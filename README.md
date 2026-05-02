@@ -64,6 +64,7 @@ Create a file named `.env` inside `igraph-backend`
 
 ## 4. Paste this template
 
+```
 PORT=5000
 NODE_ENV=development
 
@@ -81,6 +82,7 @@ EMAIL_PASS=
 
 FRONTEND_URL=http://localhost:8081
 APP_NAME=iGraph IT
+```
 
 ## 5. Get values
 
