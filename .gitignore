@@ -1,0 +1,5 @@
+igraph-backend/node_modules
+igraph-backend/.env
+igraph-backend/serviceAccountKey.json
+igraph-frontend/node_modules
+igraph-frontend/.expo
