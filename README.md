@@ -67,22 +67,18 @@ Create a file named `.env` inside `igraph-backend`
 PORT=5000
 NODE_ENV=development
 
-# Firebase
 FIREBASE_PROJECT_ID=
 FIREBASE_CLIENT_EMAIL=
 FIREBASE_PRIVATE_KEY=
 
-# JWT
 JWT_ACCESS_SECRET=
 JWT_REFRESH_SECRET=
 JWT_ACCESS_EXPIRY=15m
 JWT_REFRESH_EXPIRY=7d
 
-# Nodemailer Gmail
 EMAIL_USER=
 EMAIL_PASS=
 
-# App
 FRONTEND_URL=http://localhost:8081
 APP_NAME=iGraph IT
 
