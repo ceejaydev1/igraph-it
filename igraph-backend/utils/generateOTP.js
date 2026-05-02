@@ -27,3 +27,5 @@ const getOTPExpiry = (minutes = 5) => {
 };
 
 module.exports = { generateOTP, getOTPExpiry };
+
+//test

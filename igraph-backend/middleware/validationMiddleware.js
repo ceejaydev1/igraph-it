@@ -125,3 +125,5 @@ module.exports = {
   validateResetPassword,
   validateGoogleAuth
 };
+
+//test
