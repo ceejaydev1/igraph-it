@@ -187,3 +187,4 @@ Share secrets privately only.
 # DONE
 
 If setup is correct, backend and frontend should run.
+Test CodeRabbit
