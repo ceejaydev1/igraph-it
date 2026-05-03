@@ -680,5 +680,3 @@ module.exports = {
   refreshToken,
   logout
 };
-
-//test
