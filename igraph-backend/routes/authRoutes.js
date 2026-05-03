@@ -65,5 +65,3 @@ router.post('/refresh-token', authController.refreshToken);
 router.post('/logout', protect, authController.logout);
 
 module.exports = router;
-
-//test

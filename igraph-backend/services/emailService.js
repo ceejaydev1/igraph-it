@@ -107,5 +107,3 @@ const sendPasswordResetEmail = async (toEmail, fullName, otp) => {
 };
 
 module.exports = { sendVerificationEmail, sendPasswordResetEmail };
-
-//test

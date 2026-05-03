@@ -69,5 +69,3 @@ module.exports = {
   markUserVerified,
   updatePasswordHash
 };
-
-//test
