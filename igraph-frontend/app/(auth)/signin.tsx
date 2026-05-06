@@ -1,4 +1,5 @@
 import React, { useState, useRef } from 'react';
+import { Pressable } from 'react-native';
 import {
   View,
   Text,
@@ -22,15 +23,15 @@ const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
 const DiagramBackground = () => (
   <View style={StyleSheet.absoluteFillObject} pointerEvents="none">
-    <Svg width={SCREEN_WIDTH} height={SCREEN_HEIGHT} style={StyleSheet.absoluteFillObject}>
+    <Svg width="100%" height="100%" style={StyleSheet.absoluteFillObject}>
       <Defs>
         {/* Grid pattern */}
         <Pattern id="grid" width="32" height="32" patternUnits="userSpaceOnUse">
-          <Path d="M 32 0 L 0 0 0 32" fill="none" stroke="#c5cae9" strokeWidth="0.6" opacity="0.6" />
+          <Path d="M 32 0 L 0 0 0 32" fill="none" stroke="#c5cae9" strokeWidth="0.6" opacity="0.25" />
         </Pattern>
         {/* Dot pattern */}
         <Pattern id="dots" width="32" height="32" patternUnits="userSpaceOnUse">
-          <Circle cx="16" cy="16" r="1.2" fill="#b0b8e8" opacity="0.5" />
+          <Circle cx="16" cy="16" r="1.2" fill="#b0b8e8" opacity="0.25" />
         </Pattern>
       </Defs>
 
@@ -204,40 +205,56 @@ export default function SignIn() {
   const [loading, setLoading] = useState(false);
   const [emailFocused, setEmailFocused] = useState(false);
   const [passwordFocused, setPasswordFocused] = useState(false);
-  const [error, setError] = useState('');
+  const [errors, setErrors] = useState({
+    email: '',
+    password: '',
+    terms: '',
+  });
 
   const passwordRef = useRef<TextInput>(null);
 
   const handleSignIn = async () => {
-    setError('');
-
-    if (!email || !password) {
-      setError('Please enter your email and password.');
-      return;
-    }
-
-    if (!agreed) {
-      setError('Please agree to the Terms and Conditions.');
-      return;
-    }
-
-    try {
-      setLoading(true);
-      // Import and call your authService here
-      // const result = await signIn(email, password);
-      // Save tokens to secure store
-      // router.replace('/(tabs)/home');
-
-      // Placeholder navigation for now
-      setTimeout(() => {
-        setLoading(false);
-        router.replace('/(tabs)/home');
-      }, 1500);
-    } catch (err: any) {
-      setLoading(false);
-      setError(err.message || 'Sign in failed. Please try again.');
-    }
+  const newErrors = {
+    email: '',
+    password: '',
+    terms: '',
   };
+
+  if (!email) {
+    newErrors.email = 'Email is required';
+  }
+
+  if (!password) {
+    newErrors.password = 'Password is required';
+  }
+
+  if (!agreed) {
+    newErrors.terms = 'You must agree to continue';
+  }
+
+  setErrors(newErrors);
+
+  // stop if any error exists
+  if (newErrors.email || newErrors.password || newErrors.terms) return;
+
+  try {
+    setLoading(true);
+
+    setTimeout(() => {
+      setLoading(false);
+      router.replace('/(tabs)/home');
+    }, 1500);
+
+  } catch (err: any) {
+    setLoading(false);
+
+    // fallback: attach to password (or email)
+    setErrors(prev => ({
+      ...prev,
+      password: err.message || 'Invalid credentials',
+    }));
+  }
+};
 
   const handleGoogleSignIn = async () => {
     // Implement Google Auth via expo-auth-session
@@ -249,16 +266,12 @@ export default function SignIn() {
     <Stack.Screen options={{ headerShown: false }} />
     <KeyboardAvoidingView
       style={styles.flex}
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
       {/* Diagram Background */}
       <DiagramBackground />
 
-      <ScrollView
-        contentContainerStyle={styles.scrollContent}
-        keyboardShouldPersistTaps="handled"
-        showsVerticalScrollIndicator={false}
-      >
+      <View style={styles.scrollContent}>
         {/* ── CARD ── */}
         <View style={styles.card}>
 
@@ -280,78 +293,150 @@ export default function SignIn() {
 
           {/* Email Field */}
           <View style={styles.formGroup}>
-            <Text style={styles.label}>Email</Text>
-            <View style={[styles.inputWrap, emailFocused && styles.inputWrapFocused]}>
-              <TextInput
-                style={styles.input}
-                placeholder="you@example.com"
-                placeholderTextColor="#b8c0d4"
-                value={email}
-                onChangeText={setEmail}
-                onFocus={() => setEmailFocused(true)}
-                onBlur={() => setEmailFocused(false)}
-                keyboardType="email-address"
-                autoCapitalize="none"
-                autoCorrect={false}
-                returnKeyType="next"
-                onSubmitEditing={() => passwordRef.current?.focus()}
-              />
-            </View>
-          </View>
+  <Text style={styles.label}>Email</Text>
+
+  <View
+    style={[
+      styles.inputWrap,
+      emailFocused && styles.inputWrapFocused,
+      errors.email && styles.inputError, // 🔥 error border
+    ]}
+  >
+    <TextInput
+      style={[
+        styles.input,
+        Platform.OS === 'web' ? { outlineWidth: 0 } : null,
+      ]}
+      placeholder="you@example.com"
+      placeholderTextColor="#b8c0d4"
+
+      value={email}
+      onChangeText={(text) => {
+        setEmail(text);
+        if (errors.email) {
+          setErrors(prev => ({ ...prev, email: '' })); // 🔥 clear error live
+        }
+      }}
+
+      onFocus={() => setEmailFocused(true)}
+      onBlur={() => setEmailFocused(false)}
+
+      keyboardType="email-address"
+      autoCapitalize="none"
+      autoCorrect={false}
+
+      returnKeyType="next"
+      blurOnSubmit={false}
+      onSubmitEditing={() => passwordRef.current?.focus()}
+
+      underlineColorAndroid="transparent"
+      selectionColor="#3b5bdb"
+      cursorColor="#3b5bdb"
+
+      autoComplete="off"
+      importantForAutofill="no"
+    />
+  </View>
+
+  {errors.email ? (
+    <Text style={styles.errorText}>{errors.email}</Text>
+  ) : null}
+</View>
 
           {/* Password Field */}
           <View style={styles.formGroup}>
-            <Text style={styles.label}>Password</Text>
-            <View style={[styles.inputWrap, passwordFocused && styles.inputWrapFocused]}>
-              <TextInput
-                ref={passwordRef}
-                style={[styles.input, styles.inputWithIcon]}
-                placeholder="Enter your password"
-                placeholderTextColor="#b8c0d4"
-                value={password}
-                onChangeText={setPassword}
-                onFocus={() => setPasswordFocused(true)}
-                onBlur={() => setPasswordFocused(false)}
-                secureTextEntry={!showPassword}
-                autoCapitalize="none"
-                returnKeyType="done"
-                onSubmitEditing={handleSignIn}
-              />
-              <TouchableOpacity
-                style={styles.eyeBtn}
-                onPress={() => setShowPassword(!showPassword)}
-                activeOpacity={0.7}
-              >
-                <EyeIcon visible={showPassword} />
-              </TouchableOpacity>
-            </View>
+  <Text style={styles.label}>Password</Text>
 
-            {/* Forgot Password */}
-            <TouchableOpacity
-              style={styles.forgotWrap}
-              onPress={() => router.push('/(auth)/forgot-password')}
-              activeOpacity={0.7}
-            >
-              <Text style={styles.forgotText}>Forgot password?</Text>
-            </TouchableOpacity>
-          </View>
+  <View
+    style={[
+      styles.inputWrap,
+      passwordFocused && styles.inputWrapFocused,
+      errors.password && styles.inputError, // 🔥 error border
+    ]}
+  >
+    <TextInput
+      ref={passwordRef}
+      style={[styles.input, styles.inputWithIcon]}
 
-          {/* Error Message */}
-          {error ? <Text style={styles.errorText}>{error}</Text> : null}
+      placeholder="Enter your password"
+      placeholderTextColor="#b8c0d4"
+
+      value={password}
+      onChangeText={(text) => {
+        setPassword(text);
+        if (errors.password) {
+          setErrors(prev => ({ ...prev, password: '' })); // 🔥 clear error
+        }
+      }}
+
+      onFocus={() => setPasswordFocused(true)}
+      onBlur={() => setPasswordFocused(false)}
+
+      secureTextEntry={!showPassword}
+      autoCapitalize="none"
+
+      returnKeyType="done"
+      blurOnSubmit={true}
+      onSubmitEditing={handleSignIn}
+
+      underlineColorAndroid="transparent"
+      selectionColor="#3b5bdb"
+      cursorColor="#3b5bdb"
+
+      autoComplete="off"
+      importantForAutofill="no"
+    />
+
+    <TouchableOpacity
+      style={styles.eyeBtn}
+      onPress={() => setShowPassword(!showPassword)}
+      activeOpacity={0.7}
+    >
+      <EyeIcon visible={showPassword} />
+    </TouchableOpacity>
+  </View>
+
+  {errors.password ? (
+    <Text style={styles.errorText}>{errors.password}</Text>
+  ) : null}
+
+  <TouchableOpacity
+    style={styles.forgotWrap}
+    onPress={() => router.push('/(auth)/forgot-password')}
+    activeOpacity={0.7}
+  >
+    <Text style={styles.forgotText}>Forgot password?</Text>
+  </TouchableOpacity>
+</View>
 
           {/* Sign In Button */}
-          <TouchableOpacity
-            style={[styles.btnSignIn, loading && styles.btnDisabled]}
+          <Pressable
+            style={({ pressed }) => [
+              styles.btnSignIn,
+              loading && styles.btnDisabled,
+              {
+                transform: [{ scale: pressed ? 0.97 : 1 }],
+                opacity: pressed ? 0.9 : 1,
+              },
+            ]}
             onPress={handleSignIn}
-            activeOpacity={0.85}
             disabled={loading}
           >
             {loading ? (
-              <ActivityIndicator color="#ffffff" size="small" />
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                <ActivityIndicator color="#fff" size="small" />
+                <Text style={styles.btnSignInText}>Signing in...</Text>
+              </View>
             ) : (
               <Text style={styles.btnSignInText}>Sign In</Text>
             )}
-          </TouchableOpacity>
+          </Pressable>
+
+          <View style={styles.divider}>
+            <View style={styles.line} />
+            <Text style={styles.orText}>OR</Text>
+            <View style={styles.line} />
+          </View>
 
           {/* Continue with Google */}
           <TouchableOpacity
@@ -365,17 +450,39 @@ export default function SignIn() {
 
           {/* Terms and Conditions */}
           <TouchableOpacity
-            style={styles.termsWrap}
-            onPress={() => setAgreed(!agreed)}
+            style={[
+              styles.termsWrap,
+              errors.terms && styles.termsError, // 🔥 error border
+            ]}
+            onPress={() => {
+              setAgreed(!agreed);
+
+              if (errors.terms) {
+                setErrors(prev => ({ ...prev, terms: '' })); // 🔥 clear error
+              }
+            }}
             activeOpacity={0.8}
           >
-            <View style={[styles.customCheckbox, agreed && styles.customCheckboxChecked]}>
+            <View
+              style={[
+                styles.customCheckbox,
+                agreed && styles.customCheckboxChecked,
+              ]}
+            >
               {agreed && (
                 <Svg width={10} height={10} viewBox="0 0 10 10">
-                  <Path d="M2 5l2.5 2.5L8 3" stroke="white" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" fill="none" />
+                  <Path
+                    d="M2 5l2.5 2.5L8 3"
+                    stroke="white"
+                    strokeWidth={1.8}
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    fill="none"
+                  />
                 </Svg>
               )}
             </View>
+
             <Text style={styles.termsText}>
               I agree to the{' '}
               <Text style={styles.termsLink}>Terms and Conditions</Text>
@@ -383,6 +490,10 @@ export default function SignIn() {
               <Text style={styles.termsLink}>Privacy Policy</Text>
             </Text>
           </TouchableOpacity>
+
+          {errors.terms ? (
+            <Text style={styles.errorText}>{errors.terms}</Text>
+          ) : null}
 
           {/* Sign Up Link */}
           <View style={styles.signupWrap}>
@@ -398,7 +509,7 @@ export default function SignIn() {
           <View style={styles.connectorRight} />
 
         </View>
-      </ScrollView>
+      </View>
     </KeyboardAvoidingView>
     </>
   );
@@ -413,8 +524,7 @@ const styles = StyleSheet.create({
   },
 
   scrollContent: {
-    flexGrow: 1,
-    justifyContent: 'center',
+    flex: 1, // 🔥 change this
     alignItems: 'center',
     paddingVertical: 40,
     paddingHorizontal: 16,
@@ -424,20 +534,19 @@ const styles = StyleSheet.create({
   card: {
     backgroundColor: '#ffffff',
     borderRadius: 24,
-    paddingHorizontal: 32,
-    paddingTop: 40,
-    paddingBottom: 32,
+    paddingHorizontal: 28,
+    paddingVertical: 28,
     width: '100%',
     maxWidth: 420,
-    shadowColor: '#3b5bdb',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.10,
-    shadowRadius: 24,
-    elevation: 8,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.9)',
-    position: 'relative',
+    marginTop: -25,
+
+    shadowColor: '#0a0f1e',
+    shadowOffset: { width: 0, height: 20 },
+    shadowOpacity: 0.08,
+    shadowRadius: 40,
+    elevation: 10,
   },
+
 
   // Connector dots (top/bottom of card, matching the design)
   connectorTop: {
@@ -449,7 +558,7 @@ const styles = StyleSheet.create({
     borderRadius: 5,
     backgroundColor: '#ffffff',
     borderWidth: 1.5,
-    borderColor: '#b0b8e8',
+    borderColor: '#cbd5f5',
   },
 
   connectorBottom: {
@@ -461,7 +570,7 @@ const styles = StyleSheet.create({
     borderRadius: 5,
     backgroundColor: '#ffffff',
     borderWidth: 1.5,
-    borderColor: '#b0b8e8',
+    borderColor: '#cbd5f5',
   },
 
   connectorLeft: {
@@ -474,7 +583,7 @@ const styles = StyleSheet.create({
     borderRadius: 5,
     backgroundColor: '#ffffff',
     borderWidth: 1.5,
-    borderColor: '#b0b8e8',
+    borderColor: '#cbd5f5',
   },
 
     connectorRight: {
@@ -487,7 +596,7 @@ const styles = StyleSheet.create({
     borderRadius: 5,
     backgroundColor: '#ffffff',
     borderWidth: 1.5,
-    borderColor: '#b0b8e8',
+    borderColor: '#cbd5f5',
   },
 
   // ── LOGO
@@ -505,60 +614,58 @@ const styles = StyleSheet.create({
 
   // ── HEADING
   heading: {
-    fontFamily: Platform.OS === 'ios' ? 'Georgia' : 'serif',
-    fontSize: 24,
-    fontWeight: '700',
-    color: '#1a1f36',
+    fontSize: 28,
+    fontWeight: '800',
+    color: '#0f172a',
     textAlign: 'center',
-    letterSpacing: -0.3,
   },
 
   subtitle: {
-    fontSize: 13,
-    color: '#8896b3',
+    fontSize: 14,
+    color: '#64748b',
+    marginBottom: 24,
     textAlign: 'center',
-    marginTop: 6,
-    marginBottom: 28,
-    fontWeight: '400',
   },
 
-  // ── FORM
   formGroup: {
-    marginBottom: 14,
+    marginBottom: 16, // from 14
   },
 
   label: {
     fontSize: 13,
-    fontWeight: '500',
-    color: '#4a5568',
-    marginBottom: 7,
+    fontWeight: '600',
+    color: '#334155',
   },
 
   inputWrap: {
-    borderWidth: 1.5,
-    borderColor: '#e2e6f3',
-    borderRadius: 10,
-    backgroundColor: '#f8f9ff',
-    flexDirection: 'row',
-    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#d0d7ff',
+    borderRadius: 12,
+    backgroundColor: '#ffffff',
+    minHeight: 40, // 🔥 better control
+    justifyContent: 'center',
   },
 
   inputWrapFocused: {
     borderColor: '#3b5bdb',
     backgroundColor: '#ffffff',
+
     shadowColor: '#3b5bdb',
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.10,
-    shadowRadius: 6,
-    elevation: 2,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+    elevation: 4,
   },
 
   input: {
     flex: 1,
     paddingHorizontal: 14,
-    paddingVertical: Platform.OS === 'ios' ? 13 : 11,
+    paddingVertical: Platform.OS === 'ios' ? 11 : 9,
     fontSize: 14,
     color: '#1a1f36',
+    backgroundColor: 'transparent', // prevents overlay issues
+    minHeight: 44,
+    textAlignVertical: "center",
   },
 
   inputWithIcon: {
@@ -568,13 +675,13 @@ const styles = StyleSheet.create({
   eyeBtn: {
     position: 'absolute',
     right: 12,
-    padding: 4,
+    padding: 10,
   },
 
   // ── FORGOT
   forgotWrap: {
     alignItems: 'flex-end',
-    marginTop: 8,
+    marginTop: 6,
   },
 
   forgotText: {
@@ -584,26 +691,42 @@ const styles = StyleSheet.create({
   },
 
   // ── ERROR
+  inputError: {
+    borderColor: '#e11d48',
+  },
+
+  termsError: {
+    borderColor: '#e11d48',
+  },
+
   errorText: {
     fontSize: 12,
-    color: '#e53e3e',
-    marginBottom: 8,
-    textAlign: 'center',
+    color: '#e11d48',
+    marginTop: 6,
+    marginLeft: 4,
+    fontWeight: '500',
   },
 
   // ── SIGN IN BUTTON
   btnSignIn: {
     backgroundColor: '#3b5bdb',
-    borderRadius: 10,
-    paddingVertical: 14,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#2f49c7',
+    paddingVertical: 12,
     alignItems: 'center',
-    marginTop: 6,
+    marginTop: 5,
+    overflow: 'hidden',
+
     shadowColor: '#3b5bdb',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.35,
-    shadowRadius: 10,
-    elevation: 5,
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.25,
+    shadowRadius: 20,
+
+    elevation: 8,
   },
+
+  
 
   btnDisabled: {
     opacity: 0.75,
@@ -615,6 +738,7 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     letterSpacing: 0.3,
   },
+  
 
   // ── GOOGLE BUTTON
   btnGoogle: {
@@ -622,13 +746,32 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 10,
-    borderWidth: 1.5,
-    borderColor: '#e2e6f3',
-    borderRadius: 10,
-    paddingVertical: 12,
-    marginTop: 10,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    borderRadius: 12,
+    paddingVertical: 8,
+    marginTop: 5,
     backgroundColor: '#ffffff',
   },
+
+  divider: {
+  flexDirection: 'row',
+  alignItems: 'center',
+  marginVertical: 10,
+},
+
+line: {
+  flex: 1,
+  height: 1,
+  backgroundColor: '#e5e9f5',
+},
+
+orText: {
+  marginHorizontal: 10,
+  fontSize: 12,
+  color: '#8896b3',
+  fontWeight: '600',
+},
 
   btnGoogleText: {
     fontSize: 14,
@@ -643,7 +786,7 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
     gap: 10,
     marginTop: 14,
-    padding: 12,
+    padding: 10,
     borderWidth: 1.5,
     borderColor: '#e2e6f3',
     borderRadius: 10,
@@ -684,17 +827,17 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
-    marginTop: 18,
+    marginTop: 20,
   },
 
   signupText: {
     fontSize: 13,
-    color: '#8896b3',
+    color: '#64748b',
   },
 
   signupLink: {
     fontSize: 13,
     fontWeight: '700',
-    color: '#1a1f36',
+    color: '#3b5bdb',
   },
 });
