@@ -1,3 +1,5 @@
+// app/(auth)/signin.tsx
+
 import React, { useState, useRef } from 'react';
 import { Pressable } from 'react-native';
 import {
@@ -23,143 +25,196 @@ const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
 const DiagramBackground = () => (
   <View style={StyleSheet.absoluteFillObject} pointerEvents="none">
-    <Svg width="100%" height="100%" style={StyleSheet.absoluteFillObject}>
+    <Svg
+      width="100%"
+      height="100%"
+      viewBox={`0 0 ${SCREEN_WIDTH} ${SCREEN_HEIGHT}`}
+      preserveAspectRatio="xMidYMid slice"
+      style={StyleSheet.absoluteFillObject}
+    >
       <Defs>
-        {/* Grid pattern */}
-        <Pattern id="grid" width="32" height="32" patternUnits="userSpaceOnUse">
-          <Path d="M 32 0 L 0 0 0 32" fill="none" stroke="#c5cae9" strokeWidth="0.6" opacity="0.25" />
+        <Pattern id="grid" width="34" height="34" patternUnits="userSpaceOnUse">
+          <Path
+            d="M 34 0 L 0 0 0 34"
+            fill="none"
+            stroke="#ccd5f7"
+            strokeWidth="1.2"
+            opacity="1"
+          />
         </Pattern>
-        {/* Dot pattern */}
-        <Pattern id="dots" width="32" height="32" patternUnits="userSpaceOnUse">
-          <Circle cx="16" cy="16" r="1.2" fill="#b0b8e8" opacity="0.25" />
+
+        <Pattern id="dots" width="26" height="26" patternUnits="userSpaceOnUse">
+          <Circle cx="13" cy="13" r="1.3" fill="#b8c4f3" opacity="0.8" />
         </Pattern>
       </Defs>
 
-      {/* Background fill */}
-      <Rect width={SCREEN_WIDTH} height={SCREEN_HEIGHT} fill="#eef0fb" />
+      {/* BACKGROUND */}
+      <Rect width={SCREEN_WIDTH} height={SCREEN_HEIGHT} fill="#eef2ff" />
 
-      {/* Grid lines */}
-      <Rect width={SCREEN_WIDTH} height={SCREEN_HEIGHT} fill="url(#grid)" />
+      {/* GRID */}
+      <Rect width={SCREEN_WIDTH} height={SCREEN_HEIGHT} fill="url(#grid)" opacity="1" />
 
-      {/* Dot pattern overlay on right side */}
-      <Rect x={SCREEN_WIDTH * 0.6} y={0} width={SCREEN_WIDTH * 0.4} height={SCREEN_HEIGHT * 0.5} fill="url(#dots)" />
-      <Rect x={0} y={SCREEN_HEIGHT * 0.6} width={SCREEN_WIDTH * 0.3} height={SCREEN_HEIGHT * 0.4} fill="url(#dots)" />
+      {/* DOT DECORATIONS */}
+      <Rect
+        x={SCREEN_WIDTH * 0.72}
+        y={0}
+        width={SCREEN_WIDTH * 0.28}
+        height={SCREEN_HEIGHT * 0.34}
+        fill="url(#dots)"
+      />
+      <Rect
+        x={0}
+        y={SCREEN_HEIGHT * 0.68}
+        width={SCREEN_WIDTH * 0.28}
+        height={SCREEN_HEIGHT * 0.32}
+        fill="url(#dots)"
+      />
 
-      {/* ── TOP LEFT: Start node + UML class ── */}
-      {/* Start oval */}
-      <Rect x={40} y={80} width={90} height={36} rx={18} fill="white" stroke="#c5cae9" strokeWidth={1.2} />
-      <SvgText x={85} y={103} textAnchor="middle" fontSize={13} fill="#7986cb" fontWeight="500">Start</SvgText>
-      {/* Small circle connector on right of Start */}
-      <Circle cx={130} cy={98} r={4} fill="white" stroke="#c5cae9" strokeWidth={1.2} />
-
-      {/* UML Class box top-left */}
-      <Rect x={160} y={30} width={110} height={64} rx={4} fill="white" stroke="#c5cae9" strokeWidth={1.2} />
-      <Line x1={160} y1={50} x2={270} y2={50} stroke="#c5cae9" strokeWidth={1.2} />
-      <SvgText x={215} y={44} textAnchor="middle" fontSize={10} fill="#9fa8da">{'<<class>> User'}</SvgText>
-      <SvgText x={168} y={62} fontSize={10} fill="#9fa8da">+ email: String</SvgText>
-      <SvgText x={168} y={76} fontSize={10} fill="#9fa8da">+ password: String</SvgText>
-
-      {/* Dashed arrow from Start down */}
-      <Line x1={85} y1={116} x2={85} y2={200} stroke="#c5cae9" strokeWidth={1.2} strokeDasharray="5,4" />
-      <Polygon points={`82,200 88,200 85,210`} fill="#c5cae9" />
-
-      {/* ── TOP RIGHT: Decision diamond ── */}
-      {/* Diamond */}
+      {/* FLOW LINE TOP */}
       <Path
-        d={`M ${SCREEN_WIDTH - 100},60 L ${SCREEN_WIDTH - 60},100 L ${SCREEN_WIDTH - 100},140 L ${SCREEN_WIDTH - 140},100 Z`}
-        fill="white" stroke="#c5cae9" strokeWidth={1.2}
-      />
-      <SvgText x={SCREEN_WIDTH - 100} y={105} textAnchor="middle" fontSize={12} fill="#7986cb">Decision</SvgText>
-      {/* Small circle left of diamond */}
-      <Circle cx={SCREEN_WIDTH - 145} cy={100} r={4} fill="white" stroke="#c5cae9" strokeWidth={1.2} />
-      {/* Arrow down from diamond */}
-      <Line x1={SCREEN_WIDTH - 100} y1={140} x2={SCREEN_WIDTH - 100} y2={220} stroke="#c5cae9" strokeWidth={1.2} strokeDasharray="5,4" />
-      <Polygon points={`${SCREEN_WIDTH - 103},220 ${SCREEN_WIDTH - 97},220 ${SCREEN_WIDTH - 100},230`} fill="#c5cae9" />
-
-      {/* ── TOP RIGHT: Tree/hierarchy icon ── */}
-      <Rect x={SCREEN_WIDTH - 30} y={160} width={14} height={10} rx={2} fill="white" stroke="#c5cae9" strokeWidth={1} />
-      <Line x1={SCREEN_WIDTH - 23} y1={170} x2={SCREEN_WIDTH - 23} y2={182} stroke="#c5cae9" strokeWidth={1} />
-      <Line x1={SCREEN_WIDTH - 36} y1={182} x2={SCREEN_WIDTH - 10} y2={182} stroke="#c5cae9" strokeWidth={1} />
-      <Rect x={SCREEN_WIDTH - 40} y={182} width={10} height={8} rx={1} fill="white" stroke="#c5cae9" strokeWidth={1} />
-      <Rect x={SCREEN_WIDTH - 27} y={182} width={10} height={8} rx={1} fill="white" stroke="#c5cae9" strokeWidth={1} />
-      <Rect x={SCREEN_WIDTH - 14} y={182} width={10} height={8} rx={1} fill="white" stroke="#c5cae9" strokeWidth={1} />
-
-      {/* ── MID LEFT: Validate node ── */}
-      <Rect x={20} y={SCREEN_HEIGHT * 0.42} width={80} height={30} rx={4} fill="white" stroke="#c5cae9" strokeWidth={1.2} />
-      <SvgText x={60} y={SCREEN_HEIGHT * 0.42 + 20} textAnchor="middle" fontSize={12} fill="#7986cb">Validate</SvgText>
-      {/* Circle connector right of Validate */}
-      <Circle cx={100} cy={SCREEN_HEIGHT * 0.42 + 15} r={4} fill="white" stroke="#c5cae9" strokeWidth={1.2} />
-      {/* Dashed line left */}
-      <Line x1={20} y1={SCREEN_HEIGHT * 0.42 + 15} x2={0} y2={SCREEN_HEIGHT * 0.42 + 15} stroke="#c5cae9" strokeWidth={1.2} strokeDasharray="5,4" />
-
-      {/* ── MID RIGHT: Authenticate node ── */}
-      <Circle cx={SCREEN_WIDTH - 120} cy={SCREEN_HEIGHT * 0.42 + 15} r={4} fill="white" stroke="#c5cae9" strokeWidth={1.2} />
-      <Rect x={SCREEN_WIDTH - 116} y={SCREEN_HEIGHT * 0.42} width={100} height={30} rx={4} fill="white" stroke="#c5cae9" strokeWidth={1.2} />
-      <SvgText x={SCREEN_WIDTH - 66} y={SCREEN_HEIGHT * 0.42 + 20} textAnchor="middle" fontSize={12} fill="#7986cb">Authenticate</SvgText>
-      {/* Arrow down from Authenticate */}
-      <Line x1={SCREEN_WIDTH - 66} y1={SCREEN_HEIGHT * 0.42 + 30} x2={SCREEN_WIDTH - 66} y2={SCREEN_HEIGHT * 0.42 + 80} stroke="#c5cae9" strokeWidth={1.2} strokeDasharray="5,4" />
-      <Polygon
-        points={`${SCREEN_WIDTH - 69},${SCREEN_HEIGHT * 0.42 + 80} ${SCREEN_WIDTH - 63},${SCREEN_HEIGHT * 0.42 + 80} ${SCREEN_WIDTH - 66},${SCREEN_HEIGHT * 0.42 + 90}`}
-        fill="#c5cae9"
+        d={`
+          M ${SCREEN_WIDTH / 2} 0
+          L ${SCREEN_WIDTH / 2} 50
+          C ${SCREEN_WIDTH / 2} 90,
+            120 100,
+            90 100
+        `}
+        stroke="#b7c2f1"
+        strokeWidth="2"
+        fill="none"
+        strokeDasharray="6,6"
       />
 
-      {/* ── BOTTOM LEFT: Database + Process ── */}
-      {/* Database cylinder */}
-      <Rect x={30} y={SCREEN_HEIGHT * 0.78} width={50} height={40} rx={4} fill="white" stroke="#c5cae9" strokeWidth={1.2} />
-      <Path d={`M 30,${SCREEN_HEIGHT * 0.78 + 8} Q 55,${SCREEN_HEIGHT * 0.78} 80,${SCREEN_HEIGHT * 0.78 + 8}`} fill="white" stroke="#c5cae9" strokeWidth={1.2} />
-      <Path d={`M 30,${SCREEN_HEIGHT * 0.78 + 14} Q 55,${SCREEN_HEIGHT * 0.78 + 22} 80,${SCREEN_HEIGHT * 0.78 + 14}`} fill="none" stroke="#c5cae9" strokeWidth={1.2} />
-      {/* Arrow from DB to Process */}
-      <Line x1={80} y1={SCREEN_HEIGHT * 0.78 + 20} x2={105} y2={SCREEN_HEIGHT * 0.78 + 20} stroke="#c5cae9" strokeWidth={1.2} strokeDasharray="5,4" />
-      <Polygon
-        points={`105,${SCREEN_HEIGHT * 0.78 + 17} 115,${SCREEN_HEIGHT * 0.78 + 20} 105,${SCREEN_HEIGHT * 0.78 + 23}`}
-        fill="#c5cae9"
-      />
-      {/* Process box */}
-      <Rect x={115} y={SCREEN_HEIGHT * 0.78 + 8} width={80} height={26} rx={4} fill="white" stroke="#c5cae9" strokeWidth={1.2} />
-      <Circle cx={195} cy={SCREEN_HEIGHT * 0.78 + 21} r={4} fill="white" stroke="#c5cae9" strokeWidth={1.2} />
-      <SvgText x={155} y={SCREEN_HEIGHT * 0.78 + 26} textAnchor="middle" fontSize={12} fill="#7986cb">Process</SvgText>
-      {/* Arrow right from Process */}
-      <Line x1={199} y1={SCREEN_HEIGHT * 0.78 + 21} x2={230} y2={SCREEN_HEIGHT * 0.78 + 21} stroke="#c5cae9" strokeWidth={1.2} />
-      <Polygon
-        points={`230,${SCREEN_HEIGHT * 0.78 + 18} 240,${SCREEN_HEIGHT * 0.78 + 21} 230,${SCREEN_HEIGHT * 0.78 + 24}`}
-        fill="#c5cae9"
-      />
+      {/* START NODE */}
+      <Rect x={40} y={80} width={100} height={42} rx={21} fill="#ffffff" stroke="#c9d2f4" strokeWidth={1.5} />
+      <SvgText x={90} y={106} textAnchor="middle" fontSize={14} fill="#6070c7" fontWeight="700">
+        Start
+      </SvgText>
 
-      {/* ── BOTTOM RIGHT: End node ── */}
-      <Circle cx={SCREEN_WIDTH - 80} cy={SCREEN_HEIGHT * 0.78 + 20} r={22} fill="white" stroke="#c5cae9" strokeWidth={1.2} />
-      <SvgText x={SCREEN_WIDTH - 80} y={SCREEN_HEIGHT * 0.78 + 25} textAnchor="middle" fontSize={13} fill="#7986cb">End</SvgText>
-      {/* Dashed line to End */}
-      <Line x1={SCREEN_WIDTH - 200} y1={SCREEN_HEIGHT * 0.78 + 20} x2={SCREEN_WIDTH - 104} y2={SCREEN_HEIGHT * 0.78 + 20} stroke="#c5cae9" strokeWidth={1.2} strokeDasharray="5,4" />
-
-      {/* ── BOTTOM LEFT: Flowchart decision ── */}
+      {/* FLOW TO VERIFY DIAMOND */}
       <Path
-        d={`M ${90},${SCREEN_HEIGHT * 0.88 + 16} L ${110},${SCREEN_HEIGHT * 0.88} L ${130},${SCREEN_HEIGHT * 0.88 + 16} L ${110},${SCREEN_HEIGHT * 0.88 + 32} Z`}
-        fill="white" stroke="#c5cae9" strokeWidth={1.2}
+        d={`
+          M 140 100
+          C 200 100,
+            ${SCREEN_WIDTH - 180} 110,
+            ${SCREEN_WIDTH - 150} 110
+        `}
+        stroke="#bcc8f5"
+        strokeWidth="2"
+        fill="none"
+        strokeDasharray="5,5"
       />
-      {/* Small rectangle left */}
-      <Rect x={60} y={SCREEN_HEIGHT * 0.88 + 8} width={20} height={14} rx={2} fill="white" stroke="#c5cae9" strokeWidth={1} />
 
-      {/* ── SCATTER: X marks, plus signs, circles ── */}
-      {/* X marks */}
-      <Path d={`M ${SCREEN_WIDTH * 0.12 - 5},${SCREEN_HEIGHT * 0.05} L ${SCREEN_WIDTH * 0.12 + 5},${SCREEN_HEIGHT * 0.05 + 10}`} stroke="#c5cae9" strokeWidth={1.2} />
-      <Path d={`M ${SCREEN_WIDTH * 0.12 + 5},${SCREEN_HEIGHT * 0.05} L ${SCREEN_WIDTH * 0.12 - 5},${SCREEN_HEIGHT * 0.05 + 10}`} stroke="#c5cae9" strokeWidth={1.2} />
+      {/* VERIFY DIAMOND */}
+      <Path
+        d={`
+          M ${SCREEN_WIDTH - 110},70
+          L ${SCREEN_WIDTH - 70},110
+          L ${SCREEN_WIDTH - 110},150
+          L ${SCREEN_WIDTH - 150},110
+          Z
+        `}
+        fill="#ffffff"
+        stroke="#c9d2f4"
+        strokeWidth={1.5}
+      />
+      <SvgText
+        x={SCREEN_WIDTH - 110}
+        y={115}
+        textAnchor="middle"
+        fontSize={12}
+        fill="#6070c7"
+        fontWeight="700"
+      >
+        Verify
+      </SvgText>
 
-      <Path d={`M ${SCREEN_WIDTH * 0.42 - 5},${SCREEN_HEIGHT * 0.62} L ${SCREEN_WIDTH * 0.42 + 5},${SCREEN_HEIGHT * 0.62 + 10}`} stroke="#c5cae9" strokeWidth={1.2} />
-      <Path d={`M ${SCREEN_WIDTH * 0.42 + 5},${SCREEN_HEIGHT * 0.62} L ${SCREEN_WIDTH * 0.42 - 5},${SCREEN_HEIGHT * 0.62 + 10}`} stroke="#c5cae9" strokeWidth={1.2} />
+      {/* FLOW DOWN FROM DIAMOND */}
+      <Path
+        d={`
+          M ${SCREEN_WIDTH - 110} 150
+          L ${SCREEN_WIDTH - 110} ${SCREEN_HEIGHT * 0.42}
+        `}
+        stroke="#b7c2f1"
+        strokeWidth="2"
+        fill="none"
+        strokeDasharray="6,6"
+      />
 
-      <Path d={`M ${SCREEN_WIDTH * 0.72 - 5},${SCREEN_HEIGHT * 0.55} L ${SCREEN_WIDTH * 0.72 + 5},${SCREEN_HEIGHT * 0.55 + 10}`} stroke="#c5cae9" strokeWidth={1.2} />
-      <Path d={`M ${SCREEN_WIDTH * 0.72 + 5},${SCREEN_HEIGHT * 0.55} L ${SCREEN_WIDTH * 0.72 - 5},${SCREEN_HEIGHT * 0.55 + 10}`} stroke="#c5cae9" strokeWidth={1.2} />
+      {/* SEND OTP NODE */}
+      <Rect
+        x={SCREEN_WIDTH - 155}
+        y={SCREEN_HEIGHT * 0.42}
+        width={125}
+        height={40}
+        rx={12}
+        fill="#ffffff"
+        stroke="#c9d2f4"
+        strokeWidth={1.5}
+      />
+      <SvgText
+        x={SCREEN_WIDTH - 92}
+        y={SCREEN_HEIGHT * 0.42 + 25}
+        textAnchor="middle"
+        fontSize={13}
+        fill="#6070c7"
+        fontWeight="700"
+      >
+        Sign In
+      </SvgText>
 
-      {/* Plus signs */}
-      <Path d={`M ${SCREEN_WIDTH - 20},${SCREEN_HEIGHT * 0.55} L ${SCREEN_WIDTH - 20},${SCREEN_HEIGHT * 0.55 + 10}`} stroke="#c5cae9" strokeWidth={1.2} />
-      <Path d={`M ${SCREEN_WIDTH - 25},${SCREEN_HEIGHT * 0.55 + 5} L ${SCREEN_WIDTH - 15},${SCREEN_HEIGHT * 0.55 + 5}`} stroke="#c5cae9" strokeWidth={1.2} />
+      {/* FLOW TO END */}
+      <Path
+        d={`
+          M ${SCREEN_WIDTH - 92} ${SCREEN_HEIGHT * 0.42 + 40}
+          C ${SCREEN_WIDTH - 92} ${SCREEN_HEIGHT * 0.62},
+            ${SCREEN_WIDTH - 80} ${SCREEN_HEIGHT * 0.68},
+            ${SCREEN_WIDTH - 80} ${SCREEN_HEIGHT * 0.76}
+        `}
+        stroke="#bcc8f5"
+        strokeWidth="2"
+        fill="none"
+        strokeDasharray="6,6"
+      />
 
-      {/* Scatter circles (blobs) */}
-      <Circle cx={SCREEN_WIDTH * 0.65} cy={SCREEN_HEIGHT * 0.08} r={28} fill="#dde0f7" opacity={0.5} />
-      <Circle cx={SCREEN_WIDTH * 0.3} cy={SCREEN_HEIGHT * 0.06} r={18} fill="#dde0f7" opacity={0.4} />
-      <Circle cx={SCREEN_WIDTH * 0.55} cy={SCREEN_HEIGHT * 0.85} r={22} fill="#dde0f7" opacity={0.45} />
-      <Circle cx={SCREEN_WIDTH * 0.72} cy={SCREEN_HEIGHT * 0.92} r={16} fill="#dde0f7" opacity={0.4} />
+      {/* END NODE */}
+      <Circle
+        cx={SCREEN_WIDTH - 80}
+        cy={SCREEN_HEIGHT * 0.82}
+        r={24}
+        fill="#ffffff"
+        stroke="#c9d2f4"
+        strokeWidth={1.5}
+      />
+      <SvgText
+        x={SCREEN_WIDTH - 80}
+        y={SCREEN_HEIGHT * 0.82 + 5}
+        textAnchor="middle"
+        fontSize={14}
+        fill="#6070c7"
+        fontWeight="700"
+      >
+        End
+      </SvgText>
 
+      {/* FLOW LINE TO BOTTOM */}
+      <Path
+        d={`
+          M ${SCREEN_WIDTH - 80} ${SCREEN_HEIGHT * 0.82 + 24}
+          C ${SCREEN_WIDTH - 80} ${SCREEN_HEIGHT * 0.92},
+            ${SCREEN_WIDTH / 2} ${SCREEN_HEIGHT * 0.92},
+            ${SCREEN_WIDTH / 2} ${SCREEN_HEIGHT}
+        `}
+        stroke="#b7c2f1"
+        strokeWidth="2"
+        fill="none"
+        strokeDasharray="6,6"
+      />
+
+      {/* BLOBS */}
+      <Circle cx={SCREEN_WIDTH * 0.18} cy={SCREEN_HEIGHT * 0.1} r={24} fill="#dfe5ff" opacity={0.45} />
+      <Circle cx={SCREEN_WIDTH * 0.78} cy={SCREEN_HEIGHT * 0.18} r={32} fill="#dfe5ff" opacity={0.35} />
+      <Circle cx={SCREEN_WIDTH * 0.55} cy={SCREEN_HEIGHT * 0.88} r={24} fill="#dfe5ff" opacity={0.4} />
     </Svg>
   </View>
 );
@@ -214,303 +269,263 @@ export default function SignIn() {
   const passwordRef = useRef<TextInput>(null);
 
   const handleSignIn = async () => {
-  const newErrors = {
-    email: '',
-    password: '',
-    terms: '',
+    const newErrors = { email: '', password: '', terms: '' };
+
+    if (!email) newErrors.email = 'Email is required';
+    if (!password) newErrors.password = 'Password is required';
+    if (!agreed) newErrors.terms = 'You must agree to continue';
+
+    setErrors(newErrors);
+    if (newErrors.email || newErrors.password || newErrors.terms) return;
+
+    try {
+      setLoading(true);
+      setTimeout(() => {
+        setLoading(false);
+        router.replace('/(tabs)/home');
+      }, 1500);
+    } catch (err: any) {
+      setLoading(false);
+      setErrors(prev => ({
+        ...prev,
+        password: err.message || 'Invalid credentials',
+      }));
+    }
   };
 
-  if (!email) {
-    newErrors.email = 'Email is required';
-  }
-
-  if (!password) {
-    newErrors.password = 'Password is required';
-  }
-
-  if (!agreed) {
-    newErrors.terms = 'You must agree to continue';
-  }
-
-  setErrors(newErrors);
-
-  // stop if any error exists
-  if (newErrors.email || newErrors.password || newErrors.terms) return;
-
-  try {
-    setLoading(true);
-
-    setTimeout(() => {
-      setLoading(false);
-      router.replace('/(tabs)/home');
-    }, 1500);
-
-  } catch (err: any) {
-    setLoading(false);
-
-    // fallback: attach to password (or email)
-    setErrors(prev => ({
-      ...prev,
-      password: err.message || 'Invalid credentials',
-    }));
-  }
-};
-
   const handleGoogleSignIn = async () => {
-    // Implement Google Auth via expo-auth-session
     Alert.alert('Google Sign In', 'Google authentication coming soon.');
   };
 
   return (
-  <>
-    <Stack.Screen options={{ headerShown: false }} />
-    <KeyboardAvoidingView
-      style={styles.flex}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-    >
-      {/* Diagram Background */}
-      <DiagramBackground />
+    <>
+      <Stack.Screen options={{ headerShown: false }} />
 
-      <View style={styles.scrollContent}>
-        {/* ── CARD ── */}
-        <View style={styles.card}>
+      <KeyboardAvoidingView
+        style={styles.flex}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      >
+        <DiagramBackground />
 
-          {/* Top connector dot */}
-          <View style={styles.connectorTop} />
+        <ScrollView
+          contentContainerStyle={styles.scrollContent}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
+          {/* ── CARD ── */}
+          <View style={styles.card}>
 
-          {/* Logo */}
-          <View style={styles.logoWrap}>
-            <Image
-              source={require('../../assets/images/logo.png')}
-              style={styles.logo}
-              resizeMode="contain"
-            />
-          </View>
+            {/* CONNECTOR DOTS */}
+            <View style={styles.connectorTop} />
+            <View style={styles.connectorBottom} />
+            <View style={styles.connectorLeft} />
+            <View style={styles.connectorRight} />
 
-          {/* Heading */}
-          <Text style={styles.heading}>Welcome Back</Text>
-          <Text style={styles.subtitle}>Sign in to continue your learning journey</Text>
-
-          {/* Email Field */}
-          <View style={styles.formGroup}>
-  <Text style={styles.label}>Email</Text>
-
-  <View
-    style={[
-      styles.inputWrap,
-      emailFocused && styles.inputWrapFocused,
-      errors.email && styles.inputError, // 🔥 error border
-    ]}
-  >
-    <TextInput
-      style={[
-        styles.input,
-        Platform.OS === 'web' ? { outlineWidth: 0 } : null,
-      ]}
-      placeholder="you@example.com"
-      placeholderTextColor="#b8c0d4"
-
-      value={email}
-      onChangeText={(text) => {
-        setEmail(text);
-        if (errors.email) {
-          setErrors(prev => ({ ...prev, email: '' })); // 🔥 clear error live
-        }
-      }}
-
-      onFocus={() => setEmailFocused(true)}
-      onBlur={() => setEmailFocused(false)}
-
-      keyboardType="email-address"
-      autoCapitalize="none"
-      autoCorrect={false}
-
-      returnKeyType="next"
-      blurOnSubmit={false}
-      onSubmitEditing={() => passwordRef.current?.focus()}
-
-      underlineColorAndroid="transparent"
-      selectionColor="#3b5bdb"
-      cursorColor="#3b5bdb"
-
-      autoComplete="off"
-      importantForAutofill="no"
-    />
-  </View>
-
-  {errors.email ? (
-    <Text style={styles.errorText}>{errors.email}</Text>
-  ) : null}
-</View>
-
-          {/* Password Field */}
-          <View style={styles.formGroup}>
-  <Text style={styles.label}>Password</Text>
-
-  <View
-    style={[
-      styles.inputWrap,
-      passwordFocused && styles.inputWrapFocused,
-      errors.password && styles.inputError, // 🔥 error border
-    ]}
-  >
-    <TextInput
-      ref={passwordRef}
-      style={[styles.input, styles.inputWithIcon]}
-
-      placeholder="Enter your password"
-      placeholderTextColor="#b8c0d4"
-
-      value={password}
-      onChangeText={(text) => {
-        setPassword(text);
-        if (errors.password) {
-          setErrors(prev => ({ ...prev, password: '' })); // 🔥 clear error
-        }
-      }}
-
-      onFocus={() => setPasswordFocused(true)}
-      onBlur={() => setPasswordFocused(false)}
-
-      secureTextEntry={!showPassword}
-      autoCapitalize="none"
-
-      returnKeyType="done"
-      blurOnSubmit={true}
-      onSubmitEditing={handleSignIn}
-
-      underlineColorAndroid="transparent"
-      selectionColor="#3b5bdb"
-      cursorColor="#3b5bdb"
-
-      autoComplete="off"
-      importantForAutofill="no"
-    />
-
-    <TouchableOpacity
-      style={styles.eyeBtn}
-      onPress={() => setShowPassword(!showPassword)}
-      activeOpacity={0.7}
-    >
-      <EyeIcon visible={showPassword} />
-    </TouchableOpacity>
-  </View>
-
-  {errors.password ? (
-    <Text style={styles.errorText}>{errors.password}</Text>
-  ) : null}
-
-  <TouchableOpacity
-    style={styles.forgotWrap}
-    onPress={() => router.push('/(auth)/forgot-password')}
-    activeOpacity={0.7}
-  >
-    <Text style={styles.forgotText}>Forgot password?</Text>
-  </TouchableOpacity>
-</View>
-
-          {/* Sign In Button */}
-          <Pressable
-            style={({ pressed }) => [
-              styles.btnSignIn,
-              loading && styles.btnDisabled,
-              {
-                transform: [{ scale: pressed ? 0.97 : 1 }],
-                opacity: pressed ? 0.9 : 1,
-              },
-            ]}
-            onPress={handleSignIn}
-            disabled={loading}
-          >
-            {loading ? (
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                <ActivityIndicator color="#fff" size="small" />
-                <Text style={styles.btnSignInText}>Signing in...</Text>
-              </View>
-            ) : (
-              <Text style={styles.btnSignInText}>Sign In</Text>
-            )}
-          </Pressable>
-
-          <View style={styles.divider}>
-            <View style={styles.line} />
-            <Text style={styles.orText}>OR</Text>
-            <View style={styles.line} />
-          </View>
-
-          {/* Continue with Google */}
-          <TouchableOpacity
-            style={styles.btnGoogle}
-            onPress={handleGoogleSignIn}
-            activeOpacity={0.85}
-          >
-            <GoogleIcon />
-            <Text style={styles.btnGoogleText}>Continue with Google</Text>
-          </TouchableOpacity>
-
-          {/* Terms and Conditions */}
-          <TouchableOpacity
-            style={[
-              styles.termsWrap,
-              errors.terms && styles.termsError, // 🔥 error border
-            ]}
-            onPress={() => {
-              setAgreed(!agreed);
-
-              if (errors.terms) {
-                setErrors(prev => ({ ...prev, terms: '' })); // 🔥 clear error
-              }
-            }}
-            activeOpacity={0.8}
-          >
-            <View
-              style={[
-                styles.customCheckbox,
-                agreed && styles.customCheckboxChecked,
-              ]}
-            >
-              {agreed && (
-                <Svg width={10} height={10} viewBox="0 0 10 10">
-                  <Path
-                    d="M2 5l2.5 2.5L8 3"
-                    stroke="white"
-                    strokeWidth={1.8}
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    fill="none"
-                  />
-                </Svg>
-              )}
+            {/* LOGO */}
+            <View style={styles.logoWrap}>
+              <Image
+                source={require('../../assets/images/logo.png')}
+                style={styles.logo}
+                resizeMode="contain"
+              />
             </View>
 
-            <Text style={styles.termsText}>
-              I agree to the{' '}
-              <Text style={styles.termsLink}>Terms and Conditions</Text>
-              {' '}and{' '}
-              <Text style={styles.termsLink}>Privacy Policy</Text>
-            </Text>
-          </TouchableOpacity>
+            {/* HEADING */}
+            <Text style={styles.heading}>Welcome Back</Text>
+            <Text style={styles.subtitle}>Sign in to continue your learning journey</Text>
 
-          {errors.terms ? (
-            <Text style={styles.errorText}>{errors.terms}</Text>
-          ) : null}
+            {/* EMAIL */}
+            <View style={styles.formGroup}>
+              <Text style={styles.label}>Email</Text>
+              <View
+                style={[
+                  styles.inputWrap,
+                  emailFocused && styles.inputWrapFocused,
+                  errors.email && styles.inputError,
+                ]}
+              >
+                <TextInput
+                  style={[
+                    styles.input,
+                    Platform.OS === 'web' ? { outlineWidth: 0 } : null,
+                  ]}
+                  placeholder="you@example.com"
+                  placeholderTextColor="#b8c0d4"
+                  value={email}
+                  onChangeText={(text) => {
+                    setEmail(text);
+                    if (errors.email) setErrors(prev => ({ ...prev, email: '' }));
+                  }}
+                  onFocus={() => setEmailFocused(true)}
+                  onBlur={() => setEmailFocused(false)}
+                  keyboardType="email-address"
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  returnKeyType="next"
+                  blurOnSubmit={false}
+                  onSubmitEditing={() => passwordRef.current?.focus()}
+                  underlineColorAndroid="transparent"
+                  selectionColor="#3b5bdb"
+                  cursorColor="#3b5bdb"
+                  autoComplete="off"
+                  importantForAutofill="no"
+                />
+              </View>
+              {errors.email ? (
+                <Text style={styles.errorText}>{errors.email}</Text>
+              ) : null}
+            </View>
 
-          {/* Sign Up Link */}
-          <View style={styles.signupWrap}>
-            <Text style={styles.signupText}>Don't have an account? </Text>
-            <TouchableOpacity onPress={() => router.push('/(auth)/signup')} activeOpacity={0.7}>
-              <Text style={styles.signupLink}>Sign Up</Text>
+            {/* PASSWORD */}
+            <View style={styles.formGroup}>
+              <Text style={styles.label}>Password</Text>
+              <View
+                style={[
+                  styles.inputWrap,
+                  passwordFocused && styles.inputWrapFocused,
+                  errors.password && styles.inputError,
+                ]}
+              >
+                <TextInput
+                  ref={passwordRef}
+                  style={[styles.input, styles.inputWithIcon]}
+                  placeholder="Enter your password"
+                  placeholderTextColor="#b8c0d4"
+                  value={password}
+                  onChangeText={(text) => {
+                    setPassword(text);
+                    if (errors.password) setErrors(prev => ({ ...prev, password: '' }));
+                  }}
+                  onFocus={() => setPasswordFocused(true)}
+                  onBlur={() => setPasswordFocused(false)}
+                  secureTextEntry={!showPassword}
+                  autoCapitalize="none"
+                  returnKeyType="done"
+                  blurOnSubmit={true}
+                  onSubmitEditing={handleSignIn}
+                  underlineColorAndroid="transparent"
+                  selectionColor="#3b5bdb"
+                  cursorColor="#3b5bdb"
+                  autoComplete="off"
+                  importantForAutofill="no"
+                />
+                <TouchableOpacity
+                  style={styles.eyeBtn}
+                  onPress={() => setShowPassword(!showPassword)}
+                  activeOpacity={0.7}
+                >
+                  <EyeIcon visible={showPassword} />
+                </TouchableOpacity>
+              </View>
+              {errors.password ? (
+                <Text style={styles.errorText}>{errors.password}</Text>
+              ) : null}
+              <TouchableOpacity
+                style={styles.forgotWrap}
+                onPress={() => router.push('/(auth)/forgot-password')}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.forgotText}>Forgot password?</Text>
+              </TouchableOpacity>
+            </View>
+
+            {/* SIGN IN BUTTON */}
+            <Pressable
+              style={({ pressed }) => [
+                styles.btnSignIn,
+                loading && styles.btnDisabled,
+                {
+                  transform: [{ scale: pressed ? 0.97 : 1 }],
+                  opacity: pressed ? 0.9 : 1,
+                },
+              ]}
+              onPress={handleSignIn}
+              disabled={loading}
+            >
+              {loading ? (
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                  <ActivityIndicator color="#fff" size="small" />
+                  <Text style={styles.btnSignInText}>Signing in...</Text>
+                </View>
+              ) : (
+                <Text style={styles.btnSignInText}>Sign In</Text>
+              )}
+            </Pressable>
+
+            {/* DIVIDER */}
+            <View style={styles.divider}>
+              <View style={styles.line} />
+              <Text style={styles.orText}>OR</Text>
+              <View style={styles.line} />
+            </View>
+
+            {/* GOOGLE */}
+            <TouchableOpacity
+              style={styles.btnGoogle}
+              onPress={handleGoogleSignIn}
+              activeOpacity={0.85}
+            >
+              <GoogleIcon />
+              <Text style={styles.btnGoogleText}>Continue with Google</Text>
             </TouchableOpacity>
+
+            {/* TERMS */}
+            <TouchableOpacity
+              style={[
+                styles.termsWrap,
+                errors.terms && styles.termsError,
+              ]}
+              onPress={() => {
+                setAgreed(!agreed);
+                if (errors.terms) setErrors(prev => ({ ...prev, terms: '' }));
+              }}
+              activeOpacity={0.8}
+            >
+              <View
+                style={[
+                  styles.customCheckbox,
+                  agreed && styles.customCheckboxChecked,
+                ]}
+              >
+                {agreed && (
+                  <Svg width={10} height={10} viewBox="0 0 10 10">
+                    <Path
+                      d="M2 5l2.5 2.5L8 3"
+                      stroke="white"
+                      strokeWidth={1.8}
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      fill="none"
+                    />
+                  </Svg>
+                )}
+              </View>
+              <Text style={styles.termsText}>
+                I agree to the{' '}
+                <Text style={styles.termsLink}>Terms and Conditions</Text>
+                {' '}and{' '}
+                <Text style={styles.termsLink}>Privacy Policy</Text>
+              </Text>
+            </TouchableOpacity>
+
+            {errors.terms ? (
+              <Text style={styles.errorText}>{errors.terms}</Text>
+            ) : null}
+
+            {/* SIGN UP LINK */}
+            <View style={styles.signupWrap}>
+              <Text style={styles.signupText}>Don't have an account? </Text>
+              <TouchableOpacity
+                onPress={() => router.push('/(auth)/signup')}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.signupLink}>Sign Up</Text>
+              </TouchableOpacity>
+            </View>
+
           </View>
-
-          {/* Bottom connector dot */}
-          <View style={styles.connectorBottom} />
-          <View style={styles.connectorLeft} />
-          <View style={styles.connectorRight} />
-
-        </View>
-      </View>
-    </KeyboardAvoidingView>
+        </ScrollView>
+      </KeyboardAvoidingView>
     </>
   );
 }
@@ -520,11 +535,12 @@ export default function SignIn() {
 const styles = StyleSheet.create({
   flex: {
     flex: 1,
-    backgroundColor: '#eef0fb',
+    backgroundColor: '#eef2ff',
   },
 
   scrollContent: {
-    flex: 1, // 🔥 change this
+    flexGrow: 1,
+    justifyContent: 'center',
     alignItems: 'center',
     paddingVertical: 40,
     paddingHorizontal: 16,
@@ -538,17 +554,16 @@ const styles = StyleSheet.create({
     paddingVertical: 28,
     width: '100%',
     maxWidth: 420,
-    marginTop: -25,
-
+    position: 'relative',
     shadowColor: '#0a0f1e',
     shadowOffset: { width: 0, height: 20 },
     shadowOpacity: 0.08,
     shadowRadius: 40,
     elevation: 10,
+    marginTop: -25,
   },
 
-
-  // Connector dots (top/bottom of card, matching the design)
+  // ── CONNECTOR DOTS
   connectorTop: {
     position: 'absolute',
     top: -5,
@@ -575,9 +590,9 @@ const styles = StyleSheet.create({
 
   connectorLeft: {
     position: 'absolute',
-    left: -5, // adjust how far outside the card
+    left: -5,
     top: '50%',
-    transform: [{ translateY: -5 }], // half of height to perfectly center
+    transform: [{ translateY: -5 }],
     width: 10,
     height: 10,
     borderRadius: 5,
@@ -586,11 +601,11 @@ const styles = StyleSheet.create({
     borderColor: '#cbd5f5',
   },
 
-    connectorRight: {
+  connectorRight: {
     position: 'absolute',
-    right: -5, // adjust how far outside the card
+    right: -5,
     top: '50%',
-    transform: [{ translateY: -5 }], // half of height to perfectly center
+    transform: [{ translateY: -5 }],
     width: 10,
     height: 10,
     borderRadius: 5,
@@ -628,7 +643,7 @@ const styles = StyleSheet.create({
   },
 
   formGroup: {
-    marginBottom: 16, // from 14
+    marginBottom: 16,
   },
 
   label: {
@@ -642,14 +657,13 @@ const styles = StyleSheet.create({
     borderColor: '#d0d7ff',
     borderRadius: 12,
     backgroundColor: '#ffffff',
-    minHeight: 40, // 🔥 better control
+    minHeight: 40,
     justifyContent: 'center',
   },
 
   inputWrapFocused: {
     borderColor: '#3b5bdb',
     backgroundColor: '#ffffff',
-
     shadowColor: '#3b5bdb',
     shadowOffset: { width: 0, height: 6 },
     shadowOpacity: 0.15,
@@ -663,9 +677,9 @@ const styles = StyleSheet.create({
     paddingVertical: Platform.OS === 'ios' ? 11 : 9,
     fontSize: 14,
     color: '#1a1f36',
-    backgroundColor: 'transparent', // prevents overlay issues
+    backgroundColor: 'transparent',
     minHeight: 44,
-    textAlignVertical: "center",
+    textAlignVertical: 'center',
   },
 
   inputWithIcon: {
@@ -717,16 +731,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginTop: 5,
     overflow: 'hidden',
-
     shadowColor: '#3b5bdb',
     shadowOffset: { width: 0, height: 10 },
     shadowOpacity: 0.25,
     shadowRadius: 20,
-
     elevation: 8,
   },
-
-  
 
   btnDisabled: {
     opacity: 0.75,
@@ -738,7 +748,26 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     letterSpacing: 0.3,
   },
-  
+
+  // ── DIVIDER
+  divider: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginVertical: 10,
+  },
+
+  line: {
+    flex: 1,
+    height: 1,
+    backgroundColor: '#e5e9f5',
+  },
+
+  orText: {
+    marginHorizontal: 10,
+    fontSize: 12,
+    color: '#8896b3',
+    fontWeight: '600',
+  },
 
   // ── GOOGLE BUTTON
   btnGoogle: {
@@ -753,25 +782,6 @@ const styles = StyleSheet.create({
     marginTop: 5,
     backgroundColor: '#ffffff',
   },
-
-  divider: {
-  flexDirection: 'row',
-  alignItems: 'center',
-  marginVertical: 10,
-},
-
-line: {
-  flex: 1,
-  height: 1,
-  backgroundColor: '#e5e9f5',
-},
-
-orText: {
-  marginHorizontal: 10,
-  fontSize: 12,
-  color: '#8896b3',
-  fontWeight: '600',
-},
 
   btnGoogleText: {
     fontSize: 14,
