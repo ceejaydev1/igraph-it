@@ -1,21 +1,35 @@
 const nodemailer = require('nodemailer');
+const dns = require('dns');
 
-// services/emailService.js
+// Force IPv4 (disable IPv6)
+dns.setDefaultResultOrder('ipv4first');
+
+// Brevo SMTP Configuration
 const transporter = nodemailer.createTransport({
-  host: 'smtp.gmail.com',  // Use host instead of service
+  host: 'smtp-relay.sendinblue.com',
   port: 587,
-  secure: false, // true for 465, false for 587
+  secure: false,
   auth: {
     user: process.env.EMAIL_USER,
     pass: process.env.EMAIL_PASS,
   },
+  // Force IPv4
+  family: 4,
+  // Connection settings
+  connectionTimeout: 30000,
+  greetingTimeout: 30000,
+  socketTimeout: 30000,
+  tls: {
+    rejectUnauthorized: false,
+  },
 });
 
-transporter.verify((error) => {
+// Verify connection
+transporter.verify((error, success) => {
   if (error) {
     console.error('❌ Email service error:', error.message);
   } else {
-    console.log('✅ Email service ready');
+    console.log('✅ Email service ready (Brevo - IPv4 forced)');
   }
 });
 
@@ -46,14 +60,14 @@ const sendVerificationEmail = async (toEmail, fullName, otp) => {
             <p class="app-name">📊 iGraph IT</p>
           </div>
           <p>Hi <strong>${fullName}</strong>,</p>
-          <p>Welcome to <strong>iGraph IT</strong>! To complete your registration, please use the OTP code below:</p>
+          <p>Welcome to <strong>iGraph IT</strong>! Use the OTP code below to verify your account:</p>
           <div class="otp-box">
             <p class="otp-code">${otp}</p>
           </div>
           <p>⏰ This code expires in <span class="expiry">5 minutes</span>.</p>
           <p>If you did not create an account, please ignore this email.</p>
           <div class="footer">
-            <p>© ${new Date().getFullYear()} iGraph IT - A Progressive Web App in Learning SDLC and Creating UML Diagrams.</p>
+            <p>© ${new Date().getFullYear()} iGraph IT - Learn SDLC and Create UML Diagrams</p>
           </div>
         </div>
       </body>
@@ -96,7 +110,7 @@ const sendPasswordResetEmail = async (toEmail, fullName, otp) => {
             <p class="otp-code">${otp}</p>
           </div>
           <p>⏰ This code expires in <span class="expiry">5 minutes</span>.</p>
-          <p>⚠️ If you did not request a password reset, please secure your account immediately.</p>
+          <p>⚠️ If you did not request a password reset, please ignore this email.</p>
           <div class="footer">
             <p>© ${new Date().getFullYear()} iGraph IT — Dominican College of Tarlac</p>
           </div>
