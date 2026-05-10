@@ -21,307 +21,69 @@ import { Stack, useRouter } from 'expo-router';
 
 import {
   Svg,
-  Line,
   Circle,
   Rect,
   Path,
   Text as SvgText,
   Defs,
   Pattern,
-  Polygon,
 } from 'react-native-svg';
 
-const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } =
-  Dimensions.get('window');
+import * as authService from '@/services/authService';
 
-//
+const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
+
 // BACKGROUND
-//
-
 const DiagramBackground = () => (
   <View style={StyleSheet.absoluteFillObject} pointerEvents="none">
-    <Svg
-      width="100%"
-      height="100%"
-      viewBox={`0 0 ${SCREEN_WIDTH} ${SCREEN_HEIGHT}`}
-      preserveAspectRatio="xMidYMid slice"
-      style={StyleSheet.absoluteFillObject}
-    >
+    <Svg width="100%" height="100%" viewBox={`0 0 ${SCREEN_WIDTH} ${SCREEN_HEIGHT}`}>
       <Defs>
         <Pattern id="grid" width="34" height="34" patternUnits="userSpaceOnUse">
-          <Path
-            d="M 34 0 L 0 0 0 34"
-            fill="none"
-            stroke="#ccd5f7"
-            strokeWidth="1.2"
-            opacity="1"
-          />
+          <Path d="M 34 0 L 0 0 0 34" fill="none" stroke="#ccd5f7" strokeWidth="1.2" opacity="1" />
         </Pattern>
-
         <Pattern id="dots" width="26" height="26" patternUnits="userSpaceOnUse">
           <Circle cx="13" cy="13" r="1.3" fill="#b8c4f3" opacity="0.8" />
         </Pattern>
       </Defs>
-
-      {/* BACKGROUND */}
       <Rect width={SCREEN_WIDTH} height={SCREEN_HEIGHT} fill="#eef2ff" />
-
-      {/* GRID */}
       <Rect width={SCREEN_WIDTH} height={SCREEN_HEIGHT} fill="url(#grid)" opacity="1" />
-
-      {/* DOT DECORATIONS */}
-      <Rect
-        x={0}
-        y={0}
-        width={SCREEN_WIDTH * 0.28}
-        height={SCREEN_HEIGHT * 0.34}
-        fill="url(#dots)"
-      />
-      <Rect
-        x={SCREEN_WIDTH * 0.72}
-        y={SCREEN_HEIGHT * 0.68}
-        width={SCREEN_WIDTH * 0.28}
-        height={SCREEN_HEIGHT * 0.32}
-        fill="url(#dots)"
-      />
-
-      {/* FLOW LINE TOP */}
-      <Path
-        d={`
-          M ${SCREEN_WIDTH / 2} 0
-          L ${SCREEN_WIDTH / 2} 50
-          C ${SCREEN_WIDTH / 2} 90,
-            ${SCREEN_WIDTH - 120} 100,
-            ${SCREEN_WIDTH - 90} 100
-        `}
-        stroke="#b7c2f1"
-        strokeWidth="2"
-        fill="none"
-        strokeDasharray="6,6"
-      />
-
-      {/* START NODE — top-right */}
-      <Rect
-        x={SCREEN_WIDTH - 140}
-        y={80}
-        width={100}
-        height={42}
-        rx={21}
-        fill="#ffffff"
-        stroke="#c9d2f4"
-        strokeWidth={1.5}
-      />
-      <SvgText
-        x={SCREEN_WIDTH - 90}
-        y={106}
-        textAnchor="middle"
-        fontSize={14}
-        fill="#6070c7"
-        fontWeight="700"
-      >
-        Start
-      </SvgText>
-
-      {/* FLOW TO VERIFY DIAMOND */}
-      <Path
-        d={`
-          M ${SCREEN_WIDTH - 140} 100
-          C ${SCREEN_WIDTH - 200} 100,
-            150 110,
-            110 110
-        `}
-        stroke="#bcc8f5"
-        strokeWidth="2"
-        fill="none"
-        strokeDasharray="5,5"
-      />
-
-      {/* VERIFY DIAMOND — top-left */}
-      <Path
-        d={`
-          M 110,70
-          L 150,110
-          L 110,150
-          L 70,110
-          Z
-        `}
-        fill="#ffffff"
-        stroke="#c9d2f4"
-        strokeWidth={1.5}
-      />
-      <SvgText
-        x={110}
-        y={115}
-        textAnchor="middle"
-        fontSize={12}
-        fill="#6070c7"
-        fontWeight="700"
-      >
-        Verify
-      </SvgText>
-
-      {/* FLOW DOWN FROM DIAMOND */}
-      <Path
-        d={`M 110 150 L 110 ${SCREEN_HEIGHT * 0.42}`}
-        stroke="#b7c2f1"
-        strokeWidth="2"
-        fill="none"
-        strokeDasharray="6,6"
-      />
-
-      {/* REGISTER NODE */}
-      <Rect
-        x={30}
-        y={SCREEN_HEIGHT * 0.42}
-        width={125}
-        height={40}
-        rx={12}
-        fill="#ffffff"
-        stroke="#c9d2f4"
-        strokeWidth={1.5}
-      />
-      <SvgText
-        x={92}
-        y={SCREEN_HEIGHT * 0.42 + 25}
-        textAnchor="middle"
-        fontSize={13}
-        fill="#6070c7"
-        fontWeight="700"
-      >
-        Register
-      </SvgText>
-
-      {/* FLOW TO END */}
-      <Path
-        d={`
-          M 92 ${SCREEN_HEIGHT * 0.42 + 40}
-          C 92 ${SCREEN_HEIGHT * 0.62},
-            80 ${SCREEN_HEIGHT * 0.68},
-            80 ${SCREEN_HEIGHT * 0.76}
-        `}
-        stroke="#bcc8f5"
-        strokeWidth="2"
-        fill="none"
-        strokeDasharray="6,6"
-      />
-
-      {/* END NODE */}
-      <Circle
-        cx={80}
-        cy={SCREEN_HEIGHT * 0.82}
-        r={24}
-        fill="#ffffff"
-        stroke="#c9d2f4"
-        strokeWidth={1.5}
-      />
-      <SvgText
-        x={80}
-        y={SCREEN_HEIGHT * 0.82 + 5}
-        textAnchor="middle"
-        fontSize={14}
-        fill="#6070c7"
-        fontWeight="700"
-      >
-        End
-      </SvgText>
-
-      {/* FLOW LINE TO BOTTOM */}
-      <Path
-        d={`
-          M 80 ${SCREEN_HEIGHT * 0.82 + 24}
-          C 80 ${SCREEN_HEIGHT * 0.92},
-            ${SCREEN_WIDTH / 2} ${SCREEN_HEIGHT * 0.92},
-            ${SCREEN_WIDTH / 2} ${SCREEN_HEIGHT}
-        `}
-        stroke="#b7c2f1"
-        strokeWidth="2"
-        fill="none"
-        strokeDasharray="6,6"
-      />
-
-      {/* BLOBS */}
-      <Circle cx={SCREEN_WIDTH * 0.82} cy={SCREEN_HEIGHT * 0.1}  r={24} fill="#dfe5ff" opacity={0.45} />
-      <Circle cx={SCREEN_WIDTH * 0.22} cy={SCREEN_HEIGHT * 0.18} r={32} fill="#dfe5ff" opacity={0.35} />
-      <Circle cx={SCREEN_WIDTH * 0.45} cy={SCREEN_HEIGHT * 0.88} r={24} fill="#dfe5ff" opacity={0.4}  />
+      <Rect x={0} y={0} width={SCREEN_WIDTH * 0.28} height={SCREEN_HEIGHT * 0.34} fill="url(#dots)" />
+      <Rect x={SCREEN_WIDTH * 0.72} y={SCREEN_HEIGHT * 0.68} width={SCREEN_WIDTH * 0.28} height={SCREEN_HEIGHT * 0.32} fill="url(#dots)" />
     </Svg>
   </View>
 );
-
-//
-// EYE ICON
-//
 
 const EyeIcon = ({ visible }: { visible: boolean }) => (
   <Svg width={18} height={18} viewBox="0 0 24 24" fill="none">
     {visible ? (
       <>
-        <Path
-          d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"
-          stroke="#8896b3"
-          strokeWidth={1.8}
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        />
+        <Path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" stroke="#8896b3" strokeWidth={1.8} />
         <Circle cx={12} cy={12} r={3} stroke="#8896b3" strokeWidth={1.8} />
       </>
     ) : (
       <>
-        <Path
-          d="M17.94 17.94A10.07 10.07 0 0112 20c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94"
-          stroke="#8896b3"
-          strokeWidth={1.8}
-          strokeLinecap="round"
-        />
-        <Path
-          d="M9.9 4.24A9.12 9.12 0 0112 4c7 0 11 8 11 8a18.5 18.5 0 01-2.16 3.19"
-          stroke="#8896b3"
-          strokeWidth={1.8}
-          strokeLinecap="round"
-        />
-        <Path
-          d="M1 1l22 22"
-          stroke="#8896b3"
-          strokeWidth={1.8}
-          strokeLinecap="round"
-        />
+        <Path d="M17.94 17.94A10.07 10.07 0 0112 20c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94" stroke="#8896b3" strokeWidth={1.8} />
+        <Path d="M9.9 4.24A9.12 9.12 0 0112 4c7 0 11 8 11 8a18.5 18.5 0 01-2.16 3.19" stroke="#8896b3" strokeWidth={1.8} />
+        <Path d="M1 1l22 22" stroke="#8896b3" strokeWidth={1.8} />
       </>
     )}
   </Svg>
 );
 
-//
-// GOOGLE ICON
-//
-
 const GoogleIcon = () => (
   <Svg width={18} height={18} viewBox="0 0 24 24">
-    <Path
-      d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
-      fill="#4285F4"
-    />
-    <Path
-      d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
-      fill="#34A853"
-    />
-    <Path
-      d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"
-      fill="#FBBC05"
-    />
-    <Path
-      d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
-      fill="#EA4335"
-    />
+    <Path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4" />
+    <Path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853" />
+    <Path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05" />
+    <Path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335" />
   </Svg>
 );
-
-//
-// MAIN COMPONENT
-//
 
 export default function SignUp() {
   const router = useRouter();
 
   const [fullName, setFullName] = useState('');
+  const [username, setUsername] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -331,12 +93,14 @@ export default function SignUp() {
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState({
     fullName: '',
+    username: '',
     email: '',
     password: '',
     confirmPassword: '',
     agreed: '',
   });
 
+  const usernameRef = useRef<TextInput>(null);
   const emailRef = useRef<TextInput>(null);
   const passwordRef = useRef<TextInput>(null);
   const confirmPasswordRef = useRef<TextInput>(null);
@@ -344,6 +108,7 @@ export default function SignUp() {
   const validate = () => {
     const newErrors = {
       fullName: '',
+      username: '',
       email: '',
       password: '',
       confirmPassword: '',
@@ -354,6 +119,17 @@ export default function SignUp() {
 
     if (!fullName.trim()) {
       newErrors.fullName = 'Full name is required.';
+      isValid = false;
+    }
+
+    if (!username.trim()) {
+      newErrors.username = 'Username is required.';
+      isValid = false;
+    } else if (!/^[a-zA-Z0-9_]+$/.test(username)) {
+      newErrors.username = 'Username can only contain letters, numbers, and underscores.';
+      isValid = false;
+    } else if (username.length < 3) {
+      newErrors.username = 'Username must be at least 3 characters.';
       isValid = false;
     }
 
@@ -370,6 +146,15 @@ export default function SignUp() {
       isValid = false;
     } else if (password.length < 8) {
       newErrors.password = 'Password must be at least 8 characters.';
+      isValid = false;
+    } else if (!/[A-Z]/.test(password)) {
+      newErrors.password = 'Password must contain at least one uppercase letter.';
+      isValid = false;
+    } else if (!/[a-z]/.test(password)) {
+      newErrors.password = 'Password must contain at least one lowercase letter.';
+      isValid = false;
+    } else if (!/[0-9]/.test(password)) {
+      newErrors.password = 'Password must contain at least one number.';
       isValid = false;
     }
 
@@ -391,23 +176,50 @@ export default function SignUp() {
   };
 
   const handleSignUp = async () => {
+    console.log('🔵 STEP 1: Button clicked!');
+    console.log('📝 Form data:', { fullName, username, email, password });
+    
     const isValid = validate();
+    console.log('✅ STEP 2: Validation result:', isValid);
     if (!isValid) return;
 
+    setLoading(true);
+    console.log('⏳ STEP 3: Loading started');
+    
     try {
-      setLoading(true);
-      setTimeout(() => {
-        setLoading(false);
-        router.push('/(auth)/forgot-password');
-      }, 1500);
-    } catch (err: any) {
-      setLoading(false);
-      Alert.alert('Sign Up Failed', err.message || 'Something went wrong.');
-    }
-  };
+      console.log('🚀 STEP 4: Calling API...');
+      const result = await authService.signUp({
+        fullName,
+        username,
+        email,
+        password,
+      });
+      
+      console.log('📦 STEP 5: API Response:', result);
+      console.log('🎯 STEP 6: Result.success:', result.success);
 
-  const handleGoogleSignUp = () => {
-    Alert.alert('Google Sign Up', 'Google authentication coming soon.');
+      if (result.success) {
+        console.log('🔄 STEP 7: Navigating to verify-otp');
+        router.push({
+          pathname: '/(auth)/verify-otp',
+          params: {
+            email,
+            purpose: 'register',
+          },
+        });
+      } else {
+        console.log('❌ STEP 8: API returned false');
+        Alert.alert('Sign Up Failed', result.message || 'Something went wrong');
+      }
+    } catch (error: any) {
+      console.log('💥 STEP 9: ERROR caught:', error);
+      console.log('💥 Error message:', error.message);
+      console.log('💥 Error response:', error.response?.data);
+      Alert.alert('Sign Up Failed', error.response?.data?.message || error.message || 'Something went wrong');
+    } finally {
+      console.log('🏁 STEP 10: Loading finished');
+      setLoading(false);
+    }
   };
 
   return (
@@ -426,14 +238,11 @@ export default function SignUp() {
           showsVerticalScrollIndicator={false}
         >
           <View style={styles.card}>
-
-            {/* CONNECTOR DOTS */}
             <View style={styles.connectorTop} />
             <View style={styles.connectorBottom} />
             <View style={styles.connectorLeft} />
             <View style={styles.connectorRight} />
 
-            {/* LOGO */}
             <View style={styles.logoWrap}>
               <Image
                 source={require('../../assets/images/logo.png')}
@@ -442,7 +251,6 @@ export default function SignUp() {
               />
             </View>
 
-            {/* HEADING */}
             <Text style={styles.heading}>Create Account</Text>
 
             {/* FULL NAME */}
@@ -460,12 +268,33 @@ export default function SignUp() {
                   }}
                   autoCapitalize="words"
                   returnKeyType="next"
+                  onSubmitEditing={() => usernameRef.current?.focus()}
+                />
+              </View>
+              {errors.fullName ? <Text style={styles.fieldError}>{errors.fullName}</Text> : null}
+            </View>
+
+            {/* USERNAME */}
+            <View style={styles.formGroup}>
+              <Text style={styles.label}>Username</Text>
+              <View style={styles.inputWrap}>
+                <TextInput
+                  ref={usernameRef}
+                  style={styles.input}
+                  placeholder="juan_delacruz"
+                  placeholderTextColor="#b8c0d4"
+                  value={username}
+                  onChangeText={(text) => {
+                    setUsername(text.toLowerCase().replace(/[^a-z0-9_]/g, '_'));
+                    setErrors({ ...errors, username: '' });
+                  }}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  returnKeyType="next"
                   onSubmitEditing={() => emailRef.current?.focus()}
                 />
               </View>
-              {errors.fullName ? (
-                <Text style={styles.fieldError}>{errors.fullName}</Text>
-              ) : null}
+              {errors.username ? <Text style={styles.fieldError}>{errors.username}</Text> : null}
             </View>
 
             {/* EMAIL */}
@@ -489,9 +318,7 @@ export default function SignUp() {
                   onSubmitEditing={() => passwordRef.current?.focus()}
                 />
               </View>
-              {errors.email ? (
-                <Text style={styles.fieldError}>{errors.email}</Text>
-              ) : null}
+              {errors.email ? <Text style={styles.fieldError}>{errors.email}</Text> : null}
             </View>
 
             {/* PASSWORD */}
@@ -513,16 +340,11 @@ export default function SignUp() {
                   returnKeyType="next"
                   onSubmitEditing={() => confirmPasswordRef.current?.focus()}
                 />
-                <TouchableOpacity
-                  style={styles.eyeBtn}
-                  onPress={() => setShowPassword(!showPassword)}
-                >
+                <TouchableOpacity style={styles.eyeBtn} onPress={() => setShowPassword(!showPassword)}>
                   <EyeIcon visible={showPassword} />
                 </TouchableOpacity>
               </View>
-              {errors.password ? (
-                <Text style={styles.fieldError}>{errors.password}</Text>
-              ) : null}
+              {errors.password ? <Text style={styles.fieldError}>{errors.password}</Text> : null}
             </View>
 
             {/* CONFIRM PASSWORD */}
@@ -544,16 +366,11 @@ export default function SignUp() {
                   returnKeyType="done"
                   onSubmitEditing={handleSignUp}
                 />
-                <TouchableOpacity
-                  style={styles.eyeBtn}
-                  onPress={() => setShowConfirmPassword(!showConfirmPassword)}
-                >
+                <TouchableOpacity style={styles.eyeBtn} onPress={() => setShowConfirmPassword(!showConfirmPassword)}>
                   <EyeIcon visible={showConfirmPassword} />
                 </TouchableOpacity>
               </View>
-              {errors.confirmPassword ? (
-                <Text style={styles.fieldError}>{errors.confirmPassword}</Text>
-              ) : null}
+              {errors.confirmPassword ? <Text style={styles.fieldError}>{errors.confirmPassword}</Text> : null}
             </View>
 
             {/* TERMS */}
@@ -565,36 +382,19 @@ export default function SignUp() {
               }}
               activeOpacity={0.8}
             >
-              <View
-                style={[
-                  styles.customCheckbox,
-                  agreed && styles.customCheckboxChecked,
-                ]}
-              >
+              <View style={[styles.customCheckbox, agreed && styles.customCheckboxChecked]}>
                 {agreed && (
                   <Svg width={10} height={10} viewBox="0 0 10 10">
-                    <Path
-                      d="M2 5l2.5 2.5L8 3"
-                      stroke="white"
-                      strokeWidth={1.8}
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      fill="none"
-                    />
+                    <Path d="M2 5l2.5 2.5L8 3" stroke="white" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" fill="none" />
                   </Svg>
                 )}
               </View>
               <Text style={styles.termsText}>
-                I agree to the{' '}
-                <Text style={styles.termsLink}>Terms and Conditions</Text>
-                {' '}and{' '}
+                I agree to the <Text style={styles.termsLink}>Terms and Conditions</Text> and{' '}
                 <Text style={styles.termsLink}>Privacy Policy</Text>
               </Text>
             </TouchableOpacity>
-
-            {errors.agreed ? (
-              <Text style={styles.fieldError}>{errors.agreed}</Text>
-            ) : null}
+            {errors.agreed ? <Text style={styles.fieldError}>{errors.agreed}</Text> : null}
 
             {/* CREATE BUTTON */}
             <TouchableOpacity
@@ -603,21 +403,7 @@ export default function SignUp() {
               activeOpacity={0.85}
               disabled={loading}
             >
-              {loading ? (
-                <ActivityIndicator color="#ffffff" size="small" />
-              ) : (
-                <Text style={styles.btnCreateText}>Create Account</Text>
-              )}
-            </TouchableOpacity>
-
-            {/* GOOGLE */}
-            <TouchableOpacity
-              style={styles.btnGoogle}
-              onPress={handleGoogleSignUp}
-              activeOpacity={0.85}
-            >
-              <GoogleIcon />
-              <Text style={styles.btnGoogleText}>Sign up with Google</Text>
+              {loading ? <ActivityIndicator color="#ffffff" size="small" /> : <Text style={styles.btnCreateText}>Create Account</Text>}
             </TouchableOpacity>
 
             {/* SIGN IN LINK */}
@@ -627,7 +413,6 @@ export default function SignUp() {
                 <Text style={styles.signinLink}>Sign In</Text>
               </TouchableOpacity>
             </View>
-
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
@@ -635,254 +420,33 @@ export default function SignUp() {
   );
 }
 
-//
-// STYLES
-//
-
 const styles = StyleSheet.create({
-  flex: {
-    flex: 1,
-    backgroundColor: '#eef2ff',
-  },
-
-  scrollContent: {
-    flexGrow: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingVertical: 40,
-    paddingHorizontal: 16,
-  },
-
-  card: {
-    width: '100%',
-    maxWidth: 380,
-    backgroundColor: '#ffffff',
-    borderRadius: 24,
-    paddingHorizontal: 28,
-    paddingTop: 26,
-    paddingBottom: 22,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.9)',
-    shadowColor: '#3b5bdb',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.12,
-    shadowRadius: 24,
-    elevation: 8,
-    position: 'relative',
-    marginTop: -25,
-  },
-
-  connectorTop: {
-    position: 'absolute',
-    top: -5,
-    alignSelf: 'center',
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-    backgroundColor: '#ffffff',
-    borderWidth: 1.5,
-    borderColor: '#cbd5f5',
-  },
-
-  connectorBottom: {
-    position: 'absolute',
-    bottom: -5,
-    alignSelf: 'center',
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-    backgroundColor: '#ffffff',
-    borderWidth: 1.5,
-    borderColor: '#cbd5f5',
-  },
-
-  connectorLeft: {
-    position: 'absolute',
-    left: -5,
-    top: '50%',
-    transform: [{ translateY: -5 }],
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-    backgroundColor: '#ffffff',
-    borderWidth: 1.5,
-    borderColor: '#cbd5f5',
-  },
-
-  connectorRight: {
-    position: 'absolute',
-    right: -5,
-    top: '50%',
-    transform: [{ translateY: -5 }],
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-    backgroundColor: '#ffffff',
-    borderWidth: 1.5,
-    borderColor: '#cbd5f5',
-  },
-
-  logoWrap: {
-    alignItems: 'center',
-    marginBottom: 14,
-  },
-
-  logo: {
-    width: 56,
-    height: 56,
-    borderRadius: 14,
-    backgroundColor: '#0a0f1e',
-  },
-
-  heading: {
-    fontFamily: Platform.OS === 'ios' ? 'Georgia' : 'serif',
-    fontSize: 24,
-    fontWeight: '700',
-    color: '#1a1f36',
-    textAlign: 'center',
-    marginBottom: 16,
-  },
-
-  formGroup: {
-    marginBottom: 12,
-  },
-
-  label: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#4a5568',
-    marginBottom: 7,
-  },
-
-  inputWrap: {
-    borderWidth: 1.5,
-    borderColor: '#e2e6f3',
-    borderRadius: 10,
-    backgroundColor: '#f8f9ff',
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-
-  input: {
-    flex: 1,
-    paddingHorizontal: 14,
-    paddingVertical: Platform.OS === 'ios' ? 12 : 10,
-    fontSize: 14,
-    color: '#1a1f36',
-  },
-
-  inputWithIcon: {
-    paddingRight: 44,
-  },
-
-  eyeBtn: {
-    position: 'absolute',
-    right: 12,
-    padding: 4,
-  },
-
-  fieldError: {
-    color: '#e53e3e',
-    fontSize: 12,
-    marginTop: 6,
-    marginLeft: 4,
-    fontWeight: '500',
-  },
-
-  termsWrap: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 10,
-    marginTop: 2,
-    marginBottom: 4,
-  },
-
-  customCheckbox: {
-    width: 18,
-    height: 18,
-    borderRadius: 9,
-    borderWidth: 2,
-    borderColor: '#8896b3',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: 1,
-  },
-
-  customCheckboxChecked: {
-    backgroundColor: '#3b5bdb',
-    borderColor: '#3b5bdb',
-  },
-
-  termsText: {
-    flex: 1,
-    fontSize: 13,
-    lineHeight: 20,
-    color: '#4a5568',
-  },
-
-  termsLink: {
-    fontWeight: '700',
-    color: '#1a1f36',
-  },
-
-  btnCreate: {
-    backgroundColor: '#3b5bdb',
-    borderRadius: 10,
-    paddingVertical: 12,
-    alignItems: 'center',
-    marginTop: 14,
-    marginBottom: 10,
-    shadowColor: '#3b5bdb',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.35,
-    shadowRadius: 10,
-    elevation: 5,
-  },
-
-  btnDisabled: {
-    opacity: 0.7,
-  },
-
-  btnCreateText: {
-    color: '#ffffff',
-    fontSize: 15,
-    fontWeight: '700',
-    letterSpacing: 0.3,
-  },
-
-  btnGoogle: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1.5,
-    borderColor: '#e2e6f3',
-    borderRadius: 10,
-    paddingVertical: 11,
-    backgroundColor: '#ffffff',
-  },
-
-  btnGoogleText: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: '#1a1f36',
-    marginLeft: 8,
-  },
-
-  signinWrap: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginTop: 14,
-  },
-
-  signinText: {
-    fontSize: 13,
-    color: '#8896b3',
-  },
-
-  signinLink: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: '#1a1f36',
-  },
+  flex: { flex: 1, backgroundColor: '#eef2ff' },
+  scrollContent: { flexGrow: 1, justifyContent: 'center', alignItems: 'center', paddingVertical: 40, paddingHorizontal: 16 },
+  card: { width: '100%', maxWidth: 380, backgroundColor: '#ffffff', borderRadius: 24, paddingHorizontal: 28, paddingTop: 26, paddingBottom: 22, shadowColor: '#3b5bdb', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.12, shadowRadius: 24, elevation: 8, position: 'relative', marginTop: -25 },
+  connectorTop: { position: 'absolute', top: -5, alignSelf: 'center', width: 10, height: 10, borderRadius: 5, backgroundColor: '#ffffff', borderWidth: 1.5, borderColor: '#cbd5f5' },
+  connectorBottom: { position: 'absolute', bottom: -5, alignSelf: 'center', width: 10, height: 10, borderRadius: 5, backgroundColor: '#ffffff', borderWidth: 1.5, borderColor: '#cbd5f5' },
+  connectorLeft: { position: 'absolute', left: -5, top: '50%', transform: [{ translateY: -5 }], width: 10, height: 10, borderRadius: 5, backgroundColor: '#ffffff', borderWidth: 1.5, borderColor: '#cbd5f5' },
+  connectorRight: { position: 'absolute', right: -5, top: '50%', transform: [{ translateY: -5 }], width: 10, height: 10, borderRadius: 5, backgroundColor: '#ffffff', borderWidth: 1.5, borderColor: '#cbd5f5' },
+  logoWrap: { alignItems: 'center', marginBottom: 14 },
+  logo: { width: 56, height: 56, borderRadius: 14, backgroundColor: '#0a0f1e' },
+  heading: { fontFamily: Platform.OS === 'ios' ? 'Georgia' : 'serif', fontSize: 24, fontWeight: '700', color: '#1a1f36', textAlign: 'center', marginBottom: 16 },
+  formGroup: { marginBottom: 12 },
+  label: { fontSize: 13, fontWeight: '600', color: '#4a5568', marginBottom: 7 },
+  inputWrap: { borderWidth: 1.5, borderColor: '#e2e6f3', borderRadius: 10, backgroundColor: '#f8f9ff', flexDirection: 'row', alignItems: 'center' },
+  input: { flex: 1, paddingHorizontal: 14, paddingVertical: Platform.OS === 'ios' ? 12 : 10, fontSize: 14, color: '#1a1f36' },
+  inputWithIcon: { paddingRight: 44 },
+  eyeBtn: { position: 'absolute', right: 12, padding: 4 },
+  fieldError: { color: '#e53e3e', fontSize: 12, marginTop: 6, marginLeft: 4, fontWeight: '500' },
+  termsWrap: { flexDirection: 'row', alignItems: 'flex-start', gap: 10, marginTop: 2, marginBottom: 4 },
+  customCheckbox: { width: 18, height: 18, borderRadius: 9, borderWidth: 2, borderColor: '#8896b3', alignItems: 'center', justifyContent: 'center', marginTop: 1 },
+  customCheckboxChecked: { backgroundColor: '#3b5bdb', borderColor: '#3b5bdb' },
+  termsText: { flex: 1, fontSize: 13, lineHeight: 20, color: '#4a5568' },
+  termsLink: { fontWeight: '700', color: '#1a1f36' },
+  btnCreate: { backgroundColor: '#3b5bdb', borderRadius: 10, paddingVertical: 12, alignItems: 'center', marginTop: 14, marginBottom: 10, shadowColor: '#3b5bdb', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.35, shadowRadius: 10, elevation: 5 },
+  btnDisabled: { opacity: 0.7 },
+  btnCreateText: { color: '#ffffff', fontSize: 15, fontWeight: '700', letterSpacing: 0.3 },
+  signinWrap: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', marginTop: 14 },
+  signinText: { fontSize: 13, color: '#8896b3' },
+  signinLink: { fontSize: 13, fontWeight: '700', color: '#1a1f36' },
 });

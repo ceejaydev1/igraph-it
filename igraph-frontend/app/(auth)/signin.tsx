@@ -17,11 +17,25 @@ import {
   Alert,
 } from 'react-native';
 import { Stack, useRouter } from 'expo-router';
-import { Svg, Line, Circle, Rect, Path, G, Text as SvgText, Defs, Pattern, Marker, Polygon } from 'react-native-svg';
+import * as WebBrowser from 'expo-web-browser';
+import { makeRedirectUri, useAuthRequest } from 'expo-auth-session';
+import * as Google from 'expo-auth-session/providers/google';
+import {
+  Svg,
+  Line,
+  Circle,
+  Rect,
+  Path,
+  Text as SvgText,
+  Defs,
+  Pattern,
+} from 'react-native-svg';
+
+import * as authService from '../../services/authService';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
-// ─── DIAGRAM BACKGROUND ──────────────────────────────────────────────────────
+// ─── DIAGRAM BACKGROUND (same as before) ──────────────────────────────────────
 
 const DiagramBackground = () => (
   <View style={StyleSheet.absoluteFillObject} pointerEvents="none">
@@ -249,6 +263,8 @@ const GoogleIcon = () => (
   </Svg>
 );
 
+WebBrowser.maybeCompleteAuthSession();
+
 // ─── MAIN COMPONENT ──────────────────────────────────────────────────────────
 
 export default function SignIn() {
@@ -268,6 +284,34 @@ export default function SignIn() {
 
   const passwordRef = useRef<TextInput>(null);
 
+  // Google Sign In
+  const [request, response, promptAsync] = Google.useAuthRequest({
+    webClientId: '633434684809-p1a626c6bh4cn11v53dtbeq81u3s94a2.apps.googleusercontent.com', // Add your Google Client ID
+    // iosClientId: 'YOUR_IOS_CLIENT_ID.apps.googleusercontent.com',
+    // androidClientId: 'YOUR_ANDROID_CLIENT_ID.apps.googleusercontent.com',
+  });
+
+  React.useEffect(() => {
+    const handleGoogleResponse = async () => {
+      if (response?.type === 'success' && response.params?.id_token) {
+        setLoading(true);
+        try {
+          const result = await authService.googleAuth(response.params.id_token);
+          if (result.success) {
+            router.replace('/(tabs)/home');
+          } else {
+            Alert.alert('Sign In Failed', result.message || 'Google sign in failed');
+          }
+        } catch (error: any) {
+          Alert.alert('Sign In Failed', error.message || 'Something went wrong');
+        } finally {
+          setLoading(false);
+        }
+      }
+    };
+    handleGoogleResponse();
+  }, [response]);
+
   const handleSignIn = async () => {
     const newErrors = { email: '', password: '', terms: '' };
 
@@ -278,23 +322,28 @@ export default function SignIn() {
     setErrors(newErrors);
     if (newErrors.email || newErrors.password || newErrors.terms) return;
 
+    setLoading(true);
     try {
-      setLoading(true);
-      setTimeout(() => {
-        setLoading(false);
+      const result = await authService.signIn(email, password);
+      if (result.success) {
         router.replace('/(tabs)/home');
-      }, 1500);
-    } catch (err: any) {
+      } else {
+        Alert.alert('Sign In Failed', result.message || 'Invalid email or password');
+      }
+    } catch (error: any) {
+      Alert.alert('Sign In Failed', error.response?.data?.message || error.message || 'Something went wrong');
+    } finally {
       setLoading(false);
-      setErrors(prev => ({
-        ...prev,
-        password: err.message || 'Invalid credentials',
-      }));
     }
   };
 
   const handleGoogleSignIn = async () => {
-    Alert.alert('Google Sign In', 'Google authentication coming soon.');
+    if (!request) return;
+    try {
+      await promptAsync();
+    } catch (error) {
+      Alert.alert('Google Sign In', 'Failed to connect to Google');
+    }
   };
 
   return (
@@ -464,6 +513,7 @@ export default function SignIn() {
               style={styles.btnGoogle}
               onPress={handleGoogleSignIn}
               activeOpacity={0.85}
+              disabled={!request}
             >
               <GoogleIcon />
               <Text style={styles.btnGoogleText}>Continue with Google</Text>
@@ -530,8 +580,6 @@ export default function SignIn() {
   );
 }
 
-// ─── STYLES ──────────────────────────────────────────────────────────────────
-
 const styles = StyleSheet.create({
   flex: {
     flex: 1,
@@ -546,7 +594,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
   },
 
-  // ── CARD
   card: {
     backgroundColor: '#ffffff',
     borderRadius: 24,
@@ -563,7 +610,6 @@ const styles = StyleSheet.create({
     marginTop: -25,
   },
 
-  // ── CONNECTOR DOTS
   connectorTop: {
     position: 'absolute',
     top: -5,
@@ -614,7 +660,6 @@ const styles = StyleSheet.create({
     borderColor: '#cbd5f5',
   },
 
-  // ── LOGO
   logoWrap: {
     alignItems: 'center',
     marginBottom: 16,
@@ -627,7 +672,6 @@ const styles = StyleSheet.create({
     backgroundColor: '#0a0f1e',
   },
 
-  // ── HEADING
   heading: {
     fontSize: 28,
     fontWeight: '800',
@@ -692,7 +736,6 @@ const styles = StyleSheet.create({
     padding: 10,
   },
 
-  // ── FORGOT
   forgotWrap: {
     alignItems: 'flex-end',
     marginTop: 6,
@@ -704,7 +747,6 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
 
-  // ── ERROR
   inputError: {
     borderColor: '#e11d48',
   },
@@ -721,7 +763,6 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
 
-  // ── SIGN IN BUTTON
   btnSignIn: {
     backgroundColor: '#3b5bdb',
     borderRadius: 12,
@@ -749,7 +790,6 @@ const styles = StyleSheet.create({
     letterSpacing: 0.3,
   },
 
-  // ── DIVIDER
   divider: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -769,7 +809,6 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
 
-  // ── GOOGLE BUTTON
   btnGoogle: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -790,7 +829,6 @@ const styles = StyleSheet.create({
     marginLeft: 8,
   },
 
-  // ── TERMS
   termsWrap: {
     flexDirection: 'row',
     alignItems: 'flex-start',
@@ -832,7 +870,6 @@ const styles = StyleSheet.create({
     color: '#1a1f36',
   },
 
-  // ── SIGNUP LINK
   signupWrap: {
     flexDirection: 'row',
     justifyContent: 'center',

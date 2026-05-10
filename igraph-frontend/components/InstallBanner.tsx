@@ -1,6 +1,6 @@
 // components/InstallBanner.tsx
-// iGraph IT PWA Install Banner
-// Shows at the TOP of screen when Chrome detects the app is installable
+// iGraph IT PWA Install Banner - Mobile Only
+// Shows at the TOP of screen on mobile browsers when app is installable
 
 import React, { useEffect, useRef } from 'react';
 import {
@@ -11,7 +11,10 @@ import {
   Platform,
   Image,
   Animated,
+  Dimensions,
 } from 'react-native';
+
+const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 interface InstallBannerProps {
   visible: boolean;
@@ -61,8 +64,8 @@ export default function InstallBanner({ visible, onDismiss }: InstallBannerProps
           resizeMode="contain"
         />
         <View style={styles.textWrap}>
-          <Text style={styles.title}>iGraph IT</Text>
-          <Text style={styles.subtitle}>Install app for better experience</Text>
+          <Text style={styles.title}>Install iGraph IT</Text>
+          <Text style={styles.subtitle}>Get a better app experience</Text>
         </View>
       </View>
 
@@ -101,26 +104,28 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 16,
-    paddingVertical: 10,
+    paddingVertical: 12,
     borderBottomWidth: 1,
     borderBottomColor: '#e2e6f3',
     shadowColor: '#3b5bdb',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.10,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.12,
     shadowRadius: 8,
     elevation: 6,
+    // Mobile-specific styling
+    width: SCREEN_WIDTH,
   },
 
   left: {
     flexDirection: 'row',
     alignItems: 'center',
     flex: 1,
-    gap: 10,
+    gap: 12,
   },
 
   logo: {
-    width: 40,
-    height: 40,
+    width: 44,
+    height: 44,
     borderRadius: 10,
     backgroundColor: '#0a0f1e',
   },
@@ -130,15 +135,15 @@ const styles = StyleSheet.create({
   },
 
   title: {
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: '700',
     color: '#1a1f36',
   },
 
   subtitle: {
-    fontSize: 11,
+    fontSize: 12,
     color: '#8896b3',
-    marginTop: 1,
+    marginTop: 2,
   },
 
   right: {
@@ -149,14 +154,14 @@ const styles = StyleSheet.create({
 
   installBtn: {
     backgroundColor: '#3b5bdb',
-    paddingHorizontal: 16,
+    paddingHorizontal: 18,
     paddingVertical: 8,
     borderRadius: 8,
   },
 
   installText: {
     color: '#ffffff',
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: '700',
   },
 
@@ -165,7 +170,7 @@ const styles = StyleSheet.create({
   },
 
   dismissText: {
-    fontSize: 14,
+    fontSize: 16,
     color: '#8896b3',
     fontWeight: '600',
   },

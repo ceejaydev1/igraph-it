@@ -1,7 +1,4 @@
 // app/_layout.tsx
-// iGraph IT — Root Layout
-// Handles PWA manifest injection, service worker, install banner, and navigation
-
 import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
@@ -15,12 +12,30 @@ export const unstable_settings = {
   anchor: '(tabs)',
 };
 
+// Helper function to detect if device is mobile
+const isMobileDevice = () => {
+  if (Platform.OS !== 'web') return false;
+  
+  const userAgent = navigator.userAgent || navigator.vendor || (window as any).opera;
+  
+  // Check for mobile devices
+  const isMobile = /android|iphone|ipad|ipod|blackberry|windows phone|opera mini|iemobile/i.test(userAgent);
+  
+  // Check for tablet (treat as mobile for PWA purposes)
+  const isTablet = /ipad|android(?!.*mobile)/i.test(userAgent);
+  
+  return isMobile || isTablet;
+};
+
 export default function RootLayout() {
   const colorScheme = useColorScheme();
   const [showBanner, setShowBanner] = useState(false);
+  const [isMobile, setIsMobile] = useState(false);
 
   useEffect(() => {
     if (Platform.OS === 'web') {
+      const mobile = isMobileDevice();
+      setIsMobile(mobile);
 
       // ✅ Inject manifest link into <head>
       const existingManifest = document.querySelector('link[rel="manifest"]');
@@ -58,7 +73,15 @@ export default function RootLayout() {
       const handleBeforeInstall = (e: Event) => {
         e.preventDefault();
         deferredPrompt = e;
-        setShowBanner(true); // Show custom install banner
+        
+        // Only show custom banner on mobile devices
+        if (mobile) {
+          setShowBanner(true);
+        } else {
+          // On desktop, we don't show the banner, but we keep the prompt
+          // The browser's native install icon will appear automatically
+          console.log('[iGraph IT] Desktop - native install icon available');
+        }
       };
 
       const handleAppInstalled = () => {
@@ -79,7 +102,7 @@ export default function RootLayout() {
         return outcome === 'accepted';
       };
 
-      // Don't show if already installed (standalone mode)
+      // Check if already installed (standalone mode)
       const isStandalone =
         window.matchMedia('(display-mode: standalone)').matches ||
         (window.navigator as any).standalone === true;
@@ -97,8 +120,8 @@ export default function RootLayout() {
     <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
       <View style={styles.flex}>
 
-        {/* ✅ PWA Install Banner — only shows on web when installable */}
-        {Platform.OS === 'web' && (
+        {/* ✅ PWA Install Banner — only shows on mobile web when installable */}
+        {Platform.OS === 'web' && isMobile && (
           <InstallBanner
             visible={showBanner}
             onDismiss={() => setShowBanner(false)}
