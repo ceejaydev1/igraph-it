@@ -55,8 +55,8 @@ const signup = async (req, res) => {
       });
     }
 
-    // 4. Hash the password for storage in Firestore (extra security layer)
-    const saltRounds = 12; // Higher = more secure but slower; 12 is a good balance
+    // 4. Hash the password for storage in Firestore
+    const saltRounds = 12;
     const passwordHash = await bcrypt.hash(password, saltRounds);
 
     // 5. Create student document in Firestore
@@ -71,22 +71,19 @@ const signup = async (req, res) => {
 
     // 6. Generate OTP and save it
     const otp = generateOTP();
-    const otpExpiry = getOTPExpiry(5); // Expires in 5 minutes
+    const otpExpiry = getOTPExpiry(5);
 
-    // Invalidate any old OTPs first, then create new one
     await otpModel.invalidateAllOTPs(firebaseUser.uid, 'signup');
     await otpModel.createOTP(firebaseUser.uid, otp, 'signup', otpExpiry);
 
     // 7. Send verification email
     await sendVerificationEmail(email, fullName, otp);
 
-    // 8. Return success (do NOT return the OTP in production!)
     res.status(201).json({
       success: true,
       message: 'Account created successfully! Please check your email for the OTP verification code.',
       data: {
         email: email,
-        // Only show OTP in development to help with testing
         ...(process.env.NODE_ENV === 'development' && { debug_otp: otp })
       }
     });
@@ -101,15 +98,13 @@ const signup = async (req, res) => {
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
-// VERIFY OTP (email verification after signup)
-// POST /api/auth/verify-otp
+// VERIFY OTP
 // ─────────────────────────────────────────────────────────────────────────────
 
 const verifyOTP = async (req, res) => {
   try {
     const { email, otp } = req.body;
 
-    // 1. Find the user by email
     const user = await userModel.getUserByEmail(email);
     if (!user) {
       return res.status(404).json({
@@ -118,7 +113,6 @@ const verifyOTP = async (req, res) => {
       });
     }
 
-    // 2. Check if already verified
     if (user.is_verified) {
       return res.status(400).json({
         success: false,
@@ -126,7 +120,6 @@ const verifyOTP = async (req, res) => {
       });
     }
 
-    // 3. Get the valid OTP for this user
     const validOTP = await otpModel.getValidOTP(user.user_id, 'signup');
 
     if (!validOTP) {
@@ -136,7 +129,6 @@ const verifyOTP = async (req, res) => {
       });
     }
 
-    // 4. Compare the submitted OTP with the stored one
     if (validOTP.otp_code !== otp) {
       return res.status(400).json({
         success: false,
@@ -144,13 +136,8 @@ const verifyOTP = async (req, res) => {
       });
     }
 
-    // 5. Mark OTP as used
     await otpModel.markOTPUsed(validOTP.otp_id);
-
-    // 6. Mark user as verified in Firestore
     await userModel.markUserVerified(user.user_id);
-
-    // 7. Update Firebase Auth email verification status
     await auth.updateUser(user.user_id, { emailVerified: true });
 
     res.status(200).json({
@@ -169,24 +156,20 @@ const verifyOTP = async (req, res) => {
 
 // ─────────────────────────────────────────────────────────────────────────────
 // RESEND OTP
-// POST /api/auth/resend-otp
 // ─────────────────────────────────────────────────────────────────────────────
 
 const resendOTP = async (req, res) => {
   try {
     const { email } = req.body;
 
-    // 1. Find user
     const user = await userModel.getUserByEmail(email);
     if (!user) {
-      // Security: don't reveal if email exists or not
       return res.status(200).json({
         success: true,
         message: 'If this email exists in our system, a new OTP has been sent.'
       });
     }
 
-    // 2. Already verified — no need to resend
     if (user.is_verified) {
       return res.status(400).json({
         success: false,
@@ -194,13 +177,10 @@ const resendOTP = async (req, res) => {
       });
     }
 
-    // 3. Invalidate old OTPs and generate a new one
     await otpModel.invalidateAllOTPs(user.user_id, 'signup');
     const otp = generateOTP();
     const otpExpiry = getOTPExpiry(5);
     await otpModel.createOTP(user.user_id, otp, 'signup', otpExpiry);
-
-    // 4. Send new OTP
     await sendVerificationEmail(email, user.full_name, otp);
 
     res.status(200).json({
@@ -220,24 +200,20 @@ const resendOTP = async (req, res) => {
 
 // ─────────────────────────────────────────────────────────────────────────────
 // SIGN IN
-// POST /api/auth/signin
 // ─────────────────────────────────────────────────────────────────────────────
 
 const signin = async (req, res) => {
   try {
     const { email, password } = req.body;
 
-    // 1. Find user by email
     const user = await userModel.getUserByEmail(email);
     if (!user) {
-      // Security: use generic message to avoid revealing whether email exists
       return res.status(401).json({
         success: false,
         message: 'Invalid email or password.'
       });
     }
 
-    // 2. Block Google-only accounts from using email/password signin
     if (user.auth_provider === 'google') {
       return res.status(400).json({
         success: false,
@@ -245,7 +221,6 @@ const signin = async (req, res) => {
       });
     }
 
-    // 3. Check if email is verified
     if (!user.is_verified) {
       return res.status(403).json({
         success: false,
@@ -254,7 +229,6 @@ const signin = async (req, res) => {
       });
     }
 
-    // 4. Compare submitted password with stored hash
     const passwordMatch = await bcrypt.compare(password, user.password_hash);
     if (!passwordMatch) {
       return res.status(401).json({
@@ -263,14 +237,12 @@ const signin = async (req, res) => {
       });
     }
 
-    // 5. Generate tokens
     const accessToken = generateAccessToken(user.user_id, user.email);
     const refreshToken = generateRefreshToken(user.user_id);
 
-    // 6. Store session in Firestore
     const sessionId = uuidv4();
     const sessionExpiry = new Date();
-    sessionExpiry.setDate(sessionExpiry.getDate() + 7); // 7 days
+    sessionExpiry.setDate(sessionExpiry.getDate() + 7);
 
     await db.collection('sessions').doc(sessionId).set({
       session_id: sessionId,
@@ -281,7 +253,6 @@ const signin = async (req, res) => {
       expires_at: sessionExpiry.toISOString()
     });
 
-    // 7. Return user data + tokens (never return password_hash)
     res.status(200).json({
       success: true,
       message: 'Sign in successful!',
@@ -311,19 +282,36 @@ const signin = async (req, res) => {
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
-// GOOGLE AUTH
-// POST /api/auth/google
+// GOOGLE AUTH (UPDATED WITH DEBUG LOGS)
 // ─────────────────────────────────────────────────────────────────────────────
 
 const googleAuth = async (req, res) => {
   try {
+    console.log('🔍 STEP 1: Google auth request received');
+    console.log('📦 STEP 2: Request body:', req.body);
+    
     const { idToken } = req.body;
+    
+    console.log('🔑 STEP 3: idToken received:', idToken ? `YES (length: ${idToken.length})` : 'NO');
+
+    if (!idToken) {
+      console.log('❌ STEP 4: No idToken provided');
+      return res.status(400).json({
+        success: false,
+        message: 'No ID token provided'
+      });
+    }
 
     // 1. Verify the Google ID token using Firebase Admin
     let decodedToken;
     try {
+      console.log('🔄 STEP 5: Verifying token with Firebase Auth...');
       decodedToken = await auth.verifyIdToken(idToken);
+      console.log('✅ STEP 6: Token verified successfully!');
+      console.log('👤 STEP 7: User email:', decodedToken.email);
+      console.log('🆔 STEP 8: User UID:', decodedToken.uid);
     } catch (err) {
+      console.error('❌ STEP 9: Token verification failed:', err.message);
       return res.status(401).json({
         success: false,
         message: 'Invalid Google token. Please try again.'
@@ -333,10 +321,12 @@ const googleAuth = async (req, res) => {
     const { uid, email, name, picture } = decodedToken;
 
     // 2. Check if user already exists in Firestore
+    console.log('🔍 STEP 10: Checking if user exists in Firestore...');
     let user = await userModel.getUserById(uid);
+    console.log('👤 STEP 11: User exists?', user ? 'YES' : 'NO');
 
     if (!user) {
-      // 3. New user — create their account automatically
+      console.log('📝 STEP 12: Creating new user...');
       // Generate a unique username from their Google display name
       const baseUsername = name
         ? name.toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '') + '_' + uid.substring(0, 5)
@@ -346,20 +336,25 @@ const googleAuth = async (req, res) => {
         fullName: name || 'Google User',
         username: baseUsername,
         email: email,
-        passwordHash: null,       // Google users don't have a password
-        isVerified: true,         // Google emails are pre-verified
+        passwordHash: null,
+        isVerified: true,
         profilePicture: picture || null,
         authProvider: 'google'
       });
 
       user = await userModel.getUserById(uid);
+      console.log('✅ STEP 13: New user created:', email);
+    } else {
+      console.log('✅ STEP 13: Existing user found:', email);
     }
 
     // 4. Generate JWT tokens
+    console.log('🔑 STEP 14: Generating JWT tokens...');
     const accessToken = generateAccessToken(uid, email);
     const refreshToken = generateRefreshToken(uid);
 
     // 5. Store session
+    console.log('💾 STEP 15: Storing session in Firestore...');
     const sessionId = uuidv4();
     const sessionExpiry = new Date();
     sessionExpiry.setDate(sessionExpiry.getDate() + 7);
@@ -372,6 +367,9 @@ const googleAuth = async (req, res) => {
       created_at: new Date().toISOString(),
       expires_at: sessionExpiry.toISOString()
     });
+
+    console.log('✅ STEP 16: Session stored successfully!');
+    console.log('🎉 STEP 17: Sending success response...');
 
     res.status(200).json({
       success: true,
@@ -393,7 +391,8 @@ const googleAuth = async (req, res) => {
     });
 
   } catch (error) {
-    console.error('Google auth error:', error);
+    console.error('💥 GOOGLE AUTH ERROR:', error);
+    console.error('💥 Error stack:', error.stack);
     res.status(500).json({
       success: false,
       message: 'Server error during Google authentication.'
@@ -403,27 +402,21 @@ const googleAuth = async (req, res) => {
 
 // ─────────────────────────────────────────────────────────────────────────────
 // FORGOT PASSWORD
-// POST /api/auth/forgot-password
 // ─────────────────────────────────────────────────────────────────────────────
 
 const forgotPassword = async (req, res) => {
   try {
     const { email } = req.body;
 
-    // Find user (don't reveal if email exists or not for security)
     const user = await userModel.getUserByEmail(email);
 
     if (user && user.is_verified && user.auth_provider === 'email') {
-      // Invalidate previous reset OTPs, generate new one
       await otpModel.invalidateAllOTPs(user.user_id, 'reset');
       const otp = generateOTP();
       const otpExpiry = getOTPExpiry(5);
       await otpModel.createOTP(user.user_id, otp, 'reset', otpExpiry);
-
-      // Send reset email
       await sendPasswordResetEmail(email, user.full_name, otp);
 
-      // Return OTP in dev mode only
       if (process.env.NODE_ENV === 'development') {
         return res.status(200).json({
           success: true,
@@ -433,7 +426,6 @@ const forgotPassword = async (req, res) => {
       }
     }
 
-    // Always return same message (security: don't reveal if account exists)
     res.status(200).json({
       success: true,
       message: 'If this email is registered, a password reset OTP has been sent.'
@@ -450,7 +442,6 @@ const forgotPassword = async (req, res) => {
 
 // ─────────────────────────────────────────────────────────────────────────────
 // VERIFY RESET OTP
-// POST /api/auth/verify-reset-otp
 // ─────────────────────────────────────────────────────────────────────────────
 
 const verifyResetOTP = async (req, res) => {
@@ -473,12 +464,9 @@ const verifyResetOTP = async (req, res) => {
       });
     }
 
-    // We don't mark it as used here yet — it gets used when the password is reset
-    // Instead, we issue a short-lived "reset verified" confirmation
     res.status(200).json({
       success: true,
       message: 'OTP verified. You may now reset your password.',
-      // Return email so frontend can include it in the reset-password request
       data: { email }
     });
 
@@ -493,14 +481,12 @@ const verifyResetOTP = async (req, res) => {
 
 // ─────────────────────────────────────────────────────────────────────────────
 // RESET PASSWORD
-// POST /api/auth/reset-password
 // ─────────────────────────────────────────────────────────────────────────────
 
 const resetPassword = async (req, res) => {
   try {
     const { email, otp, newPassword } = req.body;
 
-    // 1. Find user
     const user = await userModel.getUserByEmail(email);
     if (!user) {
       return res.status(400).json({
@@ -509,7 +495,6 @@ const resetPassword = async (req, res) => {
       });
     }
 
-    // 2. Re-verify OTP one final time (security: prevents race conditions)
     const validOTP = await otpModel.getValidOTP(user.user_id, 'reset');
     if (!validOTP || validOTP.otp_code !== otp) {
       return res.status(400).json({
@@ -518,20 +503,13 @@ const resetPassword = async (req, res) => {
       });
     }
 
-    // 3. Hash the new password
     const saltRounds = 12;
     const newPasswordHash = await bcrypt.hash(newPassword, saltRounds);
 
-    // 4. Update password in Firestore
     await userModel.updatePasswordHash(user.user_id, newPasswordHash);
-
-    // 5. Update password in Firebase Auth as well
     await auth.updateUser(user.user_id, { password: newPassword });
-
-    // 6. Mark the OTP as used
     await otpModel.markOTPUsed(validOTP.otp_id);
 
-    // 7. Invalidate ALL active sessions for this user (force re-login)
     const sessionsSnapshot = await db.collection('sessions')
       .where('user_id', '==', user.user_id)
       .get();
@@ -556,7 +534,6 @@ const resetPassword = async (req, res) => {
 
 // ─────────────────────────────────────────────────────────────────────────────
 // REFRESH TOKEN
-// POST /api/auth/refresh-token
 // ─────────────────────────────────────────────────────────────────────────────
 
 const refreshToken = async (req, res) => {
@@ -570,7 +547,6 @@ const refreshToken = async (req, res) => {
       });
     }
 
-    // 1. Verify the refresh token
     let decoded;
     try {
       decoded = verifyRefreshToken(token);
@@ -581,7 +557,6 @@ const refreshToken = async (req, res) => {
       });
     }
 
-    // 2. Check if token type is correct
     if (decoded.type !== 'refresh') {
       return res.status(401).json({
         success: false,
@@ -589,7 +564,6 @@ const refreshToken = async (req, res) => {
       });
     }
 
-    // 3. Verify this refresh token exists in the sessions collection
     const sessionSnapshot = await db.collection('sessions')
       .where('user_id', '==', decoded.uid)
       .where('refresh_token', '==', token)
@@ -603,7 +577,6 @@ const refreshToken = async (req, res) => {
       });
     }
 
-    // 4. Get current user info
     const user = await userModel.getUserById(decoded.uid);
     if (!user) {
       return res.status(401).json({
@@ -612,7 +585,6 @@ const refreshToken = async (req, res) => {
       });
     }
 
-    // 5. Generate a new access token
     const newAccessToken = generateAccessToken(user.user_id, user.email);
 
     res.status(200).json({
@@ -634,7 +606,6 @@ const refreshToken = async (req, res) => {
 
 // ─────────────────────────────────────────────────────────────────────────────
 // LOGOUT
-// POST /api/auth/logout  (protected route)
 // ─────────────────────────────────────────────────────────────────────────────
 
 const logout = async (req, res) => {
@@ -642,7 +613,6 @@ const logout = async (req, res) => {
     const { refreshToken: token } = req.body;
 
     if (token) {
-      // Delete the specific session associated with this refresh token
       const sessionSnapshot = await db.collection('sessions')
         .where('user_id', '==', req.user.uid)
         .where('refresh_token', '==', token)
