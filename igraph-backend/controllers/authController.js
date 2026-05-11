@@ -638,6 +638,45 @@ const logout = async (req, res) => {
   }
 };
 
+// ─────────────────────────────────────────────────────────────────────────────
+// GET CURRENT USER (protected route)
+// GET /api/auth/me
+// ─────────────────────────────────────────────────────────────────────────────
+
+const getCurrentUser = async (req, res) => {
+  try {
+    console.log('🔍 Getting current user:', req.user.uid);
+    
+    const user = await userModel.getUserById(req.user.uid);
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found'
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      data: {
+        user: {
+          uid: user.user_id,
+          fullName: user.full_name,
+          username: user.username,
+          email: user.email,
+          profilePicture: user.profile_picture || null,
+          authProvider: user.auth_provider
+        }
+      }
+    });
+  } catch (error) {
+    console.error('Get current user error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error'
+    });
+  }
+};
+
 module.exports = {
   signup,
   verifyOTP,
@@ -648,5 +687,6 @@ module.exports = {
   verifyResetOTP,
   resetPassword,
   refreshToken,
-  logout
+  logout,
+  getCurrentUser,
 };

@@ -64,4 +64,7 @@ router.post('/refresh-token', authController.refreshToken);
 // POST /api/auth/logout  
 router.post('/logout', protect, authController.logout);
 
+// GET /api/auth/me - Get current user profile
+router.get('/me', protect, authController.getCurrentUser);
+
 module.exports = router;
