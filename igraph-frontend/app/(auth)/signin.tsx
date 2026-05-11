@@ -1,6 +1,6 @@
 // app/(auth)/signin.tsx
 
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { Pressable } from 'react-native';
 import {
   View,
@@ -18,8 +18,8 @@ import {
 } from 'react-native';
 import { Stack, useRouter } from 'expo-router';
 import * as WebBrowser from 'expo-web-browser';
-import { makeRedirectUri, useAuthRequest } from 'expo-auth-session';
-import * as Google from 'expo-auth-session/providers/google';
+import { initializeApp, FirebaseApp } from 'firebase/app';
+import { getAuth, Auth, signInWithPopup, GoogleAuthProvider, browserSessionPersistence, setPersistence } from 'firebase/auth';
 import {
   Svg,
   Line,
@@ -34,6 +34,26 @@ import {
 import * as authService from '../../services/authService';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
+
+// Firebase configuration
+const firebaseConfig = {
+  apiKey: "AIzaSyCyM0zjlTQ6cCuAf3CGWbxLnUUle_z88F8",
+  authDomain: "igraph-it.firebaseapp.com",
+  projectId: "igraph-it",
+  storageBucket: "igraph-it.firebasestorage.app",
+  messagingSenderId: "513560698622",
+  appId: "1:513560698622:web:71e12cbf9a1bb95dab0faf"
+};
+
+// Initialize Firebase
+let firebaseApp: FirebaseApp | undefined;
+let auth: Auth | undefined;
+
+if (Platform.OS === 'web') {
+  firebaseApp = initializeApp(firebaseConfig);
+  auth = getAuth(firebaseApp);
+}
+
 
 // ─── DIAGRAM BACKGROUND (same as before) ──────────────────────────────────────
 
@@ -284,33 +304,52 @@ export default function SignIn() {
 
   const passwordRef = useRef<TextInput>(null);
 
-  // Google Sign In
-  const [request, response, promptAsync] = Google.useAuthRequest({
-    webClientId: '633434684809-p1a626c6bh4cn11v53dtbeq81u3s94a2.apps.googleusercontent.com', // Add your Google Client ID
-    // iosClientId: 'YOUR_IOS_CLIENT_ID.apps.googleusercontent.com',
-    // androidClientId: 'YOUR_ANDROID_CLIENT_ID.apps.googleusercontent.com',
-  });
+  // Firebase Google Sign In
+  const handleFirebaseGoogleSignIn = async () => {
+    if (!auth) {
+      Alert.alert('Error', 'Firebase auth not available on this platform');
+      return;
+    }
 
-  React.useEffect(() => {
-    const handleGoogleResponse = async () => {
-      if (response?.type === 'success' && response.params?.id_token) {
-        setLoading(true);
-        try {
-          const result = await authService.googleAuth(response.params.id_token);
-          if (result.success) {
-            router.replace('/(tabs)/home');
-          } else {
-            Alert.alert('Sign In Failed', result.message || 'Google sign in failed');
-          }
-        } catch (error: any) {
-          Alert.alert('Sign In Failed', error.message || 'Something went wrong');
-        } finally {
-          setLoading(false);
-        }
+    setLoading(true);
+    try {
+      // Set persistence to session (keeps user logged in)
+      await setPersistence(auth, browserSessionPersistence);
+      
+      const provider = new GoogleAuthProvider();
+      provider.addScope('email');
+      provider.addScope('profile');
+      
+      const result = await signInWithPopup(auth, provider);
+      const user = result.user;
+      
+      // Get the Firebase ID token (this is what your backend expects!)
+      const idToken = await user.getIdToken();
+      
+      // Send to your backend for verification and session creation
+      const apiResult = await authService.googleAuth(idToken);
+      
+      if (apiResult.success) {
+        router.replace('/(tabs)/home');
+      } else {
+        Alert.alert('Sign In Failed', apiResult.message || 'Google sign in failed');
+        // Also sign out from Firebase if backend failed
+        await auth.signOut();
       }
-    };
-    handleGoogleResponse();
-  }, [response]);
+    } catch (error: any) {
+      console.error('Firebase Google Sign-In error:', error);
+      
+      if (error.code === 'auth/popup-blocked') {
+        Alert.alert('Popup Blocked', 'Please allow popups for this site and try again.');
+      } else if (error.code === 'auth/cancelled-popup-request') {
+        // User cancelled, do nothing
+      } else {
+        Alert.alert('Google Sign In Failed', error.message || 'Something went wrong');
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleSignIn = async () => {
     const newErrors = { email: '', password: '', terms: '' };
@@ -334,15 +373,6 @@ export default function SignIn() {
       Alert.alert('Sign In Failed', error.response?.data?.message || error.message || 'Something went wrong');
     } finally {
       setLoading(false);
-    }
-  };
-
-  const handleGoogleSignIn = async () => {
-    if (!request) return;
-    try {
-      await promptAsync();
-    } catch (error) {
-      Alert.alert('Google Sign In', 'Failed to connect to Google');
     }
   };
 
@@ -508,12 +538,12 @@ export default function SignIn() {
               <View style={styles.line} />
             </View>
 
-            {/* GOOGLE */}
+            {/* GOOGLE - Using Firebase Sign-In */}
             <TouchableOpacity
               style={styles.btnGoogle}
-              onPress={handleGoogleSignIn}
+              onPress={handleFirebaseGoogleSignIn}
               activeOpacity={0.85}
-              disabled={!request}
+              disabled={loading}
             >
               <GoogleIcon />
               <Text style={styles.btnGoogleText}>Continue with Google</Text>
