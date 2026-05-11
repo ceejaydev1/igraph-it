@@ -16,7 +16,13 @@ const PORT = process.env.PORT || 5000;
 app.use(helmet());
 
 app.use(cors({
-  origin: process.env.FRONTEND_URL || 'http://localhost:3000',
+  origin: [
+    'http://localhost:3000',
+    'http://localhost:8081',
+    'http://localhost:8081',
+    'https://igraph-it-1b6y.vercel.app',
+    'https://igraph-it-1b6y-jdfoy50d0-ceejaydev1s-projects.vercel.app'
+  ],
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization']
