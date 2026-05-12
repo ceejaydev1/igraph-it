@@ -1,63 +1,102 @@
-// emailService.js - Brevo HTTP API (Production)
 const https = require('https');
 
 const sendVerificationEmail = async (toEmail, fullName, otp) => {
   const apiKey = process.env.EMAIL_PASS;
   const senderEmail = process.env.EMAIL_USER;
+  const isProduction = process.env.NODE_ENV === 'production';
 
-  const data = JSON.stringify({
+  // REMOVED the xkeysib- check - that was blocking your valid key!
+  if (!apiKey || apiKey === 'your_brevo_api_key_here') {
+    console.log(`📧 [${isProduction ? 'BREVO_MISSING' : 'DEV_MODE'}] Verification OTP for ${toEmail}: ${otp}`);
+    
+    if (isProduction && (!apiKey || apiKey === 'your_brevo_api_key_here')) {
+      console.error('🚨 CRITICAL: Brevo API key missing in production!');
+    }
+    
+    return true;
+  }
+
+  if (!senderEmail || !senderEmail.includes('@')) {
+    console.error('❌ Invalid sender email:', senderEmail);
+    console.log(`📧 [FALLBACK] Verification OTP for ${toEmail}: ${otp}`);
+    return true;
+  }
+
+  const emailData = {
     sender: { email: senderEmail, name: 'iGraph IT' },
-    to: [{ email: toEmail, name: fullName }],
-    subject: `Verify your iGraph IT account - OTP: ${otp}`,
+    to: [{ email: toEmail, name: fullName || 'User' }],
+    subject: `Verify your account - OTP: ${otp}`,
     htmlContent: `
       <!DOCTYPE html>
       <html>
-      <body style="font-family: Arial, sans-serif;">
-        <div style="max-width: 500px; margin: 0 auto; padding: 20px;">
-          <h2 style="color: #4c6fff;">Welcome to iGraph IT!</h2>
-          <p>Hello <strong>${fullName}</strong>,</p>
+      <head><meta charset="UTF-8"></head>
+      <body style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+        <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 30px; text-align: center;">
+          <h1 style="color: white; margin: 0;">iGraph IT</h1>
+        </div>
+        <div style="padding: 30px; border: 1px solid #e0e0e0; border-top: none;">
+          <h2>Welcome ${fullName || 'User'}!</h2>
           <p>Your verification code is:</p>
-          <div style="background: #f0f4ff; padding: 20px; text-align: center; font-size: 32px; letter-spacing: 5px; border-radius: 10px;">
-            <strong>${otp}</strong>
+          <div style="background: #f5f5f5; padding: 20px; text-align: center; font-size: 32px; letter-spacing: 5px; border-radius: 8px;">
+            <strong style="color: #667eea;">${otp}</strong>
           </div>
-          <p>This code expires in 5 minutes.</p>
-          <p>If you didn't create an account, please ignore this email.</p>
-          <hr>
-          <p style="color: #888; font-size: 12px;">iGraph IT - Learn SDLC and Create UML Diagrams</p>
+          <p>This code expires in <strong>5 minutes</strong>.</p>
+          <hr style="margin: 20px 0;">
+          <p style="color: #888; font-size: 12px;">iGraph IT - Learn SDLC & Create UML Diagrams</p>
         </div>
       </body>
       </html>
-    `
-  });
+    `,
+  };
+
+  const data = JSON.stringify(emailData);
 
   const options = {
     hostname: 'api.brevo.com',
     path: '/v3/smtp/email',
     method: 'POST',
+    timeout: 8000,
     headers: {
-      'Accept': 'application/json',
+      Accept: 'application/json',
       'api-key': apiKey,
       'Content-Type': 'application/json',
-      'Content-Length': data.length
-    }
+      'Content-Length': Buffer.byteLength(data),
+    },
   };
 
-  return new Promise((resolve, reject) => {
+  return new Promise((resolve) => {
+    const startTime = Date.now();
+    
     const req = https.request(options, (res) => {
       let responseData = '';
-      res.on('data', (chunk) => responseData += chunk);
+      res.on('data', (chunk) => (responseData += chunk));
       res.on('end', () => {
+        const duration = Date.now() - startTime;
+        
         if (res.statusCode === 201) {
-          console.log(`✅ Email sent to ${toEmail}`);
+          console.log(`✅ Verification email sent to ${toEmail} (${duration}ms)`);
           resolve(true);
         } else {
-          console.error('Email error:', responseData);
-          reject(new Error(`Email API error: ${res.statusCode}`));
+          console.error(`⚠️ Brevo API error ${res.statusCode}:`, responseData.substring(0, 200));
+          console.log(`📧 [BACKUP] Verification OTP for ${toEmail}: ${otp}`);
+          resolve(true);
         }
       });
     });
-    
-    req.on('error', reject);
+
+    req.on('timeout', () => {
+      console.error(`⏱️ Brevo timeout after 8s - OTP: ${otp}`);
+      req.destroy();
+      console.log(`📧 [BACKUP] Verification OTP for ${toEmail}: ${otp}`);
+      resolve(true);
+    });
+
+    req.on('error', (err) => {
+      console.error(`❌ Brevo connection error: ${err.message}`);
+      console.log(`📧 [BACKUP] Verification OTP for ${toEmail}: ${otp}`);
+      resolve(true);
+    });
+
     req.write(data);
     req.end();
   });
@@ -66,60 +105,101 @@ const sendVerificationEmail = async (toEmail, fullName, otp) => {
 const sendPasswordResetEmail = async (toEmail, fullName, otp) => {
   const apiKey = process.env.EMAIL_PASS;
   const senderEmail = process.env.EMAIL_USER;
+  const isProduction = process.env.NODE_ENV === 'production';
 
-  const data = JSON.stringify({
+  // REMOVED the xkeysib- check - that was blocking your valid key!
+  if (!apiKey || apiKey === 'your_brevo_api_key_here') {
+    console.log(`📧 [${isProduction ? 'BREVO_MISSING' : 'DEV_MODE'}] Reset OTP for ${toEmail}: ${otp}`);
+    
+    if (isProduction && (!apiKey || apiKey === 'your_brevo_api_key_here')) {
+      console.error('🚨 CRITICAL: Brevo API key missing in production!');
+    }
+    
+    return true;
+  }
+
+  if (!senderEmail || !senderEmail.includes('@')) {
+    console.error('❌ Invalid sender email:', senderEmail);
+    console.log(`📧 [FALLBACK] Reset OTP for ${toEmail}: ${otp}`);
+    return true;
+  }
+
+  const emailData = {
     sender: { email: senderEmail, name: 'iGraph IT' },
-    to: [{ email: toEmail, name: fullName }],
+    to: [{ email: toEmail, name: fullName || 'User' }],
     subject: `Reset your password - OTP: ${otp}`,
     htmlContent: `
       <!DOCTYPE html>
       <html>
-      <body style="font-family: Arial, sans-serif;">
-        <div style="max-width: 500px; margin: 0 auto; padding: 20px;">
-          <h2 style="color: #e74c3c;">Reset Your Password</h2>
-          <p>Hello <strong>${fullName}</strong>,</p>
-          <p>Your password reset code is:</p>
-          <div style="background: #fff5f5; padding: 20px; text-align: center; font-size: 32px; letter-spacing: 5px; border-radius: 10px;">
-            <strong>${otp}</strong>
+      <head><meta charset="UTF-8"></head>
+      <body style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+        <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 30px; text-align: center;">
+          <h1 style="color: white; margin: 0;">iGraph IT</h1>
+        </div>
+        <div style="padding: 30px; border: 1px solid #e0e0e0; border-top: none;">
+          <h2>Hello ${fullName || 'User'},</h2>
+          <p>We received a request to reset your password. Use the code below:</p>
+          <div style="background: #f5f5f5; padding: 20px; text-align: center; font-size: 32px; letter-spacing: 5px; border-radius: 8px;">
+            <strong style="color: #667eea;">${otp}</strong>
           </div>
-          <p>This code expires in 5 minutes.</p>
+          <p>This code expires in <strong>5 minutes</strong>.</p>
           <p>If you didn't request this, please ignore this email.</p>
-          <hr>
-          <p style="color: #888; font-size: 12px;">iGraph IT - Learn SDLC and Create UML Diagrams</p>
+          <hr style="margin: 20px 0;">
+          <p style="color: #888; font-size: 12px;">iGraph IT - Learn SDLC & Create UML Diagrams</p>
         </div>
       </body>
       </html>
-    `
-  });
+    `,
+  };
+
+  const data = JSON.stringify(emailData);
 
   const options = {
     hostname: 'api.brevo.com',
     path: '/v3/smtp/email',
     method: 'POST',
+    timeout: 8000,
     headers: {
-      'Accept': 'application/json',
+      Accept: 'application/json',
       'api-key': apiKey,
       'Content-Type': 'application/json',
-      'Content-Length': data.length
-    }
+      'Content-Length': Buffer.byteLength(data),
+    },
   };
 
-  return new Promise((resolve, reject) => {
+  return new Promise((resolve) => {
+    const startTime = Date.now();
+    
     const req = https.request(options, (res) => {
       let responseData = '';
-      res.on('data', (chunk) => responseData += chunk);
+      res.on('data', (chunk) => (responseData += chunk));
       res.on('end', () => {
+        const duration = Date.now() - startTime;
+        
         if (res.statusCode === 201) {
-          console.log(`✅ Reset email sent to ${toEmail}`);
+          console.log(`✅ Reset email sent to ${toEmail} (${duration}ms)`);
           resolve(true);
         } else {
-          console.error('Reset email error:', responseData);
-          reject(new Error(`Email API error: ${res.statusCode}`));
+          console.error(`⚠️ Brevo API error ${res.statusCode}:`, responseData.substring(0, 200));
+          console.log(`📧 [BACKUP] Reset OTP for ${toEmail}: ${otp}`);
+          resolve(true);
         }
       });
     });
-    
-    req.on('error', reject);
+
+    req.on('timeout', () => {
+      console.error(`⏱️ Brevo timeout after 8s - OTP: ${otp}`);
+      req.destroy();
+      console.log(`📧 [BACKUP] Reset OTP for ${toEmail}: ${otp}`);
+      resolve(true);
+    });
+
+    req.on('error', (err) => {
+      console.error(`❌ Brevo connection error: ${err.message}`);
+      console.log(`📧 [BACKUP] Reset OTP for ${toEmail}: ${otp}`);
+      resolve(true);
+    });
+
     req.write(data);
     req.end();
   });

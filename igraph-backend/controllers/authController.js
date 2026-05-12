@@ -483,15 +483,32 @@ const verifyResetOTP = async (req, res) => {
 // RESET PASSWORD
 // ─────────────────────────────────────────────────────────────────────────────
 
+// This is already in your authController.js, but make sure it's correct
 const resetPassword = async (req, res) => {
   try {
     const { email, otp, newPassword } = req.body;
+
+    // Validate input
+    if (!email || !otp || !newPassword) {
+      return res.status(400).json({
+        success: false,
+        message: 'Email, OTP, and new password are required.'
+      });
+    }
 
     const user = await userModel.getUserByEmail(email);
     if (!user) {
       return res.status(400).json({
         success: false,
-        message: 'Invalid request.'
+        message: 'Invalid request. User not found.'
+      });
+    }
+
+    // Check if user uses email auth
+    if (user.auth_provider !== 'email') {
+      return res.status(400).json({
+        success: false,
+        message: 'This account uses Google Sign-In. Password reset is not available.'
       });
     }
 
@@ -506,10 +523,21 @@ const resetPassword = async (req, res) => {
     const saltRounds = 12;
     const newPasswordHash = await bcrypt.hash(newPassword, saltRounds);
 
+    // Update password in Firestore
     await userModel.updatePasswordHash(user.user_id, newPasswordHash);
-    await auth.updateUser(user.user_id, { password: newPassword });
+    
+    // Update password in Firebase Authentication
+    try {
+      await auth.updateUser(user.user_id, { password: newPassword });
+    } catch (firebaseError) {
+      console.error('Firebase password update error:', firebaseError);
+      // Continue even if Firebase update fails - Firestore is our source of truth
+    }
+    
+    // Mark OTP as used
     await otpModel.markOTPUsed(validOTP.otp_id);
 
+    // Invalidate all existing sessions
     const sessionsSnapshot = await db.collection('sessions')
       .where('user_id', '==', user.user_id)
       .get();
