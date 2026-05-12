@@ -148,45 +148,53 @@ export default function VerifyOTP() {
     }
   };
 
-  const handleVerify = async () => {
-    const code = otp.join('');
-    if (code.length < OTP_LENGTH) {
-      setError('Please enter the complete 6-digit code.');
-      return;
+  // In verify-otp.tsx, the verify function should be:
+
+const handleVerify = async () => {
+  const code = otp.join('');
+  if (code.length < OTP_LENGTH) {
+    setError('Please enter the complete 6-digit code.');
+    return;
+  }
+
+  setLoading(true);
+  setError('');
+
+  try {
+    let result;
+    if (purpose === 'reset') {
+      result = await authService.verifyResetOTP(email!, code);
+      console.log('Verify reset OTP result:', result);
+    } else {
+      result = await authService.verifyOTP(email!, code);
     }
 
-    setLoading(true);
-    setError('');
-
-    try {
-      let result;
-      if (purpose === 'reset') {
-        result = await authService.verifyResetOTP(email!, code);
-      } else {
-        result = await authService.verifyOTP(email!, code);
-      }
-
-      if (result.success) {
-        setVerified(true);
-        setTimeout(() => {
-          if (purpose === 'reset') {
-            router.push({
-              pathname: '/(auth)/reset-password',
-              params: { email, otp: code },
-            });
-          } else {
-            router.replace('/(auth)/signin');
-          }
-        }, 1200);
-      } else {
-        setError(result.message || 'Invalid code. Please try again.');
-      }
-    } catch (error: any) {
-      setError(error.response?.data?.message || 'Verification failed. Please try again.');
-    } finally {
-      setLoading(false);
+    if (result.success) {
+      setVerified(true);
+      setTimeout(() => {
+        if (purpose === 'reset') {
+          // Navigate to reset password with both email and OTP
+          router.push({
+            pathname: '/(auth)/reset-password',
+            params: { 
+              email: email,
+              otp: code 
+            },
+          });
+        } else {
+          router.replace('/(auth)/signin');
+        }
+      }, 1200);
+    } else {
+      setError(result.message || 'Invalid code. Please try again.');
     }
-  };
+  } catch (error: any) {
+    console.error('Verification error:', error);
+    setError(error.response?.data?.message || 'Verification failed. Please try again.');
+  } finally {
+    setLoading(false);
+  }
+};
 
   const handleResend = async () => {
     if (!expired) return;

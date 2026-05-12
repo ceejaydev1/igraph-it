@@ -117,25 +117,32 @@ export default function ResetPassword() {
     return isValid;
   };
 
-  const handleReset = async () => {
-    if (!validate()) return;
+  // In reset-password.tsx, update the handleReset function:
 
-    setLoading(true);
-    try {
-      const result = await authService.resetPassword(email!, otp!, newPassword);
-      if (result.success) {
-        Alert.alert('Success', 'Password reset successfully! Please sign in with your new password.', [
-          { text: 'OK', onPress: () => router.replace('/(auth)/signin') }
-        ]);
-      } else {
-        Alert.alert('Error', result.message || 'Failed to reset password');
-      }
-    } catch (error: any) {
-      Alert.alert('Error', error.response?.data?.message || 'Something went wrong');
-    } finally {
+const handleReset = async () => {
+  if (!validate()) return;
+
+  setLoading(true);
+  try {
+    const result = await authService.resetPassword(email!, otp!, newPassword);
+    
+    if (result.success) {
+      await authService.clearTokens();
+      
+      // Try without Alert first - direct navigation
+      router.replace('/(auth)/signin');
+      
+      // Optional: Show toast or snackbar instead of Alert
+      console.log('Password reset successfully');
+    } else {
+      Alert.alert('Error', result.message || 'Failed to reset password');
       setLoading(false);
     }
-  };
+  } catch (error: any) {
+    Alert.alert('Error', error.response?.data?.message || 'Something went wrong');
+    setLoading(false);
+  }
+};
 
   return (
     <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>

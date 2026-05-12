@@ -34,21 +34,132 @@ import * as authService from '@/services/authService';
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
 // BACKGROUND
+// ─── PREMIUM IMAGE BACKGROUND ───────────────────────────────────────────────
+
 const DiagramBackground = () => (
   <View style={StyleSheet.absoluteFillObject} pointerEvents="none">
-    <Svg width="100%" height="100%" viewBox={`0 0 ${SCREEN_WIDTH} ${SCREEN_HEIGHT}`}>
-      <Defs>
-        <Pattern id="grid" width="34" height="34" patternUnits="userSpaceOnUse">
-          <Path d="M 34 0 L 0 0 0 34" fill="none" stroke="#ccd5f7" strokeWidth="1.2" opacity="1" />
-        </Pattern>
-        <Pattern id="dots" width="26" height="26" patternUnits="userSpaceOnUse">
-          <Circle cx="13" cy="13" r="1.3" fill="#b8c4f3" opacity="0.8" />
-        </Pattern>
-      </Defs>
-      <Rect width={SCREEN_WIDTH} height={SCREEN_HEIGHT} fill="#eef2ff" />
-      <Rect width={SCREEN_WIDTH} height={SCREEN_HEIGHT} fill="url(#grid)" opacity="1" />
-      <Rect x={0} y={0} width={SCREEN_WIDTH * 0.28} height={SCREEN_HEIGHT * 0.34} fill="url(#dots)" />
-      <Rect x={SCREEN_WIDTH * 0.72} y={SCREEN_HEIGHT * 0.68} width={SCREEN_WIDTH * 0.28} height={SCREEN_HEIGHT * 0.32} fill="url(#dots)" />
+
+    {/* GRID IMAGE */}
+    <Image
+      source={require('../../assets/images/grid-bg.png')}
+      style={styles.gridBackground}
+      resizeMode="repeat"
+    />
+
+    {/* LIGHT OVERLAY */}
+    <View style={styles.gridOverlay} />
+
+    {/* SVG NODES */}
+    <Svg
+      width="100%"
+      height="100%"
+      viewBox={`0 0 ${SCREEN_WIDTH} ${SCREEN_HEIGHT}`}
+      preserveAspectRatio="xMidYMid slice"
+      style={StyleSheet.absoluteFillObject}
+    >
+
+      {/* FLOW PATH */}
+      <Path
+        d={`
+          M ${SCREEN_WIDTH * 0.08} ${SCREEN_HEIGHT * 0.22}
+          C ${SCREEN_WIDTH * 0.20} ${SCREEN_HEIGHT * 0.08},
+            ${SCREEN_WIDTH * 0.38} ${SCREEN_HEIGHT * 0.42},
+            ${SCREEN_WIDTH * 0.52} ${SCREEN_HEIGHT * 0.30}
+        `}
+        stroke="#bfd0ff"
+        strokeWidth="2"
+        strokeDasharray="8 10"
+        fill="none"
+        opacity="0.30"
+      />
+
+      {/* FLOW PATH */}
+      <Path
+        d={`
+          M ${SCREEN_WIDTH * 0.84} ${SCREEN_HEIGHT * 0.18}
+          C ${SCREEN_WIDTH * 0.96} ${SCREEN_HEIGHT * 0.32},
+            ${SCREEN_WIDTH * 0.94} ${SCREEN_HEIGHT * 0.56},
+            ${SCREEN_WIDTH * 0.80} ${SCREEN_HEIGHT * 0.78}
+        `}
+        stroke="#bfd0ff"
+        strokeWidth="2"
+        strokeDasharray="8 10"
+        fill="none"
+        opacity="0.30"
+      />
+
+      {/* UML BOX */}
+      <Rect
+        x={SCREEN_WIDTH * 0.08}
+        y={SCREEN_HEIGHT * 0.12}
+        width="130"
+        height="74"
+        rx="14"
+        stroke="#bfd0ff"
+        strokeWidth="1.4"
+        fill="none"
+        opacity="0.38"
+      />
+
+      {/* UML BOX */}
+      <Rect
+        x={SCREEN_WIDTH * 0.74}
+        y={SCREEN_HEIGHT * 0.20}
+        width="140"
+        height="78"
+        rx="14"
+        stroke="#bfd0ff"
+        strokeWidth="1.4"
+        fill="none"
+        opacity="0.38"
+      />
+
+      {/* DECISION DIAMOND */}
+      <Path
+        d={`
+          M ${SCREEN_WIDTH * 0.16} ${SCREEN_HEIGHT * 0.58}
+          L ${SCREEN_WIDTH * 0.20} ${SCREEN_HEIGHT * 0.62}
+          L ${SCREEN_WIDTH * 0.16} ${SCREEN_HEIGHT * 0.66}
+          L ${SCREEN_WIDTH * 0.12} ${SCREEN_HEIGHT * 0.62}
+          Z
+        `}
+        stroke="#bfd0ff"
+        strokeWidth="1.5"
+        fill="none"
+        opacity="0.34"
+      />
+
+      {/* NODE */}
+      <Circle
+        cx={SCREEN_WIDTH * 0.76}
+        cy={SCREEN_HEIGHT * 0.74}
+        r="22"
+        stroke="#bfd0ff"
+        strokeWidth="2"
+        fill="none"
+        opacity="0.30"
+      />
+
+      {/* LABELS */}
+      <SvgText
+        x={SCREEN_WIDTH * 0.10}
+        y={SCREEN_HEIGHT * 0.11}
+        fontSize="11"
+        fill="#9bb0ea"
+        opacity="0.65"
+      >
+        
+      </SvgText>
+
+      <SvgText
+        x={SCREEN_WIDTH * 0.76}
+        y={SCREEN_HEIGHT * 0.18}
+        fontSize="11"
+        fill="#9bb0ea"
+        opacity="0.65"
+      >
+      </SvgText>
+
     </Svg>
   </View>
 );
@@ -449,4 +560,15 @@ const styles = StyleSheet.create({
   signinWrap: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', marginTop: 14 },
   signinText: { fontSize: 13, color: '#8896b3' },
   signinLink: { fontSize: 13, fontWeight: '700', color: '#1a1f36' },
+
+  gridBackground: {
+  ...StyleSheet.absoluteFillObject,
+  width: '100%',
+  height: '100%',
+},
+
+gridOverlay: {
+  ...StyleSheet.absoluteFillObject,
+  backgroundColor: 'rgba(255,255,255,0.10)',
+},
 });

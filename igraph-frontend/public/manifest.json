@@ -1,7 +1,7 @@
 {
   "name": "iGraph IT",
   "short_name": "iGraph IT",
-  "description": "Learn and create SDLC and UML diagrams",
+  "description": "Learn SDLC and Create UML Diagrams",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#eef0fb",

@@ -129,14 +129,32 @@ export const forgotPassword = async (email) => {
   return response.data;
 };
 
+// Add these methods if not present or update them:
+
 export const verifyResetOTP = async (email, otp) => {
-  const response = await api.post('/auth/verify-reset-otp', { email, otp });
-  return response.data;
+  try {
+    const response = await api.post('/auth/verify-reset-otp', { email, otp });
+    console.log('Verify reset OTP response:', response.data);
+    return response.data;
+  } catch (error) {
+    console.error('Verify reset OTP error:', error.response?.data || error.message);
+    throw error;
+  }
 };
 
 export const resetPassword = async (email, otp, newPassword) => {
-  const response = await api.post('/auth/reset-password', { email, otp, newPassword });
-  return response.data;
+  try {
+    const response = await api.post('/auth/reset-password', { 
+      email, 
+      otp, 
+      newPassword 
+    });
+    console.log('Reset password response:', response.data);
+    return response.data;
+  } catch (error) {
+    console.error('Reset password error:', error.response?.data || error.message);
+    throw error;
+  }
 };
 
 export const refreshToken = async () => {
