@@ -117,32 +117,26 @@ export default function ResetPassword() {
     return isValid;
   };
 
-  // In reset-password.tsx, update the handleReset function:
+  const handleReset = async () => {
+    if (!validate()) return;
 
-const handleReset = async () => {
-  if (!validate()) return;
-
-  setLoading(true);
-  try {
-    const result = await authService.resetPassword(email!, otp!, newPassword);
-    
-    if (result.success) {
-      await authService.clearTokens();
+    setLoading(true);
+    try {
+      const result = await authService.resetPassword(email!, otp!, newPassword);
       
-      // Try without Alert first - direct navigation
-      router.replace('/(auth)/signin');
-      
-      // Optional: Show toast or snackbar instead of Alert
-      console.log('Password reset successfully');
-    } else {
-      Alert.alert('Error', result.message || 'Failed to reset password');
+      if (result.success) {
+        await authService.clearTokens();
+        router.replace('/(auth)/signin');
+        console.log('Password reset successfully');
+      } else {
+        Alert.alert('Error', result.message || 'Failed to reset password');
+        setLoading(false);
+      }
+    } catch (error: any) {
+      Alert.alert('Error', error.response?.data?.message || 'Something went wrong');
       setLoading(false);
     }
-  } catch (error: any) {
-    Alert.alert('Error', error.response?.data?.message || 'Something went wrong');
-    setLoading(false);
-  }
-};
+  };
 
   return (
     <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
@@ -164,7 +158,15 @@ const handleReset = async () => {
             <Text style={styles.label}>New Password</Text>
             <View style={[styles.inputWrap, errors.newPassword && styles.inputError]}>
               <TextInput
-                style={[styles.input, styles.inputWithIcon]}
+                style={[
+                  styles.input, 
+                  styles.inputWithIcon,
+                  Platform.OS === 'web' && { 
+                    outline: 'none',
+                    outlineStyle: 'solid',
+                    outlineWidth: 0,
+                  }
+                ]}
                 placeholder="At least 8 characters"
                 placeholderTextColor="#b8c0d4"
                 value={newPassword}
@@ -189,7 +191,15 @@ const handleReset = async () => {
             <View style={[styles.inputWrap, errors.confirmPassword && styles.inputError]}>
               <TextInput
                 ref={confirmRef}
-                style={[styles.input, styles.inputWithIcon]}
+                style={[
+                  styles.input, 
+                  styles.inputWithIcon,
+                  Platform.OS === 'web' && { 
+                    outline: 'solid',
+                    outlineStyle: 'solid',
+                    outlineColor: 'transparent',  
+                  }
+                ]}
                 placeholder="Re-enter your password"
                 placeholderTextColor="#b8c0d4"
                 value={confirmPassword}
@@ -225,27 +235,165 @@ const handleReset = async () => {
 }
 
 const styles = StyleSheet.create({
-  flex: { flex: 1, backgroundColor: '#eef2ff' },
-  scrollContent: { flexGrow: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 18, paddingVertical: 40 },
-  card: { backgroundColor: '#ffffff', borderRadius: 28, paddingHorizontal: 32, paddingTop: 34, paddingBottom: 34, width: '100%', maxWidth: 430, shadowColor: '#1e293b', shadowOffset: { width: 0, height: 12 }, shadowOpacity: 0.12, shadowRadius: 30, elevation: 14, borderWidth: 1.5, borderColor: '#f1f5ff', position: 'relative' },
-  connectorTop: { position: 'absolute', top: -7, alignSelf: 'center', width: 14, height: 14, borderRadius: 7, backgroundColor: '#ffffff', borderWidth: 2, borderColor: '#c7d2fe', zIndex: 20 },
-  connectorBottom: { position: 'absolute', bottom: -7, alignSelf: 'center', width: 14, height: 14, borderRadius: 7, backgroundColor: '#ffffff', borderWidth: 2, borderColor: '#c7d2fe', zIndex: 20 },
-  backBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 24, alignSelf: 'flex-start' },
-  backText: { fontSize: 14, color: '#4a5568', fontWeight: '600' },
-  iconWrap: { alignItems: 'center', marginBottom: 22 },
-  heading: { fontFamily: Platform.OS === 'ios' ? 'Georgia' : 'serif', fontSize: 22, fontWeight: '700', color: '#1a1f36', textAlign: 'center', letterSpacing: -0.6, marginBottom: 10 },
-  subtitle: { fontSize: 14, color: '#7f8bb3', textAlign: 'center', marginBottom: 28 },
-  formGroup: { marginBottom: 16 },
-  label: { fontSize: 13, fontWeight: '600', color: '#4a5568', marginBottom: 8 },
-  inputWrap: { borderWidth: 1.5, borderColor: '#dde3fa', borderRadius: 14, backgroundColor: '#f8faff', flexDirection: 'row', alignItems: 'center' },
-  inputError: { borderColor: '#ef4444' },
-  input: { flex: 1, paddingHorizontal: 16, paddingVertical: Platform.OS === 'ios' ? 15 : 13, fontSize: 15, color: '#1a1f36' },
-  inputWithIcon: { paddingRight: 44 },
-  eyeBtn: { position: 'absolute', right: 12, padding: 10 },
-  errorText: { fontSize: 12, color: '#ef4444', marginTop: 8, marginLeft: 4, fontWeight: '500' },
-  btnReset: { backgroundColor: '#4c6fff', borderRadius: 14, paddingVertical: 16, alignItems: 'center', marginTop: 18, shadowColor: '#4c6fff', shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.32, shadowRadius: 20, elevation: 8 },
-  btnDisabled: { opacity: 0.75 },
-  btnResetText: { color: '#ffffff', fontSize: 15, fontWeight: '700', letterSpacing: 0.3 },
-  signinLink: { alignItems: 'center', marginTop: 20 },
-  signinText: { fontSize: 14, color: '#4c6fff', fontWeight: '600' },
+  flex: { 
+    flex: 1, 
+    backgroundColor: '#eef2ff' 
+  },
+  scrollContent: { 
+    flexGrow: 1, 
+    justifyContent: 'center', 
+    alignItems: 'center', 
+    paddingHorizontal: 18, 
+    paddingVertical: 40 
+  },
+  card: { 
+    backgroundColor: '#ffffff', 
+    borderRadius: 28, 
+    paddingHorizontal: 32, 
+    paddingTop: 34, 
+    paddingBottom: 34, 
+    width: '100%', 
+    maxWidth: 430, 
+    shadowColor: '#1e293b', 
+    shadowOffset: { width: 0, height: 12 }, 
+    shadowOpacity: 0.12, 
+    shadowRadius: 30, 
+    elevation: 14, 
+    borderWidth: 1.5, 
+    borderColor: '#f1f5ff', 
+    position: 'relative' 
+  },
+  connectorTop: { 
+    position: 'absolute', 
+    top: -7, 
+    alignSelf: 'center', 
+    width: 14, 
+    height: 14, 
+    borderRadius: 7, 
+    backgroundColor: '#ffffff', 
+    borderWidth: 2, 
+    borderColor: '#c7d2fe', 
+    zIndex: 20 
+  },
+  connectorBottom: { 
+    position: 'absolute', 
+    bottom: -7, 
+    alignSelf: 'center', 
+    width: 14, 
+    height: 14, 
+    borderRadius: 7, 
+    backgroundColor: '#ffffff', 
+    borderWidth: 2, 
+    borderColor: '#c7d2fe', 
+    zIndex: 20 
+  },
+  backBtn: { 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    gap: 6, 
+    marginBottom: 24, 
+    alignSelf: 'flex-start' 
+  },
+  backText: { 
+    fontSize: 14, 
+    color: '#4a5568', 
+    fontWeight: '600' 
+  },
+  iconWrap: { 
+    alignItems: 'center', 
+    marginBottom: 22 
+  },
+  heading: { 
+    fontFamily: Platform.OS === 'ios' ? 'Georgia' : 'serif', 
+    fontSize: 22, 
+    fontWeight: '700', 
+    color: '#1a1f36', 
+    textAlign: 'center', 
+    letterSpacing: -0.6, 
+    marginBottom: 10 
+  },
+  subtitle: { 
+    fontSize: 14, 
+    color: '#7f8bb3', 
+    textAlign: 'center', 
+    marginBottom: 28 
+  },
+  formGroup: { 
+    marginBottom: 16 
+  },
+  label: { 
+    fontSize: 13, 
+    fontWeight: '600', 
+    color: '#4a5568', 
+    marginBottom: 8 
+  },
+  inputWrap: { 
+    borderWidth: 1.5, 
+    borderColor: '#dde3fa', 
+    borderRadius: 14, 
+    backgroundColor: '#f8faff', 
+    flexDirection: 'row', 
+    alignItems: 'center',
+    minHeight: 52,
+  },
+  inputError: { 
+    borderColor: '#ef4444' 
+  },
+  input: { 
+    flex: 1, 
+    paddingHorizontal: 16, 
+    paddingVertical: Platform.OS === 'ios' ? 15 : 13, 
+    fontSize: 15, 
+    color: '#1a1f36',
+    // Remove black border on focus
+    outlineWidth: 0,
+    outlineStyle: 'solid',
+  },
+  inputWithIcon: { 
+    paddingRight: 44 
+  },
+  eyeBtn: { 
+    position: 'absolute', 
+    right: 12, 
+    padding: 10,
+    top: '50%',
+    transform: [{ translateY: -15 }],
+  },
+  errorText: { 
+    fontSize: 12, 
+    color: '#ef4444', 
+    marginTop: 8, 
+    marginLeft: 4, 
+    fontWeight: '500' 
+  },
+  btnReset: { 
+    backgroundColor: '#4c6fff', 
+    borderRadius: 14, 
+    paddingVertical: 16, 
+    alignItems: 'center', 
+    marginTop: 18, 
+    shadowColor: '#4c6fff', 
+    shadowOffset: { width: 0, height: 10 }, 
+    shadowOpacity: 0.32, 
+    shadowRadius: 20, 
+    elevation: 8 
+  },
+  btnDisabled: { 
+    opacity: 0.75 
+  },
+  btnResetText: { 
+    color: '#ffffff', 
+    fontSize: 15, 
+    fontWeight: '700', 
+    letterSpacing: 0.3 
+  },
+  signinLink: { 
+    alignItems: 'center', 
+    marginTop: 20 
+  },
+  signinText: { 
+    fontSize: 14, 
+    color: '#4c6fff', 
+    fontWeight: '600' 
+  },
 });

@@ -718,7 +718,7 @@ scrollContent: {
   connectorLeft: { position: 'absolute', left: -5, top: '50%', transform: [{ translateY: -5 }], width: 10, height: 10, borderRadius: 5, backgroundColor: '#ffffff', borderWidth: 1.5, borderColor: '#cbd5f5' },
   connectorRight: { position: 'absolute', right: -5, top: '50%', transform: [{ translateY: -5 }], width: 10, height: 10, borderRadius: 5, backgroundColor: '#ffffff', borderWidth: 1.5, borderColor: '#cbd5f5' },
   logoWrap: { alignItems: 'center', marginBottom: 16 },
-  logo: { width: 56, height: 56, borderRadius: 14, backgroundColor: '#0a0f1e' },
+  logo: { width: 56, height: 56, borderRadius: 14, backgroundColor: 'transparent' },
   heading: { fontSize: 28, fontWeight: '800', color: '#0f172a', textAlign: 'center' },
   subtitle: { fontSize: 14, color: '#64748b', marginBottom: 24, textAlign: 'center' },
   formGroup: { marginBottom: 16 },

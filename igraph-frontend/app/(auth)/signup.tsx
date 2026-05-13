@@ -1,7 +1,6 @@
 // app/(auth)/signup.tsx
 
 import React, { useState, useRef } from 'react';
-
 import {
   View,
   Text,
@@ -15,154 +14,157 @@ import {
   Image,
   KeyboardAvoidingView,
   Alert,
+  Modal,
 } from 'react-native';
-
 import { Stack, useRouter } from 'expo-router';
-
-import {
-  Svg,
-  Circle,
-  Rect,
-  Path,
-  Text as SvgText,
-  Defs,
-  Pattern,
-} from 'react-native-svg';
-
+import { Svg, Circle, Rect, Path, Defs, Pattern } from 'react-native-svg';
 import * as authService from '@/services/authService';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
-// BACKGROUND
-// ─── PREMIUM IMAGE BACKGROUND ───────────────────────────────────────────────
+// ==================== TERMS AND PRIVACY CONTENT ====================
+
+const TermsContent = () => (
+  <View style={modalStyles.tabContent}>
+    <Text style={modalStyles.sectionTitle}>1. Acceptance of Terms</Text>
+    <Text style={modalStyles.text}>By registering for or using iGraph IT ("Platform"), you agree to be bound by these Terms and Conditions.</Text>
+
+    <Text style={modalStyles.sectionTitle}>2. Account Registration</Text>
+    <Text style={modalStyles.subSection}>2.1 Account Security</Text>
+    <Text style={modalStyles.text}>• You are responsible for maintaining password confidentiality{'\n'}• You must notify us immediately of unauthorized access</Text>
+    <Text style={modalStyles.subSection}>2.2 Accuracy of Information</Text>
+    <Text style={modalStyles.text}>You must provide accurate, current, and complete information during registration.</Text>
+
+    <Text style={modalStyles.sectionTitle}>3. User Conduct</Text>
+    <Text style={modalStyles.text}>You agree NOT to share account credentials, bypass authentication, use automated scripts, upload malicious content, or use the Platform for illegal activities.</Text>
+
+    <Text style={modalStyles.sectionTitle}>4. Intellectual Property</Text>
+    <Text style={modalStyles.text}>All platform content is owned by iGraph IT. You retain ownership of diagrams you create.</Text>
+
+    <Text style={modalStyles.sectionTitle}>5. Authentication and Security</Text>
+    <Text style={modalStyles.text}>• Access tokens expire after 15 minutes{'\n'}• Refresh tokens expire after 7 days{'\n'}• OTPs expire after 5 minutes</Text>
+
+    <Text style={modalStyles.sectionTitle}>6. Limitation of Liability</Text>
+    <Text style={modalStyles.text}>The Platform is provided "as is". We are not liable for indirect or consequential damages.</Text>
+
+    <Text style={modalStyles.sectionTitle}>7. Governing Law</Text>
+    <Text style={modalStyles.text}>These terms are governed by the laws of the Philippines.</Text>
+
+    <Text style={modalStyles.sectionTitle}>8. Contact Us</Text>
+    <Text style={modalStyles.text}>Email: legal@igraphit.com</Text>
+
+    <Text style={modalStyles.footer}>By using iGraph IT, you agree to these Terms and Conditions.</Text>
+  </View>
+);
+
+const PrivacyContent = () => (
+  <View style={modalStyles.tabContent}>
+    <Text style={modalStyles.sectionTitle}>1. Introduction</Text>
+    <Text style={modalStyles.text}>We are committed to protecting your personal information and your right to privacy.</Text>
+
+    <Text style={modalStyles.sectionTitle}>2. Information We Collect</Text>
+    <Text style={modalStyles.subSection}>Personal Information</Text>
+    <Text style={modalStyles.text}>Full name, username, email address, encrypted password, profile picture (optional).</Text>
+    <Text style={modalStyles.subSection}>Usage Data</Text>
+    <Text style={modalStyles.text}>Pages visited, diagrams created, time spent on platform.</Text>
+
+    <Text style={modalStyles.sectionTitle}>3. How We Use Your Information</Text>
+    <Text style={modalStyles.text}>To create and manage your account, authenticate your identity, send OTP verification, improve our platform, and comply with legal obligations.</Text>
+
+    <Text style={modalStyles.sectionTitle}>4. Data Storage and Security</Text>
+    <Text style={modalStyles.text}>Passwords are encrypted using bcrypt. All data is stored in Firebase Firestore with HTTPS/TLS encryption.</Text>
+
+    <Text style={modalStyles.sectionTitle}>5. Email Communications</Text>
+    <Text style={modalStyles.text}>We send account verification OTPs and password reset links. These are essential and cannot be opted out of.</Text>
+
+    <Text style={modalStyles.sectionTitle}>6. Your Rights</Text>
+    <Text style={modalStyles.text}>You have the right to access your data, correct inaccurate data, delete your account, and export your data.</Text>
+
+    <Text style={modalStyles.sectionTitle}>7. Contact Us</Text>
+    <Text style={modalStyles.text}>Email: privacy@igraphit.com</Text>
+
+    <Text style={modalStyles.footer}>By using iGraph IT, you agree to this Privacy Policy.</Text>
+  </View>
+);
+
+// ==================== MODAL COMPONENT ====================
+
+const PolicyModal = ({ visible, onClose, onAgree }: { visible: boolean; onClose: () => void; onAgree: () => void }) => {
+  const [activeTab, setActiveTab] = useState<'terms' | 'privacy'>('terms');
+
+  const handleAgree = () => {
+    onAgree();
+    onClose();
+  };
+
+  return (
+    <Modal animationType="slide" transparent={true} visible={visible} onRequestClose={onClose}>
+      <View style={modalStyles.modalOverlay}>
+        <View style={modalStyles.modalContainer}>
+          <View style={modalStyles.modalHeader}>
+            <Text style={modalStyles.modalTitle}>Legal Agreement</Text>
+          </View>
+
+          <View style={modalStyles.tabBar}>
+            <TouchableOpacity
+              style={[modalStyles.tab, activeTab === 'terms' && modalStyles.activeTab]}
+              onPress={() => setActiveTab('terms')}
+            >
+              <Text style={[modalStyles.tabText, activeTab === 'terms' && modalStyles.activeTabText]}>
+                Terms & Conditions
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[modalStyles.tab, activeTab === 'privacy' && modalStyles.activeTab]}
+              onPress={() => setActiveTab('privacy')}
+            >
+              <Text style={[modalStyles.tabText, activeTab === 'privacy' && modalStyles.activeTabText]}>
+                Privacy Policy
+              </Text>
+            </TouchableOpacity>
+          </View>
+
+          <ScrollView style={modalStyles.modalBody}>
+            {activeTab === 'terms' ? <TermsContent /> : <PrivacyContent />}
+          </ScrollView>
+
+          <View style={modalStyles.modalFooter}>
+            <TouchableOpacity style={modalStyles.agreeButton} onPress={handleAgree}>
+              <Text style={modalStyles.agreeButtonText}>I Agree</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={modalStyles.declineButton} onPress={onClose}>
+              <Text style={modalStyles.declineButtonText}>Decline</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </View>
+    </Modal>
+  );
+};
+
+// ==================== BACKGROUND ====================
 
 const DiagramBackground = () => (
   <View style={StyleSheet.absoluteFillObject} pointerEvents="none">
-
-    {/* GRID IMAGE */}
     <Image
       source={require('../../assets/images/grid-bg.png')}
       style={styles.gridBackground}
       resizeMode="repeat"
     />
-
-    {/* LIGHT OVERLAY */}
     <View style={styles.gridOverlay} />
-
-    {/* SVG NODES */}
-    <Svg
-      width="100%"
-      height="100%"
-      viewBox={`0 0 ${SCREEN_WIDTH} ${SCREEN_HEIGHT}`}
-      preserveAspectRatio="xMidYMid slice"
-      style={StyleSheet.absoluteFillObject}
-    >
-
-      {/* FLOW PATH */}
+    <Svg width="100%" height="100%" viewBox={`0 0 ${SCREEN_WIDTH} ${SCREEN_HEIGHT}`} style={StyleSheet.absoluteFillObject}>
       <Path
-        d={`
-          M ${SCREEN_WIDTH * 0.08} ${SCREEN_HEIGHT * 0.22}
-          C ${SCREEN_WIDTH * 0.20} ${SCREEN_HEIGHT * 0.08},
-            ${SCREEN_WIDTH * 0.38} ${SCREEN_HEIGHT * 0.42},
-            ${SCREEN_WIDTH * 0.52} ${SCREEN_HEIGHT * 0.30}
-        `}
-        stroke="#bfd0ff"
-        strokeWidth="2"
-        strokeDasharray="8 10"
-        fill="none"
-        opacity="0.30"
+        d={`M ${SCREEN_WIDTH * 0.08} ${SCREEN_HEIGHT * 0.22} C ${SCREEN_WIDTH * 0.20} ${SCREEN_HEIGHT * 0.08}, ${SCREEN_WIDTH * 0.38} ${SCREEN_HEIGHT * 0.42}, ${SCREEN_WIDTH * 0.52} ${SCREEN_HEIGHT * 0.30}`}
+        stroke="#bfd0ff" strokeWidth="2" strokeDasharray="8 10" fill="none" opacity="0.30"
       />
-
-      {/* FLOW PATH */}
-      <Path
-        d={`
-          M ${SCREEN_WIDTH * 0.84} ${SCREEN_HEIGHT * 0.18}
-          C ${SCREEN_WIDTH * 0.96} ${SCREEN_HEIGHT * 0.32},
-            ${SCREEN_WIDTH * 0.94} ${SCREEN_HEIGHT * 0.56},
-            ${SCREEN_WIDTH * 0.80} ${SCREEN_HEIGHT * 0.78}
-        `}
-        stroke="#bfd0ff"
-        strokeWidth="2"
-        strokeDasharray="8 10"
-        fill="none"
-        opacity="0.30"
-      />
-
-      {/* UML BOX */}
-      <Rect
-        x={SCREEN_WIDTH * 0.08}
-        y={SCREEN_HEIGHT * 0.12}
-        width="130"
-        height="74"
-        rx="14"
-        stroke="#bfd0ff"
-        strokeWidth="1.4"
-        fill="none"
-        opacity="0.38"
-      />
-
-      {/* UML BOX */}
-      <Rect
-        x={SCREEN_WIDTH * 0.74}
-        y={SCREEN_HEIGHT * 0.20}
-        width="140"
-        height="78"
-        rx="14"
-        stroke="#bfd0ff"
-        strokeWidth="1.4"
-        fill="none"
-        opacity="0.38"
-      />
-
-      {/* DECISION DIAMOND */}
-      <Path
-        d={`
-          M ${SCREEN_WIDTH * 0.16} ${SCREEN_HEIGHT * 0.58}
-          L ${SCREEN_WIDTH * 0.20} ${SCREEN_HEIGHT * 0.62}
-          L ${SCREEN_WIDTH * 0.16} ${SCREEN_HEIGHT * 0.66}
-          L ${SCREEN_WIDTH * 0.12} ${SCREEN_HEIGHT * 0.62}
-          Z
-        `}
-        stroke="#bfd0ff"
-        strokeWidth="1.5"
-        fill="none"
-        opacity="0.34"
-      />
-
-      {/* NODE */}
-      <Circle
-        cx={SCREEN_WIDTH * 0.76}
-        cy={SCREEN_HEIGHT * 0.74}
-        r="22"
-        stroke="#bfd0ff"
-        strokeWidth="2"
-        fill="none"
-        opacity="0.30"
-      />
-
-      {/* LABELS */}
-      <SvgText
-        x={SCREEN_WIDTH * 0.10}
-        y={SCREEN_HEIGHT * 0.11}
-        fontSize="11"
-        fill="#9bb0ea"
-        opacity="0.65"
-      >
-        
-      </SvgText>
-
-      <SvgText
-        x={SCREEN_WIDTH * 0.76}
-        y={SCREEN_HEIGHT * 0.18}
-        fontSize="11"
-        fill="#9bb0ea"
-        opacity="0.65"
-      >
-      </SvgText>
-
+      <Rect x={SCREEN_WIDTH * 0.08} y={SCREEN_HEIGHT * 0.12} width="130" height="74" rx="14" stroke="#bfd0ff" strokeWidth="1.4" fill="none" opacity="0.38" />
+      <Rect x={SCREEN_WIDTH * 0.74} y={SCREEN_HEIGHT * 0.20} width="140" height="78" rx="14" stroke="#bfd0ff" strokeWidth="1.4" fill="none" opacity="0.38" />
+      <Circle cx={SCREEN_WIDTH * 0.76} cy={SCREEN_HEIGHT * 0.74} r="22" stroke="#bfd0ff" strokeWidth="2" fill="none" opacity="0.30" />
     </Svg>
   </View>
 );
+
+// ==================== EYE ICON ====================
 
 const EyeIcon = ({ visible }: { visible: boolean }) => (
   <Svg width={18} height={18} viewBox="0 0 24 24" fill="none">
@@ -181,14 +183,7 @@ const EyeIcon = ({ visible }: { visible: boolean }) => (
   </Svg>
 );
 
-const GoogleIcon = () => (
-  <Svg width={18} height={18} viewBox="0 0 24 24">
-    <Path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4" />
-    <Path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853" />
-    <Path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05" />
-    <Path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335" />
-  </Svg>
-);
+// ==================== MAIN COMPONENT ====================
 
 export default function SignUp() {
   const router = useRouter();
@@ -202,6 +197,7 @@ export default function SignUp() {
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [agreed, setAgreed] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [showPolicyModal, setShowPolicyModal] = useState(false);
   const [errors, setErrors] = useState({
     fullName: '',
     username: '',
@@ -216,6 +212,15 @@ export default function SignUp() {
   const passwordRef = useRef<TextInput>(null);
   const confirmPasswordRef = useRef<TextInput>(null);
 
+  const openPolicyModal = () => {
+    setShowPolicyModal(true);
+  };
+
+  const handleAgree = () => {
+    setAgreed(true);
+    setErrors(prev => ({ ...prev, agreed: '' }));
+  };
+
   const validate = () => {
     const newErrors = {
       fullName: '',
@@ -225,14 +230,12 @@ export default function SignUp() {
       confirmPassword: '',
       agreed: '',
     };
-
     let isValid = true;
 
     if (!fullName.trim()) {
       newErrors.fullName = 'Full name is required.';
       isValid = false;
     }
-
     if (!username.trim()) {
       newErrors.username = 'Username is required.';
       isValid = false;
@@ -243,7 +246,6 @@ export default function SignUp() {
       newErrors.username = 'Username must be at least 3 characters.';
       isValid = false;
     }
-
     if (!email.trim()) {
       newErrors.email = 'Email address is required.';
       isValid = false;
@@ -251,7 +253,6 @@ export default function SignUp() {
       newErrors.email = 'Please enter a valid email.';
       isValid = false;
     }
-
     if (!password) {
       newErrors.password = 'Password is required.';
       isValid = false;
@@ -259,16 +260,15 @@ export default function SignUp() {
       newErrors.password = 'Password must be at least 8 characters.';
       isValid = false;
     } else if (!/[A-Z]/.test(password)) {
-      newErrors.password = 'Password must contain at least one uppercase letter.';
+      newErrors.password = 'Must contain at least one uppercase letter.';
       isValid = false;
     } else if (!/[a-z]/.test(password)) {
-      newErrors.password = 'Password must contain at least one lowercase letter.';
+      newErrors.password = 'Must contain at least one lowercase letter.';
       isValid = false;
     } else if (!/[0-9]/.test(password)) {
-      newErrors.password = 'Password must contain at least one number.';
+      newErrors.password = 'Must contain at least one number.';
       isValid = false;
     }
-
     if (!confirmPassword) {
       newErrors.confirmPassword = 'Please confirm your password.';
       isValid = false;
@@ -276,10 +276,10 @@ export default function SignUp() {
       newErrors.confirmPassword = 'Passwords do not match.';
       isValid = false;
     }
-
     if (!agreed) {
-      newErrors.agreed = 'Please agree to the Terms and Conditions.';
+      newErrors.agreed = 'You must agree to the Terms and Privacy Policy.';
       isValid = false;
+      openPolicyModal();
     }
 
     setErrors(newErrors);
@@ -287,48 +287,29 @@ export default function SignUp() {
   };
 
   const handleSignUp = async () => {
-    console.log('🔵 STEP 1: Button clicked!');
-    console.log('📝 Form data:', { fullName, username, email, password });
-    
     const isValid = validate();
-    console.log('✅ STEP 2: Validation result:', isValid);
     if (!isValid) return;
 
     setLoading(true);
-    console.log('⏳ STEP 3: Loading started');
-    
     try {
-      console.log('🚀 STEP 4: Calling API...');
       const result = await authService.signUp({
         fullName,
         username,
         email,
         password,
       });
-      
-      console.log('📦 STEP 5: API Response:', result);
-      console.log('🎯 STEP 6: Result.success:', result.success);
 
       if (result.success) {
-        console.log('🔄 STEP 7: Navigating to verify-otp');
         router.push({
           pathname: '/(auth)/verify-otp',
-          params: {
-            email,
-            purpose: 'register',
-          },
+          params: { email, purpose: 'register' },
         });
       } else {
-        console.log('❌ STEP 8: API returned false');
         Alert.alert('Sign Up Failed', result.message || 'Something went wrong');
       }
     } catch (error: any) {
-      console.log('💥 STEP 9: ERROR caught:', error);
-      console.log('💥 Error message:', error.message);
-      console.log('💥 Error response:', error.response?.data);
       Alert.alert('Sign Up Failed', error.response?.data?.message || error.message || 'Something went wrong');
     } finally {
-      console.log('🏁 STEP 10: Loading finished');
       setLoading(false);
     }
   };
@@ -337,16 +318,17 @@ export default function SignUp() {
     <>
       <Stack.Screen options={{ headerShown: false }} />
 
-      <KeyboardAvoidingView
-        style={styles.flex}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      >
+      <PolicyModal visible={showPolicyModal} onClose={() => setShowPolicyModal(false)} onAgree={handleAgree} />
+
+      <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <DiagramBackground />
 
+        {/* SCROLLVIEW - MAKES FORM SCROLLABLE */}
         <ScrollView
           contentContainerStyle={styles.scrollContent}
           keyboardShouldPersistTaps="handled"
-          showsVerticalScrollIndicator={false}
+          showsVerticalScrollIndicator={true}
+          bounces={true}
         >
           <View style={styles.card}>
             <View style={styles.connectorTop} />
@@ -367,16 +349,13 @@ export default function SignUp() {
             {/* FULL NAME */}
             <View style={styles.formGroup}>
               <Text style={styles.label}>Full Name</Text>
-              <View style={styles.inputWrap}>
+              <View style={[styles.inputWrap, errors.fullName ? styles.inputError : null]}>
                 <TextInput
                   style={styles.input}
                   placeholder="Juan dela Cruz"
                   placeholderTextColor="#b8c0d4"
                   value={fullName}
-                  onChangeText={(text) => {
-                    setFullName(text);
-                    setErrors({ ...errors, fullName: '' });
-                  }}
+                  onChangeText={(text) => { setFullName(text); setErrors({ ...errors, fullName: '' }); }}
                   autoCapitalize="words"
                   returnKeyType="next"
                   onSubmitEditing={() => usernameRef.current?.focus()}
@@ -388,7 +367,7 @@ export default function SignUp() {
             {/* USERNAME */}
             <View style={styles.formGroup}>
               <Text style={styles.label}>Username</Text>
-              <View style={styles.inputWrap}>
+              <View style={[styles.inputWrap, errors.username ? styles.inputError : null]}>
                 <TextInput
                   ref={usernameRef}
                   style={styles.input}
@@ -400,7 +379,6 @@ export default function SignUp() {
                     setErrors({ ...errors, username: '' });
                   }}
                   autoCapitalize="none"
-                  autoCorrect={false}
                   returnKeyType="next"
                   onSubmitEditing={() => emailRef.current?.focus()}
                 />
@@ -411,20 +389,16 @@ export default function SignUp() {
             {/* EMAIL */}
             <View style={styles.formGroup}>
               <Text style={styles.label}>Email Address</Text>
-              <View style={styles.inputWrap}>
+              <View style={[styles.inputWrap, errors.email ? styles.inputError : null]}>
                 <TextInput
                   ref={emailRef}
                   style={styles.input}
                   placeholder="you@example.com"
                   placeholderTextColor="#b8c0d4"
                   value={email}
-                  onChangeText={(text) => {
-                    setEmail(text);
-                    setErrors({ ...errors, email: '' });
-                  }}
+                  onChangeText={(text) => { setEmail(text); setErrors({ ...errors, email: '' }); }}
                   keyboardType="email-address"
                   autoCapitalize="none"
-                  autoCorrect={false}
                   returnKeyType="next"
                   onSubmitEditing={() => passwordRef.current?.focus()}
                 />
@@ -435,17 +409,14 @@ export default function SignUp() {
             {/* PASSWORD */}
             <View style={styles.formGroup}>
               <Text style={styles.label}>Password</Text>
-              <View style={styles.inputWrap}>
+              <View style={[styles.inputWrap, errors.password ? styles.inputError : null]}>
                 <TextInput
                   ref={passwordRef}
                   style={[styles.input, styles.inputWithIcon]}
                   placeholder="At least 8 characters"
                   placeholderTextColor="#b8c0d4"
                   value={password}
-                  onChangeText={(text) => {
-                    setPassword(text);
-                    setErrors({ ...errors, password: '' });
-                  }}
+                  onChangeText={(text) => { setPassword(text); setErrors({ ...errors, password: '' }); }}
                   secureTextEntry={!showPassword}
                   autoCapitalize="none"
                   returnKeyType="next"
@@ -461,17 +432,14 @@ export default function SignUp() {
             {/* CONFIRM PASSWORD */}
             <View style={styles.formGroup}>
               <Text style={styles.label}>Confirm Password</Text>
-              <View style={styles.inputWrap}>
+              <View style={[styles.inputWrap, errors.confirmPassword ? styles.inputError : null]}>
                 <TextInput
                   ref={confirmPasswordRef}
                   style={[styles.input, styles.inputWithIcon]}
                   placeholder="Re-enter your password"
                   placeholderTextColor="#b8c0d4"
                   value={confirmPassword}
-                  onChangeText={(text) => {
-                    setConfirmPassword(text);
-                    setErrors({ ...errors, confirmPassword: '' });
-                  }}
+                  onChangeText={(text) => { setConfirmPassword(text); setErrors({ ...errors, confirmPassword: '' }); }}
                   secureTextEntry={!showConfirmPassword}
                   autoCapitalize="none"
                   returnKeyType="done"
@@ -484,15 +452,8 @@ export default function SignUp() {
               {errors.confirmPassword ? <Text style={styles.fieldError}>{errors.confirmPassword}</Text> : null}
             </View>
 
-            {/* TERMS */}
-            <TouchableOpacity
-              style={styles.termsWrap}
-              onPress={() => {
-                setAgreed(!agreed);
-                setErrors({ ...errors, agreed: '' });
-              }}
-              activeOpacity={0.8}
-            >
+            {/* TERMS - CLICKABLE */}
+            <TouchableOpacity style={styles.termsWrap} onPress={openPolicyModal} activeOpacity={0.8}>
               <View style={[styles.customCheckbox, agreed && styles.customCheckboxChecked]}>
                 {agreed && (
                   <Svg width={10} height={10} viewBox="0 0 10 10">
@@ -501,7 +462,9 @@ export default function SignUp() {
                 )}
               </View>
               <Text style={styles.termsText}>
-                I agree to the <Text style={styles.termsLink}>Terms and Conditions</Text> and{' '}
+                I agree to the{' '}
+                <Text style={styles.termsLink}>Terms and Conditions</Text>
+                {' '}and{' '}
                 <Text style={styles.termsLink}>Privacy Policy</Text>
               </Text>
             </TouchableOpacity>
@@ -531,44 +494,332 @@ export default function SignUp() {
   );
 }
 
+// ==================== STYLES ====================
+
 const styles = StyleSheet.create({
-  flex: { flex: 1, backgroundColor: '#eef2ff' },
-  scrollContent: { flexGrow: 1, justifyContent: 'center', alignItems: 'center', paddingVertical: 40, paddingHorizontal: 16 },
-  card: { width: '100%', maxWidth: 380, backgroundColor: '#ffffff', borderRadius: 24, paddingHorizontal: 28, paddingTop: 26, paddingBottom: 22, shadowColor: '#3b5bdb', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.12, shadowRadius: 24, elevation: 8, position: 'relative', marginTop: -25 },
-  connectorTop: { position: 'absolute', top: -5, alignSelf: 'center', width: 10, height: 10, borderRadius: 5, backgroundColor: '#ffffff', borderWidth: 1.5, borderColor: '#cbd5f5' },
-  connectorBottom: { position: 'absolute', bottom: -5, alignSelf: 'center', width: 10, height: 10, borderRadius: 5, backgroundColor: '#ffffff', borderWidth: 1.5, borderColor: '#cbd5f5' },
-  connectorLeft: { position: 'absolute', left: -5, top: '50%', transform: [{ translateY: -5 }], width: 10, height: 10, borderRadius: 5, backgroundColor: '#ffffff', borderWidth: 1.5, borderColor: '#cbd5f5' },
-  connectorRight: { position: 'absolute', right: -5, top: '50%', transform: [{ translateY: -5 }], width: 10, height: 10, borderRadius: 5, backgroundColor: '#ffffff', borderWidth: 1.5, borderColor: '#cbd5f5' },
-  logoWrap: { alignItems: 'center', marginBottom: 14 },
-  logo: { width: 56, height: 56, borderRadius: 14, backgroundColor: '#0a0f1e' },
-  heading: { fontFamily: Platform.OS === 'ios' ? 'Georgia' : 'serif', fontSize: 24, fontWeight: '700', color: '#1a1f36', textAlign: 'center', marginBottom: 16 },
-  formGroup: { marginBottom: 12 },
-  label: { fontSize: 13, fontWeight: '600', color: '#4a5568', marginBottom: 7 },
-  inputWrap: { borderWidth: 1.5, borderColor: '#e2e6f3', borderRadius: 10, backgroundColor: '#f8f9ff', flexDirection: 'row', alignItems: 'center' },
-  input: { flex: 1, paddingHorizontal: 14, paddingVertical: Platform.OS === 'ios' ? 12 : 10, fontSize: 14, color: '#1a1f36' },
-  inputWithIcon: { paddingRight: 44 },
-  eyeBtn: { position: 'absolute', right: 12, padding: 4 },
-  fieldError: { color: '#e53e3e', fontSize: 12, marginTop: 6, marginLeft: 4, fontWeight: '500' },
-  termsWrap: { flexDirection: 'row', alignItems: 'flex-start', gap: 10, marginTop: 2, marginBottom: 4 },
-  customCheckbox: { width: 18, height: 18, borderRadius: 9, borderWidth: 2, borderColor: '#8896b3', alignItems: 'center', justifyContent: 'center', marginTop: 1 },
-  customCheckboxChecked: { backgroundColor: '#3b5bdb', borderColor: '#3b5bdb' },
-  termsText: { flex: 1, fontSize: 13, lineHeight: 20, color: '#4a5568' },
-  termsLink: { fontWeight: '700', color: '#1a1f36' },
-  btnCreate: { backgroundColor: '#3b5bdb', borderRadius: 10, paddingVertical: 12, alignItems: 'center', marginTop: 14, marginBottom: 10, shadowColor: '#3b5bdb', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.35, shadowRadius: 10, elevation: 5 },
-  btnDisabled: { opacity: 0.7 },
-  btnCreateText: { color: '#ffffff', fontSize: 15, fontWeight: '700', letterSpacing: 0.3 },
-  signinWrap: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', marginTop: 14 },
-  signinText: { fontSize: 13, color: '#8896b3' },
-  signinLink: { fontSize: 13, fontWeight: '700', color: '#1a1f36' },
+  flex: { 
+    flex: 1, 
+    backgroundColor: '#eef2ff' 
+  },
+  scrollContent: { 
+    flexGrow: 1, 
+    justifyContent: 'center', 
+    alignItems: 'center', 
+    paddingVertical: 40, 
+    paddingHorizontal: 16,
+    minHeight: SCREEN_HEIGHT + 100, // Ensures scrollability on all screens
+  },
+  card: {
+    width: '100%',
+    maxWidth: 400,
+    backgroundColor: '#ffffff',
+    borderRadius: 24,
+    paddingHorizontal: 24,
+    paddingTop: 32,
+    paddingBottom: 28,
+    shadowColor: '#3b5bdb',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.08,
+    shadowRadius: 24,
+    elevation: 8,
+    position: 'relative',
+  },
+  connectorTop: { 
+    position: 'absolute', 
+    top: -5, 
+    alignSelf: 'center', 
+    width: 10, 
+    height: 10, 
+    borderRadius: 5, 
+    backgroundColor: '#ffffff', 
+    borderWidth: 1.5, 
+    borderColor: '#cbd5f5' 
+  },
+  connectorBottom: { 
+    position: 'absolute', 
+    bottom: -5, 
+    alignSelf: 'center', 
+    width: 10, 
+    height: 10, 
+    borderRadius: 5, 
+    backgroundColor: '#ffffff', 
+    borderWidth: 1.5, 
+    borderColor: '#cbd5f5' 
+  },
+  connectorLeft: { 
+    position: 'absolute', 
+    left: -5, 
+    top: '50%', 
+    transform: [{ translateY: -5 }], 
+    width: 10, 
+    height: 10, 
+    borderRadius: 5, 
+    backgroundColor: '#ffffff', 
+    borderWidth: 1.5, 
+    borderColor: '#cbd5f5' 
+  },
+  connectorRight: { 
+    position: 'absolute', 
+    right: -5, 
+    top: '50%', 
+    transform: [{ translateY: -5 }], 
+    width: 10, 
+    height: 10, 
+    borderRadius: 5, 
+    backgroundColor: '#ffffff', 
+    borderWidth: 1.5, 
+    borderColor: '#cbd5f5' 
+  },
+  logoWrap: { 
+    alignItems: 'center', 
+    marginBottom: 16 
+  },
+  logo: { 
+    width: 56, 
+    height: 56, 
+    borderRadius: 14,
+    backgroundColor: 'transparent', // Removed black background
+  },
+  heading: { 
+    fontSize: 26, 
+    fontWeight: '700', 
+    color: '#1a1f36', 
+    textAlign: 'center', 
+    marginBottom: 24 
+  },
+  formGroup: { 
+    marginBottom: 16 
+  },
+  label: { 
+    fontSize: 13, 
+    fontWeight: '600', 
+    color: '#4a5568', 
+    marginBottom: 6 
+  },
+  inputWrap: { 
+    borderWidth: 1.5, 
+    borderColor: '#e2e6f3', 
+    borderRadius: 12, 
+    backgroundColor: '#f8f9ff', 
+    flexDirection: 'row', 
+    alignItems: 'center' 
+  },
+  inputError: { 
+    borderColor: '#e53e3e' 
+  },
+  input: { 
+    flex: 1, 
+    paddingHorizontal: 14, 
+    paddingVertical: Platform.OS === 'ios' ? 12 : 10, 
+    fontSize: 14, 
+    color: '#1a1f36' 
+  },
+  inputWithIcon: { 
+    paddingRight: 44 
+  },
+  eyeBtn: { 
+    position: 'absolute', 
+    right: 12, 
+    padding: 6 
+  },
+  fieldError: { 
+    color: '#e53e3e', 
+    fontSize: 11, 
+    marginTop: 4, 
+    marginLeft: 4 
+  },
+  termsWrap: { 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    gap: 10, 
+    marginTop: 8, 
+    marginBottom: 8, 
+    padding: 8 
+  },
+  customCheckbox: { 
+    width: 18, 
+    height: 18, 
+    borderRadius: 9, 
+    borderWidth: 2, 
+    borderColor: '#8896b3', 
+    alignItems: 'center', 
+    justifyContent: 'center' 
+  },
+  customCheckboxChecked: { 
+    backgroundColor: '#3b5bdb', 
+    borderColor: '#3b5bdb' 
+  },
+  termsText: { 
+    flex: 1, 
+    fontSize: 12, 
+    lineHeight: 18, 
+    color: '#4a5568' 
+  },
+  termsLink: { 
+    fontWeight: '700', 
+    color: '#3b5bdb' 
+  },
+  btnCreate: { 
+    backgroundColor: '#3b5bdb', 
+    borderRadius: 12, 
+    paddingVertical: 14, 
+    alignItems: 'center', 
+    marginTop: 16, 
+    marginBottom: 12 
+  },
+  btnDisabled: { 
+    opacity: 0.7 
+  },
+  btnCreateText: { 
+    color: '#ffffff', 
+    fontSize: 15, 
+    fontWeight: '600' 
+  },
+  signinWrap: { 
+    flexDirection: 'row', 
+    justifyContent: 'center', 
+    alignItems: 'center', 
+    marginTop: 12 
+  },
+  signinText: { 
+    fontSize: 13, 
+    color: '#8896b3' 
+  },
+  signinLink: { 
+    fontSize: 13, 
+    fontWeight: '700', 
+    color: '#3b5bdb' 
+  },
+  gridBackground: { 
+    ...StyleSheet.absoluteFillObject, 
+    width: '100%', 
+    height: '100%' 
+  },
+  gridOverlay: { 
+    ...StyleSheet.absoluteFillObject, 
+    backgroundColor: 'rgba(255,255,255,0.10)' 
+  },
+});
 
-  gridBackground: {
-  ...StyleSheet.absoluteFillObject,
-  width: '100%',
-  height: '100%',
-},
+// ==================== MODAL STYLES ====================
 
-gridOverlay: {
-  ...StyleSheet.absoluteFillObject,
-  backgroundColor: 'rgba(255,255,255,0.10)',
-},
+const modalStyles = StyleSheet.create({
+  modalOverlay: { 
+    flex: 1, 
+    backgroundColor: 'rgba(0,0,0,0.5)', 
+    justifyContent: 'center', 
+    alignItems: 'center' 
+  },
+  modalContainer: { 
+    width: SCREEN_WIDTH - 40, 
+    maxWidth: 500, 
+    maxHeight: SCREEN_HEIGHT - 80, 
+    backgroundColor: '#ffffff', 
+    borderRadius: 24, 
+    overflow: 'hidden' 
+  },
+  modalHeader: { 
+    flexDirection: 'row', 
+    justifyContent: 'center', 
+    alignItems: 'center', 
+    paddingHorizontal: 20, 
+    paddingVertical: 16, 
+    borderBottomWidth: 1, 
+    borderBottomColor: '#e2e6f3', 
+    backgroundColor: '#f8f9ff' 
+  },
+  modalTitle: { 
+    fontSize: 18, 
+    fontWeight: '700', 
+    color: '#1a1f36' 
+  },
+  tabBar: { 
+    flexDirection: 'row', 
+    borderBottomWidth: 1, 
+    borderBottomColor: '#e2e6f3' 
+  },
+  tab: { 
+    flex: 1, 
+    paddingVertical: 14, 
+    alignItems: 'center' 
+  },
+  activeTab: { 
+    borderBottomWidth: 2, 
+    borderBottomColor: '#3b5bdb' 
+  },
+  tabText: { 
+    fontSize: 14, 
+    fontWeight: '600', 
+    color: '#8896b3' 
+  },
+  activeTabText: { 
+    color: '#3b5bdb' 
+  },
+  tabContent: { 
+    padding: 20 
+  },
+  modalBody: { 
+    padding: 20, 
+    maxHeight: 400 
+  },
+  sectionTitle: { 
+    fontSize: 16, 
+    fontWeight: '700', 
+    color: '#3b5bdb', 
+    marginTop: 16, 
+    marginBottom: 8 
+  },
+  subSection: { 
+    fontSize: 14, 
+    fontWeight: '600', 
+    color: '#4a5568', 
+    marginTop: 12, 
+    marginBottom: 4 
+  },
+  text: { 
+    fontSize: 13, 
+    color: '#4a5568', 
+    lineHeight: 20, 
+    marginBottom: 8 
+  },
+  footer: { 
+    fontSize: 12, 
+    color: '#8896b3', 
+    textAlign: 'center', 
+    marginTop: 20, 
+    paddingTop: 16, 
+    borderTopWidth: 1, 
+    borderTopColor: '#e2e6f3' 
+  },
+  modalFooter: { 
+    flexDirection: 'row', 
+    padding: 16, 
+    borderTopWidth: 1, 
+    borderTopColor: '#e2e6f3', 
+    gap: 12 
+  },
+  agreeButton: { 
+    flex: 1, 
+    backgroundColor: '#3b5bdb', 
+    borderRadius: 10, 
+    paddingVertical: 12, 
+    alignItems: 'center' 
+  },
+  agreeButtonText: { 
+    color: '#ffffff', 
+    fontSize: 14, 
+    fontWeight: '600' 
+  },
+  declineButton: { 
+    flex: 1, 
+    backgroundColor: '#e5e9f5', 
+    borderRadius: 10, 
+    paddingVertical: 12, 
+    alignItems: 'center' 
+  },
+  declineButtonText: { 
+    color: '#4a5568', 
+    fontSize: 14, 
+    fontWeight: '600' 
+  },
 });

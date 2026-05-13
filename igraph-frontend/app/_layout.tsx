@@ -130,6 +130,7 @@ export default function RootLayout() {
 
         {/* ✅ Navigation Stack */}
         <Stack screenOptions={{ headerShown: false }}>
+          <Stack.Screen name="landing" />
           <Stack.Screen name="(auth)" />
           <Stack.Screen name="(tabs)" />
           <Stack.Screen

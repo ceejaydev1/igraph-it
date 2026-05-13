@@ -159,7 +159,7 @@ const styles = StyleSheet.create({
   formGroup: { marginBottom: 8 },
   label: { fontSize: 13, fontWeight: '600', color: '#4a5568', marginBottom: 8 },
   inputWrap: { borderWidth: 1.5, borderColor: '#dde3fa', borderRadius: 14, backgroundColor: '#f8faff', flexDirection: 'row', alignItems: 'center' },
-  inputWrapFocused: { borderColor: '#4c6fff', backgroundColor: '#ffffff', shadowColor: '#4c6fff', shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.16, shadowRadius: 10, elevation: 4 },
+  inputWrapFocused: { backgroundColor: '#ffffff', shadowColor: '#4c6fff', shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.16, shadowRadius: 10, elevation: 4 },
   inputWrapError: { borderColor: '#ef4444' },
   input: { flex: 1, paddingHorizontal: 16, paddingVertical: Platform.OS === 'ios' ? 15 : 13, fontSize: 15, color: '#1a1f36' },
   errorText: { fontSize: 12, color: '#ef4444', marginTop: 8, marginLeft: 4, fontWeight: '500' },
