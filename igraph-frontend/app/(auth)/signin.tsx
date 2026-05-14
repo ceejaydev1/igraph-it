@@ -101,7 +101,7 @@ const PrivacyContent = () => (
 
     <Text style={modalStyles.sectionTitle}>2. Information We Collect</Text>
     <Text style={modalStyles.subSection}>2.1 Personal Information You Provide</Text>
-    <Text style={modalStyles.text}>• Account Information: Full name, username, email address, password (encrypted){'\n'}• Profile Information: Profile picture (optional){'\n'}• Authentication Data: Sign-in methods (email/password or Google OAuth)</Text>
+    <Text style={modalStyles.text}>• Account Information: Full name, email address, password (encrypted){'\n'}• Profile Information: Profile picture (optional){'\n'}• Authentication Data: Sign-in methods (email/password or Google OAuth)</Text>
     <Text style={modalStyles.subSection}>2.2 Automatically Collected Information</Text>
     <Text style={modalStyles.text}>• Usage Data: Pages visited, diagrams created, time spent on platform{'\n'}• Device Information: Browser type, operating system, IP address{'\n'}• Cookies and Similar Technologies: To enhance user experience</Text>
 
@@ -481,37 +481,46 @@ export default function SignIn() {
   };
 
   const handleSignIn = async () => {
-    const newErrors = { email: '', password: '', terms: '' };
+  const newErrors = { email: '', password: '', terms: '' };
 
-    if (!email) newErrors.email = 'Email is required';
-    if (!password) newErrors.password = 'Password is required';
-    if (!agreed) newErrors.terms = 'You must agree to the Terms and Privacy Policy';
+  if (!email) newErrors.email = 'Email is required';
+  if (!password) newErrors.password = 'Password is required';
+  if (!agreed) newErrors.terms = 'You must agree to the Terms and Privacy Policy';
 
-    setErrors(newErrors);
+  setErrors(newErrors);
+  
+  if (!agreed) {
+    openPolicyModal();
+    return;
+  }
+  
+  if (newErrors.email || newErrors.password) return;
+
+  setLoading(true);
+  const startTime = Date.now(); // ✅ Track start time
+  
+  try {
+    const result = await authService.signIn(email, password);
+    const elapsed = Date.now() - startTime;
+    const minLoadTime = 500; // Minimum 500ms to prevent flash
     
-    if (!agreed) {
-      openPolicyModal();
-      return;
+    if (elapsed < minLoadTime) {
+      await new Promise(resolve => setTimeout(resolve, minLoadTime - elapsed));
     }
     
-    if (newErrors.email || newErrors.password) return;
-
-    setLoading(true);
-    try {
-      const result = await authService.signIn(email, password);
-      if (result.success) {
-        router.replace('/(tabs)/home');
+    if (result.success) {
+      router.replace('/(tabs)/home');
+    } else {
+      if (result.message === 'Invalid email or password.' || 
+          result.message?.includes('Invalid') ||
+          result.message?.includes('invalid')) {
+        setErrors(prev => ({ ...prev, password: 'Invalid email or password. Please try again.' }));
       } else {
-        if (result.message === 'Invalid email or password.' || 
-            result.message?.includes('Invalid') ||
-            result.message?.includes('invalid')) {
-          setErrors(prev => ({ ...prev, password: 'Invalid email or password. Please try again.' }));
-        } else {
-          showErrorPopup('Sign In Failed', result.message || 'Invalid email or password');
-        }
+        showErrorPopup('Sign In Failed', result.message || 'Invalid email or password');
       }
-    } catch (error: any) {
-      console.error('Sign in error:', error);
+    }
+  } catch (error: any) {
+     console.error('Sign in error:', error);
       if (error.response?.status === 401) {
         setErrors(prev => ({ ...prev, password: 'Invalid email or password. Please try again.' }));
       } else if (error.response?.data?.message) {
@@ -526,10 +535,10 @@ export default function SignIn() {
       } else {
         showErrorPopup('Sign In Failed', error.message || 'Something went wrong');
       }
-    } finally {
-      setLoading(false);
-    }
-  };
+  } finally {
+    setLoading(false);
+  }
+};
 
   return (
     <>
@@ -660,7 +669,7 @@ export default function SignIn() {
 
             <TouchableOpacity style={styles.btnGoogle} onPress={handleFirebaseGoogleSignIn} activeOpacity={0.85} disabled={loading}>
               <GoogleIcon />
-              <Text style={styles.btnGoogleText}>Continue with Google</Text>
+              <Text style={styles.btnGoogleText}>Google Sign In</Text>
             </TouchableOpacity>
 
             <TouchableOpacity style={[styles.termsWrap, errors.terms && styles.termsError]} onPress={openPolicyModal} activeOpacity={0.8}>

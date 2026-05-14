@@ -63,7 +63,7 @@ const PrivacyContent = () => (
 
     <Text style={modalStyles.sectionTitle}>2. Information We Collect</Text>
     <Text style={modalStyles.subSection}>Personal Information</Text>
-    <Text style={modalStyles.text}>Full name, username, email address, encrypted password, profile picture (optional).</Text>
+    <Text style={modalStyles.text}>Full name, email address, encrypted password, profile picture (optional).</Text>
     <Text style={modalStyles.subSection}>Usage Data</Text>
     <Text style={modalStyles.text}>Pages visited, diagrams created, time spent on platform.</Text>
 
@@ -219,7 +219,6 @@ export default function SignUp() {
   const router = useRouter();
 
   const [fullName, setFullName] = useState('');
-  const [username, setUsername] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -232,14 +231,18 @@ export default function SignUp() {
   const [errorModalData, setErrorModalData] = useState({ title: '', message: '' });
   const [errors, setErrors] = useState({
     fullName: '',
-    username: '',
     email: '',
     password: '',
     confirmPassword: '',
     agreed: '',
   });
 
-  const usernameRef = useRef<TextInput>(null);
+  // Focus states
+  const [fullNameFocused, setFullNameFocused] = useState(false);
+  const [emailFocused, setEmailFocused] = useState(false);
+  const [passwordFocused, setPasswordFocused] = useState(false);
+  const [confirmPasswordFocused, setConfirmPasswordFocused] = useState(false);
+
   const emailRef = useRef<TextInput>(null);
   const passwordRef = useRef<TextInput>(null);
   const confirmPasswordRef = useRef<TextInput>(null);
@@ -261,7 +264,6 @@ export default function SignUp() {
   const validate = () => {
     const newErrors = {
       fullName: '',
-      username: '',
       email: '',
       password: '',
       confirmPassword: '',
@@ -271,16 +273,6 @@ export default function SignUp() {
 
     if (!fullName.trim()) {
       newErrors.fullName = 'Full name is required.';
-      isValid = false;
-    }
-    if (!username.trim()) {
-      newErrors.username = 'Username is required.';
-      isValid = false;
-    } else if (!/^[a-zA-Z0-9_]+$/.test(username)) {
-      newErrors.username = 'Username can only contain letters, numbers, and underscores.';
-      isValid = false;
-    } else if (username.length < 3) {
-      newErrors.username = 'Username must be at least 3 characters.';
       isValid = false;
     }
     if (!email.trim()) {
@@ -331,7 +323,6 @@ export default function SignUp() {
     try {
       const result = await authService.signUp({
         fullName,
-        username,
         email,
         password,
       });
@@ -409,47 +400,27 @@ export default function SignUp() {
             {/* FULL NAME */}
             <View style={styles.formGroup}>
               <Text style={styles.label}>Full Name</Text>
-              <View style={[styles.inputWrap, errors.fullName ? styles.inputError : null]}>
+              <View style={[styles.inputWrap, fullNameFocused && styles.inputWrapFocused, errors.fullName ? styles.inputError : null]}>
                 <TextInput
                   style={styles.input}
                   placeholder="Juan dela Cruz"
                   placeholderTextColor="#b8c0d4"
                   value={fullName}
                   onChangeText={(text) => { setFullName(text); setErrors({ ...errors, fullName: '' }); }}
+                  onFocus={() => setFullNameFocused(true)}
+                  onBlur={() => setFullNameFocused(false)}
                   autoCapitalize="words"
                   returnKeyType="next"
-                  onSubmitEditing={() => usernameRef.current?.focus()}
+                  onSubmitEditing={() => emailRef.current?.focus()}
                 />
               </View>
               {errors.fullName ? <Text style={styles.fieldError}>{errors.fullName}</Text> : null}
             </View>
 
-            {/* USERNAME */}
-            <View style={styles.formGroup}>
-              <Text style={styles.label}>Username</Text>
-              <View style={[styles.inputWrap, errors.username ? styles.inputError : null]}>
-                <TextInput
-                  ref={usernameRef}
-                  style={styles.input}
-                  placeholder="juan_delacruz"
-                  placeholderTextColor="#b8c0d4"
-                  value={username}
-                  onChangeText={(text) => {
-                    setUsername(text.toLowerCase().replace(/[^a-z0-9_]/g, '_'));
-                    setErrors({ ...errors, username: '' });
-                  }}
-                  autoCapitalize="none"
-                  returnKeyType="next"
-                  onSubmitEditing={() => emailRef.current?.focus()}
-                />
-              </View>
-              {errors.username ? <Text style={styles.fieldError}>{errors.username}</Text> : null}
-            </View>
-
             {/* EMAIL */}
             <View style={styles.formGroup}>
               <Text style={styles.label}>Email Address</Text>
-              <View style={[styles.inputWrap, errors.email ? styles.inputError : null]}>
+              <View style={[styles.inputWrap, emailFocused && styles.inputWrapFocused, errors.email ? styles.inputError : null]}>
                 <TextInput
                   ref={emailRef}
                   style={styles.input}
@@ -457,6 +428,8 @@ export default function SignUp() {
                   placeholderTextColor="#b8c0d4"
                   value={email}
                   onChangeText={(text) => { setEmail(text); setErrors({ ...errors, email: '' }); }}
+                  onFocus={() => setEmailFocused(true)}
+                  onBlur={() => setEmailFocused(false)}
                   keyboardType="email-address"
                   autoCapitalize="none"
                   returnKeyType="next"
@@ -469,7 +442,7 @@ export default function SignUp() {
             {/* PASSWORD */}
             <View style={styles.formGroup}>
               <Text style={styles.label}>Password</Text>
-              <View style={[styles.inputWrap, errors.password ? styles.inputError : null]}>
+              <View style={[styles.inputWrap, passwordFocused && styles.inputWrapFocused, errors.password ? styles.inputError : null]}>
                 <TextInput
                   ref={passwordRef}
                   style={[styles.input, styles.inputWithIcon]}
@@ -477,6 +450,8 @@ export default function SignUp() {
                   placeholderTextColor="#b8c0d4"
                   value={password}
                   onChangeText={(text) => { setPassword(text); setErrors({ ...errors, password: '' }); }}
+                  onFocus={() => setPasswordFocused(true)}
+                  onBlur={() => setPasswordFocused(false)}
                   secureTextEntry={!showPassword}
                   autoCapitalize="none"
                   returnKeyType="next"
@@ -492,7 +467,7 @@ export default function SignUp() {
             {/* CONFIRM PASSWORD */}
             <View style={styles.formGroup}>
               <Text style={styles.label}>Confirm Password</Text>
-              <View style={[styles.inputWrap, errors.confirmPassword ? styles.inputError : null]}>
+              <View style={[styles.inputWrap, confirmPasswordFocused && styles.inputWrapFocused, errors.confirmPassword ? styles.inputError : null]}>
                 <TextInput
                   ref={confirmPasswordRef}
                   style={[styles.input, styles.inputWithIcon]}
@@ -500,6 +475,8 @@ export default function SignUp() {
                   placeholderTextColor="#b8c0d4"
                   value={confirmPassword}
                   onChangeText={(text) => { setConfirmPassword(text); setErrors({ ...errors, confirmPassword: '' }); }}
+                  onFocus={() => setConfirmPasswordFocused(true)}
+                  onBlur={() => setConfirmPasswordFocused(false)}
                   secureTextEntry={!showConfirmPassword}
                   autoCapitalize="none"
                   returnKeyType="done"
@@ -567,22 +544,22 @@ const styles = StyleSheet.create({
     alignItems: 'center', 
     paddingVertical: 40, 
     paddingHorizontal: 16,
-    minHeight: SCREEN_HEIGHT + 100,
+    minHeight: SCREEN_HEIGHT,
   },
   card: {
     width: '100%',
-    maxWidth: 400,
+    maxWidth: 420,
     backgroundColor: '#ffffff',
     borderRadius: 24,
-    paddingHorizontal: 24,
-    paddingTop: 32,
-    paddingBottom: 28,
-    shadowColor: '#3b5bdb',
-    shadowOffset: { width: 0, height: 8 },
+    paddingHorizontal: 28,
+    paddingVertical: 28,
+    shadowColor: '#0a0f1e',
+    shadowOffset: { width: 0, height: 20 },
     shadowOpacity: 0.08,
-    shadowRadius: 24,
-    elevation: 8,
+    shadowRadius: 40,
+    elevation: 10,
     position: 'relative',
+    marginTop: -25,
   },
   connectorTop: { 
     position: 'absolute', 
@@ -632,7 +609,7 @@ const styles = StyleSheet.create({
   },
   logoWrap: { 
     alignItems: 'center', 
-    marginBottom: 16 
+    marginBottom: 8,
   },
   logo: { 
     width: 56, 
@@ -641,11 +618,11 @@ const styles = StyleSheet.create({
     backgroundColor: 'transparent',
   },
   heading: { 
-    fontSize: 26, 
-    fontWeight: '700', 
-    color: '#1a1f36', 
-    textAlign: 'center', 
-    marginBottom: 24 
+    fontSize: 28,
+    fontWeight: '800',
+    color: '#0f172a',
+    textAlign: 'center',
+    marginBottom: 24,
   },
   formGroup: { 
     marginBottom: 16 
@@ -653,16 +630,27 @@ const styles = StyleSheet.create({
   label: { 
     fontSize: 13, 
     fontWeight: '600', 
-    color: '#4a5568', 
+    color: '#334155',
     marginBottom: 6 
   },
   inputWrap: { 
-    borderWidth: 1.5, 
-    borderColor: '#e2e6f3', 
+    borderWidth: 1,
+    borderColor: '#d0d7ff',
     borderRadius: 12, 
-    backgroundColor: '#f8f9ff', 
+    backgroundColor: '#ffffff',
+    minHeight: 40,
+    justifyContent: 'center',
     flexDirection: 'row', 
     alignItems: 'center' 
+  },
+  inputWrapFocused: { 
+    borderColor: '#3b5bdb', 
+    backgroundColor: '#ffffff', 
+    shadowColor: '#3b5bdb', 
+    shadowOffset: { width: 0, height: 6 }, 
+    shadowOpacity: 0.15, 
+    shadowRadius: 12, 
+    elevation: 4 
   },
   inputError: { 
     borderColor: '#e53e3e' 
@@ -670,9 +658,12 @@ const styles = StyleSheet.create({
   input: { 
     flex: 1, 
     paddingHorizontal: 14, 
-    paddingVertical: Platform.OS === 'ios' ? 12 : 10, 
+    paddingVertical: Platform.OS === 'ios' ? 11 : 9,
     fontSize: 14, 
-    color: '#1a1f36' 
+    color: '#1a1f36',
+    backgroundColor: 'transparent',
+    minHeight: 44,
+    textAlignVertical: 'center'
   },
   inputWithIcon: { 
     paddingRight: 44 
@@ -690,11 +681,15 @@ const styles = StyleSheet.create({
   },
   termsWrap: { 
     flexDirection: 'row', 
-    alignItems: 'center', 
+    alignItems: 'flex-start',
     gap: 10, 
-    marginTop: 8, 
-    marginBottom: 8, 
-    padding: 8 
+    marginTop: 14,
+    marginBottom: 0,
+    padding: 10,
+    borderWidth: 1.5,
+    borderColor: '#e2e6f3',
+    borderRadius: 10,
+    backgroundColor: '#f8f9ff',
   },
   customCheckbox: { 
     width: 18, 
@@ -711,7 +706,7 @@ const styles = StyleSheet.create({
   },
   termsText: { 
     flex: 1, 
-    fontSize: 12, 
+    fontSize: 12.5,
     lineHeight: 18, 
     color: '#4a5568' 
   },
@@ -721,11 +716,19 @@ const styles = StyleSheet.create({
   },
   btnCreate: { 
     backgroundColor: '#3b5bdb', 
-    borderRadius: 12, 
-    paddingVertical: 14, 
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#2f49c7',
+    paddingVertical: 12,
     alignItems: 'center', 
-    marginTop: 16, 
-    marginBottom: 12 
+    marginTop: 5,
+    marginBottom: 0,
+    overflow: 'hidden',
+    shadowColor: '#3b5bdb',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.25,
+    shadowRadius: 20,
+    elevation: 8,
   },
   btnDisabled: { 
     opacity: 0.7 
@@ -733,17 +736,18 @@ const styles = StyleSheet.create({
   btnCreateText: { 
     color: '#ffffff', 
     fontSize: 15, 
-    fontWeight: '600' 
+    fontWeight: '700',
+    letterSpacing: 0.3,
   },
   signinWrap: { 
     flexDirection: 'row', 
     justifyContent: 'center', 
     alignItems: 'center', 
-    marginTop: 12 
+    marginTop: 20
   },
   signinText: { 
-    fontSize: 13, 
-    color: '#8896b3' 
+    fontSize: 13,
+    color: '#64748b'
   },
   signinLink: { 
     fontSize: 13, 

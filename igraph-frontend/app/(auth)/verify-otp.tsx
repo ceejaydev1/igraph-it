@@ -262,7 +262,7 @@ const handleVerify = async () => {
               </View>
               {error ? <Text style={styles.errorText}>{error}</Text> : null}
               <View style={styles.timerRow}>
-                // Find the timer display section (around line 150-160):
+      
                 {expired ? (
                   <Text style={styles.timerExpired}>Code expired</Text>
                 ) : (

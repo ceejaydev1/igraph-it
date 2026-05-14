@@ -5,6 +5,8 @@ import axios from 'axios';
 import { Platform } from 'react-native';
 import API_BASE_URL from '../constants/api';
 
+
+
 // Conditional storage - works on both Web and Native
 const storage = {
   setItem: async (key, value) => {
@@ -87,6 +89,8 @@ export const getRefreshToken = async () => {
 };
 
 // Auth API calls
+// services/authService.js
+
 export const signUp = async (userData) => {
   const response = await api.post('/auth/signup', userData);
   return response.data;
@@ -102,15 +106,39 @@ export const resendOTP = async (email) => {
   return response.data;
 };
 
+// Add AbortController for timeout
+let pendingRequest = null;
+
 export const signIn = async (email, password) => {
-  const response = await api.post('/auth/signin', { email, password });
-  if (response.data.success && response.data.data?.tokens) {
-    await storeTokens(
-      response.data.data.tokens.accessToken,
-      response.data.data.tokens.refreshToken
-    );
+  // Cancel previous pending request
+  if (pendingRequest) {
+    pendingRequest.abort();
   }
-  return response.data;
+  
+  const controller = new AbortController();
+  pendingRequest = controller;
+  
+  try {
+    const response = await api.post('/auth/signin', 
+      { email, password },
+      { 
+        signal: controller.signal,
+        timeout: 5000 // 5 second timeout
+      }
+    );
+    pendingRequest = null;
+    
+    if (response.data.success && response.data.data?.tokens) {
+      await storeTokens(
+        response.data.data.tokens.accessToken,
+        response.data.data.tokens.refreshToken
+      );
+    }
+    return response.data;
+  } catch (error) {
+    pendingRequest = null;
+    throw error;
+  }
 };
 
 export const googleAuth = async (idToken) => {
@@ -190,5 +218,7 @@ export const checkAuthStatus = async () => {
   const token = await getAccessToken();
   return !!token;
 };
+
+
 
 export default api;
