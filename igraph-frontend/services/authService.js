@@ -114,14 +114,20 @@ export const signIn = async (email, password) => {
 };
 
 export const googleAuth = async (idToken) => {
-  const response = await api.post('/auth/google', { idToken });
-  if (response.data.success && response.data.data?.tokens) {
-    await storeTokens(
-      response.data.data.tokens.accessToken,
-      response.data.data.tokens.refreshToken
-    );
+  try {
+    const response = await api.post('/auth/google', { idToken });
+    if (response.data.success && response.data.data?.tokens) {
+      await storeTokens(
+        response.data.data.tokens.accessToken,
+        response.data.data.tokens.refreshToken
+      );
+    }
+    return response.data;
+  } catch (error) {
+    console.error('Google auth error:', error.response?.data || error.message);
+    // ✅ THROW the error so the frontend can catch it properly
+    throw error;
   }
-  return response.data;
 };
 
 export const forgotPassword = async (email) => {

@@ -13,7 +13,6 @@ import {
   Dimensions,
   Image,
   KeyboardAvoidingView,
-  Alert,
   Modal,
 } from 'react-native';
 import { Stack, useRouter } from 'expo-router';
@@ -87,7 +86,7 @@ const PrivacyContent = () => (
   </View>
 );
 
-// ==================== MODAL COMPONENT ====================
+// ==================== POLICY MODAL COMPONENT ====================
 
 const PolicyModal = ({ visible, onClose, onAgree }: { visible: boolean; onClose: () => void; onAgree: () => void }) => {
   const [activeTab, setActiveTab] = useState<'terms' | 'privacy'>('terms');
@@ -134,6 +133,37 @@ const PolicyModal = ({ visible, onClose, onAgree }: { visible: boolean; onClose:
             </TouchableOpacity>
             <TouchableOpacity style={modalStyles.declineButton} onPress={onClose}>
               <Text style={modalStyles.declineButtonText}>Decline</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </View>
+    </Modal>
+  );
+};
+
+// ==================== CUSTOM ERROR POPUP MODAL ====================
+
+const ErrorPopupModal = ({ visible, title, message, onClose }: { 
+  visible: boolean; 
+  title: string; 
+  message: string; 
+  onClose: () => void;
+}) => {
+  return (
+    <Modal animationType="fade" transparent={true} visible={visible} onRequestClose={onClose}>
+      <View style={styles.errorModalOverlay}>
+        <View style={styles.errorModalContainer}>
+          <View style={styles.errorModalIcon}>
+            <Svg width={56} height={56} viewBox="0 0 56 56" fill="none">
+              <Circle cx="28" cy="28" r="26" fill="#FEE2E2" stroke="#EF4444" strokeWidth="2" />
+              <Path d="M28 16V30M28 38H28.01" stroke="#EF4444" strokeWidth="3" strokeLinecap="round" />
+            </Svg>
+          </View>
+          <Text style={styles.errorModalTitle}>{title}</Text>
+          <Text style={styles.errorModalMessage}>{message}</Text>
+          <View style={styles.errorModalButtons}>
+            <TouchableOpacity style={styles.errorModalButton} onPress={onClose}>
+              <Text style={styles.errorModalButtonText}>Got it</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -198,6 +228,8 @@ export default function SignUp() {
   const [agreed, setAgreed] = useState(false);
   const [loading, setLoading] = useState(false);
   const [showPolicyModal, setShowPolicyModal] = useState(false);
+  const [showErrorModal, setShowErrorModal] = useState(false);
+  const [errorModalData, setErrorModalData] = useState({ title: '', message: '' });
   const [errors, setErrors] = useState({
     fullName: '',
     username: '',
@@ -219,6 +251,11 @@ export default function SignUp() {
   const handleAgree = () => {
     setAgreed(true);
     setErrors(prev => ({ ...prev, agreed: '' }));
+  };
+
+  const showErrorPopup = (title: string, message: string) => {
+    setErrorModalData({ title, message });
+    setShowErrorModal(true);
   };
 
   const validate = () => {
@@ -305,10 +342,27 @@ export default function SignUp() {
           params: { email, purpose: 'register' },
         });
       } else {
-        Alert.alert('Sign Up Failed', result.message || 'Something went wrong');
+        showErrorPopup('Sign Up Failed', result.message || 'Something went wrong');
       }
     } catch (error: any) {
-      Alert.alert('Sign Up Failed', error.response?.data?.message || error.message || 'Something went wrong');
+      console.error('Sign up error:', error);
+      
+      let errorMessage = '';
+      let statusCode = 0;
+      
+      if (error.response) {
+        statusCode = error.response.status;
+        errorMessage = error.response.data?.message || error.response.data?.error || error.message;
+      } else {
+        errorMessage = error.message || 'Something went wrong';
+      }
+      
+      // Handle 409 Conflict - Email already exists with Google
+      if (statusCode === 409 || errorMessage?.toLowerCase().includes('already registered')) {
+        showErrorPopup('Email Already Exists', errorMessage);
+      } else {
+        showErrorPopup('Sign Up Failed', errorMessage);
+      }
     } finally {
       setLoading(false);
     }
@@ -320,10 +374,16 @@ export default function SignUp() {
 
       <PolicyModal visible={showPolicyModal} onClose={() => setShowPolicyModal(false)} onAgree={handleAgree} />
 
+      <ErrorPopupModal
+        visible={showErrorModal}
+        title={errorModalData.title}
+        message={errorModalData.message}
+        onClose={() => setShowErrorModal(false)}
+      />
+
       <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <DiagramBackground />
 
-        {/* SCROLLVIEW - MAKES FORM SCROLLABLE */}
         <ScrollView
           contentContainerStyle={styles.scrollContent}
           keyboardShouldPersistTaps="handled"
@@ -507,7 +567,7 @@ const styles = StyleSheet.create({
     alignItems: 'center', 
     paddingVertical: 40, 
     paddingHorizontal: 16,
-    minHeight: SCREEN_HEIGHT + 100, // Ensures scrollability on all screens
+    minHeight: SCREEN_HEIGHT + 100,
   },
   card: {
     width: '100%',
@@ -578,7 +638,7 @@ const styles = StyleSheet.create({
     width: 56, 
     height: 56, 
     borderRadius: 14,
-    backgroundColor: 'transparent', // Removed black background
+    backgroundColor: 'transparent',
   },
   heading: { 
     fontSize: 26, 
@@ -698,6 +758,57 @@ const styles = StyleSheet.create({
   gridOverlay: { 
     ...StyleSheet.absoluteFillObject, 
     backgroundColor: 'rgba(255,255,255,0.10)' 
+  },
+  // Error Modal Styles
+  errorModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  errorModalContainer: {
+    width: '85%',
+    maxWidth: 340,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 24,
+    padding: 24,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.25,
+    shadowRadius: 20,
+    elevation: 10,
+  },
+  errorModalIcon: {
+    marginBottom: 16,
+  },
+  errorModalTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#1e293b',
+    textAlign: 'center',
+    marginBottom: 8,
+  },
+  errorModalMessage: {
+    fontSize: 14,
+    color: '#64748b',
+    textAlign: 'center',
+    lineHeight: 20,
+    marginBottom: 24,
+  },
+  errorModalButtons: {
+    width: '100%',
+  },
+  errorModalButton: {
+    backgroundColor: '#3b5bdb',
+    paddingVertical: 12,
+    borderRadius: 12,
+    alignItems: 'center',
+  },
+  errorModalButtonText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '600',
   },
 });
 

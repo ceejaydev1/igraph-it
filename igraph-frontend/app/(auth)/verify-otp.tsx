@@ -114,7 +114,7 @@ export default function VerifyOTP() {
   const [resending, setResending] = useState(false);
 
   const inputRefs = useRef<Array<TextInput | null>>(Array(OTP_LENGTH).fill(null));
-  const { seconds, expired, reset: resetTimer } = useCountdown(60);
+  const { seconds, expired, reset: resetTimer } = useCountdown(300);
 
   useEffect(() => {
     setTimeout(() => inputRefs.current[0]?.focus(), 300);
@@ -262,10 +262,15 @@ const handleVerify = async () => {
               </View>
               {error ? <Text style={styles.errorText}>{error}</Text> : null}
               <View style={styles.timerRow}>
-                {expired ? <Text style={styles.timerExpired}>Code expired</Text> : (
+                // Find the timer display section (around line 150-160):
+                {expired ? (
+                  <Text style={styles.timerExpired}>Code expired</Text>
+                ) : (
                   <>
                     <Text style={styles.timerLabel}>Code expires in </Text>
-                    <Text style={styles.timerCount}>{String(Math.floor(seconds / 60)).padStart(2, '0')}:{String(seconds % 60).padStart(2, '0')}</Text>
+                    <Text style={styles.timerCount}>
+                      {String(Math.floor(seconds / 60)).padStart(2, '0')}:{String(seconds % 60).padStart(2, '0')}
+                    </Text>
                   </>
                 )}
               </View>

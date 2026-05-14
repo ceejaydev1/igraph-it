@@ -14,7 +14,6 @@ import {
   Dimensions,
   Image,
   KeyboardAvoidingView,
-  Alert,
 } from 'react-native';
 import { Stack, useRouter } from 'expo-router';
 import * as WebBrowser from 'expo-web-browser';
@@ -136,8 +135,6 @@ const PrivacyContent = () => (
 
 // ─── TABBED MODAL COMPONENT ──────────────────────────────────────────────────────────────
 
-// Update the PolicyModal component only - replace the existing one:
-
 const PolicyModal = ({ visible, onClose, onAgree }: { visible: boolean; onClose: () => void; onAgree: () => void }) => {
   const [activeTab, setActiveTab] = useState<'terms' | 'privacy'>('terms');
   const scrollViewRef = useRef<ScrollView>(null);
@@ -158,10 +155,8 @@ const PolicyModal = ({ visible, onClose, onAgree }: { visible: boolean; onClose:
         <View style={modalStyles.modalContainer}>
           <View style={modalStyles.modalHeader}>
             <Text style={modalStyles.modalTitle}>Legal Agreement</Text>
-            {/* REMOVED X BUTTON */}
           </View>
 
-          {/* Tab Bar */}
           <View style={modalStyles.tabBar}>
             <TouchableOpacity
               style={[modalStyles.tab, activeTab === 'terms' && modalStyles.activeTab]}
@@ -181,7 +176,6 @@ const PolicyModal = ({ visible, onClose, onAgree }: { visible: boolean; onClose:
             </TouchableOpacity>
           </View>
 
-          {/* Tab Content with ScrollView ref */}
           <ModalScroll
             ref={scrollViewRef}
             showsVerticalScrollIndicator={false}
@@ -194,7 +188,6 @@ const PolicyModal = ({ visible, onClose, onAgree }: { visible: boolean; onClose:
             {activeTab === 'terms' ? <TermsContent /> : <PrivacyContent />}
           </ModalScroll>
 
-          {/* Scroll to Top Button - Arrow Up */}
           {showScrollTop && (
             <TouchableOpacity style={modalStyles.scrollTopButton} onPress={scrollToTop} activeOpacity={0.8}>
               <Svg width={24} height={24} viewBox="0 0 24 24" fill="none">
@@ -203,7 +196,6 @@ const PolicyModal = ({ visible, onClose, onAgree }: { visible: boolean; onClose:
             </TouchableOpacity>
           )}
 
-          {/* Footer with Agree Button */}
           <View style={modalStyles.modalFooter}>
             <TouchableOpacity style={modalStyles.agreeButton} onPress={handleAgree}>
               <Text style={modalStyles.agreeButtonText}>I Agree</Text>
@@ -218,20 +210,52 @@ const PolicyModal = ({ visible, onClose, onAgree }: { visible: boolean; onClose:
   );
 };
 
+// ─── CUSTOM ERROR POPUP MODAL ─────────────────────────────────────────────────
+
+const ErrorPopupModal = ({ visible, title, message, onClose, onAction }: { 
+  visible: boolean; 
+  title: string; 
+  message: string; 
+  onClose: () => void;
+  onAction?: () => void;
+}) => {
+  return (
+    <Modal animationType="fade" transparent={true} visible={visible} onRequestClose={onClose}>
+      <View style={styles.errorModalOverlay}>
+        <View style={styles.errorModalContainer}>
+          <View style={styles.errorModalIcon}>
+            <Svg width={56} height={56} viewBox="0 0 56 56" fill="none">
+              <Circle cx="28" cy="28" r="26" fill="#FEE2E2" stroke="#EF4444" strokeWidth="2" />
+              <Path d="M28 16V30M28 38H28.01" stroke="#EF4444" strokeWidth="3" strokeLinecap="round" />
+            </Svg>
+          </View>
+          <Text style={styles.errorModalTitle}>{title}</Text>
+          <Text style={styles.errorModalMessage}>{message}</Text>
+          <View style={styles.errorModalButtons}>
+            <TouchableOpacity
+              style={styles.errorModalButton}
+              onPress={() => {
+                onClose();
+                if (onAction) onAction();
+              }}
+            >
+              <Text style={styles.errorModalButtonText}>Got it</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </View>
+    </Modal>
+  );
+};
+
 const DiagramBackground = () => (
   <View style={StyleSheet.absoluteFillObject} pointerEvents="none">
-
-    {/* GRID IMAGE */}
     <Image
       source={require('../../assets/images/grid-bg.png')}
       style={styles.gridBackground}
       resizeMode="repeat"
     />
-
-    {/* LIGHT OVERLAY */}
     <View style={styles.gridOverlay} />
-
-    {/* SVG NODE LAYER */}
     <Svg
       width="100%"
       height="100%"
@@ -239,8 +263,6 @@ const DiagramBackground = () => (
       preserveAspectRatio="xMidYMid slice"
       style={StyleSheet.absoluteFillObject}
     >
-
-      {/* FLOW LINE */}
       <Path
         d={`
           M ${SCREEN_WIDTH * 0.08} ${SCREEN_HEIGHT * 0.25}
@@ -254,8 +276,6 @@ const DiagramBackground = () => (
         fill="none"
         opacity="0.32"
       />
-
-      {/* FLOW LINE */}
       <Path
         d={`
           M ${SCREEN_WIDTH * 0.82} ${SCREEN_HEIGHT * 0.18}
@@ -269,8 +289,6 @@ const DiagramBackground = () => (
         fill="none"
         opacity="0.32"
       />
-
-      {/* UML BOX */}
       <Rect
         x={SCREEN_WIDTH * 0.07}
         y={SCREEN_HEIGHT * 0.12}
@@ -282,8 +300,6 @@ const DiagramBackground = () => (
         fill="none"
         opacity="0.38"
       />
-
-      {/* UML BOX */}
       <Rect
         x={SCREEN_WIDTH * 0.74}
         y={SCREEN_HEIGHT * 0.16}
@@ -295,8 +311,6 @@ const DiagramBackground = () => (
         fill="none"
         opacity="0.38"
       />
-
-      {/* DECISION DIAMOND */}
       <Path
         d={`
           M ${SCREEN_WIDTH * 0.15} ${SCREEN_HEIGHT * 0.56}
@@ -310,8 +324,6 @@ const DiagramBackground = () => (
         fill="none"
         opacity="0.35"
       />
-
-      {/* CIRCLE */}
       <Circle
         cx={SCREEN_WIDTH * 0.76}
         cy={SCREEN_HEIGHT * 0.72}
@@ -321,27 +333,20 @@ const DiagramBackground = () => (
         fill="none"
         opacity="0.3"
       />
-
-      {/* LABELS */}
       <SvgText
         x={SCREEN_WIDTH * 0.10}
         y={SCREEN_HEIGHT * 0.11}
         fontSize="11"
         fill="#9bb0ea"
         opacity="0.65"
-      >
-      </SvgText>
-
+      />
       <SvgText
         x={SCREEN_WIDTH * 0.76}
         y={SCREEN_HEIGHT * 0.15}
         fontSize="11"
         fill="#9bb0ea"
         opacity="0.65"
-      >
-       
-      </SvgText>
-
+      />
     </Svg>
   </View>
 );
@@ -393,21 +398,26 @@ export default function SignIn() {
   
   // Modal states
   const [showPolicyModal, setShowPolicyModal] = useState(false);
+  const [showErrorModal, setShowErrorModal] = useState(false);
+  const [errorModalData, setErrorModalData] = useState({ title: '', message: '', onAction: undefined as (() => void) | undefined });
 
   const passwordRef = useRef<TextInput>(null);
 
-  // Open modal and reset agreement
   const openPolicyModal = () => {
     setShowPolicyModal(true);
   };
 
-  // Handle agreement from modal
   const handleAgree = () => {
     setAgreed(true);
     setErrors(prev => ({ ...prev, terms: '' }));
   };
 
-  // Firebase Google Sign In with agreement check
+  const showErrorPopup = (title: string, message: string, onAction?: () => void) => {
+    setErrorModalData({ title, message, onAction });
+    setShowErrorModal(true);
+  };
+
+  // Firebase Google Sign In
   const handleFirebaseGoogleSignIn = async () => {
     if (!agreed) {
       setErrors(prev => ({ ...prev, terms: 'You must agree to the Terms and Privacy Policy before continuing' }));
@@ -416,7 +426,7 @@ export default function SignIn() {
     }
 
     if (!auth) {
-      Alert.alert('Error', 'Firebase auth not available on this platform');
+      showErrorPopup('Error', 'Firebase auth not available on this platform');
       return;
     }
 
@@ -434,87 +444,109 @@ export default function SignIn() {
       if (apiResult.success) {
         router.replace('/(tabs)/home');
       } else {
-        Alert.alert('Sign In Failed', apiResult.message || 'Google sign in failed');
         await auth.signOut();
+        showErrorPopup('Sign In Failed', apiResult.message || 'Google sign in failed');
       }
     } catch (error: any) {
       console.error('Firebase Google Sign-In error:', error);
-      if (error.code === 'auth/popup-blocked') {
-        Alert.alert('Popup Blocked', 'Please allow popups for this site and try again.');
+      
+      let errorMessage = '';
+      let statusCode = 0;
+      
+      if (error.response) {
+        statusCode = error.response.status;
+        errorMessage = error.response.data?.message || error.response.data?.error || error.message;
       } else {
-        Alert.alert('Google Sign In Failed', error.message || 'Something went wrong');
+        errorMessage = error.message || 'Something went wrong';
+      }
+      
+      if (statusCode === 409) {
+        showErrorPopup(
+          'Account Already Exists',
+          errorMessage,
+          () => router.push('/(auth)/signin')
+        );
+      } else {
+        showErrorPopup('Google Sign In Failed', errorMessage);
+      }
+      
+      try {
+        await auth.signOut();
+      } catch (signOutError) {
+        console.log('Sign out error:', signOutError);
       }
     } finally {
       setLoading(false);
     }
   };
 
-  // In the handleSignIn function, update the error handling:
+  const handleSignIn = async () => {
+    const newErrors = { email: '', password: '', terms: '' };
 
-const handleSignIn = async () => {
-  const newErrors = { email: '', password: '', terms: '' };
+    if (!email) newErrors.email = 'Email is required';
+    if (!password) newErrors.password = 'Password is required';
+    if (!agreed) newErrors.terms = 'You must agree to the Terms and Privacy Policy';
 
-  if (!email) newErrors.email = 'Email is required';
-  if (!password) newErrors.password = 'Password is required';
-  if (!agreed) newErrors.terms = 'You must agree to the Terms and Privacy Policy';
-
-  setErrors(newErrors);
-  
-  // If terms not agreed, open modal
-  if (!agreed) {
-    openPolicyModal();
-    return;
-  }
-  
-  if (newErrors.email || newErrors.password) return;
-
-  setLoading(true);
-  try {
-    const result = await authService.signIn(email, password);
-    if (result.success) {
-      router.replace('/(tabs)/home');
-    } else {
-      // Show specific error for invalid credentials
-      if (result.message === 'Invalid email or password.' || 
-          result.message?.includes('Invalid') ||
-          result.message?.includes('invalid')) {
-        setErrors(prev => ({ ...prev, password: 'Invalid email or password. Please try again.' }));
-      } else {
-        Alert.alert('Sign In Failed', result.message || 'Invalid email or password');
-      }
+    setErrors(newErrors);
+    
+    if (!agreed) {
+      openPolicyModal();
+      return;
     }
-  } catch (error: any) {
-    console.error('Sign in error:', error);
-    // Handle 401 Unauthorized error
-    if (error.response?.status === 401) {
-      setErrors(prev => ({ ...prev, password: 'Invalid email or password. Please try again.' }));
-    } else if (error.response?.data?.message) {
-      // Check if it's an invalid credentials message
-      const msg = error.response.data.message;
-      if (msg === 'Invalid email or password.' || msg?.toLowerCase().includes('invalid')) {
-        setErrors(prev => ({ ...prev, password: 'Invalid email or password. Please try again.' }));
-      } else if (msg === 'EMAIL_NOT_VERIFIED' || msg?.toLowerCase().includes('verify')) {
-        Alert.alert('Email Not Verified', 'Please verify your email address before signing in.');
+    
+    if (newErrors.email || newErrors.password) return;
+
+    setLoading(true);
+    try {
+      const result = await authService.signIn(email, password);
+      if (result.success) {
+        router.replace('/(tabs)/home');
       } else {
-        Alert.alert('Sign In Failed', msg || 'Something went wrong');
+        if (result.message === 'Invalid email or password.' || 
+            result.message?.includes('Invalid') ||
+            result.message?.includes('invalid')) {
+          setErrors(prev => ({ ...prev, password: 'Invalid email or password. Please try again.' }));
+        } else {
+          showErrorPopup('Sign In Failed', result.message || 'Invalid email or password');
+        }
       }
-    } else {
-      Alert.alert('Sign In Failed', error.message || 'Something went wrong');
+    } catch (error: any) {
+      console.error('Sign in error:', error);
+      if (error.response?.status === 401) {
+        setErrors(prev => ({ ...prev, password: 'Invalid email or password. Please try again.' }));
+      } else if (error.response?.data?.message) {
+        const msg = error.response.data.message;
+        if (msg === 'Invalid email or password.' || msg?.toLowerCase().includes('invalid')) {
+          setErrors(prev => ({ ...prev, password: 'Invalid email or password. Please try again.' }));
+        } else if (msg === 'EMAIL_NOT_VERIFIED' || msg?.toLowerCase().includes('verify')) {
+          showErrorPopup('Email Not Verified', 'Please verify your email address before signing in.');
+        } else {
+          showErrorPopup('Sign In Failed', msg || 'Something went wrong');
+        }
+      } else {
+        showErrorPopup('Sign In Failed', error.message || 'Something went wrong');
+      }
+    } finally {
+      setLoading(false);
     }
-  } finally {
-    setLoading(false);
-  }
-};
+  };
 
   return (
     <>
       <Stack.Screen options={{ headerShown: false }} />
 
-      {/* Policy Modal with Tabs */}
       <PolicyModal 
         visible={showPolicyModal} 
         onClose={() => setShowPolicyModal(false)} 
         onAgree={handleAgree}
+      />
+
+      <ErrorPopupModal
+        visible={showErrorModal}
+        title={errorModalData.title}
+        message={errorModalData.message}
+        onClose={() => setShowErrorModal(false)}
+        onAction={errorModalData.onAction}
       />
 
       <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
@@ -542,7 +574,6 @@ const handleSignIn = async () => {
             <Text style={styles.heading}>Welcome Back</Text>
             <Text style={styles.subtitle}>Sign in to continue your learning journey</Text>
 
-            {/* EMAIL */}
             <View style={styles.formGroup}>
               <Text style={styles.label}>Email</Text>
               <View style={[styles.inputWrap, emailFocused && styles.inputWrapFocused, errors.email && styles.inputError]}>
@@ -570,7 +601,6 @@ const handleSignIn = async () => {
               {errors.email ? <Text style={styles.errorText}>{errors.email}</Text> : null}
             </View>
 
-            {/* PASSWORD */}
             <View style={styles.formGroup}>
               <Text style={styles.label}>Password</Text>
               <View style={[styles.inputWrap, passwordFocused && styles.inputWrapFocused, errors.password && styles.inputError]}>
@@ -607,7 +637,6 @@ const handleSignIn = async () => {
               </TouchableOpacity>
             </View>
 
-            {/* SIGN IN BUTTON */}
             <Pressable
               style={({ pressed }) => [styles.btnSignIn, loading && styles.btnDisabled, { transform: [{ scale: pressed ? 0.97 : 1 }], opacity: pressed ? 0.9 : 1 }]}
               onPress={handleSignIn}
@@ -623,20 +652,17 @@ const handleSignIn = async () => {
               )}
             </Pressable>
 
-            {/* DIVIDER */}
             <View style={styles.divider}>
               <View style={styles.line} />
               <Text style={styles.orText}>OR</Text>
               <View style={styles.line} />
             </View>
 
-            {/* GOOGLE - with agreement check */}
             <TouchableOpacity style={styles.btnGoogle} onPress={handleFirebaseGoogleSignIn} activeOpacity={0.85} disabled={loading}>
               <GoogleIcon />
               <Text style={styles.btnGoogleText}>Continue with Google</Text>
             </TouchableOpacity>
 
-            {/* TERMS - Click to open modal */}
             <TouchableOpacity style={[styles.termsWrap, errors.terms && styles.termsError]} onPress={openPolicyModal} activeOpacity={0.8}>
               <View style={[styles.customCheckbox, agreed && styles.customCheckboxChecked]}>
                 {agreed && (
@@ -655,7 +681,6 @@ const handleSignIn = async () => {
 
             {errors.terms ? <Text style={styles.errorText}>{errors.terms}</Text> : null}
 
-            {/* SIGN UP LINK */}
             <View style={styles.signupWrap}>
               <Text style={styles.signupText}>Don't have an account? </Text>
               <TouchableOpacity onPress={() => router.push('/(auth)/signup')} activeOpacity={0.7}>
@@ -686,33 +711,32 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.10)',
   },
 
-scrollContent: {
-  flexGrow: 1,
-  justifyContent: 'center',
-  alignItems: 'center',
-  paddingVertical: 40,
-  paddingHorizontal: 16,
-  minHeight: SCREEN_HEIGHT,
-},
+  scrollContent: {
+    flexGrow: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 40,
+    paddingHorizontal: 16,
+    minHeight: SCREEN_HEIGHT,
+  },
 
   card: {
-  backgroundColor: '#ffffff',
-  borderRadius: 24,
-  paddingHorizontal: 28,
-  paddingVertical: 28,
-  width: '100%',
-  maxWidth: 420,
-  minWidth: 320,
-  position: 'relative',
+    backgroundColor: '#ffffff',
+    borderRadius: 24,
+    paddingHorizontal: 28,
+    paddingVertical: 28,
+    width: '100%',
+    maxWidth: 420,
+    minWidth: 320,
+    position: 'relative',
+    shadowColor: '#0a0f1e',
+    shadowOffset: { width: 0, height: 20 },
+    shadowOpacity: 0.08,
+    shadowRadius: 40,
+    elevation: 10,
+    marginTop: -25,
+  },
 
-  shadowColor: '#0a0f1e',
-  shadowOffset: { width: 0, height: 20 },
-  shadowOpacity: 0.08,
-  shadowRadius: 40,
-  elevation: 10,
-
-  marginTop: -25,
-},
   connectorTop: { position: 'absolute', top: -5, alignSelf: 'center', width: 10, height: 10, borderRadius: 5, backgroundColor: '#ffffff', borderWidth: 1.5, borderColor: '#cbd5f5' },
   connectorBottom: { position: 'absolute', bottom: -5, alignSelf: 'center', width: 10, height: 10, borderRadius: 5, backgroundColor: '#ffffff', borderWidth: 1.5, borderColor: '#cbd5f5' },
   connectorLeft: { position: 'absolute', left: -5, top: '50%', transform: [{ translateY: -5 }], width: 10, height: 10, borderRadius: 5, backgroundColor: '#ffffff', borderWidth: 1.5, borderColor: '#cbd5f5' },
@@ -749,6 +773,58 @@ scrollContent: {
   signupWrap: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', marginTop: 20 },
   signupText: { fontSize: 13, color: '#64748b' },
   signupLink: { fontSize: 13, fontWeight: '700', color: '#3b5bdb' },
+
+  // Error Modal Styles
+  errorModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  errorModalContainer: {
+    width: '85%',
+    maxWidth: 340,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 24,
+    padding: 24,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.25,
+    shadowRadius: 20,
+    elevation: 10,
+  },
+  errorModalIcon: {
+    marginBottom: 16,
+  },
+  errorModalTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#1e293b',
+    textAlign: 'center',
+    marginBottom: 8,
+  },
+  errorModalMessage: {
+    fontSize: 14,
+    color: '#64748b',
+    textAlign: 'center',
+    lineHeight: 20,
+    marginBottom: 24,
+  },
+  errorModalButtons: {
+    width: '100%',
+  },
+  errorModalButton: {
+    backgroundColor: '#3b5bdb',
+    paddingVertical: 12,
+    borderRadius: 12,
+    alignItems: 'center',
+  },
+  errorModalButtonText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '600',
+  },
 });
 
 // Modal Styles
@@ -759,7 +835,6 @@ const modalStyles = StyleSheet.create({
   modalTitle: { fontSize: 18, fontWeight: '700', color: '#1a1f36', alignItems: 'center'},
   closeButton: { padding: 4 },
   
-  // Tab Styles
   tabBar: { flexDirection: 'row', borderBottomWidth: 1, borderBottomColor: '#e2e6f3', backgroundColor: '#ffffff' },
   tab: { flex: 1, paddingVertical: 14, alignItems: 'center' },
   activeTab: { borderBottomWidth: 2, borderBottomColor: '#3b5bdb' },
@@ -767,34 +842,30 @@ const modalStyles = StyleSheet.create({
   activeTabText: { color: '#3b5bdb' },
   tabContent: { padding: 20 },
   
-  // Footer Buttons
   modalFooter: { flexDirection: 'row', padding: 16, borderTopWidth: 1, borderTopColor: '#e2e6f3', gap: 12, backgroundColor: '#ffffff' },
   agreeButton: { flex: 1, backgroundColor: '#3b5bdb', borderRadius: 10, paddingVertical: 12, alignItems: 'center' },
   agreeButtonText: { color: '#ffffff', fontSize: 16, fontWeight: '700' },
   declineButton: { flex: 1, backgroundColor: '#e5e9f5', borderRadius: 10, paddingVertical: 12, alignItems: 'center' },
   declineButtonText: { color: '#4a5568', fontSize: 16, fontWeight: '600' },
 
-  // Add to modalStyles object:
-
-scrollTopButton: {
-  position: 'absolute',
-  bottom: 80,
-  right: 20,
-  backgroundColor: '#3b5bdb',
-  width: 48,
-  height: 48,
-  borderRadius: 24,
-  justifyContent: 'center',
-  alignItems: 'center',
-  shadowColor: '#000',
-  shadowOffset: { width: 0, height: 4 },
-  shadowOpacity: 0.3,
-  shadowRadius: 8,
-  elevation: 6,
-  zIndex: 10,
-},
+  scrollTopButton: {
+    position: 'absolute',
+    bottom: 80,
+    right: 20,
+    backgroundColor: '#3b5bdb',
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 6,
+    zIndex: 10,
+  },
   
-  // Content Styles
   sectionTitle: { fontSize: 18, fontWeight: '700', color: '#3b5bdb', marginTop: 20, marginBottom: 8 },
   subSection: { fontSize: 16, fontWeight: '600', color: '#4a5568', marginTop: 12, marginBottom: 4 },
   text: { fontSize: 14, color: '#4a5568', lineHeight: 22, marginBottom: 8 },
