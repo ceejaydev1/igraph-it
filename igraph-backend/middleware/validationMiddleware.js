@@ -17,17 +17,15 @@ const handleValidationErrors = (req, res, next) => {
   next();
 };
 
+// middleware/validationMiddleware.js
+
 const validateSignup = [
   body('fullName')
     .trim()
     .notEmpty().withMessage('Full name is required.')
     .isLength({ min: 2, max: 100 }).withMessage('Full name must be 2–100 characters.'),
 
-  body('username')
-    .trim()
-    .notEmpty().withMessage('Username is required.')
-    .isLength({ min: 3, max: 30 }).withMessage('Username must be 3–30 characters.')
-    .matches(/^[a-zA-Z0-9_]+$/).withMessage('Username can only contain letters, numbers, and underscores.'),
+  // REMOVED username validation
 
   body('email')
     .trim()

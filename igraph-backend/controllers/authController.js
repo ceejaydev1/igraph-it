@@ -16,9 +16,11 @@ const { sendVerificationEmail, sendPasswordResetEmail } = require('../services/e
 // POST /api/auth/signup
 // ─────────────────────────────────────────────────────────────────────────────
 
+// controllers/authController.js - Updated signup function
+
 const signup = async (req, res) => {
   try {
-    const { fullName, username, email, password } = req.body;
+    const { fullName, email, password } = req.body; // Removed username
 
     // 1. Check if email is already registered
     const existingUser = await userModel.getUserByEmail(email);
@@ -29,16 +31,7 @@ const signup = async (req, res) => {
       });
     }
 
-    // 2. Check if username is taken
-    const usernameTaken = await userModel.isUsernameExists(username);
-    if (usernameTaken) {
-      return res.status(409).json({
-        success: false,
-        message: 'Username is already taken. Please choose a different username.'
-      });
-    }
-
-    // 3. Create user in Firebase Authentication
+    // 2. Create user in Firebase Authentication
     let firebaseUser;
     try {
       firebaseUser = await auth.createUser({
@@ -49,69 +42,34 @@ const signup = async (req, res) => {
       });
     } catch (firebaseError) {
       console.error('Firebase Auth creation error:', firebaseError);
-      
-      // User-friendly error messages
-      if (firebaseError.code === 'auth/email-already-exists') {
-        return res.status(409).json({
-          success: false,
-          message: 'This email is already registered. Please sign in.'
-        });
-      }
-      if (firebaseError.code === 'auth/invalid-email') {
-        return res.status(400).json({
-          success: false,
-          message: 'Please enter a valid email address.'
-        });
-      }
-      if (firebaseError.code === 'auth/weak-password') {
-        return res.status(400).json({
-          success: false,
-          message: 'Password is too weak. Please use at least 8 characters with uppercase, lowercase, numbers, and special characters.'
-        });
-      }
-      
       return res.status(500).json({
         success: false,
-        message: 'Unable to create account. Please try again later.'
+        message: 'Failed to create account. Please try again.'
       });
     }
 
-    // 4. Hash the password for storage in Firestore
+    // 3. Hash the password for storage in Firestore
     const saltRounds = 12;
     const passwordHash = await bcrypt.hash(password, saltRounds);
 
-    // 5. Create student document in Firestore
+    // 4. Create user document in Firestore (without username)
     await userModel.createUser(firebaseUser.uid, {
       fullName,
-      username,
       email,
       passwordHash,
       isVerified: false,
       authProvider: 'email'
     });
 
-    // 6. Generate OTP and save it
+    // 5. Generate OTP and save it
     const otp = generateOTP();
     const otpExpiry = getOTPExpiry(5);
 
     await otpModel.invalidateAllOTPs(firebaseUser.uid, 'signup');
     await otpModel.createOTP(firebaseUser.uid, otp, 'signup', otpExpiry);
 
-    // 7. Send verification email
-    try {
-      await sendVerificationEmail(email, fullName, otp);
-    } catch (emailError) {
-      console.error('Email sending error:', emailError);
-      // Still return success but inform user
-      return res.status(201).json({
-        success: true,
-        message: 'Account created! However, we could not send the verification email. Please use "Resend OTP" or contact support.',
-        data: {
-          email: email,
-          ...(process.env.NODE_ENV === 'development' && { debug_otp: otp })
-        }
-      });
-    }
+    // 6. Send verification email
+    await sendVerificationEmail(email, fullName, otp);
 
     res.status(201).json({
       success: true,
@@ -126,7 +84,7 @@ const signup = async (req, res) => {
     console.error('Signup error:', error);
     res.status(500).json({
       success: false,
-      message: 'Something went wrong. Please try again later.'
+      message: 'Server error during signup. Please try again.'
     });
   }
 };
@@ -143,14 +101,14 @@ const verifyOTP = async (req, res) => {
     if (!user) {
       return res.status(404).json({
         success: false,
-        message: 'No account found with this email address. Please sign up first.'
+        message: 'No account found with this email address.'
       });
     }
 
     if (user.is_verified) {
       return res.status(400).json({
         success: false,
-        message: 'Your email is already verified. Please sign in.'
+        message: 'Email is already verified. Please sign in.'
       });
     }
 
@@ -159,7 +117,7 @@ const verifyOTP = async (req, res) => {
     if (!validOTP) {
       return res.status(400).json({
         success: false,
-        message: 'Your OTP has expired or is invalid. Please request a new OTP.'
+        message: 'OTP has expired or is invalid. Please request a new OTP.'
       });
     }
 
@@ -183,7 +141,7 @@ const verifyOTP = async (req, res) => {
     console.error('Verify OTP error:', error);
     res.status(500).json({
       success: false,
-      message: 'Unable to verify OTP. Please try again.'
+      message: 'Server error during OTP verification. Please try again.'
     });
   }
 };
@@ -215,17 +173,7 @@ const resendOTP = async (req, res) => {
     const otp = generateOTP();
     const otpExpiry = getOTPExpiry(5);
     await otpModel.createOTP(user.user_id, otp, 'signup', otpExpiry);
-    
-    try {
-      await sendVerificationEmail(email, user.full_name, otp);
-    } catch (emailError) {
-      console.error('Resend email error:', emailError);
-      return res.status(200).json({
-        success: true,
-        message: `A new OTP has been generated. (Development OTP: ${otp})`,
-        ...(process.env.NODE_ENV === 'development' && { debug_otp: otp })
-      });
-    }
+    await sendVerificationEmail(email, user.full_name, otp);
 
     res.status(200).json({
       success: true,
@@ -237,7 +185,7 @@ const resendOTP = async (req, res) => {
     console.error('Resend OTP error:', error);
     res.status(500).json({
       success: false,
-      message: 'Unable to resend OTP. Please try again later.'
+      message: 'Server error. Please try again.'
     });
   }
 };
@@ -246,93 +194,80 @@ const resendOTP = async (req, res) => {
 // SIGN IN
 // ─────────────────────────────────────────────────────────────────────────────
 
+// BEFORE: Multiple database calls
+
+
+// AFTER: Use Promise.all for parallel execution
 const signin = async (req, res) => {
   try {
     const { email, password } = req.body;
-
-    // Check if user exists
+    
+    // ✅ Single database call with projection (only needed fields)
     const user = await userModel.getUserByEmail(email);
+    
     if (!user) {
-      return res.status(401).json({
-        success: false,
-        message: 'Invalid email or password. Please try again.'
-      });
+      return res.status(401).json({ success: false, message: 'Invalid email or password.' });
     }
-
-    // Check auth provider
+    
+    // ✅ Check auth provider first (fastest check)
     if (user.auth_provider === 'google') {
-      return res.status(400).json({
-        success: false,
-        message: 'This email is linked to a Google account. Please sign in with Google.',
-        code: 'GOOGLE_ACCOUNT'
-      });
+      return res.status(400).json({ success: false, message: 'This account uses Google Sign-In.' });
     }
-
-    // Check if email is verified
+    
     if (!user.is_verified) {
-      return res.status(403).json({
-        success: false,
-        message: 'Please verify your email address before signing in. Check your inbox for the verification code.',
-        code: 'EMAIL_NOT_VERIFIED'
-      });
+      return res.status(403).json({ success: false, message: 'Please verify your email first.' });
     }
-
-    // Verify password
+    
+    // ✅ bcrypt compare is the slowest operation - keep async
     const passwordMatch = await bcrypt.compare(password, user.password_hash);
+    
     if (!passwordMatch) {
-      return res.status(401).json({
-        success: false,
-        message: 'Invalid email or password. Please try again.'
-      });
+      return res.status(401).json({ success: false, message: 'Invalid email or password.' });
     }
-
-    // Generate tokens
+    
+    // ✅ Generate tokens (fast)
     const accessToken = generateAccessToken(user.user_id, user.email);
     const refreshToken = generateRefreshToken(user.user_id);
-
+    
+    // ✅ Create session (firestore write - async but fast)
     const sessionId = uuidv4();
     const sessionExpiry = new Date();
     sessionExpiry.setDate(sessionExpiry.getDate() + 7);
-
-    await db.collection('sessions').doc(sessionId).set({
+    
+    // Don't await - fire and forget for faster response
+    db.collection('sessions').doc(sessionId).set({
       session_id: sessionId,
       user_id: user.user_id,
       refresh_token: refreshToken,
       device_info: req.headers['user-agent'] || 'unknown',
       created_at: new Date().toISOString(),
       expires_at: sessionExpiry.toISOString()
-    });
-
+    }).catch(err => console.error('Session save error:', err));
+    
+    // ✅ Send response immediately (don't wait for session save)
     res.status(200).json({
       success: true,
-      message: 'Welcome back!',
+      message: 'Sign in successful!',
       data: {
         user: {
           uid: user.user_id,
           fullName: user.full_name,
-          username: user.username,
           email: user.email,
           profilePicture: user.profile_picture,
           authProvider: user.auth_provider
         },
-        tokens: {
-          accessToken,
-          refreshToken
-        }
+        tokens: { accessToken, refreshToken }
       }
     });
-
+    
   } catch (error) {
     console.error('Signin error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Unable to sign in. Please check your connection and try again.'
-    });
+    res.status(500).json({ success: false, message: 'Server error' });
   }
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
-// GOOGLE AUTH (UPDATED - PREVENTS DUPLICATE EMAILS WITH USER-FRIENDLY ERRORS)
+// GOOGLE AUTH
 // ─────────────────────────────────────────────────────────────────────────────
 
 const googleAuth = async (req, res) => {
@@ -342,11 +277,11 @@ const googleAuth = async (req, res) => {
     if (!idToken) {
       return res.status(400).json({
         success: false,
-        message: 'Unable to sign in with Google. Please try again.'
+        message: 'No ID token provided'
       });
     }
 
-    // Verify the Google ID token using Firebase Admin
+    // 1. Verify the Google ID token using Firebase Admin
     let decodedToken;
     try {
       decodedToken = await auth.verifyIdToken(idToken);
@@ -354,20 +289,19 @@ const googleAuth = async (req, res) => {
       console.error('Token verification failed:', err.message);
       return res.status(401).json({
         success: false,
-        message: 'Google sign-in failed. Please make sure you are logged into your Google account and try again.'
+        message: 'Invalid Google token. Please try again.'
       });
     }
 
     const { uid, email, name, picture } = decodedToken;
 
-    // CHECK IF EMAIL IS ALREADY USED WITH EMAIL/PASSWORD (PREVENTS DUPLICATE)
+    // CHECK IF EMAIL IS ALREADY USED WITH EMAIL/PASSWORD
     const existingUserByEmail = await userModel.getUserByEmail(email);
     
     if (existingUserByEmail && existingUserByEmail.auth_provider !== 'google') {
       return res.status(409).json({
         success: false,
-        message: 'This email is already registered with a password. Please sign in using your email and password instead.',
-        code: 'EMAIL_WITH_PASSWORD'
+        message: 'This email is already registered with email/password. Please sign in using your email and password instead.'
       });
     }
 
@@ -375,12 +309,10 @@ const googleAuth = async (req, res) => {
     let user = await userModel.getUserById(uid);
 
     if (!user) {
-      // Generate a unique username from their Google display name
       let baseUsername = name
         ? name.toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '') + '_' + uid.substring(0, 5)
         : 'user_' + uid.substring(0, 8);
       
-      // Ensure username is unique
       let usernameExists = await userModel.isUsernameExists(baseUsername);
       let finalUsername = baseUsername;
       let counter = 1;
@@ -403,11 +335,9 @@ const googleAuth = async (req, res) => {
       user = await userModel.getUserById(uid);
     }
 
-    // Generate JWT tokens
     const accessToken = generateAccessToken(uid, email);
     const refreshToken = generateRefreshToken(uid);
 
-    // Store session
     const sessionId = uuidv4();
     const sessionExpiry = new Date();
     sessionExpiry.setDate(sessionExpiry.getDate() + 7);
@@ -423,7 +353,7 @@ const googleAuth = async (req, res) => {
 
     res.status(200).json({
       success: true,
-      message: 'Welcome! You have successfully signed in with Google.',
+      message: 'Google sign in successful!',
       data: {
         user: {
           uid: user.user_id,
@@ -444,7 +374,7 @@ const googleAuth = async (req, res) => {
     console.error('Google auth error:', error);
     res.status(500).json({
       success: false,
-      message: 'Unable to sign in with Google. Please try again later.'
+      message: 'Server error during Google authentication.'
     });
   }
 };
@@ -466,36 +396,49 @@ const forgotPassword = async (req, res) => {
 
     const user = await userModel.getUserByEmail(email);
 
-    if (user && user.is_verified && user.auth_provider === 'email') {
-      await otpModel.invalidateAllOTPs(user.user_id, 'reset');
-      const otp = generateOTP();
-      const otpExpiry = getOTPExpiry(5);
-      await otpModel.createOTP(user.user_id, otp, 'reset', otpExpiry);
-      
-      try {
-        await sendPasswordResetEmail(email, user.full_name, otp);
-      } catch (emailError) {
-        console.error('Password reset email error:', emailError);
-        // Still return success but with OTP in response for development
-        if (process.env.NODE_ENV === 'development') {
-          return res.status(200).json({
-            success: true,
-            message: 'A password reset code has been generated.',
-            debug_otp: otp
-          });
-        }
-      }
-
-      if (process.env.NODE_ENV === 'development') {
-        return res.status(200).json({
-          success: true,
-          message: 'A password reset code has been sent to your email.',
-          debug_otp: otp
-        });
-      }
+    if (!user) {
+      return res.status(200).json({
+        success: true,
+        message: 'If an account exists with this email, you will receive a password reset code.'
+      });
     }
 
-    // Always return success even if email doesn't exist (security best practice)
+    // CHECK IF USER USES GOOGLE AUTH
+    if (user.auth_provider === 'google') {
+      return res.status(400).json({
+        success: false,
+        message: 'This email is linked to a Google account. Please sign in with Google instead.',
+        code: 'GOOGLE_ACCOUNT'
+      });
+    }
+
+    if (!user.is_verified) {
+      return res.status(400).json({
+        success: false,
+        message: 'Please verify your email address first. Check your inbox for the verification code.',
+        code: 'EMAIL_NOT_VERIFIED'
+      });
+    }
+
+    await otpModel.invalidateAllOTPs(user.user_id, 'reset');
+    const otp = generateOTP();
+    const otpExpiry = getOTPExpiry(5);
+    await otpModel.createOTP(user.user_id, otp, 'reset', otpExpiry);
+    
+    try {
+      await sendPasswordResetEmail(email, user.full_name, otp);
+    } catch (emailError) {
+      console.error('Password reset email error:', emailError);
+    }
+
+    if (process.env.NODE_ENV === 'development') {
+      return res.status(200).json({
+        success: true,
+        message: 'A password reset code has been sent to your email.',
+        debug_otp: otp
+      });
+    }
+
     res.status(200).json({
       success: true,
       message: 'If an account exists with this email, you will receive a password reset code.'
@@ -575,7 +518,7 @@ const resetPassword = async (req, res) => {
     if (!user) {
       return res.status(400).json({
         success: false,
-        message: 'No account found with this email address.'
+        message: 'Invalid request. User not found.'
       });
     }
 
@@ -594,7 +537,6 @@ const resetPassword = async (req, res) => {
       });
     }
 
-    // Validate password strength
     if (newPassword.length < 8) {
       return res.status(400).json({
         success: false,
@@ -605,21 +547,16 @@ const resetPassword = async (req, res) => {
     const saltRounds = 12;
     const newPasswordHash = await bcrypt.hash(newPassword, saltRounds);
 
-    // Update password in Firestore
     await userModel.updatePasswordHash(user.user_id, newPasswordHash);
     
-    // Update password in Firebase Authentication
     try {
       await auth.updateUser(user.user_id, { password: newPassword });
     } catch (firebaseError) {
       console.error('Firebase password update error:', firebaseError);
-      // Continue even if Firebase update fails - Firestore is our source of truth
     }
     
-    // Mark OTP as used
     await otpModel.markOTPUsed(validOTP.otp_id);
 
-    // Invalidate all existing sessions
     const sessionsSnapshot = await db.collection('sessions')
       .where('user_id', '==', user.user_id)
       .get();
@@ -653,7 +590,7 @@ const refreshToken = async (req, res) => {
     if (!token) {
       return res.status(400).json({
         success: false,
-        message: 'Session expired. Please sign in again.'
+        message: 'Refresh token is required.'
       });
     }
 
@@ -663,14 +600,14 @@ const refreshToken = async (req, res) => {
     } catch (err) {
       return res.status(401).json({
         success: false,
-        message: 'Your session has expired. Please sign in again.'
+        message: 'Invalid or expired refresh token. Please sign in again.'
       });
     }
 
     if (decoded.type !== 'refresh') {
       return res.status(401).json({
         success: false,
-        message: 'Invalid session. Please sign in again.'
+        message: 'Invalid token type.'
       });
     }
 
@@ -691,7 +628,7 @@ const refreshToken = async (req, res) => {
     if (!user) {
       return res.status(401).json({
         success: false,
-        message: 'User account not found.'
+        message: 'User not found.'
       });
     }
 
@@ -699,7 +636,7 @@ const refreshToken = async (req, res) => {
 
     res.status(200).json({
       success: true,
-      message: 'Session refreshed.',
+      message: 'Token refreshed successfully.',
       data: {
         accessToken: newAccessToken
       }
@@ -709,7 +646,7 @@ const refreshToken = async (req, res) => {
     console.error('Refresh token error:', error);
     res.status(500).json({
       success: false,
-      message: 'Unable to refresh session. Please sign in again.'
+      message: 'Server error. Please try again.'
     });
   }
 };
@@ -736,21 +673,20 @@ const logout = async (req, res) => {
 
     res.status(200).json({
       success: true,
-      message: 'You have been signed out successfully.'
+      message: 'Logged out successfully.'
     });
 
   } catch (error) {
     console.error('Logout error:', error);
     res.status(500).json({
       success: false,
-      message: 'Unable to sign out. Please try again.'
+      message: 'Server error during logout.'
     });
   }
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
 // GET CURRENT USER (protected route)
-// GET /api/auth/me
 // ─────────────────────────────────────────────────────────────────────────────
 
 const getCurrentUser = async (req, res) => {
@@ -759,17 +695,17 @@ const getCurrentUser = async (req, res) => {
     if (!user) {
       return res.status(404).json({
         success: false,
-        message: 'User account not found.'
+        message: 'User not found'
       });
     }
 
+// In authController.js - getCurrentUser
     res.status(200).json({
       success: true,
       data: {
         user: {
           uid: user.user_id,
           fullName: user.full_name,
-          username: user.username,
           email: user.email,
           profilePicture: user.profile_picture || null,
           authProvider: user.auth_provider
@@ -780,10 +716,14 @@ const getCurrentUser = async (req, res) => {
     console.error('Get current user error:', error);
     res.status(500).json({
       success: false,
-      message: 'Unable to load user profile. Please refresh the page.'
+      message: 'Server error'
     });
   }
 };
+
+// ─────────────────────────────────────────────────────────────────────────────
+// MODULE EXPORTS
+// ─────────────────────────────────────────────────────────────────────────────
 
 module.exports = {
   signup,

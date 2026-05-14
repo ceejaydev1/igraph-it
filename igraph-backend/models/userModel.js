@@ -8,7 +8,6 @@ const createUser = async (userId, userData) => {
   const userDoc = {
     user_id: userId,
     full_name: userData.fullName,
-    username: userData.username,
     email: userData.email,
     password_hash: userData.passwordHash || null,
     is_verified: userData.isVerified || false,
@@ -17,6 +16,7 @@ const createUser = async (userId, userData) => {
     created_at: now,
     updated_at: now
   };
+  // REMOVED username field
 
   await db.collection(COLLECTION).doc(userId).set(userDoc);
   return userDoc;
@@ -38,14 +38,7 @@ const getUserByEmail = async (email) => {
   return snapshot.docs[0].data();
 };
 
-const isUsernameExists = async (username) => {
-  const snapshot = await db.collection(COLLECTION)
-    .where('username', '==', username)
-    .limit(1)
-    .get();
-
-  return !snapshot.empty;
-};
+// REMOVED isUsernameExists function - no longer needed
 
 const updateUser = async (userId, updates) => {
   updates.updated_at = new Date().toISOString();
@@ -64,7 +57,6 @@ module.exports = {
   createUser,
   getUserById,
   getUserByEmail,
-  isUsernameExists,
   updateUser,
   markUserVerified,
   updatePasswordHash

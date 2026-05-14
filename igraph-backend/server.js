@@ -4,12 +4,20 @@ const express = require('express');
 const helmet = require('helmet');
 const cors = require('cors');
 const rateLimit = require('express-rate-limit');
+const compression = require('compression');
+
 
 const authRoutes = require('./routes/authRoutes');
 
 const app = express();
 
 app.set('trust proxy', 1);
+
+// Optimize JSON parsing
+app.use(express.json({ limit: '10kb' })); // Small limit for auth
+app.use(express.urlencoded({ extended: true, limit: '10kb' }));
+
+app.use(compression()); // Add before routes
 
 const PORT = process.env.PORT || 5000;
 

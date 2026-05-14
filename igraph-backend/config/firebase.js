@@ -1,7 +1,6 @@
 const admin = require('firebase-admin');
 
 if (!admin.apps.length) {
-  // You need to add the project ID explicitly for token verification
   const projectId = process.env.FIREBASE_PROJECT_ID;
   
   admin.initializeApp({
@@ -12,8 +11,10 @@ if (!admin.apps.length) {
         ? process.env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, '\n')
         : undefined
     }),
-    // 🔑 THIS IS CRITICAL FOR GOOGLE AUTH
     projectId: projectId,
+    // ✅ Add these for faster connections
+    databaseURL: `https://${projectId}.firebaseio.com`,
+    storageBucket: `${projectId}.firebasestorage.app`,
   });
 
   console.log('✅ Firebase Admin SDK initialized with project:', projectId);
@@ -21,5 +22,14 @@ if (!admin.apps.length) {
 
 const db = admin.firestore();
 const auth = admin.auth();
+
+// ✅ Optimize Firestore settings
+db.settings({
+  ignoreUndefinedProperties: true,
+  // For production
+  ...(process.env.NODE_ENV === 'production' && {
+    cacheSizeBytes: 100 * 1024 * 1024, // 100MB cache
+  })
+});
 
 module.exports = { db, auth, admin };
