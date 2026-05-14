@@ -49,9 +49,30 @@ const signup = async (req, res) => {
       });
     } catch (firebaseError) {
       console.error('Firebase Auth creation error:', firebaseError);
+      
+      // User-friendly error messages
+      if (firebaseError.code === 'auth/email-already-exists') {
+        return res.status(409).json({
+          success: false,
+          message: 'This email is already registered. Please sign in.'
+        });
+      }
+      if (firebaseError.code === 'auth/invalid-email') {
+        return res.status(400).json({
+          success: false,
+          message: 'Please enter a valid email address.'
+        });
+      }
+      if (firebaseError.code === 'auth/weak-password') {
+        return res.status(400).json({
+          success: false,
+          message: 'Password is too weak. Please use at least 8 characters with uppercase, lowercase, numbers, and special characters.'
+        });
+      }
+      
       return res.status(500).json({
         success: false,
-        message: 'Failed to create account. Please try again.'
+        message: 'Unable to create account. Please try again later.'
       });
     }
 
@@ -77,7 +98,20 @@ const signup = async (req, res) => {
     await otpModel.createOTP(firebaseUser.uid, otp, 'signup', otpExpiry);
 
     // 7. Send verification email
-    await sendVerificationEmail(email, fullName, otp);
+    try {
+      await sendVerificationEmail(email, fullName, otp);
+    } catch (emailError) {
+      console.error('Email sending error:', emailError);
+      // Still return success but inform user
+      return res.status(201).json({
+        success: true,
+        message: 'Account created! However, we could not send the verification email. Please use "Resend OTP" or contact support.',
+        data: {
+          email: email,
+          ...(process.env.NODE_ENV === 'development' && { debug_otp: otp })
+        }
+      });
+    }
 
     res.status(201).json({
       success: true,
@@ -92,7 +126,7 @@ const signup = async (req, res) => {
     console.error('Signup error:', error);
     res.status(500).json({
       success: false,
-      message: 'Server error during signup. Please try again.'
+      message: 'Something went wrong. Please try again later.'
     });
   }
 };
@@ -109,14 +143,14 @@ const verifyOTP = async (req, res) => {
     if (!user) {
       return res.status(404).json({
         success: false,
-        message: 'No account found with this email address.'
+        message: 'No account found with this email address. Please sign up first.'
       });
     }
 
     if (user.is_verified) {
       return res.status(400).json({
         success: false,
-        message: 'Email is already verified. Please sign in.'
+        message: 'Your email is already verified. Please sign in.'
       });
     }
 
@@ -125,7 +159,7 @@ const verifyOTP = async (req, res) => {
     if (!validOTP) {
       return res.status(400).json({
         success: false,
-        message: 'OTP has expired or is invalid. Please request a new OTP.'
+        message: 'Your OTP has expired or is invalid. Please request a new OTP.'
       });
     }
 
@@ -149,7 +183,7 @@ const verifyOTP = async (req, res) => {
     console.error('Verify OTP error:', error);
     res.status(500).json({
       success: false,
-      message: 'Server error during OTP verification. Please try again.'
+      message: 'Unable to verify OTP. Please try again.'
     });
   }
 };
@@ -181,7 +215,17 @@ const resendOTP = async (req, res) => {
     const otp = generateOTP();
     const otpExpiry = getOTPExpiry(5);
     await otpModel.createOTP(user.user_id, otp, 'signup', otpExpiry);
-    await sendVerificationEmail(email, user.full_name, otp);
+    
+    try {
+      await sendVerificationEmail(email, user.full_name, otp);
+    } catch (emailError) {
+      console.error('Resend email error:', emailError);
+      return res.status(200).json({
+        success: true,
+        message: `A new OTP has been generated. (Development OTP: ${otp})`,
+        ...(process.env.NODE_ENV === 'development' && { debug_otp: otp })
+      });
+    }
 
     res.status(200).json({
       success: true,
@@ -193,7 +237,7 @@ const resendOTP = async (req, res) => {
     console.error('Resend OTP error:', error);
     res.status(500).json({
       success: false,
-      message: 'Server error. Please try again.'
+      message: 'Unable to resend OTP. Please try again later.'
     });
   }
 };
@@ -206,37 +250,43 @@ const signin = async (req, res) => {
   try {
     const { email, password } = req.body;
 
+    // Check if user exists
     const user = await userModel.getUserByEmail(email);
     if (!user) {
       return res.status(401).json({
         success: false,
-        message: 'Invalid email or password.'
+        message: 'Invalid email or password. Please try again.'
       });
     }
 
+    // Check auth provider
     if (user.auth_provider === 'google') {
       return res.status(400).json({
         success: false,
-        message: 'This account uses Google Sign-In. Please sign in with Google.'
+        message: 'This email is linked to a Google account. Please sign in with Google.',
+        code: 'GOOGLE_ACCOUNT'
       });
     }
 
+    // Check if email is verified
     if (!user.is_verified) {
       return res.status(403).json({
         success: false,
-        message: 'Please verify your email address before signing in.',
+        message: 'Please verify your email address before signing in. Check your inbox for the verification code.',
         code: 'EMAIL_NOT_VERIFIED'
       });
     }
 
+    // Verify password
     const passwordMatch = await bcrypt.compare(password, user.password_hash);
     if (!passwordMatch) {
       return res.status(401).json({
         success: false,
-        message: 'Invalid email or password.'
+        message: 'Invalid email or password. Please try again.'
       });
     }
 
+    // Generate tokens
     const accessToken = generateAccessToken(user.user_id, user.email);
     const refreshToken = generateRefreshToken(user.user_id);
 
@@ -255,7 +305,7 @@ const signin = async (req, res) => {
 
     res.status(200).json({
       success: true,
-      message: 'Sign in successful!',
+      message: 'Welcome back!',
       data: {
         user: {
           uid: user.user_id,
@@ -276,65 +326,73 @@ const signin = async (req, res) => {
     console.error('Signin error:', error);
     res.status(500).json({
       success: false,
-      message: 'Server error during sign in. Please try again.'
+      message: 'Unable to sign in. Please check your connection and try again.'
     });
   }
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
-// GOOGLE AUTH (UPDATED WITH DEBUG LOGS)
+// GOOGLE AUTH (UPDATED - PREVENTS DUPLICATE EMAILS WITH USER-FRIENDLY ERRORS)
 // ─────────────────────────────────────────────────────────────────────────────
 
 const googleAuth = async (req, res) => {
   try {
-    console.log('🔍 STEP 1: Google auth request received');
-    console.log('📦 STEP 2: Request body:', req.body);
-    
     const { idToken } = req.body;
-    
-    console.log('🔑 STEP 3: idToken received:', idToken ? `YES (length: ${idToken.length})` : 'NO');
 
     if (!idToken) {
-      console.log('❌ STEP 4: No idToken provided');
       return res.status(400).json({
         success: false,
-        message: 'No ID token provided'
+        message: 'Unable to sign in with Google. Please try again.'
       });
     }
 
-    // 1. Verify the Google ID token using Firebase Admin
+    // Verify the Google ID token using Firebase Admin
     let decodedToken;
     try {
-      console.log('🔄 STEP 5: Verifying token with Firebase Auth...');
       decodedToken = await auth.verifyIdToken(idToken);
-      console.log('✅ STEP 6: Token verified successfully!');
-      console.log('👤 STEP 7: User email:', decodedToken.email);
-      console.log('🆔 STEP 8: User UID:', decodedToken.uid);
     } catch (err) {
-      console.error('❌ STEP 9: Token verification failed:', err.message);
+      console.error('Token verification failed:', err.message);
       return res.status(401).json({
         success: false,
-        message: 'Invalid Google token. Please try again.'
+        message: 'Google sign-in failed. Please make sure you are logged into your Google account and try again.'
       });
     }
 
     const { uid, email, name, picture } = decodedToken;
 
-    // 2. Check if user already exists in Firestore
-    console.log('🔍 STEP 10: Checking if user exists in Firestore...');
+    // CHECK IF EMAIL IS ALREADY USED WITH EMAIL/PASSWORD (PREVENTS DUPLICATE)
+    const existingUserByEmail = await userModel.getUserByEmail(email);
+    
+    if (existingUserByEmail && existingUserByEmail.auth_provider !== 'google') {
+      return res.status(409).json({
+        success: false,
+        message: 'This email is already registered with a password. Please sign in using your email and password instead.',
+        code: 'EMAIL_WITH_PASSWORD'
+      });
+    }
+
+    // Check if user already exists in Firestore by UID
     let user = await userModel.getUserById(uid);
-    console.log('👤 STEP 11: User exists?', user ? 'YES' : 'NO');
 
     if (!user) {
-      console.log('📝 STEP 12: Creating new user...');
       // Generate a unique username from their Google display name
-      const baseUsername = name
+      let baseUsername = name
         ? name.toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '') + '_' + uid.substring(0, 5)
         : 'user_' + uid.substring(0, 8);
+      
+      // Ensure username is unique
+      let usernameExists = await userModel.isUsernameExists(baseUsername);
+      let finalUsername = baseUsername;
+      let counter = 1;
+      while (usernameExists) {
+        finalUsername = `${baseUsername}${counter}`;
+        usernameExists = await userModel.isUsernameExists(finalUsername);
+        counter++;
+      }
 
       await userModel.createUser(uid, {
         fullName: name || 'Google User',
-        username: baseUsername,
+        username: finalUsername,
         email: email,
         passwordHash: null,
         isVerified: true,
@@ -343,18 +401,13 @@ const googleAuth = async (req, res) => {
       });
 
       user = await userModel.getUserById(uid);
-      console.log('✅ STEP 13: New user created:', email);
-    } else {
-      console.log('✅ STEP 13: Existing user found:', email);
     }
 
-    // 4. Generate JWT tokens
-    console.log('🔑 STEP 14: Generating JWT tokens...');
+    // Generate JWT tokens
     const accessToken = generateAccessToken(uid, email);
     const refreshToken = generateRefreshToken(uid);
 
-    // 5. Store session
-    console.log('💾 STEP 15: Storing session in Firestore...');
+    // Store session
     const sessionId = uuidv4();
     const sessionExpiry = new Date();
     sessionExpiry.setDate(sessionExpiry.getDate() + 7);
@@ -368,12 +421,9 @@ const googleAuth = async (req, res) => {
       expires_at: sessionExpiry.toISOString()
     });
 
-    console.log('✅ STEP 16: Session stored successfully!');
-    console.log('🎉 STEP 17: Sending success response...');
-
     res.status(200).json({
       success: true,
-      message: 'Google sign in successful!',
+      message: 'Welcome! You have successfully signed in with Google.',
       data: {
         user: {
           uid: user.user_id,
@@ -391,11 +441,10 @@ const googleAuth = async (req, res) => {
     });
 
   } catch (error) {
-    console.error('💥 GOOGLE AUTH ERROR:', error);
-    console.error('💥 Error stack:', error.stack);
+    console.error('Google auth error:', error);
     res.status(500).json({
       success: false,
-      message: 'Server error during Google authentication.'
+      message: 'Unable to sign in with Google. Please try again later.'
     });
   }
 };
@@ -408,6 +457,13 @@ const forgotPassword = async (req, res) => {
   try {
     const { email } = req.body;
 
+    if (!email) {
+      return res.status(400).json({
+        success: false,
+        message: 'Please enter your email address.'
+      });
+    }
+
     const user = await userModel.getUserByEmail(email);
 
     if (user && user.is_verified && user.auth_provider === 'email') {
@@ -415,27 +471,41 @@ const forgotPassword = async (req, res) => {
       const otp = generateOTP();
       const otpExpiry = getOTPExpiry(5);
       await otpModel.createOTP(user.user_id, otp, 'reset', otpExpiry);
-      await sendPasswordResetEmail(email, user.full_name, otp);
+      
+      try {
+        await sendPasswordResetEmail(email, user.full_name, otp);
+      } catch (emailError) {
+        console.error('Password reset email error:', emailError);
+        // Still return success but with OTP in response for development
+        if (process.env.NODE_ENV === 'development') {
+          return res.status(200).json({
+            success: true,
+            message: 'A password reset code has been generated.',
+            debug_otp: otp
+          });
+        }
+      }
 
       if (process.env.NODE_ENV === 'development') {
         return res.status(200).json({
           success: true,
-          message: 'If this email is registered, a password reset OTP has been sent.',
+          message: 'A password reset code has been sent to your email.',
           debug_otp: otp
         });
       }
     }
 
+    // Always return success even if email doesn't exist (security best practice)
     res.status(200).json({
       success: true,
-      message: 'If this email is registered, a password reset OTP has been sent.'
+      message: 'If an account exists with this email, you will receive a password reset code.'
     });
 
   } catch (error) {
     console.error('Forgot password error:', error);
     res.status(500).json({
       success: false,
-      message: 'Server error. Please try again.'
+      message: 'Unable to process your request. Please try again later.'
     });
   }
 };
@@ -448,11 +518,18 @@ const verifyResetOTP = async (req, res) => {
   try {
     const { email, otp } = req.body;
 
+    if (!email || !otp) {
+      return res.status(400).json({
+        success: false,
+        message: 'Email and OTP code are required.'
+      });
+    }
+
     const user = await userModel.getUserByEmail(email);
     if (!user) {
       return res.status(400).json({
         success: false,
-        message: 'Invalid request.'
+        message: 'No account found with this email address.'
       });
     }
 
@@ -460,7 +537,7 @@ const verifyResetOTP = async (req, res) => {
     if (!validOTP || validOTP.otp_code !== otp) {
       return res.status(400).json({
         success: false,
-        message: 'Invalid or expired OTP code.'
+        message: 'Invalid or expired OTP code. Please request a new one.'
       });
     }
 
@@ -474,7 +551,7 @@ const verifyResetOTP = async (req, res) => {
     console.error('Verify reset OTP error:', error);
     res.status(500).json({
       success: false,
-      message: 'Server error. Please try again.'
+      message: 'Unable to verify OTP. Please try again.'
     });
   }
 };
@@ -483,12 +560,10 @@ const verifyResetOTP = async (req, res) => {
 // RESET PASSWORD
 // ─────────────────────────────────────────────────────────────────────────────
 
-// This is already in your authController.js, but make sure it's correct
 const resetPassword = async (req, res) => {
   try {
     const { email, otp, newPassword } = req.body;
 
-    // Validate input
     if (!email || !otp || !newPassword) {
       return res.status(400).json({
         success: false,
@@ -500,11 +575,10 @@ const resetPassword = async (req, res) => {
     if (!user) {
       return res.status(400).json({
         success: false,
-        message: 'Invalid request. User not found.'
+        message: 'No account found with this email address.'
       });
     }
 
-    // Check if user uses email auth
     if (user.auth_provider !== 'email') {
       return res.status(400).json({
         success: false,
@@ -517,6 +591,14 @@ const resetPassword = async (req, res) => {
       return res.status(400).json({
         success: false,
         message: 'Invalid or expired OTP. Please restart the password reset process.'
+      });
+    }
+
+    // Validate password strength
+    if (newPassword.length < 8) {
+      return res.status(400).json({
+        success: false,
+        message: 'Password must be at least 8 characters long.'
       });
     }
 
@@ -555,7 +637,7 @@ const resetPassword = async (req, res) => {
     console.error('Reset password error:', error);
     res.status(500).json({
       success: false,
-      message: 'Server error during password reset. Please try again.'
+      message: 'Unable to reset password. Please try again later.'
     });
   }
 };
@@ -571,7 +653,7 @@ const refreshToken = async (req, res) => {
     if (!token) {
       return res.status(400).json({
         success: false,
-        message: 'Refresh token is required.'
+        message: 'Session expired. Please sign in again.'
       });
     }
 
@@ -581,14 +663,14 @@ const refreshToken = async (req, res) => {
     } catch (err) {
       return res.status(401).json({
         success: false,
-        message: 'Invalid or expired refresh token. Please sign in again.'
+        message: 'Your session has expired. Please sign in again.'
       });
     }
 
     if (decoded.type !== 'refresh') {
       return res.status(401).json({
         success: false,
-        message: 'Invalid token type.'
+        message: 'Invalid session. Please sign in again.'
       });
     }
 
@@ -609,7 +691,7 @@ const refreshToken = async (req, res) => {
     if (!user) {
       return res.status(401).json({
         success: false,
-        message: 'User not found.'
+        message: 'User account not found.'
       });
     }
 
@@ -617,7 +699,7 @@ const refreshToken = async (req, res) => {
 
     res.status(200).json({
       success: true,
-      message: 'Token refreshed successfully.',
+      message: 'Session refreshed.',
       data: {
         accessToken: newAccessToken
       }
@@ -627,7 +709,7 @@ const refreshToken = async (req, res) => {
     console.error('Refresh token error:', error);
     res.status(500).json({
       success: false,
-      message: 'Server error. Please try again.'
+      message: 'Unable to refresh session. Please sign in again.'
     });
   }
 };
@@ -654,14 +736,14 @@ const logout = async (req, res) => {
 
     res.status(200).json({
       success: true,
-      message: 'Logged out successfully.'
+      message: 'You have been signed out successfully.'
     });
 
   } catch (error) {
     console.error('Logout error:', error);
     res.status(500).json({
       success: false,
-      message: 'Server error during logout.'
+      message: 'Unable to sign out. Please try again.'
     });
   }
 };
@@ -673,13 +755,11 @@ const logout = async (req, res) => {
 
 const getCurrentUser = async (req, res) => {
   try {
-    console.log('🔍 Getting current user:', req.user.uid);
-    
     const user = await userModel.getUserById(req.user.uid);
     if (!user) {
       return res.status(404).json({
         success: false,
-        message: 'User not found'
+        message: 'User account not found.'
       });
     }
 
@@ -700,7 +780,7 @@ const getCurrentUser = async (req, res) => {
     console.error('Get current user error:', error);
     res.status(500).json({
       success: false,
-      message: 'Server error'
+      message: 'Unable to load user profile. Please refresh the page.'
     });
   }
 };
