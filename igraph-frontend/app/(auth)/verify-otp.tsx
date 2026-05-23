@@ -14,31 +14,38 @@ import {
   KeyboardAvoidingView,
   NativeSyntheticEvent,
   TextInputKeyPressEventData,
-  Alert,
+  Modal,
+  Image,
 } from 'react-native';
-import { useRouter, useLocalSearchParams } from 'expo-router';
+import { useRouter, useLocalSearchParams, Stack } from 'expo-router';
 import { Svg, Circle, Rect, Path, Text as SvgText, Defs, Pattern } from 'react-native-svg';
 import * as authService from '../../services/authService';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 const OTP_LENGTH = 6;
 
-// DiagramBackground (simplified)
+// DiagramBackground with grid-bg.png
 const DiagramBackground = () => (
   <View style={StyleSheet.absoluteFillObject} pointerEvents="none">
+    <Image
+      source={require('../../assets/images/grid-bg.png')}
+      style={styles.gridBackground}
+      resizeMode="repeat"
+    />
+    <View style={styles.gridOverlay} />
     <Svg width={SCREEN_WIDTH} height={SCREEN_HEIGHT} style={StyleSheet.absoluteFillObject}>
-      <Defs>
-        <Pattern id="grid" width="34" height="34" patternUnits="userSpaceOnUse">
-          <Path d="M 34 0 L 0 0 0 34" fill="none" stroke="#ccd5f7" strokeWidth="1.2" opacity="1" />
-        </Pattern>
-        <Pattern id="dots" width="26" height="26" patternUnits="userSpaceOnUse">
-          <Circle cx="13" cy="13" r="1.3" fill="#b8c4f3" opacity="0.8" />
-        </Pattern>
-      </Defs>
-      <Rect width={SCREEN_WIDTH} height={SCREEN_HEIGHT} fill="#eef2ff" />
-      <Rect width={SCREEN_WIDTH} height={SCREEN_HEIGHT} fill="url(#grid)" opacity="1" />
-      <Rect x={0} y={0} width={SCREEN_WIDTH * 0.28} height={SCREEN_HEIGHT * 0.34} fill="url(#dots)" />
-      <Rect x={SCREEN_WIDTH * 0.72} y={SCREEN_HEIGHT * 0.66} width={SCREEN_WIDTH * 0.28} height={SCREEN_HEIGHT * 0.34} fill="url(#dots)" />
+      {/* Diagram lines overlay */}
+      <Path
+        d={`M ${SCREEN_WIDTH * 0.08} ${SCREEN_HEIGHT * 0.25} C ${SCREEN_WIDTH * 0.22} ${SCREEN_HEIGHT * 0.10}, ${SCREEN_WIDTH * 0.36} ${SCREEN_HEIGHT * 0.42}, ${SCREEN_WIDTH * 0.52} ${SCREEN_HEIGHT * 0.32}`}
+        stroke="#bfd0ff" strokeWidth="2" strokeDasharray="8 10" fill="none" opacity="0.32"
+      />
+      <Path
+        d={`M ${SCREEN_WIDTH * 0.82} ${SCREEN_HEIGHT * 0.18} C ${SCREEN_WIDTH * 0.96} ${SCREEN_HEIGHT * 0.30}, ${SCREEN_WIDTH * 0.95} ${SCREEN_HEIGHT * 0.55}, ${SCREEN_WIDTH * 0.78} ${SCREEN_HEIGHT * 0.76}`}
+        stroke="#bfd0ff" strokeWidth="2" strokeDasharray="8 10" fill="none" opacity="0.32"
+      />
+      <Rect x={SCREEN_WIDTH * 0.07} y={SCREEN_HEIGHT * 0.12} width="130" height="72" rx="14" stroke="#bfd0ff" strokeWidth="1.4" fill="none" opacity="0.38" />
+      <Rect x={SCREEN_WIDTH * 0.74} y={SCREEN_HEIGHT * 0.16} width="140" height="78" rx="14" stroke="#bfd0ff" strokeWidth="1.4" fill="none" opacity="0.38" />
+      <Circle cx={SCREEN_WIDTH * 0.76} cy={SCREEN_HEIGHT * 0.72} r="24" stroke="#bfd0ff" strokeWidth="2" fill="none" opacity="0.3" />
     </Svg>
   </View>
 );
@@ -63,6 +70,55 @@ const CheckIcon = () => (
     <Path d="M14 24l8 8 12-14" stroke="#4c6fff" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round" />
   </Svg>
 );
+
+// Custom Error Popup Modal (Redesigned - No Cancel Button)
+const ErrorPopupModal = ({ visible, title, message, onClose, onAction, actionButtonText }: { 
+  visible: boolean; 
+  title: string; 
+  message: string; 
+  onClose: () => void;
+  onAction?: () => void;
+  actionButtonText?: string;
+}) => {
+  return (
+    <Modal 
+      animationType="fade" 
+      transparent={true} 
+      visible={visible} 
+      onRequestClose={onClose}
+    >
+      <TouchableOpacity 
+        style={styles.errorModalOverlay} 
+        activeOpacity={1} 
+        onPress={onClose}
+      >
+        <View style={styles.errorModalContainer}>
+          <View style={styles.errorModalIconWrapper}>
+            <View style={styles.errorModalIconCircle}>
+              <Svg width={32} height={32} viewBox="0 0 24 24" fill="none">
+                <Circle cx="12" cy="12" r="10" stroke="#3b5bdb" strokeWidth="1.5" />
+                <Path d="M12 8v4M12 16h.01" stroke="#3b5bdb" strokeWidth="2" strokeLinecap="round" />
+              </Svg>
+            </View>
+          </View>
+          <Text style={styles.errorModalTitle}>{title}</Text>
+          <Text style={styles.errorModalMessage}>{message}</Text>
+          {onAction && (
+            <TouchableOpacity
+              style={styles.errorModalButtonPrimary}
+              onPress={() => {
+                onClose();
+                onAction();
+              }}
+            >
+              <Text style={styles.errorModalButtonTextPrimary}>{actionButtonText || 'Continue'}</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+      </TouchableOpacity>
+    </Modal>
+  );
+};
 
 function useCountdown(initial: number) {
   const [seconds, setSeconds] = useState(initial);
@@ -112,9 +168,21 @@ export default function VerifyOTP() {
   const [error, setError] = useState('');
   const [verified, setVerified] = useState(false);
   const [resending, setResending] = useState(false);
+  const [showErrorModal, setShowErrorModal] = useState(false);
+  const [errorModalData, setErrorModalData] = useState({ 
+    title: '', 
+    message: '',
+    onAction: undefined as (() => void) | undefined,
+    actionButtonText: '' 
+  });
 
   const inputRefs = useRef<Array<TextInput | null>>(Array(OTP_LENGTH).fill(null));
   const { seconds, expired, reset: resetTimer } = useCountdown(300);
+
+  const showErrorPopup = (title: string, message: string, onAction?: () => void, actionButtonText?: string) => {
+    setErrorModalData({ title, message, onAction, actionButtonText: actionButtonText || '' });
+    setShowErrorModal(true);
+  };
 
   useEffect(() => {
     setTimeout(() => inputRefs.current[0]?.focus(), 300);
@@ -148,53 +216,56 @@ export default function VerifyOTP() {
     }
   };
 
-  // In verify-otp.tsx, the verify function should be:
-
-const handleVerify = async () => {
-  const code = otp.join('');
-  if (code.length < OTP_LENGTH) {
-    setError('Please enter the complete 6-digit code.');
-    return;
-  }
-
-  setLoading(true);
-  setError('');
-
-  try {
-    let result;
-    if (purpose === 'reset') {
-      result = await authService.verifyResetOTP(email!, code);
-      console.log('Verify reset OTP result:', result);
-    } else {
-      result = await authService.verifyOTP(email!, code);
+  const handleVerify = async () => {
+    const code = otp.join('');
+    if (code.length < OTP_LENGTH) {
+      setError('Please enter the complete 6-digit code.');
+      return;
     }
 
-    if (result.success) {
-      setVerified(true);
-      setTimeout(() => {
-        if (purpose === 'reset') {
-          // Navigate to reset password with both email and OTP
-          router.push({
-            pathname: '/(auth)/reset-password',
-            params: { 
-              email: email,
-              otp: code 
-            },
-          });
-        } else {
-          router.replace('/(auth)/signin');
-        }
-      }, 1200);
-    } else {
-      setError(result.message || 'Invalid code. Please try again.');
+    setLoading(true);
+    setError('');
+
+    try {
+      let result;
+      if (purpose === 'reset') {
+        result = await authService.verifyResetOTP(email!, code);
+      } else {
+        result = await authService.verifyOTP(email!, code);
+      }
+
+      if (result.success) {
+        setVerified(true);
+        setTimeout(() => {
+          if (purpose === 'reset') {
+            router.push({
+              pathname: '/(auth)/reset-password',
+              params: { 
+                email: email,
+                otp: code 
+              },
+            });
+          } else {
+            showErrorPopup(
+              'Verification Successful!',
+              'Your email has been verified. Please sign in to continue.',
+              () => {
+                router.replace('/(auth)/signin');
+              },
+              'Sign In Now'
+            );
+          }
+        }, 1200);
+      } else {
+        setError(result.message || 'Invalid code. Please try again.');
+      }
+    } catch (error: any) {
+      console.error('Verification error:', error);
+      setError(error.response?.data?.message || 'Verification failed. Please try again.');
+    } finally {
+      setLoading(false);
     }
-  } catch (error: any) {
-    console.error('Verification error:', error);
-    setError(error.response?.data?.message || 'Verification failed. Please try again.');
-  } finally {
-    setLoading(false);
-  }
-};
+  };
 
   const handleResend = async () => {
     if (!expired) return;
@@ -210,9 +281,9 @@ const handleVerify = async () => {
       resetTimer();
       inputRefs.current[0]?.focus();
       setFocusedIndex(0);
-      Alert.alert('Success', 'A new OTP has been sent to your email.');
+      showErrorPopup('Success', 'A new OTP has been sent to your email.');
     } catch (error: any) {
-      Alert.alert('Error', error.response?.data?.message || 'Failed to resend OTP');
+      showErrorPopup('Error', error.response?.data?.message || 'Failed to resend OTP');
     } finally {
       setResending(false);
     }
@@ -222,90 +293,185 @@ const handleVerify = async () => {
   const isComplete = otp.every((d) => d !== '');
 
   return (
-    <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
-      <DiagramBackground />
-      <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
-        <View style={styles.card}>
-          <View style={styles.connectorTop} />
-          <TouchableOpacity style={styles.backBtn} onPress={() => router.back()} activeOpacity={0.7}>
-            <BackIcon />
-            <Text style={styles.backText}>Back</Text>
-          </TouchableOpacity>
-          <View style={styles.iconWrap}>{verified ? <CheckIcon /> : <ShieldIcon />}</View>
-          <Text style={styles.heading}>{verified ? 'Verified!' : 'Check Your Email'}</Text>
-          <Text style={styles.subtitle}>
-            {verified ? 'Your code was accepted.\nRedirecting you now…' : `We sent a 6-digit code to\n`}
-            {!verified && <Text style={styles.emailHighlight}>{maskedEmail}</Text>}
-          </Text>
-
-          {!verified && (
-            <>
-              <View style={styles.otpRow}>
-                {otp.map((digit, i) => (
-                  <View key={i}>
-                    <TextInput
-                      ref={(ref) => { inputRefs.current[i] = ref; }}
-                      style={styles.hiddenInput}
-                      value={digit}
-                      onChangeText={(t) => handleChange(t, i)}
-                      onKeyPress={(e) => handleKeyPress(e, i)}
-                      onFocus={() => setFocusedIndex(i)}
-                      onBlur={() => setFocusedIndex(-1)}
-                      keyboardType="number-pad"
-                      maxLength={1}
-                      selectTextOnFocus
-                      caretHidden
-                    />
-                    <OtpBox value={digit} focused={focusedIndex === i} hasError={!!error} />
-                  </View>
-                ))}
-              </View>
-              {error ? <Text style={styles.errorText}>{error}</Text> : null}
-              <View style={styles.timerRow}>
+    <>
+      <Stack.Screen options={{ headerShown: false }} />
       
-                {expired ? (
-                  <Text style={styles.timerExpired}>Code expired</Text>
-                ) : (
-                  <>
-                    <Text style={styles.timerLabel}>Code expires in </Text>
-                    <Text style={styles.timerCount}>
-                      {String(Math.floor(seconds / 60)).padStart(2, '0')}:{String(seconds % 60).padStart(2, '0')}
-                    </Text>
-                  </>
-                )}
-              </View>
-              <TouchableOpacity
-                style={[styles.btnVerify, (!isComplete || loading) && styles.btnDisabled]}
-                onPress={handleVerify}
-                activeOpacity={0.9}
-                disabled={!isComplete || loading}
-              >
-                {loading ? <ActivityIndicator color="#ffffff" size="small" /> : <Text style={styles.btnVerifyText}>Verify Code</Text>}
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.resendBtn} onPress={handleResend} disabled={!expired || resending} activeOpacity={expired ? 0.7 : 1}>
-                <Text style={[styles.resendText, !expired && styles.resendDisabled]}>
-                  {resending ? 'Sending...' : 'Resend code'}
-                </Text>
-              </TouchableOpacity>
-            </>
-          )}
-          <View style={styles.connectorBottom} />
-        </View>
-      </ScrollView>
-    </KeyboardAvoidingView>
+      <ErrorPopupModal
+        visible={showErrorModal}
+        title={errorModalData.title}
+        message={errorModalData.message}
+        onClose={() => setShowErrorModal(false)}
+        onAction={errorModalData.onAction}
+        actionButtonText={errorModalData.actionButtonText}
+      />
+
+      <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+        <DiagramBackground />
+        <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
+          <View style={styles.card}>
+            {/* Connectors */}
+            <View style={styles.connectorTop} />
+            <View style={styles.connectorBottom} />
+            <View style={styles.connectorLeft} />
+            <View style={styles.connectorRight} />
+            
+            <TouchableOpacity style={styles.backBtn} onPress={() => router.back()} activeOpacity={0.7}>
+              <BackIcon />
+              <Text style={styles.backText}>Back</Text>
+            </TouchableOpacity>
+            
+            <View style={styles.iconWrap}>{verified ? <CheckIcon /> : <ShieldIcon />}</View>
+            <Text style={styles.heading}>{verified ? 'Verified!' : 'Check Your Email'}</Text>
+            <Text style={styles.subtitle}>
+              {verified ? 'Your code was accepted.\nRedirecting you now…' : `We sent a 6-digit code to\n`}
+              {!verified && <Text style={styles.emailHighlight}>{maskedEmail}</Text>}
+            </Text>
+
+            {!verified && (
+              <>
+                <View style={styles.otpRow}>
+                  {otp.map((digit, i) => (
+                    <View key={i}>
+                      <TextInput
+                        ref={(ref) => { inputRefs.current[i] = ref; }}
+                        style={styles.hiddenInput}
+                        value={digit}
+                        onChangeText={(t) => handleChange(t, i)}
+                        onKeyPress={(e) => handleKeyPress(e, i)}
+                        onFocus={() => setFocusedIndex(i)}
+                        onBlur={() => setFocusedIndex(-1)}
+                        keyboardType="number-pad"
+                        maxLength={1}
+                        selectTextOnFocus
+                        caretHidden
+                      />
+                      <OtpBox value={digit} focused={focusedIndex === i} hasError={!!error} />
+                    </View>
+                  ))}
+                </View>
+                {error ? <Text style={styles.errorText}>{error}</Text> : null}
+                <View style={styles.timerRow}>
+                  {expired ? (
+                    <Text style={styles.timerExpired}>Code expired</Text>
+                  ) : (
+                    <>
+                      <Text style={styles.timerLabel}>Code expires in </Text>
+                      <Text style={styles.timerCount}>
+                        {String(Math.floor(seconds / 60)).padStart(2, '0')}:{String(seconds % 60).padStart(2, '0')}
+                      </Text>
+                    </>
+                  )}
+                </View>
+                <TouchableOpacity
+                  style={[styles.btnVerify, (!isComplete || loading) && styles.btnDisabled]}
+                  onPress={handleVerify}
+                  activeOpacity={0.9}
+                  disabled={!isComplete || loading}
+                >
+                  {loading ? <ActivityIndicator color="#ffffff" size="small" /> : <Text style={styles.btnVerifyText}>Verify Code</Text>}
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.resendBtn} onPress={handleResend} disabled={!expired || resending} activeOpacity={expired ? 0.7 : 1}>
+                  <Text style={[styles.resendText, !expired && styles.resendDisabled]}>
+                    {resending ? 'Sending...' : 'Resend code'}
+                  </Text>
+                </TouchableOpacity>
+              </>
+            )}
+          </View>
+        </ScrollView>
+      </KeyboardAvoidingView>
+    </>
   );
 }
 
 const styles = StyleSheet.create({
   flex: { flex: 1, backgroundColor: '#eef2ff' },
-  scrollContent: { flexGrow: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 18, paddingVertical: 40 },
-  card: { backgroundColor: '#ffffff', borderRadius: 28, paddingHorizontal: 32, paddingTop: 34, paddingBottom: 36, width: '100%', maxWidth: 430, shadowColor: '#1e293b', shadowOffset: { width: 0, height: 12 }, shadowOpacity: 0.12, shadowRadius: 30, elevation: 14, borderWidth: 1.5, borderColor: '#f1f5ff', position: 'relative' },
-  connectorTop: { position: 'absolute', top: -7, alignSelf: 'center', width: 14, height: 14, borderRadius: 7, backgroundColor: '#ffffff', borderWidth: 2, borderColor: '#c7d2fe', zIndex: 20 },
-  connectorBottom: { position: 'absolute', bottom: -7, alignSelf: 'center', width: 14, height: 14, borderRadius: 7, backgroundColor: '#ffffff', borderWidth: 2, borderColor: '#c7d2fe', zIndex: 20 },
+  scrollContent: { 
+    flexGrow: 1, 
+    justifyContent: 'center', 
+    alignItems: 'center', 
+    paddingHorizontal: 18, 
+    paddingVertical: 40,
+    minHeight: SCREEN_HEIGHT,
+  },
+  card: { 
+    backgroundColor: '#ffffff', 
+    borderRadius: 28, 
+    paddingHorizontal: 32, 
+    paddingTop: 34, 
+    paddingBottom: 36, 
+    width: '100%', 
+    maxWidth: 430, 
+    shadowColor: '#1e293b', 
+    shadowOffset: { width: 0, height: 12 }, 
+    shadowOpacity: 0.12, 
+    shadowRadius: 30, 
+    elevation: 14, 
+    borderWidth: 1.5, 
+    borderColor: '#f1f5ff', 
+    position: 'relative' 
+  },
+  connectorTop: { 
+    position: 'absolute', 
+    top: -7, 
+    alignSelf: 'center', 
+    width: 14, 
+    height: 14, 
+    borderRadius: 7, 
+    backgroundColor: '#ffffff', 
+    borderWidth: 2, 
+    borderColor: '#c7d2fe', 
+    zIndex: 20 
+  },
+  connectorBottom: { 
+    position: 'absolute', 
+    bottom: -7, 
+    alignSelf: 'center', 
+    width: 14, 
+    height: 14, 
+    borderRadius: 7, 
+    backgroundColor: '#ffffff', 
+    borderWidth: 2, 
+    borderColor: '#c7d2fe', 
+    zIndex: 20 
+  },
+  connectorLeft: { 
+    position: 'absolute', 
+    left: -7, 
+    top: '50%', 
+    transform: [{ translateY: -7 }], 
+    width: 14, 
+    height: 14, 
+    borderRadius: 7, 
+    backgroundColor: '#ffffff', 
+    borderWidth: 2, 
+    borderColor: '#c7d2fe', 
+    zIndex: 20 
+  },
+  connectorRight: { 
+    position: 'absolute', 
+    right: -7, 
+    top: '50%', 
+    transform: [{ translateY: -7 }], 
+    width: 14, 
+    height: 14, 
+    borderRadius: 7, 
+    backgroundColor: '#ffffff', 
+    borderWidth: 2, 
+    borderColor: '#c7d2fe', 
+    zIndex: 20 
+  },
   backBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 24, alignSelf: 'flex-start' },
   backText: { fontSize: 14, color: '#4a5568', fontWeight: '600' },
   iconWrap: { alignItems: 'center', marginBottom: 22 },
-  heading: { fontFamily: Platform.OS === 'ios' ? 'Georgia' : 'serif', fontSize: 22, fontWeight: '700', color: '#1a1f36', textAlign: 'center', letterSpacing: -0.6, marginBottom: 10, marginTop: -6 },
+  heading: { 
+    fontSize: 26, 
+    fontWeight: '800', 
+    color: '#0f172a', 
+    textAlign: 'center', 
+    letterSpacing: -0.6, 
+    marginBottom: 5
+  },
   subtitle: { fontSize: 14, color: '#7f8bb3', textAlign: 'center', lineHeight: 22, marginBottom: 32 },
   emailHighlight: { color: '#4c6fff', fontWeight: '700' },
   otpRow: { flexDirection: 'row', justifyContent: 'space-between', gap: 10, marginBottom: 8 },
@@ -328,4 +494,71 @@ const styles = StyleSheet.create({
   resendBtn: { alignItems: 'center', marginTop: 18, paddingVertical: 4 },
   resendText: { fontSize: 13, fontWeight: '700', color: '#1a1f36' },
   resendDisabled: { color: '#b0bbd6' },
+  // Grid background styles
+  gridBackground: {
+    ...StyleSheet.absoluteFillObject,
+    width: '100%',
+    height: '100%',
+  },
+  gridOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(255,255,255,0.10)',
+  },
+  // Redesigned Error Modal Styles (No Cancel Button)
+  errorModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  errorModalContainer: {
+    width: '85%',
+    maxWidth: 340,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
+    padding: 24,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+    elevation: 8,
+  },
+  errorModalIconWrapper: {
+    marginBottom: 16,
+  },
+  errorModalIconCircle: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: '#f0f4ff',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  errorModalTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#1e293b',
+    textAlign: 'center',
+    marginBottom: 8,
+  },
+  errorModalMessage: {
+    fontSize: 14,
+    color: '#64748b',
+    textAlign: 'center',
+    lineHeight: 20,
+    marginBottom: 24,
+  },
+  errorModalButtonPrimary: {
+    width: '100%',
+    paddingVertical: 12,
+    borderRadius: 10,
+    alignItems: 'center',
+    backgroundColor: '#3b5bdb',
+  },
+  errorModalButtonTextPrimary: {
+    color: '#ffffff',
+    fontSize: 16,
+    fontWeight: '600',
+  },
 });

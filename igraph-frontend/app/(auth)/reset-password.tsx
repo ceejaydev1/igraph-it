@@ -12,7 +12,8 @@ import {
   Platform,
   Dimensions,
   KeyboardAvoidingView,
-  Alert,
+  Modal,
+  Image,
 } from 'react-native';
 import { Stack, useRouter, useLocalSearchParams } from 'expo-router';
 import { Svg, Circle, Rect, Path, Text as SvgText, Defs, Pattern } from 'react-native-svg';
@@ -20,21 +21,28 @@ import * as authService from '../../services/authService';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
+// DiagramBackground with grid-bg.png
 const DiagramBackground = () => (
   <View style={StyleSheet.absoluteFillObject} pointerEvents="none">
+    <Image
+      source={require('../../assets/images/grid-bg.png')}
+      style={styles.gridBackground}
+      resizeMode="repeat"
+    />
+    <View style={styles.gridOverlay} />
     <Svg width={SCREEN_WIDTH} height={SCREEN_HEIGHT} style={StyleSheet.absoluteFillObject}>
-      <Defs>
-        <Pattern id="grid" width="34" height="34" patternUnits="userSpaceOnUse">
-          <Path d="M 34 0 L 0 0 0 34" fill="none" stroke="#ccd5f7" strokeWidth="1.2" opacity="1" />
-        </Pattern>
-        <Pattern id="dots" width="26" height="26" patternUnits="userSpaceOnUse">
-          <Circle cx="13" cy="13" r="1.3" fill="#b8c4f3" opacity="0.8" />
-        </Pattern>
-      </Defs>
-      <Rect width={SCREEN_WIDTH} height={SCREEN_HEIGHT} fill="#eef2ff" />
-      <Rect width={SCREEN_WIDTH} height={SCREEN_HEIGHT} fill="url(#grid)" opacity="1" />
-      <Rect x={SCREEN_WIDTH * 0.72} y={0} width={SCREEN_WIDTH * 0.28} height={SCREEN_HEIGHT * 0.34} fill="url(#dots)" />
-      <Rect x={0} y={SCREEN_HEIGHT * 0.68} width={SCREEN_WIDTH * 0.28} height={SCREEN_HEIGHT * 0.32} fill="url(#dots)" />
+      {/* Diagram lines overlay */}
+      <Path
+        d={`M ${SCREEN_WIDTH * 0.08} ${SCREEN_HEIGHT * 0.25} C ${SCREEN_WIDTH * 0.22} ${SCREEN_HEIGHT * 0.10}, ${SCREEN_WIDTH * 0.36} ${SCREEN_HEIGHT * 0.42}, ${SCREEN_WIDTH * 0.52} ${SCREEN_HEIGHT * 0.32}`}
+        stroke="#bfd0ff" strokeWidth="2" strokeDasharray="8 10" fill="none" opacity="0.32"
+      />
+      <Path
+        d={`M ${SCREEN_WIDTH * 0.82} ${SCREEN_HEIGHT * 0.18} C ${SCREEN_WIDTH * 0.96} ${SCREEN_HEIGHT * 0.30}, ${SCREEN_WIDTH * 0.95} ${SCREEN_HEIGHT * 0.55}, ${SCREEN_WIDTH * 0.78} ${SCREEN_HEIGHT * 0.76}`}
+        stroke="#bfd0ff" strokeWidth="2" strokeDasharray="8 10" fill="none" opacity="0.32"
+      />
+      <Rect x={SCREEN_WIDTH * 0.07} y={SCREEN_HEIGHT * 0.12} width="130" height="72" rx="14" stroke="#bfd0ff" strokeWidth="1.4" fill="none" opacity="0.38" />
+      <Rect x={SCREEN_WIDTH * 0.74} y={SCREEN_HEIGHT * 0.16} width="140" height="78" rx="14" stroke="#bfd0ff" strokeWidth="1.4" fill="none" opacity="0.38" />
+      <Circle cx={SCREEN_WIDTH * 0.76} cy={SCREEN_HEIGHT * 0.72} r="24" stroke="#bfd0ff" strokeWidth="2" fill="none" opacity="0.3" />
     </Svg>
   </View>
 );
@@ -71,6 +79,55 @@ const EyeIcon = ({ visible }: { visible: boolean }) => (
   </Svg>
 );
 
+// Custom Error Popup Modal (Redesigned - No Cancel Button)
+const ErrorPopupModal = ({ visible, title, message, onClose, onAction, actionButtonText }: { 
+  visible: boolean; 
+  title: string; 
+  message: string; 
+  onClose: () => void;
+  onAction?: () => void;
+  actionButtonText?: string;
+}) => {
+  return (
+    <Modal 
+      animationType="fade" 
+      transparent={true} 
+      visible={visible} 
+      onRequestClose={onClose}
+    >
+      <TouchableOpacity 
+        style={styles.errorModalOverlay} 
+        activeOpacity={1} 
+        onPress={onClose}
+      >
+        <View style={styles.errorModalContainer}>
+          <View style={styles.errorModalIconWrapper}>
+            <View style={styles.errorModalIconCircle}>
+              <Svg width={32} height={32} viewBox="0 0 24 24" fill="none">
+                <Circle cx="12" cy="12" r="10" stroke="#3b5bdb" strokeWidth="1.5" />
+                <Path d="M12 8v4M12 16h.01" stroke="#3b5bdb" strokeWidth="2" strokeLinecap="round" />
+              </Svg>
+            </View>
+          </View>
+          <Text style={styles.errorModalTitle}>{title}</Text>
+          <Text style={styles.errorModalMessage}>{message}</Text>
+          {onAction && (
+            <TouchableOpacity
+              style={styles.errorModalButtonPrimary}
+              onPress={() => {
+                onClose();
+                onAction();
+              }}
+            >
+              <Text style={styles.errorModalButtonTextPrimary}>{actionButtonText || 'Continue'}</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+      </TouchableOpacity>
+    </Modal>
+  );
+};
+
 export default function ResetPassword() {
   const router = useRouter();
   const { email, otp } = useLocalSearchParams<{ email: string; otp: string }>();
@@ -81,8 +138,20 @@ export default function ResetPassword() {
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState({ newPassword: '', confirmPassword: '' });
+  const [showErrorModal, setShowErrorModal] = useState(false);
+  const [errorModalData, setErrorModalData] = useState({ 
+    title: '', 
+    message: '',
+    onAction: undefined as (() => void) | undefined,
+    actionButtonText: '' 
+  });
 
   const confirmRef = useRef<TextInput>(null);
+
+  const showErrorPopup = (title: string, message: string, onAction?: () => void, actionButtonText?: string) => {
+    setErrorModalData({ title, message, onAction, actionButtonText: actionButtonText || '' });
+    setShowErrorModal(true);
+  };
 
   const validate = () => {
     const newErrors = { newPassword: '', confirmPassword: '' };
@@ -126,111 +195,112 @@ export default function ResetPassword() {
       
       if (result.success) {
         await authService.clearTokens();
+        // Direct navigation to sign in without success popup
         router.replace('/(auth)/signin');
-        console.log('Password reset successfully');
       } else {
-        Alert.alert('Error', result.message || 'Failed to reset password');
-        setLoading(false);
+        showErrorPopup('Error', result.message || 'Failed to reset password');
       }
     } catch (error: any) {
-      Alert.alert('Error', error.response?.data?.message || 'Something went wrong');
+      showErrorPopup('Error', error.response?.data?.message || 'Something went wrong');
+    } finally {
       setLoading(false);
     }
   };
 
   return (
-    <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
-      <DiagramBackground />
-      <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
-        <View style={styles.card}>
-          <View style={styles.connectorTop} />
-          <TouchableOpacity style={styles.backBtn} onPress={() => router.back()} activeOpacity={0.7}>
-            <BackIcon />
-            <Text style={styles.backText}>Back</Text>
-          </TouchableOpacity>
-          <View style={styles.iconWrap}>
-            <LockIcon />
-          </View>
-          <Text style={styles.heading}>Reset Password</Text>
-          <Text style={styles.subtitle}>Enter your new password below</Text>
+    <>
+      <Stack.Screen options={{ headerShown: false }} />
+      
+      <ErrorPopupModal
+        visible={showErrorModal}
+        title={errorModalData.title}
+        message={errorModalData.message}
+        onClose={() => setShowErrorModal(false)}
+        onAction={errorModalData.onAction}
+        actionButtonText={errorModalData.actionButtonText}
+      />
 
-          <View style={styles.formGroup}>
-            <Text style={styles.label}>New Password</Text>
-            <View style={[styles.inputWrap, errors.newPassword && styles.inputError]}>
-              <TextInput
-                style={[
-                  styles.input, 
-                  styles.inputWithIcon,
-                  Platform.OS === 'web' && { 
-                    outline: 'none',
-                    outlineStyle: 'solid',
-                    outlineWidth: 0,
-                  }
-                ]}
-                placeholder="At least 8 characters"
-                placeholderTextColor="#b8c0d4"
-                value={newPassword}
-                onChangeText={(text) => {
-                  setNewPassword(text);
-                  setErrors({ ...errors, newPassword: '' });
-                }}
-                secureTextEntry={!showPassword}
-                autoCapitalize="none"
-                returnKeyType="next"
-                onSubmitEditing={() => confirmRef.current?.focus()}
-              />
-              <TouchableOpacity style={styles.eyeBtn} onPress={() => setShowPassword(!showPassword)}>
-                <EyeIcon visible={showPassword} />
-              </TouchableOpacity>
+      <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+        <DiagramBackground />
+        <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
+          <View style={styles.card}>
+            {/* Connectors */}
+            <View style={styles.connectorTop} />
+            <View style={styles.connectorBottom} />
+            <View style={styles.connectorLeft} />
+            <View style={styles.connectorRight} />
+            
+            <TouchableOpacity style={styles.backBtn} onPress={() => router.back()} activeOpacity={0.7}>
+              <BackIcon />
+              <Text style={styles.backText}>Back</Text>
+            </TouchableOpacity>
+            
+            <View style={styles.iconWrap}>
+              <LockIcon />
             </View>
-            {errors.newPassword ? <Text style={styles.errorText}>{errors.newPassword}</Text> : null}
-          </View>
+            <Text style={styles.heading}>Reset Password</Text>
+            <Text style={styles.subtitle}>Enter your new password below</Text>
 
-          <View style={styles.formGroup}>
-            <Text style={styles.label}>Confirm Password</Text>
-            <View style={[styles.inputWrap, errors.confirmPassword && styles.inputError]}>
-              <TextInput
-                ref={confirmRef}
-                style={[
-                  styles.input, 
-                  styles.inputWithIcon,
-                  Platform.OS === 'web' && { 
-                    outline: 'solid',
-                    outlineStyle: 'solid',
-                    outlineColor: 'transparent',  
-                  }
-                ]}
-                placeholder="Re-enter your password"
-                placeholderTextColor="#b8c0d4"
-                value={confirmPassword}
-                onChangeText={(text) => {
-                  setConfirmPassword(text);
-                  setErrors({ ...errors, confirmPassword: '' });
-                }}
-                secureTextEntry={!showConfirmPassword}
-                autoCapitalize="none"
-                returnKeyType="done"
-                onSubmitEditing={handleReset}
-              />
-              <TouchableOpacity style={styles.eyeBtn} onPress={() => setShowConfirmPassword(!showConfirmPassword)}>
-                <EyeIcon visible={showConfirmPassword} />
-              </TouchableOpacity>
+            <View style={styles.formGroup}>
+              <Text style={styles.label}>New Password</Text>
+              <View style={[styles.inputWrap, errors.newPassword && styles.inputError]}>
+                <TextInput
+                  style={[styles.input, styles.inputWithIcon, Platform.OS === 'web' ? { outlineWidth: 0, outlineColor: ' #808080'} : null]}
+                  placeholder="At least 8 characters"
+                  placeholderTextColor="#b8c0d4"
+                  value={newPassword}
+                  onChangeText={(text) => {
+                    setNewPassword(text);
+                    setErrors({ ...errors, newPassword: '' });
+                  }}
+                  secureTextEntry={!showPassword}
+                  autoCapitalize="none"
+                  returnKeyType="next"
+                  onSubmitEditing={() => confirmRef.current?.focus()}
+                />
+                <TouchableOpacity style={styles.eyeBtn} onPress={() => setShowPassword(!showPassword)}>
+                  <EyeIcon visible={showPassword} />
+                </TouchableOpacity>
+              </View>
+              {errors.newPassword ? <Text style={styles.errorText}>{errors.newPassword}</Text> : null}
             </View>
-            {errors.confirmPassword ? <Text style={styles.errorText}>{errors.confirmPassword}</Text> : null}
+
+            <View style={styles.formGroup}>
+              <Text style={styles.label}>Confirm Password</Text>
+              <View style={[styles.inputWrap, errors.confirmPassword && styles.inputError]}>
+                <TextInput
+                  ref={confirmRef}
+                  style={[styles.input, styles.inputWithIcon, Platform.OS === 'web' ? { outlineWidth: 0, outlineColor: ' #808080'} : null]}
+                  placeholder="Re-enter your password"
+                  placeholderTextColor="#b8c0d4"
+                  value={confirmPassword}
+                  onChangeText={(text) => {
+                    setConfirmPassword(text);
+                    setErrors({ ...errors, confirmPassword: '' });
+                  }}
+                  secureTextEntry={!showConfirmPassword}
+                  autoCapitalize="none"
+                  returnKeyType="done"
+                  onSubmitEditing={handleReset}
+                />
+                <TouchableOpacity style={styles.eyeBtn} onPress={() => setShowConfirmPassword(!showConfirmPassword)}>
+                  <EyeIcon visible={showConfirmPassword} />
+                </TouchableOpacity>
+              </View>
+              {errors.confirmPassword ? <Text style={styles.errorText}>{errors.confirmPassword}</Text> : null}
+            </View>
+
+            <TouchableOpacity style={[styles.btnReset, loading && styles.btnDisabled]} onPress={handleReset} disabled={loading}>
+              {loading ? <ActivityIndicator color="#ffffff" size="small" /> : <Text style={styles.btnResetText}>Reset Password</Text>}
+            </TouchableOpacity>
+
+            <TouchableOpacity style={styles.signinLink} onPress={() => router.push('/(auth)/signin')}>
+              <Text style={styles.signinText}>Back to Sign In</Text>
+            </TouchableOpacity>
           </View>
-
-          <TouchableOpacity style={[styles.btnReset, loading && styles.btnDisabled]} onPress={handleReset} disabled={loading}>
-            {loading ? <ActivityIndicator color="#ffffff" size="small" /> : <Text style={styles.btnResetText}>Reset Password</Text>}
-          </TouchableOpacity>
-
-          <TouchableOpacity style={styles.signinLink} onPress={() => router.push('/(auth)/signin')}>
-            <Text style={styles.signinText}>Back to Sign In</Text>
-          </TouchableOpacity>
-
-          <View style={styles.connectorBottom} />
-        </View>
-      </ScrollView>
-    </KeyboardAvoidingView>
+        </ScrollView>
+      </KeyboardAvoidingView>
+    </>
   );
 }
 
@@ -244,7 +314,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center', 
     alignItems: 'center', 
     paddingHorizontal: 18, 
-    paddingVertical: 40 
+    paddingVertical: 40,
+    minHeight: SCREEN_HEIGHT,
   },
   card: { 
     backgroundColor: '#ffffff', 
@@ -287,6 +358,32 @@ const styles = StyleSheet.create({
     borderColor: '#c7d2fe', 
     zIndex: 20 
   },
+  connectorLeft: { 
+    position: 'absolute', 
+    left: -7, 
+    top: '50%', 
+    transform: [{ translateY: -7 }], 
+    width: 14, 
+    height: 14, 
+    borderRadius: 7, 
+    backgroundColor: '#ffffff', 
+    borderWidth: 2, 
+    borderColor: '#c7d2fe', 
+    zIndex: 20 
+  },
+  connectorRight: { 
+    position: 'absolute', 
+    right: -7, 
+    top: '50%', 
+    transform: [{ translateY: -7 }], 
+    width: 14, 
+    height: 14, 
+    borderRadius: 7, 
+    backgroundColor: '#ffffff', 
+    borderWidth: 2, 
+    borderColor: '#c7d2fe', 
+    zIndex: 20 
+  },
   backBtn: { 
     flexDirection: 'row', 
     alignItems: 'center', 
@@ -304,19 +401,19 @@ const styles = StyleSheet.create({
     marginBottom: 22 
   },
   heading: { 
-    fontFamily: Platform.OS === 'ios' ? 'Georgia' : 'serif', 
-    fontSize: 22, 
-    fontWeight: '700', 
-    color: '#1a1f36', 
+    fontSize: 26, 
+    fontWeight: '800', 
+    color: '#0f172a', 
     textAlign: 'center', 
     letterSpacing: -0.6, 
-    marginBottom: 10 
+    marginBottom: 5
   },
   subtitle: { 
     fontSize: 14, 
-    color: '#7f8bb3', 
+    color: '#64748b', 
     textAlign: 'center', 
-    marginBottom: 28 
+    marginBottom: 28,
+    lineHeight: 20,
   },
   formGroup: { 
     marginBottom: 16 
@@ -334,7 +431,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#f8faff', 
     flexDirection: 'row', 
     alignItems: 'center',
-    minHeight: 52,
+    minHeight: 40,
   },
   inputError: { 
     borderColor: '#ef4444' 
@@ -345,9 +442,6 @@ const styles = StyleSheet.create({
     paddingVertical: Platform.OS === 'ios' ? 15 : 13, 
     fontSize: 15, 
     color: '#1a1f36',
-    // Remove black border on focus
-    outlineWidth: 0,
-    outlineStyle: 'solid',
   },
   inputWithIcon: { 
     paddingRight: 44 
@@ -356,8 +450,6 @@ const styles = StyleSheet.create({
     position: 'absolute', 
     right: 12, 
     padding: 10,
-    top: '50%',
-    transform: [{ translateY: -15 }],
   },
   errorText: { 
     fontSize: 12, 
@@ -395,5 +487,72 @@ const styles = StyleSheet.create({
     fontSize: 14, 
     color: '#4c6fff', 
     fontWeight: '600' 
+  },
+  // Grid background styles
+  gridBackground: {
+    ...StyleSheet.absoluteFillObject,
+    width: '100%',
+    height: '100%',
+  },
+  gridOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(255,255,255,0.10)',
+  },
+  // Redesigned Error Modal Styles (No Cancel Button)
+  errorModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  errorModalContainer: {
+    width: '85%',
+    maxWidth: 340,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
+    padding: 24,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+    elevation: 8,
+  },
+  errorModalIconWrapper: {
+    marginBottom: 16,
+  },
+  errorModalIconCircle: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: '#f0f4ff',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  errorModalTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#1e293b',
+    textAlign: 'center',
+    marginBottom: 8,
+  },
+  errorModalMessage: {
+    fontSize: 14,
+    color: '#64748b',
+    textAlign: 'center',
+    lineHeight: 20,
+    marginBottom: 24,
+  },
+  errorModalButtonPrimary: {
+    width: '100%',
+    paddingVertical: 12,
+    borderRadius: 10,
+    alignItems: 'center',
+    backgroundColor: '#3b5bdb',
+  },
+  errorModalButtonTextPrimary: {
+    color: '#ffffff',
+    fontSize: 16,
+    fontWeight: '600',
   },
 });

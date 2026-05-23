@@ -13,29 +13,57 @@ import {
   Dimensions,
   KeyboardAvoidingView,
   Modal,
+  Image,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Svg, Circle, Rect, Path, Text as SvgText, Defs, Pattern } from 'react-native-svg';
+import { initializeApp, FirebaseApp } from 'firebase/app';
+import { getAuth, Auth, signInWithPopup, GoogleAuthProvider, browserSessionPersistence, setPersistence } from 'firebase/auth';
 import * as authService from '../../services/authService';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
-// DiagramBackground component
+// Firebase configuration
+const firebaseConfig = {
+  apiKey: "AIzaSyCyM0zjlTQ6cCuAf3CGWbxLnUUle_z88F8",
+  authDomain: "igraph-it.firebaseapp.com",
+  projectId: "igraph-it",
+  storageBucket: "igraph-it.firebasestorage.app",
+  messagingSenderId: "513560698622",
+  appId: "1:513560698622:web:71e12cbf9a1bb95dab0faf"
+};
+
+// Initialize Firebase
+let firebaseApp: FirebaseApp | undefined;
+let auth: Auth | undefined;
+
+if (Platform.OS === 'web') {
+  firebaseApp = initializeApp(firebaseConfig);
+  auth = getAuth(firebaseApp);
+}
+
+// DiagramBackground component with grid-bg.png
 const DiagramBackground = () => (
   <View style={StyleSheet.absoluteFillObject} pointerEvents="none">
+    <Image
+      source={require('../../assets/images/grid-bg.png')}
+      style={styles.gridBackground}
+      resizeMode="repeat"
+    />
+    <View style={styles.gridOverlay} />
     <Svg width={SCREEN_WIDTH} height={SCREEN_HEIGHT} style={StyleSheet.absoluteFillObject}>
-      <Defs>
-        <Pattern id="grid" width="34" height="34" patternUnits="userSpaceOnUse">
-          <Path d="M 34 0 L 0 0 0 34" fill="none" stroke="#ccd5f7" strokeWidth="1.2" opacity="1" />
-        </Pattern>
-        <Pattern id="dots" width="26" height="26" patternUnits="userSpaceOnUse">
-          <Circle cx="13" cy="13" r="1.3" fill="#b8c4f3" opacity="0.8" />
-        </Pattern>
-      </Defs>
-      <Rect width={SCREEN_WIDTH} height={SCREEN_HEIGHT} fill="#eef2ff" />
-      <Rect width={SCREEN_WIDTH} height={SCREEN_HEIGHT} fill="url(#grid)" opacity="1" />
-      <Rect x={SCREEN_WIDTH * 0.72} y={0} width={SCREEN_WIDTH * 0.28} height={SCREEN_HEIGHT * 0.34} fill="url(#dots)" />
-      <Rect x={0} y={SCREEN_HEIGHT * 0.68} width={SCREEN_WIDTH * 0.28} height={SCREEN_HEIGHT * 0.32} fill="url(#dots)" />
+      {/* Diagram lines overlay */}
+      <Path
+        d={`M ${SCREEN_WIDTH * 0.08} ${SCREEN_HEIGHT * 0.25} C ${SCREEN_WIDTH * 0.22} ${SCREEN_HEIGHT * 0.10}, ${SCREEN_WIDTH * 0.36} ${SCREEN_HEIGHT * 0.42}, ${SCREEN_WIDTH * 0.52} ${SCREEN_HEIGHT * 0.32}`}
+        stroke="#bfd0ff" strokeWidth="2" strokeDasharray="8 10" fill="none" opacity="0.32"
+      />
+      <Path
+        d={`M ${SCREEN_WIDTH * 0.82} ${SCREEN_HEIGHT * 0.18} C ${SCREEN_WIDTH * 0.96} ${SCREEN_HEIGHT * 0.30}, ${SCREEN_WIDTH * 0.95} ${SCREEN_HEIGHT * 0.55}, ${SCREEN_WIDTH * 0.78} ${SCREEN_HEIGHT * 0.76}`}
+        stroke="#bfd0ff" strokeWidth="2" strokeDasharray="8 10" fill="none" opacity="0.32"
+      />
+      <Rect x={SCREEN_WIDTH * 0.07} y={SCREEN_HEIGHT * 0.12} width="130" height="72" rx="14" stroke="#bfd0ff" strokeWidth="1.4" fill="none" opacity="0.38" />
+      <Rect x={SCREEN_WIDTH * 0.74} y={SCREEN_HEIGHT * 0.16} width="140" height="78" rx="14" stroke="#bfd0ff" strokeWidth="1.4" fill="none" opacity="0.38" />
+      <Circle cx={SCREEN_WIDTH * 0.76} cy={SCREEN_HEIGHT * 0.72} r="24" stroke="#bfd0ff" strokeWidth="2" fill="none" opacity="0.3" />
     </Svg>
   </View>
 );
@@ -54,32 +82,62 @@ const BackIcon = () => (
   </Svg>
 );
 
-// Custom Error Popup Modal
-const ErrorPopupModal = ({ visible, title, message, onClose }: { 
+const GoogleIcon = () => (
+  <Svg width={20} height={20} viewBox="0 0 24 24">
+    <Path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4" />
+    <Path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853" />
+    <Path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05" />
+    <Path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335" />
+  </Svg>
+);
+
+// Custom Error Popup Modal (Redesigned - No Cancel Button)
+const ErrorPopupModal = ({ visible, title, message, onClose, onAction, actionButtonText, actionIcon }: { 
   visible: boolean; 
   title: string; 
   message: string; 
   onClose: () => void;
+  onAction?: () => void;
+  actionButtonText?: string;
+  actionIcon?: React.ReactNode;
 }) => {
   return (
-    <Modal animationType="fade" transparent={true} visible={visible} onRequestClose={onClose}>
-      <View style={styles.errorModalOverlay}>
+    <Modal 
+      animationType="fade" 
+      transparent={true} 
+      visible={visible} 
+      onRequestClose={onClose}
+    >
+      <TouchableOpacity 
+        style={styles.errorModalOverlay} 
+        activeOpacity={1} 
+        onPress={onClose}
+      >
         <View style={styles.errorModalContainer}>
-          <View style={styles.errorModalIcon}>
-            <Svg width={56} height={56} viewBox="0 0 56 56" fill="none">
-              <Circle cx="28" cy="28" r="26" fill="#FEE2E2" stroke="#EF4444" strokeWidth="2" />
-              <Path d="M28 16V30M28 38H28.01" stroke="#EF4444" strokeWidth="3" strokeLinecap="round" />
-            </Svg>
+          <View style={styles.errorModalIconWrapper}>
+            <View style={styles.errorModalIconCircle}>
+              <Svg width={32} height={32} viewBox="0 0 24 24" fill="none">
+                <Circle cx="12" cy="12" r="10" stroke="#3b5bdb" strokeWidth="1.5" />
+                <Path d="M12 8v4M12 16h.01" stroke="#3b5bdb" strokeWidth="2" strokeLinecap="round" />
+              </Svg>
+            </View>
           </View>
           <Text style={styles.errorModalTitle}>{title}</Text>
           <Text style={styles.errorModalMessage}>{message}</Text>
-          <View style={styles.errorModalButtons}>
-            <TouchableOpacity style={styles.errorModalButton} onPress={onClose}>
-              <Text style={styles.errorModalButtonText}>Got it</Text>
+          {onAction && (
+            <TouchableOpacity
+              style={styles.errorModalButtonPrimary}
+              onPress={() => {
+                onClose();
+                onAction();
+              }}
+            >
+              {actionIcon && <View style={{ marginRight: 8 }}>{actionIcon}</View>}
+              <Text style={styles.errorModalButtonTextPrimary}>{actionButtonText || 'Continue'}</Text>
             </TouchableOpacity>
-          </View>
+          )}
         </View>
-      </View>
+      </TouchableOpacity>
     </Modal>
   );
 };
@@ -91,11 +149,55 @@ export default function ForgotPassword() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [showErrorModal, setShowErrorModal] = useState(false);
-  const [errorModalData, setErrorModalData] = useState({ title: '', message: '' });
+  const [errorModalData, setErrorModalData] = useState({ 
+    title: '', 
+    message: '',
+    onAction: undefined as (() => void) | undefined,
+    actionButtonText: '',
+    actionIcon: undefined as React.ReactNode | undefined
+  });
 
-  const showErrorPopup = (title: string, message: string) => {
-    setErrorModalData({ title, message });
+  const showErrorPopup = (title: string, message: string, onAction?: () => void, actionButtonText?: string, actionIcon?: React.ReactNode) => {
+    setErrorModalData({ title, message, onAction, actionButtonText: actionButtonText || '', actionIcon });
     setShowErrorModal(true);
+  };
+
+  // Google Sign In handler
+  const handleGoogleSignIn = async () => {
+    if (!auth) {
+      showErrorPopup('Error', 'Firebase auth not available on this platform');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      await setPersistence(auth, browserSessionPersistence);
+      const provider = new GoogleAuthProvider();
+      provider.addScope('email');
+      provider.addScope('profile');
+      const result = await signInWithPopup(auth, provider);
+      const user = result.user;
+      const idToken = await user.getIdToken();
+      const apiResult = await authService.googleAuth(idToken);
+      
+      if (apiResult.success) {
+        router.replace('/(tabs)/home');
+      } else {
+        await auth.signOut();
+        showErrorPopup('Sign In Failed', apiResult.message || 'Google sign in failed');
+      }
+    } catch (error: any) {
+      console.error('Firebase Google Sign-In error:', error);
+      let errorMessage = error.message || 'Something went wrong';
+      showErrorPopup('Google Sign In Failed', errorMessage);
+      try {
+        await auth.signOut();
+      } catch (signOutError) {
+        console.log('Sign out error:', signOutError);
+      }
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleSendOTP = async () => {
@@ -115,10 +217,15 @@ export default function ForgotPassword() {
     try {
       const result = await authService.forgotPassword(email);
       
-      // ✅ Check if backend returned an error (for Google accounts)
       if (!result.success) {
         if (result.message?.includes('Google') || result.code === 'GOOGLE_ACCOUNT') {
-          showErrorPopup('Google Account Detected', 'This email is linked to a Google account. Please sign in with Google instead.');
+          showErrorPopup(
+            'Google Account Detected', 
+            'This email is linked to a Google account. Please sign in with Google instead.',
+            handleGoogleSignIn,
+            'Sign In with Google',
+            <GoogleIcon />
+          );
         } else {
           showErrorPopup('Error', result.message || 'Failed to send OTP');
         }
@@ -148,7 +255,13 @@ export default function ForgotPassword() {
       if (errorMessage?.toLowerCase().includes('google') || 
           errorMessage?.toLowerCase().includes('provider') ||
           errorMessage?.includes('Google Sign-In')) {
-        showErrorPopup('Google Account Detected', 'This email is linked to a Google account. Please sign in with Google instead.');
+        showErrorPopup(
+          'Google Account Detected', 
+          'This email is linked to a Google account. Please sign in with Google instead.',
+          handleGoogleSignIn,
+          'Sign In with Google',
+          <GoogleIcon />
+        );
       } else if (statusCode === 400 && errorMessage?.includes('verify')) {
         showErrorPopup('Email Not Verified', 'Please verify your email address first. Check your inbox for the verification code.');
       } else {
@@ -167,16 +280,25 @@ export default function ForgotPassword() {
           title={errorModalData.title}
           message={errorModalData.message}
           onClose={() => setShowErrorModal(false)}
+          onAction={errorModalData.onAction}
+          actionButtonText={errorModalData.actionButtonText}
+          actionIcon={errorModalData.actionIcon}
         />
         
         <DiagramBackground />
         <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
           <View style={styles.card}>
+            {/* Connectors */}
             <View style={styles.connectorTop} />
+            <View style={styles.connectorBottom} />
+            <View style={styles.connectorLeft} />
+            <View style={styles.connectorRight} />
+            
             <TouchableOpacity style={styles.backBtn} onPress={() => router.back()} activeOpacity={0.7}>
               <BackIcon />
               <Text style={styles.backText}>Back</Text>
             </TouchableOpacity>
+            
             <View style={styles.iconWrap}>
               <MailIcon />
             </View>
@@ -186,7 +308,7 @@ export default function ForgotPassword() {
               <Text style={styles.label}>Email Address</Text>
               <View style={[styles.inputWrap, emailFocused && styles.inputWrapFocused, error && styles.inputWrapError]}>
                 <TextInput
-                  style={styles.input}
+                  style={[styles.input, Platform.OS === 'web' ? { outlineWidth: 0, outlineColor: ' #808080'} : null]}
                   placeholder="you@example.com"
                   placeholderTextColor="#b8c0d4"
                   value={email}
@@ -214,7 +336,6 @@ export default function ForgotPassword() {
                 <Text style={styles.signinLink}>Sign In</Text>
               </TouchableOpacity>
             </View>
-            <View style={styles.connectorBottom} />
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
@@ -224,31 +345,198 @@ export default function ForgotPassword() {
 
 const styles = StyleSheet.create({
   flex: { flex: 1, backgroundColor: '#eef2ff' },
-  scrollContent: { flexGrow: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 18, paddingVertical: 40 },
-  card: { backgroundColor: '#ffffff', borderRadius: 28, paddingHorizontal: 32, paddingTop: 34, paddingBottom: 34, width: '100%', maxWidth: 430, shadowColor: '#1e293b', shadowOffset: { width: 0, height: 12 }, shadowOpacity: 0.12, shadowRadius: 30, elevation: 14, borderWidth: 1.5, borderColor: '#f1f5ff', position: 'relative' },
-  connectorTop: { position: 'absolute', top: -7, alignSelf: 'center', width: 14, height: 14, borderRadius: 7, backgroundColor: '#ffffff', borderWidth: 2, borderColor: '#c7d2fe', zIndex: 20 },
-  connectorBottom: { position: 'absolute', bottom: -7, alignSelf: 'center', width: 14, height: 14, borderRadius: 7, backgroundColor: '#ffffff', borderWidth: 2, borderColor: '#c7d2fe', zIndex: 20 },
-  backBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 24, alignSelf: 'flex-start' },
-  backText: { fontSize: 14, color: '#4a5568', fontWeight: '600' },
-  iconWrap: { alignItems: 'center', marginBottom: 22 },
-  heading: { fontFamily: Platform.OS === 'ios' ? 'Georgia' : 'serif', fontSize: 22, fontWeight: '700', color: '#1a1f36', textAlign: 'center', letterSpacing: -0.6, marginBottom: 30, marginTop: -6 },
-  formGroup: { marginBottom: 8 },
-  label: { fontSize: 13, fontWeight: '600', color: '#4a5568', marginBottom: 8 },
-  inputWrap: { borderWidth: 1.5, borderColor: '#dde3fa', borderRadius: 14, backgroundColor: '#f8faff', flexDirection: 'row', alignItems: 'center' },
-  inputWrapFocused: { backgroundColor: '#ffffff', shadowColor: '#4c6fff', shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.16, shadowRadius: 10, elevation: 4 },
-  inputWrapError: { borderColor: '#ef4444' },
-  input: { flex: 1, paddingHorizontal: 16, paddingVertical: Platform.OS === 'ios' ? 15 : 13, fontSize: 15, color: '#1a1f36' },
-  errorText: { fontSize: 12, color: '#ef4444', marginTop: 8, marginLeft: 4, fontWeight: '500' },
-  btnSend: { backgroundColor: '#4c6fff', borderRadius: 14, paddingVertical: 16, alignItems: 'center', marginTop: 18, shadowColor: '#4c6fff', shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.32, shadowRadius: 20, elevation: 8 },
-  btnDisabled: { opacity: 0.75 },
-  btnSendText: { color: '#ffffff', fontSize: 15, fontWeight: '700', letterSpacing: 0.3 },
-  signinWrap: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', marginTop: 22 },
-  signinText: { fontSize: 13, color: '#8896b3' },
-  signinLink: { fontSize: 13, fontWeight: '700', color: '#1a1f36', marginLeft: 4 },
-  // Error Modal Styles
+  scrollContent: { 
+    flexGrow: 1, 
+    justifyContent: 'center', 
+    alignItems: 'center', 
+    paddingHorizontal: 18, 
+    paddingVertical: 40,
+    minHeight: SCREEN_HEIGHT,
+  },
+  card: { 
+    backgroundColor: '#ffffff', 
+    borderRadius: 28, 
+    paddingHorizontal: 32, 
+    paddingTop: 34, 
+    paddingBottom: 34, 
+    width: '100%', 
+    maxWidth: 430, 
+    shadowColor: '#1e293b', 
+    shadowOffset: { width: 0, height: 12 }, 
+    shadowOpacity: 0.12, 
+    shadowRadius: 30, 
+    elevation: 14, 
+    borderWidth: 1.5, 
+    borderColor: '#f1f5ff', 
+    position: 'relative' 
+  },
+  connectorTop: { 
+    position: 'absolute', 
+    top: -7, 
+    alignSelf: 'center', 
+    width: 14, 
+    height: 14, 
+    borderRadius: 7, 
+    backgroundColor: '#ffffff', 
+    borderWidth: 2, 
+    borderColor: '#c7d2fe', 
+    zIndex: 20 
+  },
+  connectorBottom: { 
+    position: 'absolute', 
+    bottom: -7, 
+    alignSelf: 'center', 
+    width: 14, 
+    height: 14, 
+    borderRadius: 7, 
+    backgroundColor: '#ffffff', 
+    borderWidth: 2, 
+    borderColor: '#c7d2fe', 
+    zIndex: 20 
+  },
+  connectorLeft: { 
+    position: 'absolute', 
+    left: -7, 
+    top: '50%', 
+    transform: [{ translateY: -7 }], 
+    width: 14, 
+    height: 14, 
+    borderRadius: 7, 
+    backgroundColor: '#ffffff', 
+    borderWidth: 2, 
+    borderColor: '#c7d2fe', 
+    zIndex: 20 
+  },
+  connectorRight: { 
+    position: 'absolute', 
+    right: -7, 
+    top: '50%', 
+    transform: [{ translateY: -7 }], 
+    width: 14, 
+    height: 14, 
+    borderRadius: 7, 
+    backgroundColor: '#ffffff', 
+    borderWidth: 2, 
+    borderColor: '#c7d2fe', 
+    zIndex: 20 
+  },
+  backBtn: { 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    gap: 6, 
+    marginBottom: 24, 
+    alignSelf: 'flex-start' 
+  },
+  backText: { 
+    fontSize: 14, 
+    color: '#4a5568', 
+    fontWeight: '600' 
+  },
+  iconWrap: { 
+    alignItems: 'center', 
+    marginBottom: 22 
+  },
+  heading: { 
+    fontSize: 26, 
+    fontWeight: '800', 
+    color: '#0f172a', 
+    textAlign: 'center', 
+    letterSpacing: -0.6, 
+    marginBottom: 30 
+  },
+  formGroup: { 
+    marginBottom: 8 
+  },
+  label: { 
+    fontSize: 13, 
+    fontWeight: '600', 
+    color: '#4a5568', 
+    marginBottom: 8 
+  },
+  inputWrap: { 
+    borderWidth: 1.5, 
+    borderColor: '#dde3fa', 
+    borderRadius: 14, 
+    backgroundColor: '#f8faff', 
+    flexDirection: 'row', 
+    alignItems: 'center' 
+  },
+  inputWrapFocused: { 
+    backgroundColor: '#ffffff', 
+    shadowColor: '#4c6fff', 
+    shadowOffset: { width: 0, height: 0 }, 
+    shadowOpacity: 0.16, 
+    shadowRadius: 10, 
+    elevation: 4 
+  },
+  inputWrapError: { 
+    borderColor: '#ef4444' 
+  },
+  input: { 
+    flex: 1, 
+    paddingHorizontal: 16, 
+    paddingVertical: Platform.OS === 'ios' ? 15 : 13, 
+    fontSize: 15, 
+    color: '#1a1f36',
+  },
+  errorText: { 
+    fontSize: 12, 
+    color: '#ef4444', 
+    marginTop: 8, 
+    marginLeft: 4, 
+    fontWeight: '500' 
+  },
+  btnSend: { 
+    backgroundColor: '#4c6fff', 
+    borderRadius: 14, 
+    paddingVertical: 16, 
+    alignItems: 'center', 
+    marginTop: 18, 
+    shadowColor: '#4c6fff', 
+    shadowOffset: { width: 0, height: 10 }, 
+    shadowOpacity: 0.32, 
+    shadowRadius: 20, 
+    elevation: 8 
+  },
+  btnDisabled: { 
+    opacity: 0.75 
+  },
+  btnSendText: { 
+    color: '#ffffff', 
+    fontSize: 15, 
+    fontWeight: '700', 
+    letterSpacing: 0.3 
+  },
+  signinWrap: { 
+    flexDirection: 'row', 
+    justifyContent: 'center', 
+    alignItems: 'center', 
+    marginTop: 22 
+  },
+  signinText: { 
+    fontSize: 13, 
+    color: '#8896b3' 
+  },
+  signinLink: { 
+    fontSize: 13, 
+    fontWeight: '700', 
+    color: '#1a1f36', 
+    marginLeft: 4 
+  },
+  // Grid background styles
+  gridBackground: {
+    ...StyleSheet.absoluteFillObject,
+    width: '100%',
+    height: '100%',
+  },
+  gridOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(255,255,255,0.10)',
+  },
+  // Redesigned Error Modal Styles (No Cancel Button)
   errorModalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -256,17 +544,25 @@ const styles = StyleSheet.create({
     width: '85%',
     maxWidth: 340,
     backgroundColor: '#FFFFFF',
-    borderRadius: 24,
+    borderRadius: 20,
     padding: 24,
     alignItems: 'center',
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.25,
-    shadowRadius: 20,
-    elevation: 10,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+    elevation: 8,
   },
-  errorModalIcon: {
+  errorModalIconWrapper: {
     marginBottom: 16,
+  },
+  errorModalIconCircle: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: '#f0f4ff',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   errorModalTitle: {
     fontSize: 20,
@@ -282,17 +578,17 @@ const styles = StyleSheet.create({
     lineHeight: 20,
     marginBottom: 24,
   },
-  errorModalButtons: {
+  errorModalButtonPrimary: {
     width: '100%',
-  },
-  errorModalButton: {
-    backgroundColor: '#3b5bdb',
     paddingVertical: 12,
-    borderRadius: 12,
+    borderRadius: 10,
     alignItems: 'center',
+    justifyContent: 'center',
+    flexDirection: 'row',
+    backgroundColor: '#3b5bdb',
   },
-  errorModalButtonText: {
-    color: '#FFFFFF',
+  errorModalButtonTextPrimary: {
+    color: '#ffffff',
     fontSize: 16,
     fontWeight: '600',
   },
