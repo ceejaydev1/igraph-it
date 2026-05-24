@@ -23,14 +23,14 @@ import * as authService from '../../services/authService';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
-// Firebase configuration
+// Firebase configuration using environment variables
 const firebaseConfig = {
-  apiKey: "AIzaSyCyM0zjlTQ6cCuAf3CGWbxLnUUle_z88F8",
-  authDomain: "igraph-it.firebaseapp.com",
-  projectId: "igraph-it",
-  storageBucket: "igraph-it.firebasestorage.app",
-  messagingSenderId: "513560698622",
-  appId: "1:513560698622:web:71e12cbf9a1bb95dab0faf"
+  apiKey: process.env.EXPO_PUBLIC_FIREBASE_API_KEY || "AIzaSyCyM0zjlTQ6cCuAf3CGWbxLnUUle_z88F8",
+  authDomain: process.env.EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN || "igraph-it.firebaseapp.com",
+  projectId: process.env.EXPO_PUBLIC_FIREBASE_PROJECT_ID || "igraph-it",
+  storageBucket: process.env.EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET || "igraph-it.firebasestorage.app",
+  messagingSenderId: process.env.EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID || "513560698622",
+  appId: process.env.EXPO_PUBLIC_FIREBASE_APP_ID || "1:513560698622:web:71e12cbf9a1bb95dab0faf"
 };
 
 // Initialize Firebase
@@ -142,6 +142,45 @@ const ErrorPopupModal = ({ visible, title, message, onClose, onAction, actionBut
   );
 };
 
+// Success Modal
+const SuccessModal = ({ visible, title, message, onClose }: { 
+  visible: boolean; 
+  title: string; 
+  message: string; 
+  onClose: () => void;
+}) => {
+  return (
+    <Modal 
+      animationType="fade" 
+      transparent={true} 
+      visible={visible} 
+      onRequestClose={onClose}
+    >
+      <TouchableOpacity 
+        style={styles.errorModalOverlay} 
+        activeOpacity={1} 
+        onPress={onClose}
+      >
+        <View style={styles.errorModalContainer}>
+          <View style={styles.errorModalIconWrapper}>
+            <View style={[styles.errorModalIconCircle, { backgroundColor: '#d1fae5' }]}>
+              <Svg width={32} height={32} viewBox="0 0 24 24" fill="none">
+                <Circle cx="12" cy="12" r="10" stroke="#10b981" strokeWidth="1.5" />
+                <Path d="M8 12l3 3 5-6" stroke="#10b981" strokeWidth="2" strokeLinecap="round" />
+              </Svg>
+            </View>
+          </View>
+          <Text style={styles.errorModalTitle}>{title}</Text>
+          <Text style={styles.errorModalMessage}>{message}</Text>
+          <TouchableOpacity style={[styles.errorModalButtonPrimary, { backgroundColor: '#10b981' }]} onPress={onClose}>
+            <Text style={styles.errorModalButtonTextPrimary}>Continue</Text>
+          </TouchableOpacity>
+        </View>
+      </TouchableOpacity>
+    </Modal>
+  );
+};
+
 export default function ForgotPassword() {
   const router = useRouter();
   const [email, setEmail] = useState('');
@@ -149,6 +188,7 @@ export default function ForgotPassword() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [showErrorModal, setShowErrorModal] = useState(false);
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [errorModalData, setErrorModalData] = useState({ 
     title: '', 
     message: '',
@@ -160,6 +200,10 @@ export default function ForgotPassword() {
   const showErrorPopup = (title: string, message: string, onAction?: () => void, actionButtonText?: string, actionIcon?: React.ReactNode) => {
     setErrorModalData({ title, message, onAction, actionButtonText: actionButtonText || '', actionIcon });
     setShowErrorModal(true);
+  };
+
+  const showSuccessPopup = (title: string, message: string) => {
+    setShowSuccessModal(true);
   };
 
   // Google Sign In handler
@@ -233,11 +277,16 @@ export default function ForgotPassword() {
         return;
       }
       
-      // Success - navigate to verify OTP
-      router.push({
-        pathname: '/(auth)/verify-otp',
-        params: { email, purpose: 'reset' },
-      });
+      // Show success popup before navigating
+      const maskedEmail = email.replace(/(.{2})(.*)(@.*)/, '$1•••$3');
+      showSuccessPopup('OTP Sent!', `We've sent a verification code to ${maskedEmail}`);
+      
+      setTimeout(() => {
+        router.push({
+          pathname: '/(auth)/verify-otp',
+          params: { email, purpose: 'reset' },
+        });
+      }, 1500);
     } catch (error: any) {
       console.error('Forgot password error:', error);
       
@@ -265,7 +314,14 @@ export default function ForgotPassword() {
       } else if (statusCode === 400 && errorMessage?.includes('verify')) {
         showErrorPopup('Email Not Verified', 'Please verify your email address first. Check your inbox for the verification code.');
       } else {
-        showErrorPopup('Error', errorMessage || 'Failed to send OTP. Please try again.');
+        // Don't show "email not found" - security best practice
+        showSuccessPopup('If an account exists', `We've sent a password reset link to ${email} if the account exists.`);
+        setTimeout(() => {
+          router.push({
+            pathname: '/(auth)/verify-otp',
+            params: { email, purpose: 'reset' },
+          });
+        }, 1500);
       }
     } finally {
       setLoading(false);
@@ -274,7 +330,11 @@ export default function ForgotPassword() {
 
   return (
     <>
-      <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+      <KeyboardAvoidingView 
+        style={styles.flex} 
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 64 : 0}
+      >
         <ErrorPopupModal
           visible={showErrorModal}
           title={errorModalData.title}
@@ -283,6 +343,13 @@ export default function ForgotPassword() {
           onAction={errorModalData.onAction}
           actionButtonText={errorModalData.actionButtonText}
           actionIcon={errorModalData.actionIcon}
+        />
+        
+        <SuccessModal
+          visible={showSuccessModal}
+          title="Check Your Email"
+          message="If an account exists with this email, you'll receive a password reset link shortly."
+          onClose={() => setShowSuccessModal(false)}
         />
         
         <DiagramBackground />
@@ -475,7 +542,7 @@ const styles = StyleSheet.create({
   input: { 
     flex: 1, 
     paddingHorizontal: 16, 
-    paddingVertical: Platform.OS === 'ios' ? 15 : 13, 
+    paddingVertical: Platform.OS === 'ios' ? 13 : 11, 
     fontSize: 15, 
     color: '#1a1f36',
   },

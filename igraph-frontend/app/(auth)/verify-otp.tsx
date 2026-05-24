@@ -12,13 +12,11 @@ import {
   Platform,
   Dimensions,
   KeyboardAvoidingView,
-  NativeSyntheticEvent,
-  TextInputKeyPressEventData,
   Modal,
   Image,
 } from 'react-native';
 import { useRouter, useLocalSearchParams, Stack } from 'expo-router';
-import { Svg, Circle, Rect, Path, Text as SvgText, Defs, Pattern } from 'react-native-svg';
+import { Svg, Circle, Rect, Path } from 'react-native-svg';
 import * as authService from '../../services/authService';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
@@ -34,14 +32,21 @@ const DiagramBackground = () => (
     />
     <View style={styles.gridOverlay} />
     <Svg width={SCREEN_WIDTH} height={SCREEN_HEIGHT} style={StyleSheet.absoluteFillObject}>
-      {/* Diagram lines overlay */}
       <Path
         d={`M ${SCREEN_WIDTH * 0.08} ${SCREEN_HEIGHT * 0.25} C ${SCREEN_WIDTH * 0.22} ${SCREEN_HEIGHT * 0.10}, ${SCREEN_WIDTH * 0.36} ${SCREEN_HEIGHT * 0.42}, ${SCREEN_WIDTH * 0.52} ${SCREEN_HEIGHT * 0.32}`}
-        stroke="#bfd0ff" strokeWidth="2" strokeDasharray="8 10" fill="none" opacity="0.32"
+        stroke="#bfd0ff"
+        strokeWidth="2"
+        strokeDasharray="8 10"
+        fill="none"
+        opacity="0.32"
       />
       <Path
         d={`M ${SCREEN_WIDTH * 0.82} ${SCREEN_HEIGHT * 0.18} C ${SCREEN_WIDTH * 0.96} ${SCREEN_HEIGHT * 0.30}, ${SCREEN_WIDTH * 0.95} ${SCREEN_HEIGHT * 0.55}, ${SCREEN_WIDTH * 0.78} ${SCREEN_HEIGHT * 0.76}`}
-        stroke="#bfd0ff" strokeWidth="2" strokeDasharray="8 10" fill="none" opacity="0.32"
+        stroke="#bfd0ff"
+        strokeWidth="2"
+        strokeDasharray="8 10"
+        fill="none"
+        opacity="0.32"
       />
       <Rect x={SCREEN_WIDTH * 0.07} y={SCREEN_HEIGHT * 0.12} width="130" height="72" rx="14" stroke="#bfd0ff" strokeWidth="1.4" fill="none" opacity="0.38" />
       <Rect x={SCREEN_WIDTH * 0.74} y={SCREEN_HEIGHT * 0.16} width="140" height="78" rx="14" stroke="#bfd0ff" strokeWidth="1.4" fill="none" opacity="0.38" />
@@ -71,7 +76,7 @@ const CheckIcon = () => (
   </Svg>
 );
 
-// Custom Error Popup Modal (Redesigned - No Cancel Button)
+// Custom Error Popup Modal
 const ErrorPopupModal = ({ visible, title, message, onClose, onAction, actionButtonText }: { 
   visible: boolean; 
   title: string; 
@@ -120,6 +125,46 @@ const ErrorPopupModal = ({ visible, title, message, onClose, onAction, actionBut
   );
 };
 
+// Success Modal
+const SuccessModal = ({ visible, title, message, onClose, buttonText = 'Continue' }: { 
+  visible: boolean; 
+  title: string; 
+  message: string; 
+  onClose: () => void;
+  buttonText?: string;
+}) => {
+  return (
+    <Modal 
+      animationType="fade" 
+      transparent={true} 
+      visible={visible} 
+      onRequestClose={onClose}
+    >
+      <TouchableOpacity 
+        style={styles.errorModalOverlay} 
+        activeOpacity={1} 
+        onPress={onClose}
+      >
+        <View style={styles.errorModalContainer}>
+          <View style={styles.errorModalIconWrapper}>
+            <View style={[styles.errorModalIconCircle, { backgroundColor: '#d1fae5' }]}>
+              <Svg width={32} height={32} viewBox="0 0 24 24" fill="none">
+                <Circle cx="12" cy="12" r="10" stroke="#10b981" strokeWidth="1.5" />
+                <Path d="M8 12l3 3 5-6" stroke="#10b981" strokeWidth="2" strokeLinecap="round" />
+              </Svg>
+            </View>
+          </View>
+          <Text style={styles.errorModalTitle}>{title}</Text>
+          <Text style={styles.errorModalMessage}>{message}</Text>
+          <TouchableOpacity style={[styles.errorModalButtonPrimary, { backgroundColor: '#10b981' }]} onPress={onClose}>
+            <Text style={styles.errorModalButtonTextPrimary}>{buttonText}</Text>
+          </TouchableOpacity>
+        </View>
+      </TouchableOpacity>
+    </Modal>
+  );
+};
+
 function useCountdown(initial: number) {
   const [seconds, setSeconds] = useState(initial);
   const [active, setActive] = useState(true);
@@ -138,37 +183,90 @@ function useCountdown(initial: number) {
   return { seconds, expired: seconds <= 0, reset };
 }
 
-interface OtpBoxProps {
-  value: string;
-  focused: boolean;
+// Improved OTP Input Component with single TextInput
+const OTPInput = ({ 
+  value, 
+  onChange, 
+  onComplete, 
+  hasError 
+}: { 
+  value: string; 
+  onChange: (val: string) => void; 
+  onComplete?: (val: string) => void;
   hasError: boolean;
-}
+}) => {
+  const inputRef = useRef<TextInput>(null);
+  const [isFocused, setIsFocused] = useState(false);
+  const otpArray = value.split('').concat(Array(OTP_LENGTH - value.length).fill(''));
 
-const OtpBox = ({ value, focused, hasError }: OtpBoxProps) => (
-  <View
-    style={[
-      styles.otpBox,
-      focused && styles.otpBoxFocused,
-      hasError && styles.otpBoxError,
-      value && !hasError && styles.otpBoxFilled,
-    ]}
-  >
-    <Text style={[styles.otpDigit, hasError && styles.otpDigitError]}>{value || ''}</Text>
-    {focused && !value ? <View style={styles.cursor} /> : null}
-  </View>
-);
+  useEffect(() => {
+    // Auto-focus on mount
+    setTimeout(() => inputRef.current?.focus(), 100);
+  }, []);
+
+  const handleChange = (text: string) => {
+    // Only allow numbers
+    const cleaned = text.replace(/[^0-9]/g, '').slice(0, OTP_LENGTH);
+    onChange(cleaned);
+    
+    if (cleaned.length === OTP_LENGTH && onComplete) {
+      onComplete(cleaned);
+    }
+  };
+
+  return (
+    <TouchableOpacity 
+      activeOpacity={1} 
+      onPress={() => inputRef.current?.focus()}
+      style={styles.otpContainer}
+    >
+      <View style={styles.otpRow}>
+        {otpArray.map((digit, index) => (
+          <View
+            key={index}
+            style={[
+              styles.otpBox,
+              isFocused && styles.otpBoxFocused,
+              hasError && styles.otpBoxError,
+              digit && !hasError && styles.otpBoxFilled,
+            ]}
+          >
+            <Text style={[styles.otpDigit, hasError && styles.otpDigitError]}>
+              {digit}
+            </Text>
+            {isFocused && !digit && <View style={styles.cursor} />}
+          </View>
+        ))}
+      </View>
+      <TextInput
+        ref={inputRef}
+        style={styles.hiddenInput}
+        value={value}
+        onChangeText={handleChange}
+        onFocus={() => setIsFocused(true)}
+        onBlur={() => setIsFocused(false)}
+        keyboardType="numeric"
+        inputMode="numeric"
+        maxLength={OTP_LENGTH}
+        autoFocus
+        caretHidden
+        selectionColor="#4c6fff"
+      />
+    </TouchableOpacity>
+  );
+};
 
 export default function VerifyOTP() {
   const router = useRouter();
   const { email, purpose } = useLocalSearchParams<{ email: string; purpose: 'reset' | 'register' }>();
 
-  const [otp, setOtp] = useState<string[]>(Array(OTP_LENGTH).fill(''));
-  const [focusedIndex, setFocusedIndex] = useState<number>(0);
+  const [otp, setOtp] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [verified, setVerified] = useState(false);
   const [resending, setResending] = useState(false);
   const [showErrorModal, setShowErrorModal] = useState(false);
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [errorModalData, setErrorModalData] = useState({ 
     title: '', 
     message: '',
@@ -176,7 +274,6 @@ export default function VerifyOTP() {
     actionButtonText: '' 
   });
 
-  const inputRefs = useRef<Array<TextInput | null>>(Array(OTP_LENGTH).fill(null));
   const { seconds, expired, reset: resetTimer } = useCountdown(300);
 
   const showErrorPopup = (title: string, message: string, onAction?: () => void, actionButtonText?: string) => {
@@ -184,41 +281,9 @@ export default function VerifyOTP() {
     setShowErrorModal(true);
   };
 
-  useEffect(() => {
-    setTimeout(() => inputRefs.current[0]?.focus(), 300);
-  }, []);
-
-  const handleChange = (text: string, index: number) => {
-    const digit = text.replace(/[^0-9]/g, '').slice(-1);
-    setError('');
-    const updated = [...otp];
-    updated[index] = digit;
-    setOtp(updated);
-    if (digit && index < OTP_LENGTH - 1) {
-      inputRefs.current[index + 1]?.focus();
-      setFocusedIndex(index + 1);
-    }
-  };
-
-  const handleKeyPress = (e: NativeSyntheticEvent<TextInputKeyPressEventData>, index: number) => {
-    if (e.nativeEvent.key === 'Backspace') {
-      setError('');
-      const updated = [...otp];
-      if (updated[index]) {
-        updated[index] = '';
-        setOtp(updated);
-      } else if (index > 0) {
-        updated[index - 1] = '';
-        setOtp(updated);
-        inputRefs.current[index - 1]?.focus();
-        setFocusedIndex(index - 1);
-      }
-    }
-  };
-
-  const handleVerify = async () => {
-    const code = otp.join('');
-    if (code.length < OTP_LENGTH) {
+  const handleVerify = async (code?: string) => {
+    const otpCode = code || otp;
+    if (otpCode.length < OTP_LENGTH) {
       setError('Please enter the complete 6-digit code.');
       return;
     }
@@ -229,9 +294,9 @@ export default function VerifyOTP() {
     try {
       let result;
       if (purpose === 'reset') {
-        result = await authService.verifyResetOTP(email!, code);
+        result = await authService.verifyResetOTP(email!, otpCode);
       } else {
-        result = await authService.verifyOTP(email!, code);
+        result = await authService.verifyOTP(email!, otpCode);
       }
 
       if (result.success) {
@@ -242,18 +307,11 @@ export default function VerifyOTP() {
               pathname: '/(auth)/reset-password',
               params: { 
                 email: email,
-                otp: code 
+                otp: otpCode 
               },
             });
           } else {
-            showErrorPopup(
-              'Verification Successful!',
-              'Your email has been verified. Please sign in to continue.',
-              () => {
-                router.replace('/(auth)/signin');
-              },
-              'Sign In Now'
-            );
+            setShowSuccessModal(true);
           }
         }, 1200);
       } else {
@@ -268,7 +326,11 @@ export default function VerifyOTP() {
   };
 
   const handleResend = async () => {
-    if (!expired) return;
+    if (!expired) {
+      showErrorPopup('Wait', `Please wait ${seconds}s before requesting another code`);
+      return;
+    }
+    
     setResending(true);
     try {
       if (purpose === 'reset') {
@@ -276,21 +338,18 @@ export default function VerifyOTP() {
       } else {
         await authService.resendOTP(email!);
       }
-      setOtp(Array(OTP_LENGTH).fill(''));
+      setOtp('');
       setError('');
       resetTimer();
-      inputRefs.current[0]?.focus();
-      setFocusedIndex(0);
-      showErrorPopup('Success', 'A new OTP has been sent to your email.');
+      showErrorPopup('Success', 'A new verification code has been sent to your email.');
     } catch (error: any) {
-      showErrorPopup('Error', error.response?.data?.message || 'Failed to resend OTP');
+      showErrorPopup('Error', error.response?.data?.message || 'Failed to resend code');
     } finally {
       setResending(false);
     }
   };
 
   const maskedEmail = email ? email.replace(/(.{2})(.*)(@.*)/, (_, a, b, c) => a + b.replace(/./g, '•') + c) : '';
-  const isComplete = otp.every((d) => d !== '');
 
   return (
     <>
@@ -305,7 +364,22 @@ export default function VerifyOTP() {
         actionButtonText={errorModalData.actionButtonText}
       />
 
-      <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+      <SuccessModal
+        visible={showSuccessModal}
+        title="Email Verified!"
+        message="Your email has been successfully verified. You can now sign in to your account."
+        onClose={() => {
+          setShowSuccessModal(false);
+          router.replace('/(auth)/signin');
+        }}
+        buttonText="Sign In Now"
+      />
+
+      <KeyboardAvoidingView 
+        style={styles.flex} 
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 64 : 0}
+      >
         <DiagramBackground />
         <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
           <View style={styles.card}>
@@ -315,7 +389,13 @@ export default function VerifyOTP() {
             <View style={styles.connectorLeft} />
             <View style={styles.connectorRight} />
             
-            <TouchableOpacity style={styles.backBtn} onPress={() => router.back()} activeOpacity={0.7}>
+            <TouchableOpacity 
+              style={styles.backBtn} 
+              onPress={() => router.back()} 
+              activeOpacity={0.7}
+              accessibilityLabel="Go back to previous screen"
+              accessibilityRole="button"
+            >
               <BackIcon />
               <Text style={styles.backText}>Back</Text>
             </TouchableOpacity>
@@ -323,33 +403,25 @@ export default function VerifyOTP() {
             <View style={styles.iconWrap}>{verified ? <CheckIcon /> : <ShieldIcon />}</View>
             <Text style={styles.heading}>{verified ? 'Verified!' : 'Check Your Email'}</Text>
             <Text style={styles.subtitle}>
-              {verified ? 'Your code was accepted.\nRedirecting you now…' : `We sent a 6-digit code to\n`}
+              {verified 
+                ? 'Your code was accepted.\nRedirecting you now…' 
+                : purpose === 'reset'
+                  ? `Enter the 6-digit verification code sent to\n`
+                  : `We sent a 6-digit verification code to\n`
+              }
               {!verified && <Text style={styles.emailHighlight}>{maskedEmail}</Text>}
             </Text>
 
             {!verified && (
               <>
-                <View style={styles.otpRow}>
-                  {otp.map((digit, i) => (
-                    <View key={i}>
-                      <TextInput
-                        ref={(ref) => { inputRefs.current[i] = ref; }}
-                        style={styles.hiddenInput}
-                        value={digit}
-                        onChangeText={(t) => handleChange(t, i)}
-                        onKeyPress={(e) => handleKeyPress(e, i)}
-                        onFocus={() => setFocusedIndex(i)}
-                        onBlur={() => setFocusedIndex(-1)}
-                        keyboardType="number-pad"
-                        maxLength={1}
-                        selectTextOnFocus
-                        caretHidden
-                      />
-                      <OtpBox value={digit} focused={focusedIndex === i} hasError={!!error} />
-                    </View>
-                  ))}
-                </View>
+                <OTPInput 
+                  value={otp}
+                  onChange={setOtp}
+                  onComplete={handleVerify}
+                  hasError={!!error}
+                />
                 {error ? <Text style={styles.errorText}>{error}</Text> : null}
+                
                 <View style={styles.timerRow}>
                   {expired ? (
                     <Text style={styles.timerExpired}>Code expired</Text>
@@ -362,17 +434,24 @@ export default function VerifyOTP() {
                     </>
                   )}
                 </View>
+                
                 <TouchableOpacity
-                  style={[styles.btnVerify, (!isComplete || loading) && styles.btnDisabled]}
-                  onPress={handleVerify}
+                  style={[styles.btnVerify, (otp.length < OTP_LENGTH || loading) && styles.btnDisabled]}
+                  onPress={() => handleVerify()}
                   activeOpacity={0.9}
-                  disabled={!isComplete || loading}
+                  disabled={otp.length < OTP_LENGTH || loading}
                 >
                   {loading ? <ActivityIndicator color="#ffffff" size="small" /> : <Text style={styles.btnVerifyText}>Verify Code</Text>}
                 </TouchableOpacity>
-                <TouchableOpacity style={styles.resendBtn} onPress={handleResend} disabled={!expired || resending} activeOpacity={expired ? 0.7 : 1}>
+                
+                <TouchableOpacity 
+                  style={styles.resendBtn} 
+                  onPress={handleResend} 
+                  disabled={resending}
+                  activeOpacity={expired ? 0.7 : 1}
+                >
                   <Text style={[styles.resendText, !expired && styles.resendDisabled]}>
-                    {resending ? 'Sending...' : 'Resend code'}
+                    {resending ? 'Sending...' : expired ? 'Resend code' : `Resend code in ${seconds}s`}
                   </Text>
                 </TouchableOpacity>
               </>
@@ -474,15 +553,71 @@ const styles = StyleSheet.create({
   },
   subtitle: { fontSize: 14, color: '#7f8bb3', textAlign: 'center', lineHeight: 22, marginBottom: 32 },
   emailHighlight: { color: '#4c6fff', fontWeight: '700' },
-  otpRow: { flexDirection: 'row', justifyContent: 'space-between', gap: 10, marginBottom: 8 },
-  hiddenInput: { position: 'absolute', width: '100%', height: '100%', opacity: 0, zIndex: 10 },
-  otpBox: { width: (Math.min(SCREEN_WIDTH - 36, 430) - 64 - 50) / OTP_LENGTH, height: 58, borderRadius: 14, borderWidth: 1.8, borderColor: '#dde3fa', backgroundColor: '#f8faff', alignItems: 'center', justifyContent: 'center' },
-  otpBoxFocused: { borderColor: '#4c6fff', backgroundColor: '#ffffff', shadowColor: '#4c6fff', shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.18, shadowRadius: 10, elevation: 5 },
-  otpBoxFilled: { borderColor: '#a5b4fc', backgroundColor: '#f0f4ff' },
-  otpBoxError: { borderColor: '#ef4444', backgroundColor: '#fff5f5' },
-  otpDigit: { fontSize: 22, fontWeight: '700', color: '#1a1f36' },
-  otpDigitError: { color: '#ef4444' },
-  cursor: { position: 'absolute', bottom: 12, width: 2, height: 20, borderRadius: 2, backgroundColor: '#4c6fff', opacity: 0.8 },
+  
+  // OTP Input Styles
+  otpContainer: {
+    width: '100%',
+    marginBottom: 8,
+  },
+  otpRow: { 
+    flexDirection: 'row', 
+    justifyContent: 'space-between', 
+    gap: 10, 
+    marginBottom: 8,
+  },
+  hiddenInput: { 
+    position: 'absolute', 
+    width: '100%', 
+    height: '100%', 
+    opacity: 0, 
+    zIndex: 10,
+    backgroundColor: 'transparent',
+  },
+  otpBox: { 
+    flex: 1,
+    aspectRatio: 1,
+    maxWidth: 58,
+    borderRadius: 14, 
+    borderWidth: 1.8, 
+    borderColor: '#dde3fa', 
+    backgroundColor: '#f8faff', 
+    alignItems: 'center', 
+    justifyContent: 'center',
+  },
+  otpBoxFocused: { 
+    borderColor: '#4c6fff', 
+    backgroundColor: '#ffffff', 
+    shadowColor: '#4c6fff', 
+    shadowOffset: { width: 0, height: 0 }, 
+    shadowOpacity: 0.18, 
+    shadowRadius: 10, 
+    elevation: 5,
+  },
+  otpBoxFilled: { 
+    borderColor: '#a5b4fc', 
+    backgroundColor: '#f0f4ff',
+  },
+  otpBoxError: { 
+    borderColor: '#ef4444', 
+    backgroundColor: '#fff5f5',
+  },
+  otpDigit: { 
+    fontSize: 22, 
+    fontWeight: '700', 
+    color: '#1a1f36',
+  },
+  otpDigitError: { 
+    color: '#ef4444',
+  },
+  cursor: { 
+    position: 'absolute', 
+    bottom: 12, 
+    width: 2, 
+    height: 20, 
+    borderRadius: 2, 
+    backgroundColor: '#4c6fff', 
+    opacity: 0.8,
+  },
   timerRow: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', marginTop: 14, marginBottom: 4 },
   timerLabel: { fontSize: 13, color: '#8896b3' },
   timerCount: { fontSize: 13, fontWeight: '700', color: '#4c6fff' },
@@ -494,7 +629,6 @@ const styles = StyleSheet.create({
   resendBtn: { alignItems: 'center', marginTop: 18, paddingVertical: 4 },
   resendText: { fontSize: 13, fontWeight: '700', color: '#1a1f36' },
   resendDisabled: { color: '#b0bbd6' },
-  // Grid background styles
   gridBackground: {
     ...StyleSheet.absoluteFillObject,
     width: '100%',
@@ -504,7 +638,6 @@ const styles = StyleSheet.create({
     ...StyleSheet.absoluteFillObject,
     backgroundColor: 'rgba(255,255,255,0.10)',
   },
-  // Redesigned Error Modal Styles (No Cancel Button)
   errorModalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.5)',

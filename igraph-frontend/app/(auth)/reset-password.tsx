@@ -31,7 +31,6 @@ const DiagramBackground = () => (
     />
     <View style={styles.gridOverlay} />
     <Svg width={SCREEN_WIDTH} height={SCREEN_HEIGHT} style={StyleSheet.absoluteFillObject}>
-      {/* Diagram lines overlay */}
       <Path
         d={`M ${SCREEN_WIDTH * 0.08} ${SCREEN_HEIGHT * 0.25} C ${SCREEN_WIDTH * 0.22} ${SCREEN_HEIGHT * 0.10}, ${SCREEN_WIDTH * 0.36} ${SCREEN_HEIGHT * 0.42}, ${SCREEN_WIDTH * 0.52} ${SCREEN_HEIGHT * 0.32}`}
         stroke="#bfd0ff" strokeWidth="2" strokeDasharray="8 10" fill="none" opacity="0.32"
@@ -79,7 +78,7 @@ const EyeIcon = ({ visible }: { visible: boolean }) => (
   </Svg>
 );
 
-// Custom Error Popup Modal (Redesigned - No Cancel Button)
+// Custom Error Popup Modal
 const ErrorPopupModal = ({ visible, title, message, onClose, onAction, actionButtonText }: { 
   visible: boolean; 
   title: string; 
@@ -128,6 +127,76 @@ const ErrorPopupModal = ({ visible, title, message, onClose, onAction, actionBut
   );
 };
 
+// Success Modal
+const SuccessModal = ({ visible, title, message, onClose }: { 
+  visible: boolean; 
+  title: string; 
+  message: string; 
+  onClose: () => void;
+}) => {
+  return (
+    <Modal 
+      animationType="fade" 
+      transparent={true} 
+      visible={visible} 
+      onRequestClose={onClose}
+    >
+      <TouchableOpacity 
+        style={styles.errorModalOverlay} 
+        activeOpacity={1} 
+        onPress={onClose}
+      >
+        <View style={styles.errorModalContainer}>
+          <View style={styles.errorModalIconWrapper}>
+            <View style={[styles.errorModalIconCircle, { backgroundColor: '#d1fae5' }]}>
+              <Svg width={32} height={32} viewBox="0 0 24 24" fill="none">
+                <Circle cx="12" cy="12" r="10" stroke="#10b981" strokeWidth="1.5" />
+                <Path d="M8 12l3 3 5-6" stroke="#10b981" strokeWidth="2" strokeLinecap="round" />
+              </Svg>
+            </View>
+          </View>
+          <Text style={styles.errorModalTitle}>{title}</Text>
+          <Text style={styles.errorModalMessage}>{message}</Text>
+          <TouchableOpacity style={[styles.errorModalButtonPrimary, { backgroundColor: '#10b981' }]} onPress={onClose}>
+            <Text style={styles.errorModalButtonTextPrimary}>Sign In</Text>
+          </TouchableOpacity>
+        </View>
+      </TouchableOpacity>
+    </Modal>
+  );
+};
+
+// Password strength indicator
+const PasswordStrengthIndicator = ({ password }: { password: string }) => {
+  const getStrength = () => {
+    if (!password) return { text: '', color: '#8896b3', percentage: 0 };
+    
+    let score = 0;
+    if (password.length >= 8) score++;
+    if (/[A-Z]/.test(password)) score++;
+    if (/[a-z]/.test(password)) score++;
+    if (/[0-9]/.test(password)) score++;
+    
+    if (score === 4) return { text: 'Strong password!', color: '#10b981', percentage: 100 };
+    if (score === 3) return { text: 'Good password', color: '#f59e0b', percentage: 75 };
+    if (score > 0) return { text: 'Weak password', color: '#ef4444', percentage: 50 };
+    return { text: 'Enter a password', color: '#8896b3', percentage: 0 };
+  };
+
+  const strength = getStrength();
+
+  if (!password) return null;
+
+  return (
+    <View style={styles.strengthContainer}>
+      <View style={styles.strengthBar}>
+        <View style={[styles.strengthFill, { width: `${strength.percentage}%`, backgroundColor: strength.color }]} />
+      </View>
+      <Text style={[styles.strengthText, { color: strength.color }]}>{strength.text}</Text>
+    </View>
+  );
+};
+
 export default function ResetPassword() {
   const router = useRouter();
   const { email, otp } = useLocalSearchParams<{ email: string; otp: string }>();
@@ -139,6 +208,7 @@ export default function ResetPassword() {
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState({ newPassword: '', confirmPassword: '' });
   const [showErrorModal, setShowErrorModal] = useState(false);
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [errorModalData, setErrorModalData] = useState({ 
     title: '', 
     message: '',
@@ -153,6 +223,10 @@ export default function ResetPassword() {
     setShowErrorModal(true);
   };
 
+  const isPasswordValid = (pwd: string) => {
+    return pwd.length >= 8 && /[A-Z]/.test(pwd) && /[a-z]/.test(pwd) && /[0-9]/.test(pwd);
+  };
+
   const validate = () => {
     const newErrors = { newPassword: '', confirmPassword: '' };
     let isValid = true;
@@ -160,17 +234,8 @@ export default function ResetPassword() {
     if (!newPassword) {
       newErrors.newPassword = 'Password is required';
       isValid = false;
-    } else if (newPassword.length < 8) {
-      newErrors.newPassword = 'Password must be at least 8 characters';
-      isValid = false;
-    } else if (!/[A-Z]/.test(newPassword)) {
-      newErrors.newPassword = 'Must contain at least one uppercase letter';
-      isValid = false;
-    } else if (!/[a-z]/.test(newPassword)) {
-      newErrors.newPassword = 'Must contain at least one lowercase letter';
-      isValid = false;
-    } else if (!/[0-9]/.test(newPassword)) {
-      newErrors.newPassword = 'Must contain at least one number';
+    } else if (!isPasswordValid(newPassword)) {
+      newErrors.newPassword = 'Password must be at least 8 characters with uppercase, lowercase, and number';
       isValid = false;
     }
 
@@ -195,8 +260,8 @@ export default function ResetPassword() {
       
       if (result.success) {
         await authService.clearTokens();
-        // Direct navigation to sign in without success popup
-        router.replace('/(auth)/signin');
+        // Show success modal before navigation
+        setShowSuccessModal(true);
       } else {
         showErrorPopup('Error', result.message || 'Failed to reset password');
       }
@@ -205,6 +270,11 @@ export default function ResetPassword() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleSuccessClose = () => {
+    setShowSuccessModal(false);
+    router.replace('/(auth)/signin');
   };
 
   return (
@@ -220,7 +290,18 @@ export default function ResetPassword() {
         actionButtonText={errorModalData.actionButtonText}
       />
 
-      <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+      <SuccessModal
+        visible={showSuccessModal}
+        title="Password Reset Successful"
+        message="Your password has been updated. You can now sign in with your new password."
+        onClose={handleSuccessClose}
+      />
+
+      <KeyboardAvoidingView 
+        style={styles.flex} 
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 64 : 0}
+      >
         <DiagramBackground />
         <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
           <View style={styles.card}>
@@ -262,6 +343,7 @@ export default function ResetPassword() {
                   <EyeIcon visible={showPassword} />
                 </TouchableOpacity>
               </View>
+              <PasswordStrengthIndicator password={newPassword} />
               {errors.newPassword ? <Text style={styles.errorText}>{errors.newPassword}</Text> : null}
             </View>
 
@@ -287,6 +369,9 @@ export default function ResetPassword() {
                   <EyeIcon visible={showConfirmPassword} />
                 </TouchableOpacity>
               </View>
+              {confirmPassword && newPassword === confirmPassword && !errors.confirmPassword && newPassword ? (
+                <Text style={styles.matchSuccess}>✓ Passwords match</Text>
+              ) : null}
               {errors.confirmPassword ? <Text style={styles.errorText}>{errors.confirmPassword}</Text> : null}
             </View>
 
@@ -439,7 +524,7 @@ const styles = StyleSheet.create({
   input: { 
     flex: 1, 
     paddingHorizontal: 16, 
-    paddingVertical: Platform.OS === 'ios' ? 15 : 13, 
+    paddingVertical: Platform.OS === 'ios' ? 13 : 11, 
     fontSize: 15, 
     color: '#1a1f36',
   },
@@ -457,6 +542,29 @@ const styles = StyleSheet.create({
     marginTop: 8, 
     marginLeft: 4, 
     fontWeight: '500' 
+  },
+  strengthContainer: {
+    marginTop: 8,
+  },
+  strengthBar: {
+    height: 4,
+    backgroundColor: '#e2e6f3',
+    borderRadius: 2,
+    overflow: 'hidden',
+    marginBottom: 6,
+  },
+  strengthFill: {
+    height: '100%',
+    borderRadius: 2,
+  },
+  strengthText: {
+    fontSize: 11,
+  },
+  matchSuccess: {
+    color: '#10b981',
+    fontSize: 11,
+    marginTop: 4,
+    marginLeft: 4,
   },
   btnReset: { 
     backgroundColor: '#4c6fff', 

@@ -69,6 +69,34 @@ api.interceptors.request.use(async (config) => {
   return config;
 });
 
+// Add response interceptor for token refresh
+api.interceptors.response.use(
+  (response) => response,
+  async (error) => {
+    const originalRequest = error.config;
+    
+    if (error.response?.status === 401 && !originalRequest._retry) {
+      originalRequest._retry = true;
+      
+      try {
+        const newAccessToken = await refreshToken();
+        if (newAccessToken) {
+          originalRequest.headers.Authorization = `Bearer ${newAccessToken}`;
+          return api(originalRequest);
+        }
+      } catch (refreshError) {
+        // Redirect to login if refresh fails
+        if (Platform.OS === 'web') {
+          window.location.href = '/(auth)/signin';
+        }
+        return Promise.reject(refreshError);
+      }
+    }
+    
+    return Promise.reject(error);
+  }
+);
+
 // Token management
 export const storeTokens = async (accessToken, refreshToken) => {
   await storage.setItem('accessToken', accessToken);
@@ -78,6 +106,9 @@ export const storeTokens = async (accessToken, refreshToken) => {
 export const clearTokens = async () => {
   await storage.removeItem('accessToken');
   await storage.removeItem('refreshToken');
+  if (Platform.OS === 'web') {
+    localStorage.removeItem('user');
+  }
 };
 
 export const getAccessToken = async () => {
@@ -89,10 +120,11 @@ export const getRefreshToken = async () => {
 };
 
 // Auth API calls
-// services/authService.js
-
-export const signUp = async (userData) => {
-  const response = await api.post('/auth/signup', userData);
+export const signUp = async (userData, consentTimestamp = null) => {
+  const payload = consentTimestamp 
+    ? { ...userData, consentTimestamp }
+    : userData;
+  const response = await api.post('/auth/signup', payload);
   return response.data;
 };
 
@@ -109,7 +141,7 @@ export const resendOTP = async (email) => {
 // Add AbortController for timeout
 let pendingRequest = null;
 
-export const signIn = async (email, password) => {
+export const signIn = async (email, password, consentTimestamp = null) => {
   // Cancel previous pending request
   if (pendingRequest) {
     pendingRequest.abort();
@@ -119,8 +151,12 @@ export const signIn = async (email, password) => {
   pendingRequest = controller;
   
   try {
+    const payload = consentTimestamp 
+      ? { email, password, consentTimestamp }
+      : { email, password };
+    
     const response = await api.post('/auth/signin', 
-      { email, password },
+      payload,
       { 
         signal: controller.signal,
         timeout: 5000 // 5 second timeout
@@ -133,6 +169,9 @@ export const signIn = async (email, password) => {
         response.data.data.tokens.accessToken,
         response.data.data.tokens.refreshToken
       );
+      if (Platform.OS === 'web' && response.data.data.user) {
+        localStorage.setItem('user', JSON.stringify(response.data.data.user));
+      }
     }
     return response.data;
   } catch (error) {
@@ -141,19 +180,25 @@ export const signIn = async (email, password) => {
   }
 };
 
-export const googleAuth = async (idToken) => {
+export const googleAuth = async (idToken, consentTimestamp = null) => {
   try {
-    const response = await api.post('/auth/google', { idToken });
+    const payload = consentTimestamp 
+      ? { idToken, consentTimestamp }
+      : { idToken };
+    
+    const response = await api.post('/auth/google', payload);
     if (response.data.success && response.data.data?.tokens) {
       await storeTokens(
         response.data.data.tokens.accessToken,
         response.data.data.tokens.refreshToken
       );
+      if (Platform.OS === 'web' && response.data.data.user) {
+        localStorage.setItem('user', JSON.stringify(response.data.data.user));
+      }
     }
     return response.data;
   } catch (error) {
     console.error('Google auth error:', error.response?.data || error.message);
-    // ✅ THROW the error so the frontend can catch it properly
     throw error;
   }
 };
@@ -162,8 +207,6 @@ export const forgotPassword = async (email) => {
   const response = await api.post('/auth/forgot-password', { email });
   return response.data;
 };
-
-// Add these methods if not present or update them:
 
 export const verifyResetOTP = async (email, otp) => {
   try {
@@ -198,8 +241,21 @@ export const refreshToken = async () => {
   const response = await api.post('/auth/refresh-token', { refreshToken: refresh });
   if (response.data.success && response.data.data?.accessToken) {
     await storage.setItem('accessToken', response.data.data.accessToken);
+    return response.data.data.accessToken;
   }
-  return response.data;
+  return null;
+};
+
+export const verifyToken = async () => {
+  try {
+    const token = await getAccessToken();
+    if (!token) return { success: false };
+    
+    const response = await api.get('/auth/verify');
+    return response.data;
+  } catch (error) {
+    return { success: false };
+  }
 };
 
 export const logout = async () => {
@@ -216,9 +272,24 @@ export const logout = async () => {
 
 export const checkAuthStatus = async () => {
   const token = await getAccessToken();
-  return !!token;
+  if (!token) return false;
+  
+  try {
+    const result = await verifyToken();
+    return result.success;
+  } catch {
+    return false;
+  }
 };
 
-
+export const recordConsent = async (consentTimestamp) => {
+  try {
+    const response = await api.post('/auth/record-consent', { consentTimestamp });
+    return response.data;
+  } catch (error) {
+    console.error('Failed to record consent:', error);
+    return { success: false };
+  }
+};
 
 export default api;

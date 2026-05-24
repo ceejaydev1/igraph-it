@@ -499,6 +499,44 @@ const ErrorPopupModal = ({
   );
 };
 
+// ─── SUCCESS MODAL ────────────────────────────────────────────────────────────
+
+const SuccessModal = ({
+  visible,
+  title,
+  message,
+  onClose,
+  buttonText = 'Continue',
+}: {
+  visible: boolean;
+  title: string;
+  message: string;
+  onClose: () => void;
+  buttonText?: string;
+}) => {
+  return (
+    <Modal animationType="fade" transparent={true} visible={visible} onRequestClose={onClose}>
+      <TouchableOpacity style={styles.errorModalOverlay} activeOpacity={1} onPress={onClose}>
+        <View style={styles.errorModalContainer}>
+          <View style={styles.errorModalIconWrapper}>
+            <View style={[styles.errorModalIconCircle, { backgroundColor: '#d1fae5' }]}>
+              <Svg width={32} height={32} viewBox="0 0 24 24" fill="none">
+                <Circle cx="12" cy="12" r="10" stroke="#10b981" strokeWidth="1.5" />
+                <Path d="M8 12l3 3 5-6" stroke="#10b981" strokeWidth="2" strokeLinecap="round" />
+              </Svg>
+            </View>
+          </View>
+          <Text style={styles.errorModalTitle}>{title}</Text>
+          <Text style={styles.errorModalMessage}>{message}</Text>
+          <TouchableOpacity style={[styles.errorModalButtonPrimary, { backgroundColor: '#10b981' }]} onPress={onClose}>
+            <Text style={styles.errorModalButtonTextPrimary}>{buttonText}</Text>
+          </TouchableOpacity>
+        </View>
+      </TouchableOpacity>
+    </Modal>
+  );
+};
+
 // ─── BACKGROUND ───────────────────────────────────────────────────────────────
 
 const DiagramBackground = () => (
@@ -589,6 +627,68 @@ const EyeIcon = ({ visible }: { visible: boolean }) => (
   </Svg>
 );
 
+// ─── PASSWORD PROGRESSIVE VALIDATION ──────────────────────────────────────────
+
+interface PasswordValidation {
+  minLength: boolean;
+  hasUpper: boolean;
+  hasLower: boolean;
+  hasNumber: boolean;
+}
+
+const PasswordStrengthIndicator = ({ password }: { password: string }) => {
+  const [validation, setValidation] = useState<PasswordValidation>({
+    minLength: false,
+    hasUpper: false,
+    hasLower: false,
+    hasNumber: false,
+  });
+
+  useEffect(() => {
+    setValidation({
+      minLength: password.length >= 8,
+      hasUpper: /[A-Z]/.test(password),
+      hasLower: /[a-z]/.test(password),
+      hasNumber: /[0-9]/.test(password),
+    });
+  }, [password]);
+
+  const getStrength = () => {
+    const passed = Object.values(validation).filter(Boolean).length;
+    if (passed === 4) return { text: 'Strong password!', color: '#10b981', percentage: 100 };
+    if (passed === 3) return { text: 'Good password', color: '#f59e0b', percentage: 75 };
+    if (passed > 0) return { text: 'Weak password', color: '#ef4444', percentage: 50 };
+    return { text: 'Enter a password', color: '#8896b3', percentage: 0 };
+  };
+
+  const strength = getStrength();
+
+  if (!password) return null;
+
+  return (
+    <View style={styles.strengthContainer}>
+      <View style={styles.strengthBar}>
+        <View style={[styles.strengthFill, { width: `${strength.percentage}%`, backgroundColor: strength.color }]} />
+      </View>
+      <Text style={[styles.strengthText, { color: strength.color }]}>{strength.text}</Text>
+      <View style={styles.validationList}>
+        <Text style={[styles.validationItem, validation.minLength && styles.validationValid]}>
+          {validation.minLength ? '✓' : '○'} At least 8 characters
+        </Text>
+        <Text style={[styles.validationItem, validation.hasUpper && styles.validationValid]}>
+          {validation.hasUpper ? '✓' : '○'} One uppercase letter
+        </Text>
+        <Text style={[styles.validationItem, validation.hasLower && styles.validationValid]}>
+          {validation.hasLower ? '✓' : '○'} One lowercase letter
+        </Text>
+        <Text style={[styles.validationItem, validation.hasNumber && styles.validationValid]}>
+          {validation.hasNumber ? '✓' : '○'} One number
+        </Text>
+      </View>
+    </View>
+  );
+};
+
 // ─── MAIN COMPONENT ───────────────────────────────────────────────────────────
 
 export default function SignUp() {
@@ -606,11 +706,16 @@ export default function SignUp() {
   const [showSuccessAnimation, setShowSuccessAnimation] = useState(false);
   const [showPolicyModal, setShowPolicyModal] = useState(false);
   const [showErrorModal, setShowErrorModal] = useState(false);
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [errorModalData, setErrorModalData] = useState({
     title: '',
     message: '',
     onAction: undefined as (() => void) | undefined,
     actionButtonText: '',
+  });
+  const [successModalData, setSuccessModalData] = useState({
+    title: '',
+    message: '',
   });
   const [errors, setErrors] = useState({
     fullName: '',
@@ -635,11 +740,6 @@ export default function SignUp() {
 
   const openPolicyModal = () => setShowPolicyModal(true);
 
-  /**
-   * Called when user taps "I Agree" inside the modal.
-   * Captures ISO timestamp for server-side legal record.
-   * TODO: pass agreementTimestamp to authService.signUp() once backend supports it.
-   */
   const handleAgree = useCallback(() => {
     setAgreed(true);
     setErrors((prev) => ({ ...prev, agreed: '' }));
@@ -647,10 +747,8 @@ export default function SignUp() {
 
   const handleToggleAgreement = useCallback(() => {
     if (!agreed) {
-      // Not yet agreed → open modal so user reads before agreeing
       openPolicyModal();
     } else {
-      // Unticking revokes agreement
       setAgreed(false);
     }
   }, [agreed]);
@@ -663,6 +761,22 @@ export default function SignUp() {
   ) => {
     setErrorModalData({ title, message, onAction, actionButtonText: actionButtonText || '' });
     setShowErrorModal(true);
+  };
+
+  const showSuccessPopup = (title: string, message: string) => {
+    setSuccessModalData({ title, message });
+    setShowSuccessModal(true);
+  };
+
+  // ── Real-time password validation ────────────────────────────────────────
+
+  const isPasswordValid = (pwd: string) => {
+    return pwd.length >= 8 && /[A-Z]/.test(pwd) && /[a-z]/.test(pwd) && /[0-9]/.test(pwd);
+  };
+
+  const doPasswordsMatch = () => {
+    if (!confirmPassword) return null;
+    return password === confirmPassword;
   };
 
   // ── Validation ────────────────────────────────────────────────────────────
@@ -691,17 +805,8 @@ export default function SignUp() {
     if (!password) {
       newErrors.password = 'Password is required.';
       isValid = false;
-    } else if (password.length < 8) {
-      newErrors.password = 'Password must be at least 8 characters.';
-      isValid = false;
-    } else if (!/[A-Z]/.test(password)) {
-      newErrors.password = 'Must contain at least one uppercase letter.';
-      isValid = false;
-    } else if (!/[a-z]/.test(password)) {
-      newErrors.password = 'Must contain at least one lowercase letter.';
-      isValid = false;
-    } else if (!/[0-9]/.test(password)) {
-      newErrors.password = 'Must contain at least one number.';
+    } else if (!isPasswordValid(password)) {
+      newErrors.password = 'Please meet all password requirements below.';
       isValid = false;
     }
     if (!confirmPassword) {
@@ -737,8 +842,13 @@ export default function SignUp() {
       if (result.success) {
         setShowSuccessAnimation(true);
         setTimeout(() => {
-          showToastMessage('Verification code sent to your email!');
-          router.push({ pathname: '/(auth)/verify-otp', params: { email, purpose: 'register' } });
+          showSuccessPopup(
+            'Verification Code Sent!',
+            `We've sent a 6-digit verification code to ${email.replace(/(.{2})(.*)(@.*)/, '$1•••$3')}`
+          );
+          setTimeout(() => {
+            router.push({ pathname: '/(auth)/verify-otp', params: { email, purpose: 'register' } });
+          }, 1500);
         }, 800);
       } else {
         const msg = result.message || '';
@@ -797,24 +907,6 @@ export default function SignUp() {
     }
   };
 
-  // ── Password strength hint ─────────────────────────────────────────────────
-
-  const getPasswordHint = () => {
-    if (!password) return '';
-    if (password.length < 8) return 'Password must be at least 8 characters';
-    if (!/[A-Z]/.test(password)) return 'Add an uppercase letter';
-    if (!/[a-z]/.test(password)) return 'Add a lowercase letter';
-    if (!/[0-9]/.test(password)) return 'Add a number';
-    return '✓ Strong password!';
-  };
-
-  const passwordHint = getPasswordHint();
-  const isPasswordStrong =
-    password.length >= 8 &&
-    /[A-Z]/.test(password) &&
-    /[a-z]/.test(password) &&
-    /[0-9]/.test(password);
-
   const isAnyInputFocused =
     fullNameFocused || emailFocused || passwordFocused || confirmPasswordFocused;
 
@@ -824,8 +916,7 @@ export default function SignUp() {
     <>
       <Stack.Screen options={{ headerShown: false }} />
 
-      <PolicyModal
-        visible={showPolicyModal}
+      <PolicyModal        visible={showPolicyModal}
         onClose={() => setShowPolicyModal(false)}
         onAgree={handleAgree}
       />
@@ -839,9 +930,18 @@ export default function SignUp() {
         actionButtonText={errorModalData.actionButtonText}
       />
 
+      <SuccessModal
+        visible={showSuccessModal}
+        title={successModalData.title}
+        message={successModalData.message}
+        onClose={() => setShowSuccessModal(false)}
+        buttonText="Continue"
+      />
+
       <KeyboardAvoidingView
         style={styles.flex}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 64 : 0}
       >
         <DiagramBackground />
 
@@ -922,7 +1022,7 @@ export default function SignUp() {
               {errors.email ? <Text style={styles.fieldError}>{errors.email}</Text> : null}
             </View>
 
-            {/* Password */}
+            {/* Password with strength indicator */}
             <View style={styles.formGroup}>
               <Text style={styles.label}>Password</Text>
               <View
@@ -935,7 +1035,7 @@ export default function SignUp() {
                 <TextInput
                   ref={passwordRef}
                   style={[styles.input, styles.inputWithIcon, Platform.OS === 'web' ? { outlineWidth: 0 } : null]}
-                  placeholder="At least 8 characters"
+                  placeholder="Create a strong password"
                   placeholderTextColor="#b8c0d4"
                   value={password}
                   onChangeText={(text) => { setPassword(text); setErrors({ ...errors, password: '' }); }}
@@ -950,11 +1050,7 @@ export default function SignUp() {
                   <EyeIcon visible={showPassword} />
                 </TouchableOpacity>
               </View>
-              {password && !errors.password && (
-                <Text style={[styles.passwordHint, isPasswordStrong && styles.passwordHintSuccess]}>
-                  {passwordHint}
-                </Text>
-              )}
+              <PasswordStrengthIndicator password={password} />
               {errors.password ? <Text style={styles.fieldError}>{errors.password}</Text> : null}
             </View>
 
@@ -989,11 +1085,12 @@ export default function SignUp() {
                   <EyeIcon visible={showConfirmPassword} />
                 </TouchableOpacity>
               </View>
-              {errors.confirmPassword ? (
-                <Text style={styles.fieldError}>{errors.confirmPassword}</Text>
-              ) : confirmPassword && password === confirmPassword && password ? (
-                <Text style={styles.passwordHintSuccess}>✓ Passwords match</Text>
+              {doPasswordsMatch() === false && !errors.confirmPassword ? (
+                <Text style={styles.fieldError}>Passwords do not match</Text>
+              ) : doPasswordsMatch() && password ? (
+                <Text style={styles.matchSuccess}>✓ Passwords match</Text>
               ) : null}
+              {errors.confirmPassword ? <Text style={styles.fieldError}>{errors.confirmPassword}</Text> : null}
             </View>
 
             {/* Terms checkbox row */}
@@ -1138,7 +1235,7 @@ const styles = StyleSheet.create({
   input: {
     flex: 1,
     paddingHorizontal: 14,
-    paddingVertical: Platform.OS === 'ios' ? 11 : 9,
+    paddingVertical: Platform.OS === 'ios' ? 13 : 11,
     fontSize: 14,
     color: '#1a1f36',
     backgroundColor: 'transparent',
@@ -1148,6 +1245,45 @@ const styles = StyleSheet.create({
   inputWithIcon: { paddingRight: 44 },
   eyeBtn: { position: 'absolute', right: 12, padding: 6 },
   fieldError: { color: '#e53e3e', fontSize: 11, marginTop: 4, marginLeft: 4 },
+  
+  strengthContainer: {
+    marginTop: 8,
+  },
+  strengthBar: {
+    height: 4,
+    backgroundColor: '#e2e6f3',
+    borderRadius: 2,
+    overflow: 'hidden',
+    marginBottom: 6,
+  },
+  strengthFill: {
+    height: '100%',
+    borderRadius: 2,
+  },
+  strengthText: {
+    fontSize: 11,
+    marginBottom: 6,
+  },
+  validationList: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginTop: 4,
+  },
+  validationItem: {
+    fontSize: 10,
+    color: '#8896b3',
+    marginRight: 12,
+  },
+  validationValid: {
+    color: '#10b981',
+  },
+  matchSuccess: {
+    color: '#10b981',
+    fontSize: 11,
+    marginTop: 4,
+    marginLeft: 4,
+  },
   passwordHint: { fontSize: 11, color: '#8896b3', marginTop: 4, marginLeft: 4 },
   passwordHintSuccess: { color: '#10b981', fontSize: 11, marginTop: 4 },
 

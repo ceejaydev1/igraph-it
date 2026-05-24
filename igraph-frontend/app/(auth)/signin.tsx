@@ -1,7 +1,13 @@
 // app/(auth)/signin.tsx
 
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { Pressable, Modal, ScrollView as ModalScroll, useWindowDimensions } from 'react-native';
+import {
+  Pressable,
+  Modal,
+  ScrollView as ModalScroll,
+  useWindowDimensions,
+  Switch,
+} from 'react-native';
 import {
   View,
   Text,
@@ -35,6 +41,7 @@ import {
 } from 'react-native-svg';
 
 import * as authService from '../../services/authService';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -147,12 +154,12 @@ const getResponsiveLogoSize = (windowWidth: number): number => {
 // ─── FIREBASE SETUP ───────────────────────────────────────────────────────────
 
 const firebaseConfig = {
-  apiKey: "AIzaSyCyM0zjlTQ6cCuAf3CGWbxLnUUle_z88F8",
-  authDomain: "igraph-it.firebaseapp.com",
-  projectId: "igraph-it",
-  storageBucket: "igraph-it.firebasestorage.app",
-  messagingSenderId: "513560698622",
-  appId: "1:513560698622:web:71e12cbf9a1bb95dab0faf",
+  apiKey: process.env.EXPO_PUBLIC_FIREBASE_API_KEY || "AIzaSyCyM0zjlTQ6cCuAf3CGWbxLnUUle_z88F8",
+  authDomain: process.env.EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN || "igraph-it.firebaseapp.com",
+  projectId: process.env.EXPO_PUBLIC_FIREBASE_PROJECT_ID || "igraph-it",
+  storageBucket: process.env.EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET || "igraph-it.firebasestorage.app",
+  messagingSenderId: process.env.EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID || "513560698622",
+  appId: process.env.EXPO_PUBLIC_FIREBASE_APP_ID || "1:513560698622:web:71e12cbf9a1bb95dab0faf"
 };
 
 let firebaseApp: FirebaseApp | undefined;
@@ -612,6 +619,44 @@ const ErrorPopupModal = ({
   );
 };
 
+// ─── SUCCESS MODAL ────────────────────────────────────────────────────────────
+
+const SuccessModal = ({
+  visible,
+  title,
+  message,
+  onClose,
+  buttonText = 'Continue',
+}: {
+  visible: boolean;
+  title: string;
+  message: string;
+  onClose: () => void;
+  buttonText?: string;
+}) => {
+  return (
+    <Modal animationType="fade" transparent={true} visible={visible} onRequestClose={onClose}>
+      <TouchableOpacity style={styles.errorModalOverlay} activeOpacity={1} onPress={onClose}>
+        <View style={styles.errorModalContainer}>
+          <View style={styles.errorModalIconWrapper}>
+            <View style={[styles.errorModalIconCircle, { backgroundColor: '#d1fae5' }]}>
+              <Svg width={32} height={32} viewBox="0 0 24 24" fill="none">
+                <Circle cx="12" cy="12" r="10" stroke="#10b981" strokeWidth="1.5" />
+                <Path d="M8 12l3 3 5-6" stroke="#10b981" strokeWidth="2" strokeLinecap="round" />
+              </Svg>
+            </View>
+          </View>
+          <Text style={styles.errorModalTitle}>{title}</Text>
+          <Text style={styles.errorModalMessage}>{message}</Text>
+          <TouchableOpacity style={[styles.errorModalButtonPrimary, { backgroundColor: '#10b981' }]} onPress={onClose}>
+            <Text style={styles.errorModalButtonTextPrimary}>{buttonText}</Text>
+          </TouchableOpacity>
+        </View>
+      </TouchableOpacity>
+    </Modal>
+  );
+};
+
 // ─── BACKGROUND ───────────────────────────────────────────────────────────────
 
 const DiagramBackground = () => (
@@ -757,6 +802,39 @@ const GoogleIcon = () => (
 
 WebBrowser.maybeCompleteAuthSession();
 
+// ─── SPLASH SCREEN COMPONENT ──────────────────────────────────────────────────
+
+const SplashScreen = () => (
+  <View style={styles.splashContainer}>
+    <ActivityIndicator size="large" color="#3b5bdb" />
+    <Text style={styles.splashText}>Loading iGraph IT...</Text>
+  </View>
+);
+
+// Save "Remember Me" preference
+const saveRememberMe = async (email: string, remember: boolean) => {
+  if (remember && email) {
+    await AsyncStorage.setItem('rememberedEmail', email);
+    await AsyncStorage.setItem('rememberMe', 'true');
+  } else if (!remember) {
+    await AsyncStorage.removeItem('rememberedEmail');
+    await AsyncStorage.setItem('rememberMe', 'false');
+  }
+};
+
+const loadRememberedEmail = async () => {
+  try {
+    const remember = await AsyncStorage.getItem('rememberMe');
+    if (remember === 'true') {
+      const email = await AsyncStorage.getItem('rememberedEmail');
+      return email || '';
+    }
+  } catch (error) {
+    console.log('Error loading remembered email:', error);
+  }
+  return '';
+};
+
 // ─── MAIN COMPONENT ───────────────────────────────────────────────────────────
 
 export default function SignIn() {
@@ -764,9 +842,11 @@ export default function SignIn() {
   const params = useLocalSearchParams();
   const { width: windowWidth } = useWindowDimensions();
 
+  const [initialLoading, setInitialLoading] = useState(true);
   const [email, setEmail] = useState((params.prefilledEmail as string) || '');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [rememberMe, setRememberMe] = useState(false);
   const [agreed, setAgreed] = useState(false);
   const [agreementTimestamp, setAgreementTimestamp] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -787,29 +867,55 @@ export default function SignIn() {
   const passwordRef = useRef<TextInput>(null);
   const logoSize = getResponsiveLogoSize(windowWidth);
 
+  // Load remembered email on mount
+  useEffect(() => {
+    const loadEmail = async () => {
+      const remembered = await loadRememberedEmail();
+      if (remembered) {
+        setEmail(remembered);
+        setRememberMe(true);
+      }
+    };
+    loadEmail();
+  }, []);
+
+  // Check for existing session on initial load
+  useEffect(() => {
+    const checkExistingSession = async () => {
+      try {
+        const token = await authService.getAccessToken();
+        if (token) {
+          const response = await authService.verifyToken();
+          if (response.success) {
+            router.replace('/(tabs)/home');
+            return;
+          }
+        }
+      } catch (error) {
+        console.log('No valid session found');
+      } finally {
+        setInitialLoading(false);
+      }
+    };
+
+    checkExistingSession();
+  }, [router]);
+
   // ── Handlers ──────────────────────────────────────────────────────────────
 
   const openPolicyModal = () => setShowPolicyModal(true);
 
-  /**
-   * Called when user taps "I Agree" inside the modal.
-   * Records the ISO timestamp — pass this to your server on sign-up/sign-in
-   * alongside the user's consent for legal defensibility.
-   */
   const handleAgree = useCallback(() => {
     const ts = new Date().toISOString();
     setAgreed(true);
     setAgreementTimestamp(ts);
     setErrors((prev) => ({ ...prev, terms: '' }));
-    // TODO: persist ts on your backend — e.g. authService.recordConsent(ts)
   }, []);
 
   const handleToggleAgreement = useCallback(() => {
     if (!agreed) {
-      // Not yet agreed → open modal so user reads before agreeing
       openPolicyModal();
     } else {
-      // Unticking revokes agreement
       setAgreed(false);
       setAgreementTimestamp(null);
     }
@@ -833,50 +939,7 @@ export default function SignIn() {
     }
   };
 
-  // ── Google Sign-In (existing account fallback) ────────────────────────────
-
-  const handleGoogleSignInForExistingAccount = async () => {
-    if (!agreed) {
-      setErrors((prev) => ({
-        ...prev,
-        terms: 'You must agree to the Terms and Privacy Policy before continuing',
-      }));
-      openPolicyModal();
-      return;
-    }
-    if (!auth) {
-      showErrorPopup('Error', 'Firebase auth not available on this platform');
-      return;
-    }
-
-    setLoading(true);
-    try {
-      await setPersistence(auth, browserSessionPersistence);
-      const provider = new GoogleAuthProvider();
-      provider.addScope('email');
-      provider.addScope('profile');
-      const result = await signInWithPopup(auth, provider);
-      const idToken = await result.user.getIdToken();
-      // Pass agreement timestamp so backend can record it
-      const apiResult = await authService.googleAuth(idToken);
-
-      if (apiResult.success) {
-        setShowSuccessAnimation(true);
-        setTimeout(() => router.replace('/(tabs)/home'), 800);
-      } else {
-        await auth.signOut();
-        showErrorPopup('Sign In Failed', apiResult.message || 'Google sign in failed');
-      }
-    } catch (error: any) {
-      console.error('Firebase Google Sign-In error:', error);
-      showErrorPopup('Google Sign In Failed', error.message || 'Something went wrong');
-      try { await auth?.signOut(); } catch {}
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // ── Google Sign-In (primary) ──────────────────────────────────────────────
+  // ─── Google Sign-In with Popup Detection (IMMEDIATE STOP ON CLOSE) ──────────────
 
   const handleFirebaseGoogleSignIn = async () => {
     if (!agreed) {
@@ -893,12 +956,63 @@ export default function SignIn() {
     }
 
     setLoading(true);
+    
+    let popupWindow: Window | null = null;
+    let closeCheckInterval: number | null = null;
+    let signInCompleted = false;
+    
     try {
       await setPersistence(auth, browserSessionPersistence);
       const provider = new GoogleAuthProvider();
       provider.addScope('email');
       provider.addScope('profile');
-      const result = await signInWithPopup(auth, provider);
+      
+      // Start the sign-in popup
+      const signInPromise = signInWithPopup(auth, provider);
+      
+      // Try to get reference to the popup window after it opens
+      setTimeout(() => {
+        // Look for the popup window that Firebase creates
+        // It typically has names like 'SignIn', 'GoogleSignIn', or empty string
+        if (!popupWindow) {
+          // Check all windows to find the popup
+          const allWindows = window.open('', 'SignIn');
+          if (allWindows && allWindows !== window) {
+            popupWindow = allWindows;
+          } else {
+            const googleWindow = window.open('', 'GoogleSignIn');
+            if (googleWindow && googleWindow !== window) {
+              popupWindow = googleWindow;
+            }
+          }
+        }
+      }, 100);
+      
+      // Set up interval to check if popup was closed (checks every 200ms)
+      const closeDetectionPromise = new Promise((_, reject) => {
+        closeCheckInterval = window.setInterval(() => {
+          // If we have a reference to the popup and it's closed, reject immediately
+          if (popupWindow && popupWindow.closed && !signInCompleted) {
+            if (closeCheckInterval) {
+              window.clearInterval(closeCheckInterval);
+              closeCheckInterval = null;
+            }
+            reject(new Error('POPUP_CLOSED_BY_USER'));
+          }
+        }, 200);
+      });
+      
+      // Race between sign-in completion and popup close detection
+      const result = await Promise.race([signInPromise, closeDetectionPromise]) as any;
+      signInCompleted = true;
+      
+      // Clear interval
+      if (closeCheckInterval) {
+        window.clearInterval(closeCheckInterval);
+        closeCheckInterval = null;
+      }
+      
+      // Sign-in successful - continue to backend
       const idToken = await result.user.getIdToken();
       const apiResult = await authService.googleAuth(idToken);
 
@@ -924,26 +1038,145 @@ export default function SignIn() {
       }
     } catch (error: any) {
       console.error('Firebase Google Sign-In error:', error);
-      const statusCode = error.response?.status ?? 0;
-      const errorMessage =
-        error.response?.data?.message || error.response?.data?.error || error.message || 'Something went wrong';
-
-      if (
-        statusCode === 409 ||
-        errorMessage.toLowerCase().includes('already registered') ||
-        errorMessage.toLowerCase().includes('already exists')
-      ) {
-        showErrorPopup(
-          'Account Already Exists',
-          'This email is already registered with email/password. Please sign in using your email and password instead.',
-          () => passwordRef.current?.focus(),
-          'Sign In with Email/Password'
-        );
+      
+      // Clear interval
+      if (closeCheckInterval) {
+        window.clearInterval(closeCheckInterval);
+        closeCheckInterval = null;
+      }
+      
+      // User closed the popup - silently reset loading (NO ERROR MESSAGE)
+      if (error?.message === 'POPUP_CLOSED_BY_USER') {
+        console.log('Google Sign-In popup was closed by user');
+        // Silent reset - do nothing, just stop loading
+      } else if (error?.code === 'auth/popup-closed-by-user') {
+        console.log('Google Sign-In popup was closed by user');
+        // Silent reset - do nothing
       } else {
-        showErrorPopup('Google Sign In Failed', errorMessage);
+        // Real error - show popup
+        const statusCode = error.response?.status ?? 0;
+        const errorMessage =
+          error.response?.data?.message || error.response?.data?.error || error.message || 'Something went wrong';
+
+        if (
+          statusCode === 409 ||
+          errorMessage.toLowerCase().includes('already registered') ||
+          errorMessage.toLowerCase().includes('already exists')
+        ) {
+          showErrorPopup(
+            'Account Already Exists',
+            'This email is already registered with email/password. Please sign in using your email and password instead.',
+            () => passwordRef.current?.focus(),
+            'Sign In with Email/Password'
+          );
+        } else {
+          showErrorPopup('Google Sign In Failed', errorMessage);
+        }
+      }
+      try { 
+        if (auth) {
+          await auth.signOut();
+        }
+      } catch (signOutError) {
+        console.log('Sign out error during cleanup:', signOutError);
+      }
+    } finally {
+      if (closeCheckInterval) {
+        window.clearInterval(closeCheckInterval);
+        closeCheckInterval = null;
+      }
+      setLoading(false);
+    }
+  };
+
+  // ── Google Sign-In (existing account fallback) ────────────────────────────
+
+  const handleGoogleSignInForExistingAccount = async () => {
+    if (!agreed) {
+      setErrors((prev) => ({
+        ...prev,
+        terms: 'You must agree to the Terms and Privacy Policy before continuing',
+      }));
+      openPolicyModal();
+      return;
+    }
+    if (!auth) {
+      showErrorPopup('Error', 'Firebase auth not available on this platform');
+      return;
+    }
+
+    setLoading(true);
+    
+    let popupWindow: Window | null = null;
+    let closeCheckInterval: number | null = null;
+    let signInCompleted = false;
+    
+    try {
+      await setPersistence(auth, browserSessionPersistence);
+      const provider = new GoogleAuthProvider();
+      provider.addScope('email');
+      provider.addScope('profile');
+      
+      const signInPromise = signInWithPopup(auth, provider);
+      
+      setTimeout(() => {
+        if (!popupWindow) {
+          const allWindows = window.open('', 'SignIn');
+          if (allWindows && allWindows !== window) {
+            popupWindow = allWindows;
+          }
+        }
+      }, 100);
+      
+      const closeDetectionPromise = new Promise((_, reject) => {
+        closeCheckInterval = window.setInterval(() => {
+          if (popupWindow && popupWindow.closed && !signInCompleted) {
+            if (closeCheckInterval) {
+              window.clearInterval(closeCheckInterval);
+              closeCheckInterval = null;
+            }
+            reject(new Error('POPUP_CLOSED_BY_USER'));
+          }
+        }, 200);
+      });
+      
+      const result = await Promise.race([signInPromise, closeDetectionPromise]) as any;
+      signInCompleted = true;
+      
+      if (closeCheckInterval) {
+        window.clearInterval(closeCheckInterval);
+        closeCheckInterval = null;
+      }
+      
+      const idToken = await result.user.getIdToken();
+      const apiResult = await authService.googleAuth(idToken);
+
+      if (apiResult.success) {
+        setShowSuccessAnimation(true);
+        setTimeout(() => router.replace('/(tabs)/home'), 800);
+      } else {
+        await auth.signOut();
+        showErrorPopup('Sign In Failed', apiResult.message || 'Google sign in failed');
+      }
+    } catch (error: any) {
+      console.error('Firebase Google Sign-In error:', error);
+      
+      if (closeCheckInterval) {
+        window.clearInterval(closeCheckInterval);
+        closeCheckInterval = null;
+      }
+      
+      if (error?.message === 'POPUP_CLOSED_BY_USER' || error?.code === 'auth/popup-closed-by-user') {
+        console.log('Google Sign-In popup was closed by user');
+      } else {
+        showErrorPopup('Google Sign In Failed', error.message || 'Something went wrong');
       }
       try { await auth?.signOut(); } catch {}
     } finally {
+      if (closeCheckInterval) {
+        window.clearInterval(closeCheckInterval);
+        closeCheckInterval = null;
+      }
       setLoading(false);
     }
   };
@@ -969,12 +1202,13 @@ export default function SignIn() {
     const startTime = Date.now();
 
     try {
-      // Pass agreement timestamp so backend can record it
       const result = await authService.signIn(email, password);
       const elapsed = Date.now() - startTime;
       if (elapsed < 500) await new Promise((r) => setTimeout(r, 500 - elapsed));
 
       if (result.success) {
+        // Save "Remember Me" preference
+        await saveRememberMe(email, rememberMe);
         setShowSuccessAnimation(true);
         setTimeout(() => router.replace('/(tabs)/home'), 800);
       } else {
@@ -1039,7 +1273,9 @@ export default function SignIn() {
 
   const isAnyInputFocused = emailFocused || passwordFocused;
 
-  // ── Render ─────────────────────────────────────────────────────────────────
+  if (initialLoading) {
+    return <SplashScreen />;
+  }
 
   return (
     <>
@@ -1063,6 +1299,7 @@ export default function SignIn() {
       <KeyboardAvoidingView
         style={styles.flex}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 64 : 0}
       >
         <DiagramBackground />
 
@@ -1075,13 +1312,11 @@ export default function SignIn() {
           contentInsetAdjustmentBehavior="always"
         >
           <View style={styles.card}>
-            {/* Connector dots */}
             <View style={styles.connectorTop} />
             <View style={styles.connectorBottom} />
             <View style={styles.connectorLeft} />
             <View style={styles.connectorRight} />
 
-            {/* Logo */}
             <View style={styles.logoWrap}>
               <AnimatedLogo
                 size={logoSize}
@@ -1093,7 +1328,6 @@ export default function SignIn() {
             <Text style={styles.heading}>Welcome Back</Text>
             <Text style={styles.subtitle}>Sign in to continue your learning journey</Text>
 
-            {/* Email */}
             <View style={styles.formGroup}>
               <Text style={styles.label}>Email</Text>
               <View
@@ -1133,7 +1367,6 @@ export default function SignIn() {
               {errors.email ? <Text style={styles.errorText}>{errors.email}</Text> : null}
             </View>
 
-            {/* Password */}
             <View style={styles.formGroup}>
               <Text style={styles.label}>Password</Text>
               <View
@@ -1147,6 +1380,7 @@ export default function SignIn() {
                   ref={passwordRef}
                   style={[
                     styles.input,
+                    styles.inputWithIcon,
                     Platform.OS === 'web' ? { outlineWidth: 0 } : null,
                   ]}
                   placeholder="Enter your password"
@@ -1173,6 +1407,8 @@ export default function SignIn() {
                   style={styles.eyeBtn}
                   onPress={() => setShowPassword(!showPassword)}
                   activeOpacity={0.7}
+                  accessibilityLabel={showPassword ? "Hide password" : "Show password"}
+                  accessibilityRole="button"
                 >
                   <EyeIcon visible={showPassword} />
                 </TouchableOpacity>
@@ -1182,16 +1418,41 @@ export default function SignIn() {
               ) : (
                 <Text style={styles.passwordHint} />
               )}
-              <TouchableOpacity
-                style={styles.forgotWrap}
-                onPress={() => router.push('/(auth)/forgot-password')}
-                activeOpacity={0.7}
-              >
-                <Text style={styles.forgotText}>Forgot password?</Text>
-              </TouchableOpacity>
+              
+              {/* Forgot Password and Remember Me Row */}
+              <View style={styles.optionsRow}>
+                <TouchableOpacity
+                  style={styles.rememberMeRow}
+                  onPress={() => setRememberMe(!rememberMe)}
+                  activeOpacity={0.7}
+                >
+                  <View style={[styles.checkbox, rememberMe && styles.checkboxChecked]}>
+                    {rememberMe && (
+                      <Svg width={10} height={10} viewBox="0 0 10 10">
+                        <Path
+                          d="M2 5l2.5 2.5L8 3"
+                          stroke="white"
+                          strokeWidth={1.8}
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          fill="none"
+                        />
+                      </Svg>
+                    )}
+                  </View>
+                  <Text style={styles.rememberMeText}>Remember me</Text>
+                </TouchableOpacity>
+                
+                <TouchableOpacity
+                  style={styles.forgotWrap}
+                  onPress={() => router.push('/(auth)/forgot-password')}
+                  activeOpacity={0.7}
+                >
+                  <Text style={styles.forgotText}>Forgot password?</Text>
+                </TouchableOpacity>
+              </View>
             </View>
 
-            {/* Sign In Button */}
             <Pressable
               style={({ pressed }) => [
                 styles.btnSignIn,
@@ -1211,33 +1472,31 @@ export default function SignIn() {
               )}
             </Pressable>
 
-            {/* Divider */}
             <View style={styles.divider}>
               <View style={styles.line} />
               <Text style={styles.orText}>OR</Text>
               <View style={styles.line} />
             </View>
 
-            {/* Google Sign In */}
-            <TouchableOpacity
-              style={styles.btnGoogle}
-              onPress={handleFirebaseGoogleSignIn}
-              activeOpacity={0.85}
-              disabled={loading}
-            >
-              <GoogleIcon />
-              <Text style={styles.btnGoogleText}>Google Sign In</Text>
-            </TouchableOpacity>
+            {Platform.OS !== 'web' ? (
+              <View style={styles.nativeGoogleFallback}>
+                <Text style={styles.nativeGoogleFallbackText}>
+                  Google Sign In is available on web. Please use email/password on mobile.
+                </Text>
+              </View>
+            ) : (
+              <TouchableOpacity
+                style={styles.btnGoogle}
+                onPress={handleFirebaseGoogleSignIn}
+                activeOpacity={0.85}
+                disabled={loading}
+              >
+                <GoogleIcon />
+                <Text style={styles.btnGoogleText}>Google Sign In</Text>
+              </TouchableOpacity>
+            )}
 
-            {/* ── Terms checkbox row ───────────────────────────────────────
-                FIXED: checkbox toggles agreement directly.
-                The underlined link text opens the modal for reading.
-                Users must open the modal and scroll both documents
-                before the "I Agree" button inside the modal activates.
-            ─────────────────────────────────────────────────────────────── */}
             <View style={[styles.termsWrap, errors.terms && styles.termsError]}>
-              {/* Checkbox — tapping it opens the modal if not yet agreed,
-                  or revokes agreement if already agreed */}
               <TouchableOpacity
                 onPress={handleToggleAgreement}
                 activeOpacity={0.7}
@@ -1260,7 +1519,6 @@ export default function SignIn() {
                 </View>
               </TouchableOpacity>
 
-              {/* Label with tappable links */}
               <Text style={styles.termsText}>
                 {'I agree to the '}
                 <Text style={styles.termsLink} onPress={openPolicyModal}>
@@ -1275,7 +1533,6 @@ export default function SignIn() {
 
             {errors.terms ? <Text style={styles.errorText}>{errors.terms}</Text> : null}
 
-            {/* Sign Up link */}
             <View style={styles.signupWrap}>
               <Text style={styles.signupText}>Don't have an account? </Text>
               <TouchableOpacity
@@ -1296,7 +1553,17 @@ export default function SignIn() {
 
 const styles = StyleSheet.create({
   flex: { flex: 1, backgroundColor: '#eef2ff' },
-
+  splashContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#eef2ff',
+  },
+  splashText: {
+    marginTop: 12,
+    fontSize: 14,
+    color: '#64748b',
+  },
   gridBackground: { ...StyleSheet.absoluteFillObject, width: '100%', height: '100%' },
   gridOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(255,255,255,0.10)' },
 
@@ -1379,16 +1646,47 @@ const styles = StyleSheet.create({
   input: {
     flex: 1,
     paddingHorizontal: 14,
-    paddingVertical: Platform.OS === 'ios' ? 11 : 9,
+    paddingVertical: Platform.OS === 'ios' ? 13 : 11,
     fontSize: 14,
     color: '#1a1f36',
     backgroundColor: 'transparent',
     minHeight: 44,
     textAlignVertical: 'center',
   },
+  inputWithIcon: { paddingRight: 44 },
   eyeBtn: { position: 'absolute', right: 12, padding: 10 },
-  forgotWrap: { alignItems: 'flex-end', marginTop: 6 },
+  
+  optionsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: 8,
+  },
+  rememberMeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  checkbox: {
+    width: 18,
+    height: 18,
+    borderRadius: 4,
+    borderWidth: 2,
+    borderColor: '#8896b3',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  checkboxChecked: {
+    backgroundColor: '#3b5bdb',
+    borderColor: '#3b5bdb',
+  },
+  rememberMeText: {
+    fontSize: 12.5,
+    color: '#4a5568',
+  },
+  forgotWrap: { alignItems: 'flex-end' },
   forgotText: { fontSize: 12.5, color: '#8896b3', fontWeight: '500' },
+  
   inputError: { borderColor: '#e11d48' },
   termsError: { borderColor: '#e11d48' },
   errorText: { fontSize: 12, color: '#e11d48', marginTop: 6, marginLeft: 4, fontWeight: '500' },
@@ -1429,6 +1727,18 @@ const styles = StyleSheet.create({
     backgroundColor: '#ffffff',
   },
   btnGoogleText: { fontSize: 14, fontWeight: '500', color: '#1a1f36', marginLeft: 8 },
+  nativeGoogleFallback: {
+    marginTop: 10,
+    padding: 12,
+    backgroundColor: '#fef3c7',
+    borderRadius: 12,
+    alignItems: 'center',
+  },
+  nativeGoogleFallbackText: {
+    fontSize: 12,
+    color: '#92400e',
+    textAlign: 'center',
+  },
 
   termsWrap: {
     flexDirection: 'row',
@@ -1465,7 +1775,6 @@ const styles = StyleSheet.create({
   signupText: { fontSize: 13, color: '#64748b' },
   signupLink: { fontSize: 13, fontWeight: '700', color: '#3b5bdb' },
 
-  // Error Modal
   errorModalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
@@ -1518,8 +1827,6 @@ const styles = StyleSheet.create({
   errorModalButtonTextPrimary: { color: '#ffffff', fontSize: 16, fontWeight: '600' },
 });
 
-// ─── MODAL STYLES ─────────────────────────────────────────────────────────────
-
 const modalStyles = StyleSheet.create({
   modalOverlay: {
     flex: 1,
@@ -1561,7 +1868,6 @@ const modalStyles = StyleSheet.create({
   activeTabText: { color: '#3b5bdb' },
   tabContent: { padding: 20 },
 
-  // Scroll-to-read hint banner
   scrollHintBanner: {
     flexDirection: 'row',
     alignItems: 'center',
