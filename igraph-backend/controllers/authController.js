@@ -270,6 +270,8 @@ const signin = async (req, res) => {
 // GOOGLE AUTH
 // ─────────────────────────────────────────────────────────────────────────────
 
+// controllers/authController.js - Updated googleAuth function
+
 const googleAuth = async (req, res) => {
   try {
     const { idToken } = req.body;
@@ -309,22 +311,10 @@ const googleAuth = async (req, res) => {
     let user = await userModel.getUserById(uid);
 
     if (!user) {
-      let baseUsername = name
-        ? name.toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '') + '_' + uid.substring(0, 5)
-        : 'user_' + uid.substring(0, 8);
-      
-      let usernameExists = await userModel.isUsernameExists(baseUsername);
-      let finalUsername = baseUsername;
-      let counter = 1;
-      while (usernameExists) {
-        finalUsername = `${baseUsername}${counter}`;
-        usernameExists = await userModel.isUsernameExists(finalUsername);
-        counter++;
-      }
-
+      // REMOVED username logic - no longer needed
+      // Create user without username
       await userModel.createUser(uid, {
         fullName: name || 'Google User',
-        username: finalUsername,
         email: email,
         passwordHash: null,
         isVerified: true,
@@ -358,7 +348,6 @@ const googleAuth = async (req, res) => {
         user: {
           uid: user.user_id,
           fullName: user.full_name,
-          username: user.username,
           email: user.email,
           profilePicture: user.profile_picture,
           authProvider: user.auth_provider
