@@ -25,6 +25,14 @@ const signup = async (req, res) => {
     // 1. Check if email is already registered
     const existingUser = await userModel.getUserByEmail(email);
     if (existingUser) {
+      // ✅ FIX: Return DIFFERENT messages based on auth provider
+      if (existingUser.auth_provider === 'google') {
+        return res.status(409).json({
+          success: false,
+          message: 'This email is registered with Google. Please sign in with Google instead.',
+          code: 'GOOGLE_ACCOUNT'
+        });
+      }
       return res.status(409).json({
         success: false,
         message: 'This email is already registered. Please sign in or use a different email.'
