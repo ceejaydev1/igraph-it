@@ -246,12 +246,14 @@ export const refreshToken = async () => {
   return null;
 };
 
+// ✅ FIXED: Use /me endpoint instead of /verify (which doesn't exist)
 export const verifyToken = async () => {
   try {
     const token = await getAccessToken();
     if (!token) return { success: false };
     
-    const response = await api.get('/auth/verify');
+    // Changed from '/auth/verify' to '/auth/me' - this endpoint exists
+    const response = await api.get('/auth/me');
     return response.data;
   } catch (error) {
     return { success: false };

@@ -1,6 +1,6 @@
 // app/(auth)/forgot-password.tsx
 
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   View,
   Text,
@@ -14,16 +14,17 @@ import {
   KeyboardAvoidingView,
   Modal,
   Image,
+  Animated,
 } from 'react-native';
 import { useRouter } from 'expo-router';
-import { Svg, Circle, Rect, Path, Text as SvgText, Defs, Pattern } from 'react-native-svg';
+import { Svg, Circle, Rect, Path } from 'react-native-svg';
 import { initializeApp, FirebaseApp } from 'firebase/app';
 import { getAuth, Auth, signInWithPopup, GoogleAuthProvider, browserSessionPersistence, setPersistence } from 'firebase/auth';
 import * as authService from '../../services/authService';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
-// Firebase configuration using environment variables
+// Firebase configuration
 const firebaseConfig = {
   apiKey: process.env.EXPO_PUBLIC_FIREBASE_API_KEY || "AIzaSyCyM0zjlTQ6cCuAf3CGWbxLnUUle_z88F8",
   authDomain: process.env.EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN || "igraph-it.firebaseapp.com",
@@ -41,6 +42,108 @@ if (Platform.OS === 'web') {
   firebaseApp = initializeApp(firebaseConfig);
   auth = getAuth(firebaseApp);
 }
+
+// Custom Toast Component - Works on iOS, Android, and Web
+const CustomToast = ({ visible, message, isError, onHide }: { 
+  visible: boolean; 
+  message: string; 
+  isError: boolean;
+  onHide: () => void;
+}) => {
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const slideAnim = useRef(new Animated.Value(-50)).current;
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    if (visible) {
+      // Animate in
+      Animated.parallel([
+        Animated.timing(fadeAnim, {
+          toValue: 1,
+          duration: 300,
+          useNativeDriver: true,
+        }),
+        Animated.spring(slideAnim, {
+          toValue: 0,
+          tension: 50,
+          friction: 7,
+          useNativeDriver: true,
+        }),
+      ]).start();
+
+      // Auto hide after 3 seconds
+      timeoutRef.current = setTimeout(() => {
+        hideToast();
+      }, 3000);
+    }
+
+    return () => {
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+      }
+    };
+  }, [visible]);
+
+  const hideToast = () => {
+    Animated.parallel([
+      Animated.timing(fadeAnim, {
+        toValue: 0,
+        duration: 300,
+        useNativeDriver: true,
+      }),
+      Animated.timing(slideAnim, {
+        toValue: -50,
+        duration: 300,
+        useNativeDriver: true,
+      }),
+    ]).start(() => {
+      onHide();
+    });
+  };
+
+  if (!visible) return null;
+
+  return (
+    <Animated.View
+      style={[
+        styles.toastContainer,
+        {
+          opacity: fadeAnim,
+          transform: [{ translateY: slideAnim }],
+        },
+      ]}
+    >
+      <View style={[styles.toastContent, isError ? styles.toastError : styles.toastSuccess]}>
+        {isError ? (
+          <Svg width={20} height={20} viewBox="0 0 24 24" fill="none">
+            <Circle cx="12" cy="12" r="10" stroke="#fff" strokeWidth="1.5" />
+            <Path d="M12 8v4M12 16h.01" stroke="#fff" strokeWidth="2" strokeLinecap="round" />
+          </Svg>
+        ) : (
+          <Svg width={20} height={20} viewBox="0 0 24 24" fill="none">
+            <Circle cx="12" cy="12" r="10" stroke="#fff" strokeWidth="1.5" />
+            <Path d="M8 12l3 3 5-6" stroke="#fff" strokeWidth="2" strokeLinecap="round" />
+          </Svg>
+        )}
+        <Text style={styles.toastText}>{message}</Text>
+      </View>
+    </Animated.View>
+  );
+};
+
+// Helper function to get input wrapper style
+const getInputWrapperStyle = (isFocused: boolean, hasError: string) => {
+  if (hasError && isFocused) {
+    return [styles.inputWrap, styles.inputWrapError, styles.inputWrapErrorFocused];
+  }
+  if (hasError) {
+    return [styles.inputWrap, styles.inputWrapError];
+  }
+  if (isFocused) {
+    return [styles.inputWrap, styles.inputWrapFocused];
+  }
+  return [styles.inputWrap];
+};
 
 // DiagramBackground component with grid-bg.png
 const DiagramBackground = () => (
@@ -68,14 +171,6 @@ const DiagramBackground = () => (
   </View>
 );
 
-const MailIcon = () => (
-  <Svg width={56} height={56} viewBox="0 0 48 48" fill="none">
-    <Rect width={48} height={48} rx={16} fill="#eef2ff" />
-    <Path d="M12 16a2 2 0 012-2h20a2 2 0 012 2v16a2 2 0 01-2 2H14a2 2 0 01-2-2V16z" stroke="#4c6fff" strokeWidth={1.8} fill="none" />
-    <Path d="M12 16l12 9 12-9" stroke="#4c6fff" strokeWidth={1.8} strokeLinecap="round" fill="none" />
-  </Svg>
-);
-
 const BackIcon = () => (
   <Svg width={20} height={20} viewBox="0 0 24 24" fill="none">
     <Path d="M19 12H5M5 12l7 7M5 12l7-7" stroke="#4a5568" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" />
@@ -91,7 +186,7 @@ const GoogleIcon = () => (
   </Svg>
 );
 
-// Custom Error Popup Modal (Redesigned - No Cancel Button)
+// Custom Error Popup Modal (kept for complex errors with actions)
 const ErrorPopupModal = ({ visible, title, message, onClose, onAction, actionButtonText, actionIcon }: { 
   visible: boolean; 
   title: string; 
@@ -142,53 +237,17 @@ const ErrorPopupModal = ({ visible, title, message, onClose, onAction, actionBut
   );
 };
 
-// Success Modal
-const SuccessModal = ({ visible, title, message, onClose }: { 
-  visible: boolean; 
-  title: string; 
-  message: string; 
-  onClose: () => void;
-}) => {
-  return (
-    <Modal 
-      animationType="fade" 
-      transparent={true} 
-      visible={visible} 
-      onRequestClose={onClose}
-    >
-      <TouchableOpacity 
-        style={styles.errorModalOverlay} 
-        activeOpacity={1} 
-        onPress={onClose}
-      >
-        <View style={styles.errorModalContainer}>
-          <View style={styles.errorModalIconWrapper}>
-            <View style={[styles.errorModalIconCircle, { backgroundColor: '#d1fae5' }]}>
-              <Svg width={32} height={32} viewBox="0 0 24 24" fill="none">
-                <Circle cx="12" cy="12" r="10" stroke="#10b981" strokeWidth="1.5" />
-                <Path d="M8 12l3 3 5-6" stroke="#10b981" strokeWidth="2" strokeLinecap="round" />
-              </Svg>
-            </View>
-          </View>
-          <Text style={styles.errorModalTitle}>{title}</Text>
-          <Text style={styles.errorModalMessage}>{message}</Text>
-          <TouchableOpacity style={[styles.errorModalButtonPrimary, { backgroundColor: '#10b981' }]} onPress={onClose}>
-            <Text style={styles.errorModalButtonTextPrimary}>Continue</Text>
-          </TouchableOpacity>
-        </View>
-      </TouchableOpacity>
-    </Modal>
-  );
-};
-
 export default function ForgotPassword() {
   const router = useRouter();
+  const emailInputRef = useRef<TextInput>(null);
   const [email, setEmail] = useState('');
   const [emailFocused, setEmailFocused] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [showErrorModal, setShowErrorModal] = useState(false);
-  const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const [toastVisible, setToastVisible] = useState(false);
+  const [toastMessage, setToastMessage] = useState('');
+  const [toastIsError, setToastIsError] = useState(false);
   const [errorModalData, setErrorModalData] = useState({ 
     title: '', 
     message: '',
@@ -197,13 +256,19 @@ export default function ForgotPassword() {
     actionIcon: undefined as React.ReactNode | undefined
   });
 
+  const showToast = (message: string, isError: boolean = false) => {
+    setToastMessage(message);
+    setToastIsError(isError);
+    setToastVisible(true);
+  };
+
+  const hideToast = () => {
+    setToastVisible(false);
+  };
+
   const showErrorPopup = (title: string, message: string, onAction?: () => void, actionButtonText?: string, actionIcon?: React.ReactNode) => {
     setErrorModalData({ title, message, onAction, actionButtonText: actionButtonText || '', actionIcon });
     setShowErrorModal(true);
-  };
-
-  const showSuccessPopup = (title: string, message: string) => {
-    setShowSuccessModal(true);
   };
 
   // Google Sign In handler
@@ -271,22 +336,22 @@ export default function ForgotPassword() {
             <GoogleIcon />
           );
         } else {
-          showErrorPopup('Error', result.message || 'Failed to send OTP');
+          showToast(result.message || 'Failed to send OTP', true);
         }
         setLoading(false);
         return;
       }
       
-      // Show success popup before navigating
+      // Show success toast instead of modal
       const maskedEmail = email.replace(/(.{2})(.*)(@.*)/, '$1•••$3');
-      showSuccessPopup('OTP Sent!', `We've sent a verification code to ${maskedEmail}`);
+      showToast(`OTP code sent to ${maskedEmail}`, false);
       
       setTimeout(() => {
         router.push({
           pathname: '/(auth)/verify-otp',
           params: { email, purpose: 'reset' },
         });
-      }, 1500);
+      }, 400);
     } catch (error: any) {
       console.error('Forgot password error:', error);
       
@@ -312,20 +377,32 @@ export default function ForgotPassword() {
           <GoogleIcon />
         );
       } else if (statusCode === 400 && errorMessage?.includes('verify')) {
-        showErrorPopup('Email Not Verified', 'Please verify your email address first. Check your inbox for the verification code.');
+        showToast('Please verify your email address first. Check your inbox for the OTP code.', true);
       } else {
-        // Don't show "email not found" - security best practice
-        showSuccessPopup('If an account exists', `We've sent a password reset link to ${email} if the account exists.`);
+        // Show toast instead of modal for security best practice
+        showToast(`If an account exists with ${email}, you will receive a OTP Code.`, false);
         setTimeout(() => {
           router.push({
             pathname: '/(auth)/verify-otp',
             params: { email, purpose: 'reset' },
           });
-        }, 1500);
+        }, 400);
       }
     } finally {
       setLoading(false);
     }
+  };
+
+  // Handle Enter key press on keyboard
+  const handleSubmitEditing = () => {
+    handleSendOTP();
+  };
+
+  // Get dynamic outline color for web
+  const getOutlineColor = () => {
+    if (error) return '#ef4444';
+    if (emailFocused) return '#4c6fff';
+    return '#dde3fa';
   };
 
   return (
@@ -345,11 +422,11 @@ export default function ForgotPassword() {
           actionIcon={errorModalData.actionIcon}
         />
         
-        <SuccessModal
-          visible={showSuccessModal}
-          title="Check Your Email"
-          message="If an account exists with this email, you'll receive a password reset link shortly."
-          onClose={() => setShowSuccessModal(false)}
+        <CustomToast
+          visible={toastVisible}
+          message={toastMessage}
+          isError={toastIsError}
+          onHide={hideToast}
         />
         
         <DiagramBackground />
@@ -366,16 +443,23 @@ export default function ForgotPassword() {
               <Text style={styles.backText}>Back</Text>
             </TouchableOpacity>
             
-            <View style={styles.iconWrap}>
-              <MailIcon />
-            </View>
             <Text style={styles.heading}>Forgot Password?</Text>
 
             <View style={styles.formGroup}>
               <Text style={styles.label}>Email Address</Text>
-              <View style={[styles.inputWrap, emailFocused && styles.inputWrapFocused, error && styles.inputWrapError]}>
+              <View style={getInputWrapperStyle(emailFocused, error)}>
                 <TextInput
-                  style={[styles.input, Platform.OS === 'web' ? { outlineWidth: 0, outlineColor: ' #808080'} : null]}
+                  ref={emailInputRef}
+                  style={[
+                    styles.input, 
+                    Platform.OS === 'web' && { 
+                      outlineWidth: 1,
+                      outlineStyle: 'solid',
+                      outlineOffset: 0,
+                      borderRadius: 12,
+                      outlineColor: getOutlineColor(),
+                    }
+                  ]}
                   placeholder="you@example.com"
                   placeholderTextColor="#b8c0d4"
                   value={email}
@@ -388,6 +472,9 @@ export default function ForgotPassword() {
                   keyboardType="email-address"
                   autoCapitalize="none"
                   autoCorrect={false}
+                  returnKeyType="go"
+                  blurOnSubmit={false}
+                  onSubmitEditing={handleSubmitEditing}
                 />
               </View>
               {error ? <Text style={styles.errorText}>{error}</Text> : null}
@@ -499,17 +586,14 @@ const styles = StyleSheet.create({
     color: '#4a5568', 
     fontWeight: '600' 
   },
-  iconWrap: { 
-    alignItems: 'center', 
-    marginBottom: 22 
-  },
   heading: { 
     fontSize: 26, 
     fontWeight: '800', 
     color: '#0f172a', 
     textAlign: 'center', 
     letterSpacing: -0.6, 
-    marginBottom: 30 
+    marginBottom: 30, 
+    marginTop: 30
   },
   formGroup: { 
     marginBottom: 8 
@@ -521,23 +605,36 @@ const styles = StyleSheet.create({
     marginBottom: 8 
   },
   inputWrap: { 
-    borderWidth: 1.5, 
+    borderWidth: 1, 
     borderColor: '#dde3fa', 
-    borderRadius: 14, 
-    backgroundColor: '#f8faff', 
+    borderRadius: 12,
+    backgroundColor: '#ffffff', 
     flexDirection: 'row', 
-    alignItems: 'center' 
+    alignItems: 'center',
   },
   inputWrapFocused: { 
+    borderWidth: 1,
     backgroundColor: '#ffffff', 
-    shadowColor: '#4c6fff', 
-    shadowOffset: { width: 0, height: 0 }, 
-    shadowOpacity: 0.16, 
-    shadowRadius: 10, 
+    borderColor: '#3b5bdb',
+    shadowColor: '#3b5bdb',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
     elevation: 4 
   },
   inputWrapError: { 
-    borderColor: '#ef4444' 
+    borderColor: '#ef4444',
+    borderWidth: 1,
+  },
+  inputWrapErrorFocused: {
+    borderColor: '#ef4444',
+    borderWidth: 1,
+    backgroundColor: '#ffffff',
+    shadowColor: '#ef4444',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+    elevation: 4,
   },
   input: { 
     flex: 1, 
@@ -587,8 +684,44 @@ const styles = StyleSheet.create({
   signinLink: { 
     fontSize: 13, 
     fontWeight: '700', 
-    color: '#1a1f36', 
+    color: '#3b5bdb', 
     marginLeft: 4 
+  },
+  // Toast Styles
+  toastContainer: {
+    position: 'absolute',
+    top: Platform.OS === 'ios' ? 60 : 50,
+    left: 20,
+    right: 20,
+    zIndex: 1000,
+    alignItems: 'center',
+  },
+  toastContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 12,
+    minWidth: 200,
+    maxWidth: '90%',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+    elevation: 6,
+  },
+  toastSuccess: {
+    backgroundColor: '#10b981',
+  },
+  toastError: {
+    backgroundColor: '#ef4444',
+  },
+  toastText: {
+    color: '#ffffff',
+    fontSize: 14,
+    fontWeight: '600',
+    marginLeft: 10,
+    flex: 1,
   },
   // Grid background styles
   gridBackground: {
@@ -600,7 +733,7 @@ const styles = StyleSheet.create({
     ...StyleSheet.absoluteFillObject,
     backgroundColor: 'rgba(255,255,255,0.10)',
   },
-  // Redesigned Error Modal Styles (No Cancel Button)
+  // Error Modal Styles
   errorModalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.5)',

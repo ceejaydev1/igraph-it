@@ -32,6 +32,85 @@ export default function RootLayout() {
   const [showBanner, setShowBanner] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
 
+  // ✅ NEW: Service Worker cleanup and management
+  useEffect(() => {
+    if (Platform.OS === 'web' && typeof window !== 'undefined') {
+      // Function to clean up old/broken service workers
+      const cleanupAndRegisterSW = async () => {
+        if ('serviceWorker' in navigator) {
+          console.log('[PWA] Starting Service Worker cleanup...');
+          
+          // Get all registered service workers
+          const registrations = await navigator.serviceWorker.getRegistrations();
+          
+          // Unregister old/broken service workers
+          for (const registration of registrations) {
+            // Check if it's an old version (doesn't have v5 in the script URL)
+            const isOldVersion = registration.active && 
+              !registration.active.scriptURL.includes('v5');
+            
+            if (isOldVersion) {
+              console.log('[PWA] Unregistering old service worker:', registration.active.scriptURL);
+              await registration.unregister();
+            } else if (registration.active) {
+              console.log('[PWA] Found current service worker:', registration.active.scriptURL);
+            }
+          }
+          
+          // Small delay to ensure cleanup is complete
+          await new Promise(resolve => setTimeout(resolve, 100));
+          
+          // Register fresh service worker
+          try {
+            const registration = await navigator.serviceWorker.register('/service-worker.js', {
+              scope: '/',
+              updateViaCache: 'none' // Don't cache the SW itself
+            });
+            console.log('[PWA] ✅ Service Worker registered successfully:', registration.scope);
+            
+            // Check for updates immediately
+            registration.update();
+            
+            // Listen for updates
+            registration.addEventListener('updatefound', () => {
+              const newWorker = registration.installing;
+              if (newWorker) {
+                console.log('[PWA] New service worker found, updating...');
+                newWorker.addEventListener('statechange', () => {
+                  if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                    console.log('[PWA] New service worker installed, reloading to activate...');
+                    // Optionally reload to activate new SW
+                    // window.location.reload();
+                  }
+                });
+              }
+            });
+            
+          } catch (err) {
+            console.error('[PWA] ❌ Service Worker registration failed:', err);
+          }
+        }
+      };
+      
+      // Run cleanup and registration
+      cleanupAndRegisterSW();
+      
+      // Check for updates every hour
+      const updateInterval = setInterval(() => {
+        if ('serviceWorker' in navigator) {
+          navigator.serviceWorker.ready.then(registration => {
+            registration.update();
+            console.log('[PWA] Checking for service worker updates...');
+          }).catch(err => {
+            console.warn('[PWA] Failed to check for updates:', err);
+          });
+        }
+      }, 60 * 60 * 1000); // Every hour
+      
+      return () => clearInterval(updateInterval);
+    }
+  }, []);
+
   useEffect(() => {
     if (Platform.OS === 'web') {
       const mobile = isMobileDevice();
@@ -44,6 +123,7 @@ export default function RootLayout() {
         link.rel = 'manifest';
         link.href = '/manifest.json';
         document.head.appendChild(link);
+        console.log('[PWA] Manifest link injected');
       }
 
       // ✅ Inject theme color meta
@@ -53,18 +133,7 @@ export default function RootLayout() {
         meta.name = 'theme-color';
         meta.content = '#3b5bdb';
         document.head.appendChild(meta);
-      }
-
-      // ✅ Register service worker
-      if ('serviceWorker' in navigator) {
-        navigator.serviceWorker
-          .register('/service-worker.js')
-          .then((reg) => {
-            console.log('[iGraph IT] Service Worker registered:', reg.scope);
-          })
-          .catch((err) => {
-            console.error('[iGraph IT] Service Worker failed:', err);
-          });
+        console.log('[PWA] Theme color meta injected');
       }
 
       // ✅ Listen for PWA install prompt
@@ -73,21 +142,26 @@ export default function RootLayout() {
       const handleBeforeInstall = (e: Event) => {
         e.preventDefault();
         deferredPrompt = e;
+        console.log('[PWA] Install prompt ready');
         
         // Only show custom banner on mobile devices
         if (mobile) {
           setShowBanner(true);
         } else {
           // On desktop, we don't show the banner, but we keep the prompt
-          // The browser's native install icon will appear automatically
-          console.log('[iGraph IT] Desktop - native install icon available');
+          console.log('[PWA] Desktop - native install icon available');
         }
       };
 
       const handleAppInstalled = () => {
-        console.log('[iGraph IT] PWA installed successfully!');
+        console.log('[PWA] ✅ App installed successfully!');
         setShowBanner(false);
         deferredPrompt = null;
+        
+        // Optional: Send analytics event
+        if (typeof window !== 'undefined' && (window as any).gtag) {
+          (window as any).gtag('event', 'pwa_installed');
+        }
       };
 
       window.addEventListener('beforeinstallprompt', handleBeforeInstall);
@@ -95,9 +169,14 @@ export default function RootLayout() {
 
       // Expose install trigger for the banner component
       (window as any).triggerPWAInstall = async () => {
-        if (!deferredPrompt) return false;
+        if (!deferredPrompt) {
+          console.log('[PWA] No install prompt available');
+          return false;
+        }
+        
         deferredPrompt.prompt();
         const { outcome } = await deferredPrompt.userChoice;
+        console.log('[PWA] User install choice:', outcome);
         deferredPrompt = null;
         return outcome === 'accepted';
       };
@@ -107,11 +186,15 @@ export default function RootLayout() {
         window.matchMedia('(display-mode: standalone)').matches ||
         (window.navigator as any).standalone === true;
 
-      if (isStandalone) setShowBanner(false);
+      if (isStandalone) {
+        console.log('[PWA] Running in standalone mode (already installed)');
+        setShowBanner(false);
+      }
 
       return () => {
         window.removeEventListener('beforeinstallprompt', handleBeforeInstall);
         window.removeEventListener('appinstalled', handleAppInstalled);
+        delete (window as any).triggerPWAInstall;
       };
     }
   }, []);

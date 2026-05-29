@@ -1,6 +1,6 @@
 // app/(auth)/reset-password.tsx
 
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   View,
   Text,
@@ -14,12 +14,99 @@ import {
   KeyboardAvoidingView,
   Modal,
   Image,
+  Animated,
 } from 'react-native';
 import { Stack, useRouter, useLocalSearchParams } from 'expo-router';
 import { Svg, Circle, Rect, Path, Text as SvgText, Defs, Pattern } from 'react-native-svg';
 import * as authService from '../../services/authService';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
+
+// Custom Toast Component
+const CustomToast = ({ visible, message, isError, onHide }: { 
+  visible: boolean; 
+  message: string; 
+  isError: boolean;
+  onHide: () => void;
+}) => {
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const slideAnim = useRef(new Animated.Value(-50)).current;
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    if (visible) {
+      Animated.parallel([
+        Animated.timing(fadeAnim, {
+          toValue: 1,
+          duration: 300,
+          useNativeDriver: true,
+        }),
+        Animated.spring(slideAnim, {
+          toValue: 0,
+          tension: 50,
+          friction: 7,
+          useNativeDriver: true,
+        }),
+      ]).start();
+
+      timeoutRef.current = setTimeout(() => {
+        hideToast();
+      }, 3000);
+    }
+
+    return () => {
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+      }
+    };
+  }, [visible]);
+
+  const hideToast = () => {
+    Animated.parallel([
+      Animated.timing(fadeAnim, {
+        toValue: 0,
+        duration: 300,
+        useNativeDriver: true,
+      }),
+      Animated.timing(slideAnim, {
+        toValue: -50,
+        duration: 300,
+        useNativeDriver: true,
+      }),
+    ]).start(() => {
+      onHide();
+    });
+  };
+
+  if (!visible) return null;
+
+  return (
+    <Animated.View
+      style={[
+        styles.toastContainer,
+        {
+          opacity: fadeAnim,
+          transform: [{ translateY: slideAnim }],
+        },
+      ]}
+    >
+      <View style={[styles.toastContent, isError ? styles.toastError : styles.toastSuccess]}>
+        {isError ? (
+          <Svg width={20} height={20} viewBox="0 0 24 24" fill="none">
+            <Circle cx="12" cy="12" r="10" stroke="#fff" strokeWidth="1.5" />
+            <Path d="M12 8v4M12 16h.01" stroke="#fff" strokeWidth="2" strokeLinecap="round" />
+          </Svg>
+        ) : (
+          <Svg width={20} height={20} viewBox="0 0 24 24" fill="none">
+            <Circle cx="12" cy="12" r="10" stroke="#fff" strokeWidth="1.5" />
+            <Path d="M8 12l3 3 5-6" stroke="#fff" strokeWidth="2" strokeLinecap="round" />
+          </Svg>
+        )}
+        <Text style={styles.toastText}>{message}</Text>
+      </View>
+    </Animated.View>
+  );
+};
 
 // DiagramBackground with grid-bg.png
 const DiagramBackground = () => (
@@ -46,15 +133,6 @@ const DiagramBackground = () => (
   </View>
 );
 
-const LockIcon = () => (
-  <Svg width={56} height={56} viewBox="0 0 48 48" fill="none">
-    <Rect width={48} height={48} rx={16} fill="#eef2ff" />
-    <Path d="M16 20V14a8 8 0 0 1 16 0v6" stroke="#4c6fff" strokeWidth={1.8} fill="none" />
-    <Rect x="12" y="20" width="24" height="16" rx="3" stroke="#4c6fff" strokeWidth={1.8} fill="none" />
-    <Circle cx="24" cy="28" r="2" stroke="#4c6fff" strokeWidth={1.8} fill="none" />
-  </Svg>
-);
-
 const BackIcon = () => (
   <Svg width={20} height={20} viewBox="0 0 24 24" fill="none">
     <Path d="M19 12H5M5 12l7 7M5 12l7-7" stroke="#4a5568" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" />
@@ -78,7 +156,7 @@ const EyeIcon = ({ visible }: { visible: boolean }) => (
   </Svg>
 );
 
-// Custom Error Popup Modal
+// Custom Error Popup Modal (kept for complex errors with actions)
 const ErrorPopupModal = ({ visible, title, message, onClose, onAction, actionButtonText }: { 
   visible: boolean; 
   title: string; 
@@ -127,45 +205,6 @@ const ErrorPopupModal = ({ visible, title, message, onClose, onAction, actionBut
   );
 };
 
-// Success Modal
-const SuccessModal = ({ visible, title, message, onClose }: { 
-  visible: boolean; 
-  title: string; 
-  message: string; 
-  onClose: () => void;
-}) => {
-  return (
-    <Modal 
-      animationType="fade" 
-      transparent={true} 
-      visible={visible} 
-      onRequestClose={onClose}
-    >
-      <TouchableOpacity 
-        style={styles.errorModalOverlay} 
-        activeOpacity={1} 
-        onPress={onClose}
-      >
-        <View style={styles.errorModalContainer}>
-          <View style={styles.errorModalIconWrapper}>
-            <View style={[styles.errorModalIconCircle, { backgroundColor: '#d1fae5' }]}>
-              <Svg width={32} height={32} viewBox="0 0 24 24" fill="none">
-                <Circle cx="12" cy="12" r="10" stroke="#10b981" strokeWidth="1.5" />
-                <Path d="M8 12l3 3 5-6" stroke="#10b981" strokeWidth="2" strokeLinecap="round" />
-              </Svg>
-            </View>
-          </View>
-          <Text style={styles.errorModalTitle}>{title}</Text>
-          <Text style={styles.errorModalMessage}>{message}</Text>
-          <TouchableOpacity style={[styles.errorModalButtonPrimary, { backgroundColor: '#10b981' }]} onPress={onClose}>
-            <Text style={styles.errorModalButtonTextPrimary}>Sign In</Text>
-          </TouchableOpacity>
-        </View>
-      </TouchableOpacity>
-    </Modal>
-  );
-};
-
 // Password strength indicator
 const PasswordStrengthIndicator = ({ password }: { password: string }) => {
   const getStrength = () => {
@@ -197,6 +236,13 @@ const PasswordStrengthIndicator = ({ password }: { password: string }) => {
   );
 };
 
+// Helper function for outline color on web
+const getOutlineColor = (isFocused: boolean, hasError: string) => {
+  if (hasError) return '#ef4444';
+  if (isFocused) return '#4c6fff';
+  return '#dde3fa';
+};
+
 export default function ResetPassword() {
   const router = useRouter();
   const { email, otp } = useLocalSearchParams<{ email: string; otp: string }>();
@@ -207,8 +253,12 @@ export default function ResetPassword() {
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState({ newPassword: '', confirmPassword: '' });
+  const [newPasswordFocused, setNewPasswordFocused] = useState(false);
+  const [confirmPasswordFocused, setConfirmPasswordFocused] = useState(false);
   const [showErrorModal, setShowErrorModal] = useState(false);
-  const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const [toastVisible, setToastVisible] = useState(false);
+  const [toastMessage, setToastMessage] = useState('');
+  const [toastIsError, setToastIsError] = useState(false);
   const [errorModalData, setErrorModalData] = useState({ 
     title: '', 
     message: '',
@@ -217,6 +267,16 @@ export default function ResetPassword() {
   });
 
   const confirmRef = useRef<TextInput>(null);
+
+  const showToast = (message: string, isError: boolean = false) => {
+    setToastMessage(message);
+    setToastIsError(isError);
+    setToastVisible(true);
+  };
+
+  const hideToast = () => {
+    setToastVisible(false);
+  };
 
   const showErrorPopup = (title: string, message: string, onAction?: () => void, actionButtonText?: string) => {
     setErrorModalData({ title, message, onAction, actionButtonText: actionButtonText || '' });
@@ -260,21 +320,20 @@ export default function ResetPassword() {
       
       if (result.success) {
         await authService.clearTokens();
-        // Show success modal before navigation
-        setShowSuccessModal(true);
+        // Show success toast instead of modal
+        showToast('Password reset successful! Redirecting to sign in...', false);
+        // Redirect after toast
+        setTimeout(() => {
+          router.replace('/(auth)/signin');
+        }, 400);
       } else {
-        showErrorPopup('Error', result.message || 'Failed to reset password');
+        showToast(result.message || 'Failed to reset password', true);
       }
     } catch (error: any) {
-      showErrorPopup('Error', error.response?.data?.message || 'Something went wrong');
+      showToast(error.response?.data?.message || 'Something went wrong', true);
     } finally {
       setLoading(false);
     }
-  };
-
-  const handleSuccessClose = () => {
-    setShowSuccessModal(false);
-    router.replace('/(auth)/signin');
   };
 
   return (
@@ -290,11 +349,11 @@ export default function ResetPassword() {
         actionButtonText={errorModalData.actionButtonText}
       />
 
-      <SuccessModal
-        visible={showSuccessModal}
-        title="Password Reset Successful"
-        message="Your password has been updated. You can now sign in with your new password."
-        onClose={handleSuccessClose}
+      <CustomToast
+        visible={toastVisible}
+        message={toastMessage}
+        isError={toastIsError}
+        onHide={hideToast}
       />
 
       <KeyboardAvoidingView 
@@ -316,17 +375,28 @@ export default function ResetPassword() {
               <Text style={styles.backText}>Back</Text>
             </TouchableOpacity>
             
-            <View style={styles.iconWrap}>
-              <LockIcon />
-            </View>
             <Text style={styles.heading}>Reset Password</Text>
             <Text style={styles.subtitle}>Enter your new password below</Text>
 
             <View style={styles.formGroup}>
               <Text style={styles.label}>New Password</Text>
-              <View style={[styles.inputWrap, errors.newPassword && styles.inputError]}>
+              <View style={[
+                styles.inputWrap, 
+                newPasswordFocused && styles.inputWrapFocused,
+                errors.newPassword && styles.inputError
+              ]}>
                 <TextInput
-                  style={[styles.input, styles.inputWithIcon, Platform.OS === 'web' ? { outlineWidth: 0, outlineColor: ' #808080'} : null]}
+                  style={[
+                    styles.input, 
+                    styles.inputWithIcon,
+                    Platform.OS === 'web' && { 
+                      outlineWidth: 1,
+                      outlineStyle: 'solid',
+                      outlineOffset: 0,
+                      borderRadius: 12,
+                      outlineColor: getOutlineColor(newPasswordFocused, errors.newPassword),
+                    }
+                  ]}
                   placeholder="At least 8 characters"
                   placeholderTextColor="#b8c0d4"
                   value={newPassword}
@@ -334,6 +404,8 @@ export default function ResetPassword() {
                     setNewPassword(text);
                     setErrors({ ...errors, newPassword: '' });
                   }}
+                  onFocus={() => setNewPasswordFocused(true)}
+                  onBlur={() => setNewPasswordFocused(false)}
                   secureTextEntry={!showPassword}
                   autoCapitalize="none"
                   returnKeyType="next"
@@ -349,10 +421,24 @@ export default function ResetPassword() {
 
             <View style={styles.formGroup}>
               <Text style={styles.label}>Confirm Password</Text>
-              <View style={[styles.inputWrap, errors.confirmPassword && styles.inputError]}>
+              <View style={[
+                styles.inputWrap, 
+                confirmPasswordFocused && styles.inputWrapFocused,
+                errors.confirmPassword && styles.inputError
+              ]}>
                 <TextInput
                   ref={confirmRef}
-                  style={[styles.input, styles.inputWithIcon, Platform.OS === 'web' ? { outlineWidth: 0, outlineColor: ' #808080'} : null]}
+                  style={[
+                    styles.input, 
+                    styles.inputWithIcon,
+                    Platform.OS === 'web' && { 
+                      outlineWidth: 1,
+                      outlineStyle: 'solid',
+                      outlineOffset: 0,
+                      borderRadius: 12,
+                      outlineColor: getOutlineColor(confirmPasswordFocused, errors.confirmPassword),
+                    }
+                  ]}
                   placeholder="Re-enter your password"
                   placeholderTextColor="#b8c0d4"
                   value={confirmPassword}
@@ -360,6 +446,8 @@ export default function ResetPassword() {
                     setConfirmPassword(text);
                     setErrors({ ...errors, confirmPassword: '' });
                   }}
+                  onFocus={() => setConfirmPasswordFocused(true)}
+                  onBlur={() => setConfirmPasswordFocused(false)}
                   secureTextEntry={!showConfirmPassword}
                   autoCapitalize="none"
                   returnKeyType="done"
@@ -481,17 +569,13 @@ const styles = StyleSheet.create({
     color: '#4a5568', 
     fontWeight: '600' 
   },
-  iconWrap: { 
-    alignItems: 'center', 
-    marginBottom: 22 
-  },
   heading: { 
     fontSize: 26, 
     fontWeight: '800', 
     color: '#0f172a', 
     textAlign: 'center', 
     letterSpacing: -0.6, 
-    marginBottom: 5
+    marginBottom: 12
   },
   subtitle: { 
     fontSize: 14, 
@@ -510,23 +594,35 @@ const styles = StyleSheet.create({
     marginBottom: 8 
   },
   inputWrap: { 
-    borderWidth: 1.5, 
+    borderWidth: 1, 
     borderColor: '#dde3fa', 
-    borderRadius: 14, 
-    backgroundColor: '#f8faff', 
+    borderRadius: 12, 
+    backgroundColor: '#ffffff', 
     flexDirection: 'row', 
     alignItems: 'center',
     minHeight: 40,
+  },
+  inputWrapFocused: { 
+    borderWidth: 1,
+    backgroundColor: '#ffffff', 
+    borderColor: '#3b5bdb',
+    shadowColor: '#3b5bdb',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+    elevation: 4,
   },
   inputError: { 
     borderColor: '#ef4444' 
   },
   input: { 
     flex: 1, 
-    paddingHorizontal: 16, 
+    paddingHorizontal: 14, 
     paddingVertical: Platform.OS === 'ios' ? 13 : 11, 
-    fontSize: 15, 
+    fontSize: 14, 
     color: '#1a1f36',
+    minHeight: 44,
+    textAlignVertical: 'center',
   },
   inputWithIcon: { 
     paddingRight: 44 
@@ -539,12 +635,12 @@ const styles = StyleSheet.create({
   errorText: { 
     fontSize: 12, 
     color: '#ef4444', 
-    marginTop: 8, 
+    marginTop: 6, 
     marginLeft: 4, 
     fontWeight: '500' 
   },
   strengthContainer: {
-    marginTop: 8,
+    marginTop: 6,
   },
   strengthBar: {
     height: 4,
@@ -563,7 +659,7 @@ const styles = StyleSheet.create({
   matchSuccess: {
     color: '#10b981',
     fontSize: 11,
-    marginTop: 4,
+    marginTop: 6,
     marginLeft: 4,
   },
   btnReset: { 
@@ -596,6 +692,42 @@ const styles = StyleSheet.create({
     color: '#4c6fff', 
     fontWeight: '600' 
   },
+  // Toast Styles
+  toastContainer: {
+    position: 'absolute',
+    top: Platform.OS === 'ios' ? 60 : 50,
+    left: 20,
+    right: 20,
+    zIndex: 1000,
+    alignItems: 'center',
+  },
+  toastContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 12,
+    minWidth: 200,
+    maxWidth: '90%',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+    elevation: 6,
+  },
+  toastSuccess: {
+    backgroundColor: '#10b981',
+  },
+  toastError: {
+    backgroundColor: '#ef4444',
+  },
+  toastText: {
+    color: '#ffffff',
+    fontSize: 14,
+    fontWeight: '600',
+    marginLeft: 10,
+    flex: 1,
+  },
   // Grid background styles
   gridBackground: {
     ...StyleSheet.absoluteFillObject,
@@ -606,7 +738,7 @@ const styles = StyleSheet.create({
     ...StyleSheet.absoluteFillObject,
     backgroundColor: 'rgba(255,255,255,0.10)',
   },
-  // Redesigned Error Modal Styles (No Cancel Button)
+  // Error Modal Styles
   errorModalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.5)',

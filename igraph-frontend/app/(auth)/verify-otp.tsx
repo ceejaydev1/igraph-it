@@ -1,4 +1,4 @@
-// app/(auth)/verify-otp.tsx
+// app/(auth)/verify-otp.tsx - Full updated file with optimizations
 
 import React, { useState, useRef, useEffect } from 'react';
 import {
@@ -14,6 +14,7 @@ import {
   KeyboardAvoidingView,
   Modal,
   Image,
+  Animated,
 } from 'react-native';
 import { useRouter, useLocalSearchParams, Stack } from 'expo-router';
 import { Svg, Circle, Rect, Path } from 'react-native-svg';
@@ -55,14 +56,6 @@ const DiagramBackground = () => (
   </View>
 );
 
-const ShieldIcon = () => (
-  <Svg width={56} height={56} viewBox="0 0 48 48" fill="none">
-    <Rect width={48} height={48} rx={16} fill="#eef2ff" />
-    <Path d="M24 10l-10 4v8c0 6.6 4.3 12.8 10 14 5.7-1.2 10-7.4 10-14v-8l-10-4z" stroke="#4c6fff" strokeWidth={1.8} fill="none" strokeLinejoin="round" />
-    <Path d="M20 24l3 3 5-5" stroke="#4c6fff" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" />
-  </Svg>
-);
-
 const BackIcon = () => (
   <Svg width={20} height={20} viewBox="0 0 24 24" fill="none">
     <Path d="M19 12H5M5 12l7 7M5 12l7-7" stroke="#4a5568" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" />
@@ -70,9 +63,9 @@ const BackIcon = () => (
 );
 
 const CheckIcon = () => (
-  <Svg width={56} height={56} viewBox="0 0 48 48" fill="none">
-    <Rect width={48} height={48} rx={16} fill="#e6ecff" />
-    <Path d="M14 24l8 8 12-14" stroke="#4c6fff" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round" />
+  <Svg width={40} height={40} viewBox="0 0 24 24" fill="none">
+    <Circle cx="12" cy="12" r="10" stroke="#10b981" strokeWidth="2" />
+    <Path d="M8 12l3 3 5-6" stroke="#10b981" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
   </Svg>
 );
 
@@ -125,7 +118,7 @@ const ErrorPopupModal = ({ visible, title, message, onClose, onAction, actionBut
   );
 };
 
-// Success Modal
+// Success Modal (only for registration flow)
 const SuccessModal = ({ visible, title, message, onClose, buttonText = 'Continue' }: { 
   visible: boolean; 
   title: string; 
@@ -183,7 +176,7 @@ function useCountdown(initial: number) {
   return { seconds, expired: seconds <= 0, reset };
 }
 
-// Improved OTP Input Component with single TextInput
+// OTP Input Component
 const OTPInput = ({ 
   value, 
   onChange, 
@@ -200,12 +193,10 @@ const OTPInput = ({
   const otpArray = value.split('').concat(Array(OTP_LENGTH - value.length).fill(''));
 
   useEffect(() => {
-    // Auto-focus on mount
     setTimeout(() => inputRef.current?.focus(), 100);
   }, []);
 
   const handleChange = (text: string) => {
-    // Only allow numbers
     const cleaned = text.replace(/[^0-9]/g, '').slice(0, OTP_LENGTH);
     onChange(cleaned);
     
@@ -256,6 +247,58 @@ const OTPInput = ({
   );
 };
 
+// Success Overlay Component for smooth transition
+const SuccessOverlay = ({ visible, onAnimationComplete }: { visible: boolean; onAnimationComplete: () => void }) => {
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const scaleAnim = useRef(new Animated.Value(0.5)).current;
+
+  useEffect(() => {
+    if (visible) {
+      Animated.parallel([
+        Animated.timing(fadeAnim, {
+          toValue: 1,
+          duration: 400,
+          useNativeDriver: true,
+        }),
+        Animated.spring(scaleAnim, {
+          toValue: 1,
+          tension: 50,
+          friction: 7,
+          useNativeDriver: true,
+        }),
+      ]).start();
+    }
+  }, [visible]);
+
+  if (!visible) return null;
+
+  return (
+    <Animated.View
+      style={[
+        styles.successOverlay,
+        {
+          opacity: fadeAnim,
+        },
+      ]}
+    >
+      <Animated.View
+        style={[
+          styles.successContent,
+          {
+            transform: [{ scale: scaleAnim }],
+          },
+        ]}
+      >
+        <View style={styles.successIconCircle}>
+          <CheckIcon />
+        </View>
+        <Text style={styles.successTitle}>Verified!</Text>
+        <Text style={styles.successMessage}>Redirecting to reset password...</Text>
+      </Animated.View>
+    </Animated.View>
+  );
+};
+
 export default function VerifyOTP() {
   const router = useRouter();
   const { email, purpose } = useLocalSearchParams<{ email: string; purpose: 'reset' | 'register' }>();
@@ -263,10 +306,10 @@ export default function VerifyOTP() {
   const [otp, setOtp] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [verified, setVerified] = useState(false);
   const [resending, setResending] = useState(false);
   const [showErrorModal, setShowErrorModal] = useState(false);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const [showSuccessOverlay, setShowSuccessOverlay] = useState(false);
   const [errorModalData, setErrorModalData] = useState({ 
     title: '', 
     message: '',
@@ -300,9 +343,12 @@ export default function VerifyOTP() {
       }
 
       if (result.success) {
-        setVerified(true);
-        setTimeout(() => {
-          if (purpose === 'reset') {
+        if (purpose === 'reset') {
+          // Show success overlay with smooth animation
+          setShowSuccessOverlay(true);
+          
+          // Wait for animation then redirect - OPTIMIZED: 400ms
+          setTimeout(() => {
             router.push({
               pathname: '/(auth)/reset-password',
               params: { 
@@ -310,10 +356,10 @@ export default function VerifyOTP() {
                 otp: otpCode 
               },
             });
-          } else {
-            setShowSuccessModal(true);
-          }
-        }, 1200);
+          }, 400); // Changed from 800ms to 400ms
+        } else {
+          setShowSuccessModal(true);
+        }
       } else {
         setError(result.message || 'Invalid code. Please try again.');
       }
@@ -341,7 +387,7 @@ export default function VerifyOTP() {
       setOtp('');
       setError('');
       resetTimer();
-      showErrorPopup('Success', 'A new verification code has been sent to your email.');
+      showErrorPopup('Success', 'A new OTP code has been sent to your email.');
     } catch (error: any) {
       showErrorPopup('Error', error.response?.data?.message || 'Failed to resend code');
     } finally {
@@ -375,6 +421,11 @@ export default function VerifyOTP() {
         buttonText="Sign In Now"
       />
 
+      <SuccessOverlay 
+        visible={showSuccessOverlay} 
+        onAnimationComplete={() => {}}
+      />
+
       <KeyboardAvoidingView 
         style={styles.flex} 
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
@@ -400,62 +451,55 @@ export default function VerifyOTP() {
               <Text style={styles.backText}>Back</Text>
             </TouchableOpacity>
             
-            <View style={styles.iconWrap}>{verified ? <CheckIcon /> : <ShieldIcon />}</View>
-            <Text style={styles.heading}>{verified ? 'Verified!' : 'Check Your Email'}</Text>
+            <Text style={styles.heading}>Verify Your Email</Text>
             <Text style={styles.subtitle}>
-              {verified 
-                ? 'Your code was accepted.\nRedirecting you now…' 
-                : purpose === 'reset'
-                  ? `Enter the 6-digit verification code sent to\n`
-                  : `We sent a 6-digit verification code to\n`
+              {purpose === 'reset'
+                ? `Enter the 6-digit OTP code sent to\n`
+                : `We sent a 6-digit OTP code to\n`
               }
-              {!verified && <Text style={styles.emailHighlight}>{maskedEmail}</Text>}
+              <Text style={styles.emailHighlight}>{maskedEmail}</Text>
             </Text>
 
-            {!verified && (
-              <>
-                <OTPInput 
-                  value={otp}
-                  onChange={setOtp}
-                  onComplete={handleVerify}
-                  hasError={!!error}
-                />
-                {error ? <Text style={styles.errorText}>{error}</Text> : null}
-                
-                <View style={styles.timerRow}>
-                  {expired ? (
-                    <Text style={styles.timerExpired}>Code expired</Text>
-                  ) : (
-                    <>
-                      <Text style={styles.timerLabel}>Code expires in </Text>
-                      <Text style={styles.timerCount}>
-                        {String(Math.floor(seconds / 60)).padStart(2, '0')}:{String(seconds % 60).padStart(2, '0')}
-                      </Text>
-                    </>
-                  )}
-                </View>
-                
-                <TouchableOpacity
-                  style={[styles.btnVerify, (otp.length < OTP_LENGTH || loading) && styles.btnDisabled]}
-                  onPress={() => handleVerify()}
-                  activeOpacity={0.9}
-                  disabled={otp.length < OTP_LENGTH || loading}
-                >
-                  {loading ? <ActivityIndicator color="#ffffff" size="small" /> : <Text style={styles.btnVerifyText}>Verify Code</Text>}
-                </TouchableOpacity>
-                
-                <TouchableOpacity 
-                  style={styles.resendBtn} 
-                  onPress={handleResend} 
-                  disabled={resending}
-                  activeOpacity={expired ? 0.7 : 1}
-                >
-                  <Text style={[styles.resendText, !expired && styles.resendDisabled]}>
-                    {resending ? 'Sending...' : expired ? 'Resend code' : `Resend code in ${seconds}s`}
+            <OTPInput 
+              value={otp}
+              onChange={setOtp}
+              onComplete={handleVerify}
+              hasError={!!error}
+            />
+            {error ? <Text style={styles.errorText}>{error}</Text> : null}
+            
+            <View style={styles.timerRow}>
+              {expired ? (
+                <Text style={styles.timerExpired}>Code expired</Text>
+              ) : (
+                <>
+                  <Text style={styles.timerLabel}>Code expires in </Text>
+                  <Text style={styles.timerCount}>
+                    {String(Math.floor(seconds / 60)).padStart(2, '0')}:{String(seconds % 60).padStart(2, '0')}
                   </Text>
-                </TouchableOpacity>
-              </>
-            )}
+                </>
+              )}
+            </View>
+            
+            <TouchableOpacity
+              style={[styles.btnVerify, (otp.length < OTP_LENGTH || loading) && styles.btnDisabled]}
+              onPress={() => handleVerify()}
+              activeOpacity={0.9}
+              disabled={otp.length < OTP_LENGTH || loading}
+            >
+              {loading ? <ActivityIndicator color="#ffffff" size="small" /> : <Text style={styles.btnVerifyText}>Verify Code</Text>}
+            </TouchableOpacity>
+            
+            <TouchableOpacity 
+              style={styles.resendBtn} 
+              onPress={handleResend} 
+              disabled={resending}
+              activeOpacity={expired ? 0.7 : 1}
+            >
+              <Text style={[styles.resendText, !expired && styles.resendDisabled]}>
+                {resending ? 'Sending...' : expired ? 'Resend code' : `Resend code in ${seconds}s`}
+              </Text>
+            </TouchableOpacity>
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
@@ -542,14 +586,13 @@ const styles = StyleSheet.create({
   },
   backBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 24, alignSelf: 'flex-start' },
   backText: { fontSize: 14, color: '#4a5568', fontWeight: '600' },
-  iconWrap: { alignItems: 'center', marginBottom: 22 },
   heading: { 
     fontSize: 26, 
     fontWeight: '800', 
     color: '#0f172a', 
     textAlign: 'center', 
     letterSpacing: -0.6, 
-    marginBottom: 5
+    marginBottom: 12
   },
   subtitle: { fontSize: 14, color: '#7f8bb3', textAlign: 'center', lineHeight: 22, marginBottom: 32 },
   emailHighlight: { color: '#4c6fff', fontWeight: '700' },
@@ -629,6 +672,51 @@ const styles = StyleSheet.create({
   resendBtn: { alignItems: 'center', marginTop: 18, paddingVertical: 4 },
   resendText: { fontSize: 13, fontWeight: '700', color: '#1a1f36' },
   resendDisabled: { color: '#b0bbd6' },
+  // Success Overlay Styles
+  successOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.85)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 2000,
+  },
+  successContent: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#ffffff',
+    borderRadius: 24,
+    padding: 32,
+    marginHorizontal: 40,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.3,
+    shadowRadius: 20,
+    elevation: 10,
+  },
+  successIconCircle: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: '#d1fae5',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  successTitle: {
+    fontSize: 24,
+    fontWeight: '800',
+    color: '#0f172a',
+    marginBottom: 8,
+  },
+  successMessage: {
+    fontSize: 14,
+    color: '#64748b',
+    textAlign: 'center',
+  },
   gridBackground: {
     ...StyleSheet.absoluteFillObject,
     width: '100%',

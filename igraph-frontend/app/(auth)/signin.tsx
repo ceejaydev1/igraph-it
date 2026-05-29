@@ -6,7 +6,6 @@ import {
   Modal,
   ScrollView as ModalScroll,
   useWindowDimensions,
-  Switch,
 } from 'react-native';
 import {
   View,
@@ -27,17 +26,22 @@ import {
 } from 'react-native';
 import { Stack, useRouter, useLocalSearchParams } from 'expo-router';
 import * as WebBrowser from 'expo-web-browser';
-import { initializeApp, FirebaseApp } from 'firebase/app';
-import { getAuth, Auth, signInWithPopup, GoogleAuthProvider, browserSessionPersistence, setPersistence } from 'firebase/auth';
+import { initializeApp, FirebaseApp, getApps } from 'firebase/app';
+import {
+  getAuth,
+  Auth,
+  GoogleAuthProvider,
+  signInWithPopup,
+  signInWithRedirect,
+  getRedirectResult,
+  setPersistence,
+  browserSessionPersistence,
+} from 'firebase/auth';
 import {
   Svg,
-  Line,
   Circle,
   Rect,
   Path,
-  Text as SvgText,
-  Defs,
-  Pattern,
 } from 'react-native-svg';
 
 import * as authService from '../../services/authService';
@@ -165,9 +169,19 @@ const firebaseConfig = {
 let firebaseApp: FirebaseApp | undefined;
 let auth: Auth | undefined;
 
-if (Platform.OS === 'web') {
-  firebaseApp = initializeApp(firebaseConfig);
-  auth = getAuth(firebaseApp);
+// Initialize Firebase
+if (Platform.OS === 'web' && typeof window !== 'undefined') {
+  try {
+    if (!getApps().length) {
+      firebaseApp = initializeApp(firebaseConfig);
+      console.log('[Firebase] App initialized');
+    } else {
+      firebaseApp = getApps()[0];
+    }
+    auth = getAuth(firebaseApp);
+  } catch (e: any) {
+    console.error('[Firebase] Init error:', e.message);
+  }
 }
 
 // ─── TERMS AND PRIVACY POLICY CONTENT ────────────────────────────────────────
@@ -331,7 +345,7 @@ const PrivacyContent = () => (
   </View>
 );
 
-// ─── POLICY MODAL (with scroll-to-bottom enforcement per tab) ─────────────────
+// ─── POLICY MODAL ────────────────────────────────────────────────────────────
 
 const PolicyModal = ({
   visible,
@@ -346,14 +360,10 @@ const PolicyModal = ({
   const [activeTab, setActiveTab] = useState<'terms' | 'privacy'>('terms');
   const scrollViewRef = useRef<ScrollView>(null);
   const [showScrollTop, setShowScrollTop] = useState(false);
-
-  // Track per-tab read status
   const [termsRead, setTermsRead] = useState(false);
   const [privacyRead, setPrivacyRead] = useState(false);
-
   const bothRead = termsRead && privacyRead;
 
-  // Reset read state when modal opens so user must scroll each time
   useEffect(() => {
     if (visible) {
       setTermsRead(false);
@@ -363,7 +373,6 @@ const PolicyModal = ({
     }
   }, [visible]);
 
-  // Reset scroll position when switching tabs
   const handleTabSwitch = (tab: 'terms' | 'privacy') => {
     setActiveTab(tab);
     setShowScrollTop(false);
@@ -374,7 +383,6 @@ const PolicyModal = ({
     const { layoutMeasurement, contentOffset, contentSize } = event.nativeEvent;
     const offsetY = contentOffset.y;
     setShowScrollTop(offsetY > 200);
-
     const isAtBottom = layoutMeasurement.height + offsetY >= contentSize.height - 40;
     if (isAtBottom) {
       if (activeTab === 'terms') setTermsRead(true);
@@ -391,57 +399,34 @@ const PolicyModal = ({
     onClose();
   };
 
-const handleDecline = () => {
-  onClose();
-};
+  const handleDecline = () => {
+    onClose();
+  };
 
   const modalWidth = Math.min(ww - 40, 500);
   const modalMaxHeight = wh - 80;
 
   return (
-    <Modal
-      animationType="slide"
-      transparent={true}
-      visible={visible}
-      onRequestClose={onClose}
-      accessible={true}
-      accessibilityLabel="Terms and Conditions agreement"
-      accessibilityRole="alert"
-    >
+    <Modal animationType="slide" transparent={true} visible={visible} onRequestClose={onClose}>
       <View style={modalStyles.modalOverlay}>
         <View style={[modalStyles.modalContainer, { width: modalWidth, maxHeight: modalMaxHeight }]}>
-          {/* Header */}
           <View style={modalStyles.modalHeader}>
             <Text style={modalStyles.modalTitle}>Legal Agreement</Text>
           </View>
 
-          {/* Tabs */}
           <View style={modalStyles.tabBar}>
             <TouchableOpacity
               style={[modalStyles.tab, activeTab === 'terms' && modalStyles.activeTab]}
               onPress={() => handleTabSwitch('terms')}
-              accessibilityLabel="Terms and Conditions tab"
-              accessibilityRole="tab"
             >
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                <Text
-                  style={[
-                    modalStyles.tabText,
-                    activeTab === 'terms' && modalStyles.activeTabText,
-                  ]}
-                >
+                <Text style={[modalStyles.tabText, activeTab === 'terms' && modalStyles.activeTabText]}>
                   Terms & Conditions
                 </Text>
                 {termsRead && (
                   <Svg width={14} height={14} viewBox="0 0 24 24" fill="none">
                     <Circle cx="12" cy="12" r="10" fill="#3b5bdb" />
-                    <Path
-                      d="M8 12l2.5 2.5L16 9"
-                      stroke="white"
-                      strokeWidth={2}
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                    />
+                    <Path d="M8 12l2.5 2.5L16 9" stroke="white" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
                   </Svg>
                 )}
               </View>
@@ -449,53 +434,29 @@ const handleDecline = () => {
             <TouchableOpacity
               style={[modalStyles.tab, activeTab === 'privacy' && modalStyles.activeTab]}
               onPress={() => handleTabSwitch('privacy')}
-              accessibilityLabel="Privacy Policy tab"
-              accessibilityRole="tab"
             >
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                <Text
-                  style={[
-                    modalStyles.tabText,
-                    activeTab === 'privacy' && modalStyles.activeTabText,
-                  ]}
-                >
+                <Text style={[modalStyles.tabText, activeTab === 'privacy' && modalStyles.activeTabText]}>
                   Privacy Policy
                 </Text>
                 {privacyRead && (
                   <Svg width={14} height={14} viewBox="0 0 24 24" fill="none">
                     <Circle cx="12" cy="12" r="10" fill="#3b5bdb" />
-                    <Path
-                      d="M8 12l2.5 2.5L16 9"
-                      stroke="white"
-                      strokeWidth={2}
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                    />
+                    <Path d="M8 12l2.5 2.5L16 9" stroke="white" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
                   </Svg>
                 )}
               </View>
             </TouchableOpacity>
           </View>
 
-          {/* Scroll-hint banner when not yet read */}
           {!bothRead && (
             <View style={modalStyles.scrollHintBanner}>
               <Svg width={14} height={14} viewBox="0 0 24 24" fill="none">
-                <Path
-                  d="M12 5v14M5 12l7 7 7-7"
-                  stroke="#3b5bdb"
-                  strokeWidth={2}
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
+                <Path d="M12 5v14M5 12l7 7 7-7" stroke="#3b5bdb" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
               </Svg>
               <Text style={modalStyles.scrollHintText}>
                 Please scroll to the bottom of{' '}
-                {!termsRead && !privacyRead
-                  ? 'both documents'
-                  : !termsRead
-                  ? 'Terms & Conditions'
-                  : 'Privacy Policy'}{' '}
+                {!termsRead && !privacyRead ? 'both documents' : !termsRead ? 'Terms & Conditions' : 'Privacy Policy'}{' '}
                 to enable Agree
               </Text>
             </View>
@@ -506,51 +467,28 @@ const handleDecline = () => {
             showsVerticalScrollIndicator={true}
             onScroll={handleScroll}
             scrollEventThrottle={16}
-            accessibilityLabel="Legal document content"
           >
             {activeTab === 'terms' ? <TermsContent /> : <PrivacyContent />}
           </ScrollView>
 
           {showScrollTop && (
-            <TouchableOpacity
-              style={modalStyles.scrollTopButton}
-              onPress={scrollToTop}
-              activeOpacity={0.8}
-              accessibilityLabel="Scroll to top"
-            >
+            <TouchableOpacity style={modalStyles.scrollTopButton} onPress={scrollToTop}>
               <Svg width={24} height={24} viewBox="0 0 24 24" fill="none">
-                <Path
-                  d="M12 19V5M5 12l7-7 7 7"
-                  stroke="#ffffff"
-                  strokeWidth={2}
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
+                <Path d="M12 19V5M5 12l7-7 7 7" stroke="#ffffff" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
               </Svg>
             </TouchableOpacity>
           )}
 
-          {/* Footer */}
           <View style={modalStyles.modalFooter}>
             <TouchableOpacity
               style={[modalStyles.agreeButton, !bothRead && modalStyles.agreeButtonDisabled]}
               onPress={bothRead ? handleAgree : undefined}
-              activeOpacity={bothRead ? 0.7 : 1}
-              accessibilityLabel={
-                bothRead ? 'Agree to terms' : 'Read both documents to enable agree'
-              }
             >
               <Text style={[modalStyles.agreeButtonText, !bothRead && modalStyles.agreeButtonTextDisabled]}>
                 {bothRead ? 'I Agree' : 'Read First'}
               </Text>
             </TouchableOpacity>
-
-            <TouchableOpacity
-              style={modalStyles.declineButton}
-              onPress={handleDecline}
-              activeOpacity={0.7}
-              accessibilityLabel="Decline terms"
-            >
+            <TouchableOpacity style={modalStyles.declineButton} onPress={handleDecline}>
               <Text style={modalStyles.declineButtonText}>Decline</Text>
             </TouchableOpacity>
           </View>
@@ -569,6 +507,7 @@ const ErrorPopupModal = ({
   onClose,
   onAction,
   actionButtonText,
+  actionIcon,
 }: {
   visible: boolean;
   title: string;
@@ -576,6 +515,7 @@ const ErrorPopupModal = ({
   onClose: () => void;
   onAction?: () => void;
   actionButtonText?: string;
+  actionIcon?: React.ReactNode;
 }) => {
   return (
     <Modal animationType="fade" transparent={true} visible={visible} onRequestClose={onClose}>
@@ -585,28 +525,16 @@ const ErrorPopupModal = ({
             <View style={styles.errorModalIconCircle}>
               <Svg width={32} height={32} viewBox="0 0 24 24" fill="none">
                 <Circle cx="12" cy="12" r="10" stroke="#3b5bdb" strokeWidth="1.5" />
-                <Path
-                  d="M12 8v4M12 16h.01"
-                  stroke="#3b5bdb"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                />
+                <Path d="M12 8v4M12 16h.01" stroke="#3b5bdb" strokeWidth="2" strokeLinecap="round" />
               </Svg>
             </View>
           </View>
           <Text style={styles.errorModalTitle}>{title}</Text>
           <Text style={styles.errorModalMessage}>{message}</Text>
           {onAction ? (
-            <TouchableOpacity
-              style={styles.errorModalButtonPrimary}
-              onPress={() => {
-                onClose();
-                onAction();
-              }}
-            >
-              <Text style={styles.errorModalButtonTextPrimary}>
-                {actionButtonText || 'Continue'}
-              </Text>
+            <TouchableOpacity style={styles.errorModalButtonPrimary} onPress={() => { onClose(); onAction(); }}>
+              {actionIcon && <View style={{ marginRight: 8 }}>{actionIcon}</View>}
+              <Text style={styles.errorModalButtonTextPrimary}>{actionButtonText || 'Continue'}</Text>
             </TouchableOpacity>
           ) : (
             <TouchableOpacity style={styles.errorModalButtonPrimary} onPress={onClose}>
@@ -661,85 +589,15 @@ const SuccessModal = ({
 
 const DiagramBackground = () => (
   <View style={StyleSheet.absoluteFillObject} pointerEvents="none">
-    <Image
-      source={require('../../assets/images/grid-bg.png')}
-      style={styles.gridBackground}
-      resizeMode="repeat"
-    />
+    <Image source={require('../../assets/images/grid-bg.png')} style={styles.gridBackground} resizeMode="repeat" />
     <View style={styles.gridOverlay} />
-    <Svg
-      width="100%"
-      height="100%"
-      viewBox={`0 0 ${SCREEN_WIDTH} ${SCREEN_HEIGHT}`}
-      preserveAspectRatio="xMidYMid slice"
-      style={StyleSheet.absoluteFillObject}
-    >
-      <Path
-        d={`M ${SCREEN_WIDTH * 0.08} ${SCREEN_HEIGHT * 0.25} C ${SCREEN_WIDTH * 0.22} ${
-          SCREEN_HEIGHT * 0.10
-        }, ${SCREEN_WIDTH * 0.36} ${SCREEN_HEIGHT * 0.42}, ${SCREEN_WIDTH * 0.52} ${
-          SCREEN_HEIGHT * 0.32
-        }`}
-        stroke="#bfd0ff"
-        strokeWidth="2"
-        strokeDasharray="8 10"
-        fill="none"
-        opacity="0.32"
-      />
-      <Path
-        d={`M ${SCREEN_WIDTH * 0.82} ${SCREEN_HEIGHT * 0.18} C ${SCREEN_WIDTH * 0.96} ${
-          SCREEN_HEIGHT * 0.30
-        }, ${SCREEN_WIDTH * 0.95} ${SCREEN_HEIGHT * 0.55}, ${SCREEN_WIDTH * 0.78} ${
-          SCREEN_HEIGHT * 0.76
-        }`}
-        stroke="#bfd0ff"
-        strokeWidth="2"
-        strokeDasharray="8 10"
-        fill="none"
-        opacity="0.32"
-      />
-      <Rect
-        x={SCREEN_WIDTH * 0.07}
-        y={SCREEN_HEIGHT * 0.12}
-        width="130"
-        height="72"
-        rx="14"
-        stroke="#bfd0ff"
-        strokeWidth="1.4"
-        fill="none"
-        opacity="0.38"
-      />
-      <Rect
-        x={SCREEN_WIDTH * 0.74}
-        y={SCREEN_HEIGHT * 0.16}
-        width="140"
-        height="78"
-        rx="14"
-        stroke="#bfd0ff"
-        strokeWidth="1.4"
-        fill="none"
-        opacity="0.38"
-      />
-      <Path
-        d={`M ${SCREEN_WIDTH * 0.15} ${SCREEN_HEIGHT * 0.56} L ${SCREEN_WIDTH * 0.19} ${
-          SCREEN_HEIGHT * 0.60
-        } L ${SCREEN_WIDTH * 0.15} ${SCREEN_HEIGHT * 0.64} L ${SCREEN_WIDTH * 0.11} ${
-          SCREEN_HEIGHT * 0.60
-        } Z`}
-        stroke="#bfd0ff"
-        strokeWidth="1.5"
-        fill="none"
-        opacity="0.35"
-      />
-      <Circle
-        cx={SCREEN_WIDTH * 0.76}
-        cy={SCREEN_HEIGHT * 0.72}
-        r="24"
-        stroke="#bfd0ff"
-        strokeWidth="2"
-        fill="none"
-        opacity="0.3"
-      />
+    <Svg width="100%" height="100%" viewBox={`0 0 ${SCREEN_WIDTH} ${SCREEN_HEIGHT}`} preserveAspectRatio="xMidYMid slice" style={StyleSheet.absoluteFillObject}>
+      <Path d={`M ${SCREEN_WIDTH * 0.08} ${SCREEN_HEIGHT * 0.25} C ${SCREEN_WIDTH * 0.22} ${SCREEN_HEIGHT * 0.10}, ${SCREEN_WIDTH * 0.36} ${SCREEN_HEIGHT * 0.42}, ${SCREEN_WIDTH * 0.52} ${SCREEN_HEIGHT * 0.32}`} stroke="#bfd0ff" strokeWidth="2" strokeDasharray="8 10" fill="none" opacity="0.32" />
+      <Path d={`M ${SCREEN_WIDTH * 0.82} ${SCREEN_HEIGHT * 0.18} C ${SCREEN_WIDTH * 0.96} ${SCREEN_HEIGHT * 0.30}, ${SCREEN_WIDTH * 0.95} ${SCREEN_HEIGHT * 0.55}, ${SCREEN_WIDTH * 0.78} ${SCREEN_HEIGHT * 0.76}`} stroke="#bfd0ff" strokeWidth="2" strokeDasharray="8 10" fill="none" opacity="0.32" />
+      <Rect x={SCREEN_WIDTH * 0.07} y={SCREEN_HEIGHT * 0.12} width="130" height="72" rx="14" stroke="#bfd0ff" strokeWidth="1.4" fill="none" opacity="0.38" />
+      <Rect x={SCREEN_WIDTH * 0.74} y={SCREEN_HEIGHT * 0.16} width="140" height="78" rx="14" stroke="#bfd0ff" strokeWidth="1.4" fill="none" opacity="0.38" />
+      <Path d={`M ${SCREEN_WIDTH * 0.15} ${SCREEN_HEIGHT * 0.56} L ${SCREEN_WIDTH * 0.19} ${SCREEN_HEIGHT * 0.60} L ${SCREEN_WIDTH * 0.15} ${SCREEN_HEIGHT * 0.64} L ${SCREEN_WIDTH * 0.11} ${SCREEN_HEIGHT * 0.60} Z`} stroke="#bfd0ff" strokeWidth="1.5" fill="none" opacity="0.35" />
+      <Circle cx={SCREEN_WIDTH * 0.76} cy={SCREEN_HEIGHT * 0.72} r="24" stroke="#bfd0ff" strokeWidth="2" fill="none" opacity="0.3" />
     </Svg>
   </View>
 );
@@ -750,29 +608,13 @@ const EyeIcon = ({ visible }: { visible: boolean }) => (
   <Svg width={18} height={18} viewBox="0 0 24 24" fill="none">
     {visible ? (
       <>
-        <Path
-          d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"
-          stroke="#8896b3"
-          strokeWidth={1.8}
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        />
+        <Path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" stroke="#8896b3" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" />
         <Circle cx={12} cy={12} r={3} stroke="#8896b3" strokeWidth={1.8} />
       </>
     ) : (
       <>
-        <Path
-          d="M17.94 17.94A10.07 10.07 0 0112 20c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94"
-          stroke="#8896b3"
-          strokeWidth={1.8}
-          strokeLinecap="round"
-        />
-        <Path
-          d="M9.9 4.24A9.12 9.12 0 0112 4c7 0 11 8 11 8a18.5 18.5 0 01-2.16 3.19"
-          stroke="#8896b3"
-          strokeWidth={1.8}
-          strokeLinecap="round"
-        />
+        <Path d="M17.94 17.94A10.07 10.07 0 0112 20c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94" stroke="#8896b3" strokeWidth={1.8} strokeLinecap="round" />
+        <Path d="M9.9 4.24A9.12 9.12 0 0112 4c7 0 11 8 11 8a18.5 18.5 0 01-2.16 3.19" stroke="#8896b3" strokeWidth={1.8} strokeLinecap="round" />
         <Path d="M1 1l22 22" stroke="#8896b3" strokeWidth={1.8} strokeLinecap="round" />
       </>
     )}
@@ -781,33 +623,27 @@ const EyeIcon = ({ visible }: { visible: boolean }) => (
 
 const GoogleIcon = () => (
   <Svg width={18} height={18} viewBox="0 0 24 24">
-    <Path
-      d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
-      fill="#4285F4"
-    />
-    <Path
-      d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
-      fill="#34A853"
-    />
-    <Path
-      d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"
-      fill="#FBBC05"
-    />
-    <Path
-      d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
-      fill="#EA4335"
-    />
+    <Path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4" />
+    <Path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853" />
+    <Path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05" />
+    <Path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335" />
+  </Svg>
+);
+
+const EmailIcon = () => (
+  <Svg width={18} height={18} viewBox="0 0 24 24" fill="none">
+    <Path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" stroke="#ffffff" strokeWidth={1.5} fill="none"/>
+    <Path d="M22 6l-10 7L2 6" stroke="#ffffff" strokeWidth={1.5} fill="none"/>
   </Svg>
 );
 
 WebBrowser.maybeCompleteAuthSession();
 
-// ─── SPLASH SCREEN COMPONENT ──────────────────────────────────────────────────
+// ─── SPLASH SCREEN ───────────────────────────────────────────────────────────
 
 const SplashScreen = () => (
   <View style={styles.splashContainer}>
     <ActivityIndicator size="large" color="#3b5bdb" />
-    <Text style={styles.splashText}>Loading iGraph IT...</Text>
   </View>
 );
 
@@ -848,13 +684,11 @@ export default function SignIn() {
   const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(false);
   const [agreed, setAgreed] = useState(false);
-  const [agreementTimestamp, setAgreementTimestamp] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [emailFocused, setEmailFocused] = useState(false);
   const [passwordFocused, setPasswordFocused] = useState(false);
   const [showSuccessAnimation, setShowSuccessAnimation] = useState(false);
   const [errors, setErrors] = useState({ email: '', password: '', terms: '' });
-
   const [showPolicyModal, setShowPolicyModal] = useState(false);
   const [showErrorModal, setShowErrorModal] = useState(false);
   const [errorModalData, setErrorModalData] = useState({
@@ -862,6 +696,7 @@ export default function SignIn() {
     message: '',
     onAction: undefined as (() => void) | undefined,
     actionButtonText: '',
+    actionIcon: undefined as React.ReactNode | undefined,
   });
 
   const passwordRef = useRef<TextInput>(null);
@@ -878,6 +713,38 @@ export default function SignIn() {
     };
     loadEmail();
   }, []);
+
+  // Handle Google Sign-In redirect result
+  useEffect(() => {
+    const handleRedirectResult = async () => {
+      if (!auth) return;
+      
+      try {
+        const result = await getRedirectResult(auth);
+        if (result) {
+          setLoading(true);
+          const idToken = await result.user.getIdToken();
+          const apiResult = await authService.googleAuth(idToken);
+          
+          if (apiResult.success) {
+            setShowSuccessAnimation(true);
+            setTimeout(() => {
+              router.replace('/(tabs)/home');
+            }, 400);
+          } else {
+            await auth.signOut();
+            showErrorPopup('Sign In Failed', apiResult.message || 'Google sign in failed');
+          }
+          setLoading(false);
+        }
+      } catch (error: any) {
+        console.error('Redirect result error:', error);
+        setLoading(false);
+      }
+    };
+    
+    handleRedirectResult();
+  }, [auth, router]);
 
   // Check for existing session on initial load
   useEffect(() => {
@@ -897,7 +764,6 @@ export default function SignIn() {
         setInitialLoading(false);
       }
     };
-
     checkExistingSession();
   }, [router]);
 
@@ -906,9 +772,7 @@ export default function SignIn() {
   const openPolicyModal = () => setShowPolicyModal(true);
 
   const handleAgree = useCallback(() => {
-    const ts = new Date().toISOString();
     setAgreed(true);
-    setAgreementTimestamp(ts);
     setErrors((prev) => ({ ...prev, terms: '' }));
   }, []);
 
@@ -917,17 +781,11 @@ export default function SignIn() {
       openPolicyModal();
     } else {
       setAgreed(false);
-      setAgreementTimestamp(null);
     }
   }, [agreed]);
 
-  const showErrorPopup = (
-    title: string,
-    message: string,
-    onAction?: () => void,
-    actionButtonText?: string
-  ) => {
-    setErrorModalData({ title, message, onAction, actionButtonText: actionButtonText || '' });
+  const showErrorPopup = (title: string, message: string, onAction?: () => void, actionButtonText?: string, actionIcon?: React.ReactNode) => {
+    setErrorModalData({ title, message, onAction, actionButtonText: actionButtonText || '', actionIcon });
     setShowErrorModal(true);
   };
 
@@ -936,10 +794,15 @@ export default function SignIn() {
       ToastAndroid.show(message, ToastAndroid.SHORT);
     } else if (Platform.OS === 'ios') {
       Alert.alert(isError ? 'Error' : 'Success', message);
+    } else {
+      console.log(message);
+      if (isError) {
+        Alert.alert('Error', message);
+      }
     }
   };
 
-  // ─── Google Sign-In with Popup Detection (IMMEDIATE STOP ON CLOSE) ──────────────
+  // ─── GOOGLE SIGN-IN WITH POPUP + Redirect Fallback ─────────────────────────
 
   const handleFirebaseGoogleSignIn = async () => {
     if (!agreed) {
@@ -956,227 +819,97 @@ export default function SignIn() {
     }
 
     setLoading(true);
-    
-    let popupWindow: Window | null = null;
-    let closeCheckInterval: number | null = null;
-    let signInCompleted = false;
-    
+
     try {
-      await setPersistence(auth, browserSessionPersistence);
       const provider = new GoogleAuthProvider();
       provider.addScope('email');
       provider.addScope('profile');
-      
-      // Start the sign-in popup
-      const signInPromise = signInWithPopup(auth, provider);
-      
-      // Try to get reference to the popup window after it opens
-      setTimeout(() => {
-        // Look for the popup window that Firebase creates
-        // It typically has names like 'SignIn', 'GoogleSignIn', or empty string
-        if (!popupWindow) {
-          // Check all windows to find the popup
-          const allWindows = window.open('', 'SignIn');
-          if (allWindows && allWindows !== window) {
-            popupWindow = allWindows;
-          } else {
-            const googleWindow = window.open('', 'GoogleSignIn');
-            if (googleWindow && googleWindow !== window) {
-              popupWindow = googleWindow;
-            }
-          }
-        }
-      }, 100);
-      
-      // Set up interval to check if popup was closed (checks every 200ms)
-      const closeDetectionPromise = new Promise((_, reject) => {
-        closeCheckInterval = window.setInterval(() => {
-          // If we have a reference to the popup and it's closed, reject immediately
-          if (popupWindow && popupWindow.closed && !signInCompleted) {
-            if (closeCheckInterval) {
-              window.clearInterval(closeCheckInterval);
-              closeCheckInterval = null;
-            }
-            reject(new Error('POPUP_CLOSED_BY_USER'));
-          }
-        }, 200);
+      provider.setCustomParameters({ 
+        prompt: 'select_account',
       });
-      
-      // Race between sign-in completion and popup close detection
-      const result = await Promise.race([signInPromise, closeDetectionPromise]) as any;
-      signInCompleted = true;
-      
-      // Clear interval
-      if (closeCheckInterval) {
-        window.clearInterval(closeCheckInterval);
-        closeCheckInterval = null;
-      }
-      
-      // Sign-in successful - continue to backend
+
+      const result = await signInWithPopup(auth, provider);
       const idToken = await result.user.getIdToken();
       const apiResult = await authService.googleAuth(idToken);
 
       if (apiResult.success) {
         setShowSuccessAnimation(true);
-        setTimeout(() => router.replace('/(tabs)/home'), 800);
+        setTimeout(() => {
+          router.replace('/(tabs)/home');
+        }, 400);
       } else {
         await auth.signOut();
         const msg = apiResult.message || '';
-        if (
-          msg.toLowerCase().includes('already exists') ||
-          msg.toLowerCase().includes('registered with email')
-        ) {
+        // Check if email already exists with email/password (409 conflict)
+        if (msg.toLowerCase().includes('already registered') || 
+            msg.toLowerCase().includes('already exists') ||
+            msg.toLowerCase().includes('email/password')) {
+          const googleEmail = result.user.email || '';
+          if (googleEmail) {
+            setEmail(googleEmail);
+          }
           showErrorPopup(
             'Account Already Exists',
             'This email is already registered with email/password. Please sign in using your email and password instead.',
             () => passwordRef.current?.focus(),
-            'Sign In with Email/Password'
+            'Sign In with Email/Password',
+            <EmailIcon />
           );
         } else {
-          showErrorPopup('Sign In Failed', msg || 'Google sign in failed');
+          showErrorPopup('Sign In Failed', msg || 'Google sign in failed. Please try again.');
         }
       }
     } catch (error: any) {
-      console.error('Firebase Google Sign-In error:', error);
+      console.error('Google Sign-In error:', error);
       
-      // Clear interval
-      if (closeCheckInterval) {
-        window.clearInterval(closeCheckInterval);
-        closeCheckInterval = null;
+      // Handle 409 from backend
+      if (error.response?.status === 409) {
+        const errorMsg = error.response?.data?.message || '';
+        showErrorPopup(
+          'Account Already Exists',
+          errorMsg || 'This email is already registered with email/password. Please sign in using your email and password instead.',
+          () => passwordRef.current?.focus(),
+          'Sign In with Email/Password',
+          <EmailIcon />
+        );
       }
-      
-      // User closed the popup - silently reset loading (NO ERROR MESSAGE)
-      if (error?.message === 'POPUP_CLOSED_BY_USER') {
-        console.log('Google Sign-In popup was closed by user');
-        // Silent reset - do nothing, just stop loading
-      } else if (error?.code === 'auth/popup-closed-by-user') {
-        console.log('Google Sign-In popup was closed by user');
-        // Silent reset - do nothing
-      } else {
-        // Real error - show popup
-        const statusCode = error.response?.status ?? 0;
-        const errorMessage =
-          error.response?.data?.message || error.response?.data?.error || error.message || 'Something went wrong';
-
-        if (
-          statusCode === 409 ||
-          errorMessage.toLowerCase().includes('already registered') ||
-          errorMessage.toLowerCase().includes('already exists')
-        ) {
-          showErrorPopup(
-            'Account Already Exists',
-            'This email is already registered with email/password. Please sign in using your email and password instead.',
-            () => passwordRef.current?.focus(),
-            'Sign In with Email/Password'
-          );
-        } else {
-          showErrorPopup('Google Sign In Failed', errorMessage);
-        }
+      // User closed popup - silently handle
+      else if (error.code === 'auth/popup-closed-by-user') {
+        // Do nothing - user cancelled
       }
-      try { 
-        if (auth) {
-          await auth.signOut();
-        }
-      } catch (signOutError) {
-        console.log('Sign out error during cleanup:', signOutError);
+      else if (error.code === 'auth/popup-blocked') {
+        showErrorPopup(
+          'Popup Blocked',
+          'Please allow popups for this website to sign in with Google.',
+          undefined,
+          'OK'
+        );
+      }
+      else if (error.code === 'auth/network-request-failed') {
+        showErrorPopup(
+          'Network Error',
+          'Unable to reach Google servers. Please check your internet connection.',
+          undefined,
+          'OK'
+        );
+      }
+      else if (error.code === 'auth/internal-error' || error.message?.includes('Failed to fetch')) {
+        showErrorPopup(
+          'Google Sign In Unavailable',
+          'Google Sign-In is currently unavailable. Please use email/password to sign in instead.',
+          undefined,
+          'OK'
+        );
+      }
+      else {
+        showErrorPopup(
+          'Google Sign In Failed', 
+          error.message || 'Something went wrong. Please try again.',
+          undefined,
+          'OK'
+        );
       }
     } finally {
-      if (closeCheckInterval) {
-        window.clearInterval(closeCheckInterval);
-        closeCheckInterval = null;
-      }
-      setLoading(false);
-    }
-  };
-
-  // ── Google Sign-In (existing account fallback) ────────────────────────────
-
-  const handleGoogleSignInForExistingAccount = async () => {
-    if (!agreed) {
-      setErrors((prev) => ({
-        ...prev,
-        terms: 'You must agree to the Terms and Privacy Policy before continuing',
-      }));
-      openPolicyModal();
-      return;
-    }
-    if (!auth) {
-      showErrorPopup('Error', 'Firebase auth not available on this platform');
-      return;
-    }
-
-    setLoading(true);
-    
-    let popupWindow: Window | null = null;
-    let closeCheckInterval: number | null = null;
-    let signInCompleted = false;
-    
-    try {
-      await setPersistence(auth, browserSessionPersistence);
-      const provider = new GoogleAuthProvider();
-      provider.addScope('email');
-      provider.addScope('profile');
-      
-      const signInPromise = signInWithPopup(auth, provider);
-      
-      setTimeout(() => {
-        if (!popupWindow) {
-          const allWindows = window.open('', 'SignIn');
-          if (allWindows && allWindows !== window) {
-            popupWindow = allWindows;
-          }
-        }
-      }, 100);
-      
-      const closeDetectionPromise = new Promise((_, reject) => {
-        closeCheckInterval = window.setInterval(() => {
-          if (popupWindow && popupWindow.closed && !signInCompleted) {
-            if (closeCheckInterval) {
-              window.clearInterval(closeCheckInterval);
-              closeCheckInterval = null;
-            }
-            reject(new Error('POPUP_CLOSED_BY_USER'));
-          }
-        }, 200);
-      });
-      
-      const result = await Promise.race([signInPromise, closeDetectionPromise]) as any;
-      signInCompleted = true;
-      
-      if (closeCheckInterval) {
-        window.clearInterval(closeCheckInterval);
-        closeCheckInterval = null;
-      }
-      
-      const idToken = await result.user.getIdToken();
-      const apiResult = await authService.googleAuth(idToken);
-
-      if (apiResult.success) {
-        setShowSuccessAnimation(true);
-        setTimeout(() => router.replace('/(tabs)/home'), 800);
-      } else {
-        await auth.signOut();
-        showErrorPopup('Sign In Failed', apiResult.message || 'Google sign in failed');
-      }
-    } catch (error: any) {
-      console.error('Firebase Google Sign-In error:', error);
-      
-      if (closeCheckInterval) {
-        window.clearInterval(closeCheckInterval);
-        closeCheckInterval = null;
-      }
-      
-      if (error?.message === 'POPUP_CLOSED_BY_USER' || error?.code === 'auth/popup-closed-by-user') {
-        console.log('Google Sign-In popup was closed by user');
-      } else {
-        showErrorPopup('Google Sign In Failed', error.message || 'Something went wrong');
-      }
-      try { await auth?.signOut(); } catch {}
-    } finally {
-      if (closeCheckInterval) {
-        window.clearInterval(closeCheckInterval);
-        closeCheckInterval = null;
-      }
       setLoading(false);
     }
   };
@@ -1207,31 +940,24 @@ export default function SignIn() {
       if (elapsed < 500) await new Promise((r) => setTimeout(r, 500 - elapsed));
 
       if (result.success) {
-        // Save "Remember Me" preference
         await saveRememberMe(email, rememberMe);
         setShowSuccessAnimation(true);
-        setTimeout(() => router.replace('/(tabs)/home'), 800);
+        setTimeout(() => {
+          router.replace('/(tabs)/home');
+        }, 400);
       } else {
         const msg = result.message || '';
         if (msg === 'Invalid email or password.' || msg.toLowerCase().includes('invalid')) {
-          setErrors((prev) => ({
-            ...prev,
-            password: 'Invalid email or password. Please try again.',
-          }));
-        } else if (
-          msg.includes('EMAIL_NOT_VERIFIED') ||
-          msg.toLowerCase().includes('verify')
-        ) {
+          setErrors((prev) => ({ ...prev, password: 'Invalid email or password. Please try again.' }));
+        } else if (msg.includes('EMAIL_NOT_VERIFIED') || msg.toLowerCase().includes('verify')) {
           showToastMessage('Please verify your email address before signing in.', true);
-        } else if (
-          msg.toLowerCase().includes('google') ||
-          msg.toLowerCase().includes('oauth')
-        ) {
+        } else if (msg.toLowerCase().includes('google') || msg.toLowerCase().includes('oauth')) {
           showErrorPopup(
             'Google Account Detected',
             'This email is registered with Google. Please sign in using Google instead.',
-            handleGoogleSignInForExistingAccount,
-            'Sign In with Google'
+            handleFirebaseGoogleSignIn,
+            'Sign In with Google',
+            <GoogleIcon />
           );
         } else {
           setErrors((prev) => ({ ...prev, password: msg || 'Invalid email or password' }));
@@ -1240,25 +966,20 @@ export default function SignIn() {
     } catch (error: any) {
       console.error('Sign in error:', error);
       if (error.response?.status === 401) {
-        setErrors((prev) => ({
-          ...prev,
-          password: 'Invalid email or password. Please try again.',
-        }));
+        setErrors((prev) => ({ ...prev, password: 'Invalid email or password. Please try again.' }));
       } else if (error.response?.data?.message) {
         const msg = error.response.data.message;
         if (msg === 'Invalid email or password.' || msg.toLowerCase().includes('invalid')) {
-          setErrors((prev) => ({
-            ...prev,
-            password: 'Invalid email or password. Please try again.',
-          }));
+          setErrors((prev) => ({ ...prev, password: 'Invalid email or password. Please try again.' }));
         } else if (msg === 'EMAIL_NOT_VERIFIED' || msg.toLowerCase().includes('verify')) {
           showToastMessage('Please verify your email address before signing in.', true);
         } else if (msg.toLowerCase().includes('google') || msg.toLowerCase().includes('oauth')) {
           showErrorPopup(
             'Google Account Detected',
             'This email is registered with Google. Please sign in using Google instead.',
-            handleGoogleSignInForExistingAccount,
-            'Sign In with Google'
+            handleFirebaseGoogleSignIn,
+            'Sign In with Google',
+            <GoogleIcon />
           );
         } else {
           setErrors((prev) => ({ ...prev, password: msg || 'Something went wrong' }));
@@ -1273,6 +994,12 @@ export default function SignIn() {
 
   const isAnyInputFocused = emailFocused || passwordFocused;
 
+  const getOutlineColor = (isFocused: boolean, hasError: string, defaultColor: string = '#dde3fa') => {
+    if (hasError) return '#ef4444';
+    if (isFocused) return '#4c6fff';
+    return defaultColor;
+  };
+
   if (initialLoading) {
     return <SplashScreen />;
   }
@@ -1281,36 +1008,21 @@ export default function SignIn() {
     <>
       <Stack.Screen options={{ headerShown: false }} />
 
-      <PolicyModal
-        visible={showPolicyModal}
-        onClose={() => setShowPolicyModal(false)}
-        onAgree={handleAgree}
-      />
-
-      <ErrorPopupModal
-        visible={showErrorModal}
-        title={errorModalData.title}
-        message={errorModalData.message}
-        onClose={() => setShowErrorModal(false)}
-        onAction={errorModalData.onAction}
+      <PolicyModal visible={showPolicyModal} onClose={() => setShowPolicyModal(false)} onAgree={handleAgree} />
+      <ErrorPopupModal 
+        visible={showErrorModal} 
+        title={errorModalData.title} 
+        message={errorModalData.message} 
+        onClose={() => setShowErrorModal(false)} 
+        onAction={errorModalData.onAction} 
         actionButtonText={errorModalData.actionButtonText}
+        actionIcon={errorModalData.actionIcon}
       />
 
-      <KeyboardAvoidingView
-        style={styles.flex}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? 64 : 0}
-      >
+      <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined} keyboardVerticalOffset={Platform.OS === 'ios' ? 64 : 0}>
         <DiagramBackground />
 
-        <ScrollView
-          contentContainerStyle={styles.scrollContent}
-          keyboardShouldPersistTaps="handled"
-          showsVerticalScrollIndicator={false}
-          automaticallyAdjustKeyboardInsets={true}
-          keyboardDismissMode="interactive"
-          contentInsetAdjustmentBehavior="always"
-        >
+        <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false} automaticallyAdjustKeyboardInsets={true} keyboardDismissMode="interactive" contentInsetAdjustmentBehavior="always">
           <View style={styles.card}>
             <View style={styles.connectorTop} />
             <View style={styles.connectorBottom} />
@@ -1318,11 +1030,7 @@ export default function SignIn() {
             <View style={styles.connectorRight} />
 
             <View style={styles.logoWrap}>
-              <AnimatedLogo
-                size={logoSize}
-                isInputFocused={isAnyInputFocused}
-                showSuccess={showSuccessAnimation}
-              />
+              <AnimatedLogo size={logoSize} isInputFocused={isAnyInputFocused} showSuccess={showSuccessAnimation} />
             </View>
 
             <Text style={styles.heading}>Welcome Back</Text>
@@ -1330,25 +1038,13 @@ export default function SignIn() {
 
             <View style={styles.formGroup}>
               <Text style={styles.label}>Email</Text>
-              <View
-                style={[
-                  styles.inputWrap,
-                  emailFocused && styles.inputWrapFocused,
-                  errors.email && styles.inputError,
-                ]}
-              >
+              <View style={[styles.inputWrap, emailFocused && styles.inputWrapFocused, errors.email && styles.inputError]}>
                 <TextInput
-                  style={[
-                    styles.input,
-                    Platform.OS === 'web' ? { outlineWidth: 0 } : null,
-                  ]}
+                  style={[styles.input, Platform.OS === 'web' && { outlineWidth: 1, outlineStyle: 'solid', outlineOffset: 0, borderRadius: 12, outlineColor: getOutlineColor(emailFocused, errors.email) }]}
                   placeholder="you@example.com"
                   placeholderTextColor="#b8c0d4"
                   value={email}
-                  onChangeText={(text) => {
-                    setEmail(text);
-                    if (errors.email) setErrors((prev) => ({ ...prev, email: '' }));
-                  }}
+                  onChangeText={(text) => { setEmail(text); if (errors.email) setErrors((prev) => ({ ...prev, email: '' })); }}
                   onFocus={() => setEmailFocused(true)}
                   onBlur={() => setEmailFocused(false)}
                   keyboardType="email-address"
@@ -1369,27 +1065,14 @@ export default function SignIn() {
 
             <View style={styles.formGroup}>
               <Text style={styles.label}>Password</Text>
-              <View
-                style={[
-                  styles.inputWrap,
-                  passwordFocused && styles.inputWrapFocused,
-                  errors.password && styles.inputError,
-                ]}
-              >
+              <View style={[styles.inputWrap, passwordFocused && styles.inputWrapFocused, errors.password && styles.inputError]}>
                 <TextInput
                   ref={passwordRef}
-                  style={[
-                    styles.input,
-                    styles.inputWithIcon,
-                    Platform.OS === 'web' ? { outlineWidth: 0 } : null,
-                  ]}
+                  style={[styles.input, styles.inputWithIcon, Platform.OS === 'web' && { outlineWidth: 1, outlineStyle: 'solid', outlineOffset: 0, borderRadius: 12, outlineColor: getOutlineColor(passwordFocused, errors.password) }]}
                   placeholder="Enter your password"
                   placeholderTextColor="#b8c0d4"
                   value={password}
-                  onChangeText={(text) => {
-                    setPassword(text);
-                    if (errors.password) setErrors((prev) => ({ ...prev, password: '' }));
-                  }}
+                  onChangeText={(text) => { setPassword(text); if (errors.password) setErrors((prev) => ({ ...prev, password: '' })); }}
                   onFocus={() => setPasswordFocused(true)}
                   onBlur={() => setPasswordFocused(false)}
                   secureTextEntry={!showPassword}
@@ -1403,65 +1086,30 @@ export default function SignIn() {
                   autoComplete="off"
                   importantForAutofill="no"
                 />
-                <TouchableOpacity
-                  style={styles.eyeBtn}
-                  onPress={() => setShowPassword(!showPassword)}
-                  activeOpacity={0.7}
-                  accessibilityLabel={showPassword ? "Hide password" : "Show password"}
-                  accessibilityRole="button"
-                >
+                <TouchableOpacity style={styles.eyeBtn} onPress={() => setShowPassword(!showPassword)}>
                   <EyeIcon visible={showPassword} />
                 </TouchableOpacity>
               </View>
-              {errors.password ? (
-                <Text style={styles.errorText}>{errors.password}</Text>
-              ) : (
-                <Text style={styles.passwordHint} />
-              )}
-              
-              {/* Forgot Password and Remember Me Row */}
+              {errors.password ? <Text style={styles.errorText}>{errors.password}</Text> : <Text style={styles.passwordHint} />}
+
               <View style={styles.optionsRow}>
-                <TouchableOpacity
-                  style={styles.rememberMeRow}
-                  onPress={() => setRememberMe(!rememberMe)}
-                  activeOpacity={0.7}
-                >
+                <TouchableOpacity style={styles.rememberMeRow} onPress={() => setRememberMe(!rememberMe)}>
                   <View style={[styles.checkbox, rememberMe && styles.checkboxChecked]}>
                     {rememberMe && (
                       <Svg width={10} height={10} viewBox="0 0 10 10">
-                        <Path
-                          d="M2 5l2.5 2.5L8 3"
-                          stroke="white"
-                          strokeWidth={1.8}
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          fill="none"
-                        />
+                        <Path d="M2 5l2.5 2.5L8 3" stroke="white" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" fill="none" />
                       </Svg>
                     )}
                   </View>
                   <Text style={styles.rememberMeText}>Remember me</Text>
                 </TouchableOpacity>
-                
-                <TouchableOpacity
-                  style={styles.forgotWrap}
-                  onPress={() => router.push('/(auth)/forgot-password')}
-                  activeOpacity={0.7}
-                >
+                <TouchableOpacity style={styles.forgotWrap} onPress={() => router.push('/(auth)/forgot-password')}>
                   <Text style={styles.forgotText}>Forgot password?</Text>
                 </TouchableOpacity>
               </View>
             </View>
 
-            <Pressable
-              style={({ pressed }) => [
-                styles.btnSignIn,
-                loading && styles.btnDisabled,
-                { transform: [{ scale: pressed ? 0.97 : 1 }], opacity: pressed ? 0.9 : 1 },
-              ]}
-              onPress={handleSignIn}
-              disabled={loading}
-            >
+            <Pressable style={({ pressed }) => [styles.btnSignIn, loading && styles.btnDisabled, { transform: [{ scale: pressed ? 0.97 : 1 }], opacity: pressed ? 0.9 : 1 }]} onPress={handleSignIn} disabled={loading}>
               {loading ? (
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
                   <ActivityIndicator color="#fff" size="small" />
@@ -1480,65 +1128,37 @@ export default function SignIn() {
 
             {Platform.OS !== 'web' ? (
               <View style={styles.nativeGoogleFallback}>
-                <Text style={styles.nativeGoogleFallbackText}>
-                  Google Sign In is available on web. Please use email/password on mobile.
-                </Text>
+                <Text style={styles.nativeGoogleFallbackText}>Google Sign In is available on web. Please use email/password on mobile.</Text>
               </View>
             ) : (
-              <TouchableOpacity
-                style={styles.btnGoogle}
-                onPress={handleFirebaseGoogleSignIn}
-                activeOpacity={0.85}
-                disabled={loading}
-              >
-                <GoogleIcon />
-                <Text style={styles.btnGoogleText}>Google Sign In</Text>
+              <TouchableOpacity style={[styles.btnGoogle, loading && styles.btnDisabled]} onPress={handleFirebaseGoogleSignIn} activeOpacity={0.85} disabled={loading}>
+                {loading ? <ActivityIndicator color="#3b5bdb" size="small" /> : <GoogleIcon />}
+                <Text style={styles.btnGoogleText}>Sign in with Google</Text>
               </TouchableOpacity>
             )}
 
             <View style={[styles.termsWrap, errors.terms && styles.termsError]}>
-              <TouchableOpacity
-                onPress={handleToggleAgreement}
-                activeOpacity={0.7}
-                accessibilityLabel={agreed ? 'Revoke agreement' : 'Open terms to agree'}
-                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-              >
+              <TouchableOpacity onPress={handleToggleAgreement} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
                 <View style={[styles.customCheckbox, agreed && styles.customCheckboxChecked]}>
                   {agreed && (
                     <Svg width={10} height={10} viewBox="0 0 10 10">
-                      <Path
-                        d="M2 5l2.5 2.5L8 3"
-                        stroke="white"
-                        strokeWidth={1.8}
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        fill="none"
-                      />
+                      <Path d="M2 5l2.5 2.5L8 3" stroke="white" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" fill="none" />
                     </Svg>
                   )}
                 </View>
               </TouchableOpacity>
-
               <Text style={styles.termsText}>
                 {'I agree to the '}
-                <Text style={styles.termsLink} onPress={openPolicyModal}>
-                  Terms and Conditions
-                </Text>
+                <Text style={styles.termsLink} onPress={openPolicyModal}>Terms and Conditions</Text>
                 {' and '}
-                <Text style={styles.termsLink} onPress={openPolicyModal}>
-                  Privacy Policy
-                </Text>
+                <Text style={styles.termsLink} onPress={openPolicyModal}>Privacy Policy</Text>
               </Text>
             </View>
-
             {errors.terms ? <Text style={styles.errorText}>{errors.terms}</Text> : null}
 
             <View style={styles.signupWrap}>
               <Text style={styles.signupText}>Don't have an account? </Text>
-              <TouchableOpacity
-                onPress={() => router.push('/(auth)/signup')}
-                activeOpacity={0.7}
-              >
+              <TouchableOpacity onPress={() => router.push('/(auth)/signup')}>
                 <Text style={styles.signupLink}>Sign Up</Text>
               </TouchableOpacity>
             </View>
@@ -1549,400 +1169,93 @@ export default function SignIn() {
   );
 }
 
-// ─── STYLES ───────────────────────────────────────────────────────────────────
+// ─── STYLES ─────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
   flex: { flex: 1, backgroundColor: '#eef2ff' },
-  splashContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#eef2ff',
-  },
-  splashText: {
-    marginTop: 12,
-    fontSize: 14,
-    color: '#64748b',
-  },
+  splashContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#eef2ff' },
   gridBackground: { ...StyleSheet.absoluteFillObject, width: '100%', height: '100%' },
   gridOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(255,255,255,0.10)' },
-
-  scrollContent: {
-    flexGrow: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingVertical: 40,
-    paddingHorizontal: 16,
-    minHeight: SCREEN_HEIGHT,
-  },
-
-  card: {
-    backgroundColor: '#ffffff',
-    borderRadius: 24,
-    paddingHorizontal: 28,
-    paddingVertical: 28,
-    width: '100%',
-    maxWidth: 420,
-    minWidth: 320,
-    position: 'relative',
-    shadowColor: '#1e293b',
-    shadowOffset: { width: 0, height: 20 },
-    shadowOpacity: 0.08,
-    shadowRadius: 40,
-    elevation: 10,
-    marginTop: -25,
-    borderColor: '#f1f5ff',
-  },
-
-  connectorTop: {
-    position: 'absolute', top: -5, alignSelf: 'center',
-    width: 10, height: 10, borderRadius: 5,
-    backgroundColor: '#ffffff', borderWidth: 2, borderColor: '#c7d2fe',
-  },
-  connectorBottom: {
-    position: 'absolute', bottom: -5, alignSelf: 'center',
-    width: 10, height: 10, borderRadius: 5,
-    backgroundColor: '#ffffff', borderWidth: 2, borderColor: '#c7d2fe',
-  },
-  connectorLeft: {
-    position: 'absolute', left: -5, top: '50%',
-    transform: [{ translateY: -5 }],
-    width: 10, height: 10, borderRadius: 5,
-    backgroundColor: '#ffffff', borderWidth: 2, borderColor: '#c7d2fe',
-  },
-  connectorRight: {
-    position: 'absolute', right: -5, top: '50%',
-    transform: [{ translateY: -5 }],
-    width: 10, height: 10, borderRadius: 5,
-    backgroundColor: '#ffffff', borderWidth: 2, borderColor: '#c7d2fe',
-  },
-
-  logoWrap: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: -10,
-    minHeight: 80,
-  },
+  scrollContent: { flexGrow: 1, justifyContent: 'center', alignItems: 'center', paddingVertical: 40, paddingHorizontal: 16, minHeight: SCREEN_HEIGHT },
+  card: { backgroundColor: '#ffffff', borderRadius: 24, paddingHorizontal: 28, paddingVertical: 28, width: '100%', maxWidth: 420, minWidth: 320, position: 'relative', shadowColor: '#1e293b', shadowOffset: { width: 0, height: 20 }, shadowOpacity: 0.08, shadowRadius: 40, elevation: 10, marginTop: -25, borderColor: '#f1f5ff' },
+  connectorTop: { position: 'absolute', top: -5, alignSelf: 'center', width: 10, height: 10, borderRadius: 5, backgroundColor: '#ffffff', borderWidth: 2, borderColor: '#c7d2fe' },
+  connectorBottom: { position: 'absolute', bottom: -5, alignSelf: 'center', width: 10, height: 10, borderRadius: 5, backgroundColor: '#ffffff', borderWidth: 2, borderColor: '#c7d2fe' },
+  connectorLeft: { position: 'absolute', left: -5, top: '50%', transform: [{ translateY: -5 }], width: 10, height: 10, borderRadius: 5, backgroundColor: '#ffffff', borderWidth: 2, borderColor: '#c7d2fe' },
+  connectorRight: { position: 'absolute', right: -5, top: '50%', transform: [{ translateY: -5 }], width: 10, height: 10, borderRadius: 5, backgroundColor: '#ffffff', borderWidth: 2, borderColor: '#c7d2fe' },
+  logoWrap: { alignItems: 'center', justifyContent: 'center', marginBottom: -10, minHeight: 80 },
   logoWrapper: { alignItems: 'center', justifyContent: 'center' },
   logo: { backgroundColor: 'transparent' },
-
   heading: { fontSize: 28, fontWeight: '800', color: '#0f172a', textAlign: 'center' },
   subtitle: { fontSize: 14, color: '#64748b', marginBottom: 24, textAlign: 'center' },
   formGroup: { marginBottom: 16 },
   label: { fontSize: 13, fontWeight: '600', color: '#334155', marginBottom: 6 },
-
-  inputWrap: {
-    borderWidth: 1, borderColor: '#dde3fa', borderRadius: 12,
-    backgroundColor: '#ffffff', minHeight: 40, justifyContent: 'center',
-  },
-  inputWrapFocused: {
-    backgroundColor: '#ffffff',
-    shadowColor: '#3b5bdb',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.15,
-    shadowRadius: 12,
-    elevation: 4,
-  },
-  input: {
-    flex: 1,
-    paddingHorizontal: 14,
-    paddingVertical: Platform.OS === 'ios' ? 13 : 11,
-    fontSize: 14,
-    color: '#1a1f36',
-    backgroundColor: 'transparent',
-    minHeight: 44,
-    textAlignVertical: 'center',
-  },
+  inputWrap: { borderWidth: 1, borderColor: '#dde3fa', borderRadius: 12, backgroundColor: '#ffffff', minHeight: 40, justifyContent: 'center' },
+  inputWrapFocused: { backgroundColor: '#ffffff', shadowColor: '#3b5bdb', shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.15, shadowRadius: 12, elevation: 4 },
+  input: { flex: 1, paddingHorizontal: 14, paddingVertical: Platform.OS === 'ios' ? 13 : 11, fontSize: 14, color: '#1a1f36', backgroundColor: 'transparent', minHeight: 44, textAlignVertical: 'center' },
   inputWithIcon: { paddingRight: 44 },
   eyeBtn: { position: 'absolute', right: 12, padding: 10 },
-  
-  optionsRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginTop: 8,
-  },
-  rememberMeRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  checkbox: {
-    width: 18,
-    height: 18,
-    borderRadius: 4,
-    borderWidth: 2,
-    borderColor: '#8896b3',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  checkboxChecked: {
-    backgroundColor: '#3b5bdb',
-    borderColor: '#3b5bdb',
-  },
-  rememberMeText: {
-    fontSize: 12.5,
-    color: '#4a5568',
-  },
+  optionsRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 8 },
+  rememberMeRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  checkbox: { width: 18, height: 18, borderRadius: 4, borderWidth: 2, borderColor: '#8896b3', alignItems: 'center', justifyContent: 'center' },
+  checkboxChecked: { backgroundColor: '#3b5bdb', borderColor: '#3b5bdb' },
+  rememberMeText: { fontSize: 12.5, color: '#4a5568' },
   forgotWrap: { alignItems: 'flex-end' },
   forgotText: { fontSize: 12.5, color: '#8896b3', fontWeight: '500' },
-  
   inputError: { borderColor: '#e11d48' },
   termsError: { borderColor: '#e11d48' },
   errorText: { fontSize: 12, color: '#e11d48', marginTop: 6, marginLeft: 4, fontWeight: '500' },
   passwordHint: { fontSize: 11, color: '#8896b3', marginTop: 6, marginLeft: 4 },
-
-  btnSignIn: {
-    backgroundColor: '#3b5bdb',
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#2f49c7',
-    paddingVertical: 12,
-    alignItems: 'center',
-    marginTop: 5,
-    overflow: 'hidden',
-    shadowColor: '#3b5bdb',
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.25,
-    shadowRadius: 20,
-    elevation: 8,
-  },
+  btnSignIn: { backgroundColor: '#3b5bdb', borderRadius: 12, borderWidth: 1, borderColor: '#2f49c7', paddingVertical: 12, alignItems: 'center', marginTop: 5, overflow: 'hidden', shadowColor: '#3b5bdb', shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.25, shadowRadius: 20, elevation: 8 },
   btnDisabled: { opacity: 0.75 },
   btnSignInText: { color: '#ffffff', fontSize: 15, fontWeight: '700', letterSpacing: 0.3 },
-
   divider: { flexDirection: 'row', alignItems: 'center', marginVertical: 10 },
   line: { flex: 1, height: 1, backgroundColor: '#e5e9f5' },
   orText: { marginHorizontal: 10, fontSize: 12, color: '#8896b3', fontWeight: '600' },
-
-  btnGoogle: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 10,
-    borderWidth: 1,
-    borderColor: '#e5e7eb',
-    borderRadius: 12,
-    paddingVertical: 8,
-    marginTop: 5,
-    backgroundColor: '#ffffff',
-  },
+  btnGoogle: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, borderWidth: 1, borderColor: '#e5e7eb', borderRadius: 12, paddingVertical: 8, marginTop: 5, backgroundColor: '#ffffff' },
   btnGoogleText: { fontSize: 14, fontWeight: '500', color: '#1a1f36', marginLeft: 8 },
-  nativeGoogleFallback: {
-    marginTop: 10,
-    padding: 12,
-    backgroundColor: '#fef3c7',
-    borderRadius: 12,
-    alignItems: 'center',
-  },
-  nativeGoogleFallbackText: {
-    fontSize: 12,
-    color: '#92400e',
-    textAlign: 'center',
-  },
-
-  termsWrap: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 10,
-    marginTop: 14,
-    padding: 10,
-    borderWidth: 1.5,
-    borderColor: '#e2e6f3',
-    borderRadius: 10,
-    backgroundColor: '#f8f9ff',
-  },
-  customCheckbox: {
-    width: 18,
-    height: 18,
-    borderRadius: 9,
-    borderWidth: 2,
-    borderColor: '#8896b3',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: 1,
-    flexShrink: 0,
-  },
+  nativeGoogleFallback: { marginTop: 10, padding: 12, backgroundColor: '#fef3c7', borderRadius: 12, alignItems: 'center' },
+  nativeGoogleFallbackText: { fontSize: 12, color: '#92400e', textAlign: 'center' },
+  termsWrap: { flexDirection: 'row', alignItems: 'flex-start', gap: 10, marginTop: 14, padding: 10, borderWidth: 1.5, borderColor: '#e2e6f3', borderRadius: 10, backgroundColor: '#f8f9ff' },
+  customCheckbox: { width: 18, height: 18, borderRadius: 9, borderWidth: 2, borderColor: '#8896b3', alignItems: 'center', justifyContent: 'center', marginTop: 1, flexShrink: 0 },
   customCheckboxChecked: { borderColor: '#3b5bdb', backgroundColor: '#3b5bdb' },
   termsText: { fontSize: 12.5, color: '#4a5568', flex: 1, lineHeight: 18 },
   termsLink: { fontWeight: '700', color: '#3b5bdb' },
-
-  signupWrap: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginTop: 20,
-  },
+  signupWrap: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', marginTop: 20 },
   signupText: { fontSize: 13, color: '#64748b' },
   signupLink: { fontSize: 13, fontWeight: '700', color: '#3b5bdb' },
-
-  errorModalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  errorModalContainer: {
-    width: '85%',
-    maxWidth: 340,
-    backgroundColor: '#FFFFFF',
-    borderRadius: 20,
-    padding: 24,
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15,
-    shadowRadius: 12,
-    elevation: 8,
-  },
+  errorModalOverlay: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.5)', justifyContent: 'center', alignItems: 'center' },
+  errorModalContainer: { width: '85%', maxWidth: 340, backgroundColor: '#FFFFFF', borderRadius: 20, padding: 24, alignItems: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.15, shadowRadius: 12, elevation: 8 },
   errorModalIconWrapper: { marginBottom: 16 },
-  errorModalIconCircle: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    backgroundColor: '#f0f4ff',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  errorModalTitle: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: '#1e293b',
-    textAlign: 'center',
-    marginBottom: 8,
-  },
-  errorModalMessage: {
-    fontSize: 14,
-    color: '#64748b',
-    textAlign: 'center',
-    lineHeight: 20,
-    marginBottom: 24,
-  },
-  errorModalButtonPrimary: {
-    width: '100%',
-    paddingVertical: 12,
-    borderRadius: 10,
-    alignItems: 'center',
-    backgroundColor: '#3b5bdb',
-  },
+  errorModalIconCircle: { width: 64, height: 64, borderRadius: 32, backgroundColor: '#f0f4ff', justifyContent: 'center', alignItems: 'center' },
+  errorModalTitle: { fontSize: 20, fontWeight: '700', color: '#1e293b', textAlign: 'center', marginBottom: 8 },
+  errorModalMessage: { fontSize: 14, color: '#64748b', textAlign: 'center', lineHeight: 20, marginBottom: 24 },
+  errorModalButtonPrimary: { width: '100%', paddingVertical: 12, borderRadius: 10, alignItems: 'center', backgroundColor: '#3b5bdb', flexDirection: 'row', justifyContent: 'center' },
   errorModalButtonTextPrimary: { color: '#ffffff', fontSize: 16, fontWeight: '600' },
 });
 
 const modalStyles = StyleSheet.create({
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  modalContainer: {
-    backgroundColor: '#ffffff',
-    borderRadius: 24,
-    overflow: 'hidden',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.25,
-    shadowRadius: 20,
-    elevation: 15,
-  },
-  modalHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#e2e6f3',
-    backgroundColor: '#f8f9ff',
-  },
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.5)', justifyContent: 'center', alignItems: 'center' },
+  modalContainer: { backgroundColor: '#ffffff', borderRadius: 24, overflow: 'hidden', shadowColor: '#000', shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.25, shadowRadius: 20, elevation: 15 },
+  modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, paddingVertical: 16, borderBottomWidth: 1, borderBottomColor: '#e2e6f3', backgroundColor: '#f8f9ff' },
   modalTitle: { fontSize: 18, fontWeight: '700', color: '#1a1f36' },
-
-  tabBar: {
-    flexDirection: 'row',
-    borderBottomWidth: 1,
-    borderBottomColor: '#e2e6f3',
-    backgroundColor: '#ffffff',
-  },
+  tabBar: { flexDirection: 'row', borderBottomWidth: 1, borderBottomColor: '#e2e6f3', backgroundColor: '#ffffff' },
   tab: { flex: 1, paddingVertical: 14, alignItems: 'center' },
   activeTab: { borderBottomWidth: 2, borderBottomColor: '#3b5bdb' },
   tabText: { fontSize: 14, fontWeight: '600', color: '#8896b3' },
   activeTabText: { color: '#3b5bdb' },
   tabContent: { padding: 20 },
-
-  scrollHintBanner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    backgroundColor: '#eef2ff',
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderBottomWidth: 1,
-    borderBottomColor: '#c7d2fe',
-  },
+  scrollHintBanner: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: '#eef2ff', paddingHorizontal: 14, paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: '#c7d2fe' },
   scrollHintText: { fontSize: 12, color: '#3b5bdb', flex: 1, fontWeight: '500' },
-
-  modalFooter: {
-    flexDirection: 'row',
-    padding: 16,
-    borderTopWidth: 1,
-    borderTopColor: '#e2e6f3',
-    gap: 12,
-    backgroundColor: '#ffffff',
-  },
-  agreeButton: {
-    flex: 1,
-    backgroundColor: '#3b5bdb',
-    borderRadius: 10,
-    paddingVertical: 12,
-    alignItems: 'center',
-  },
-  agreeButtonDisabled: {
-    backgroundColor: '#c7d2fe',
-  },
+  modalFooter: { flexDirection: 'row', padding: 16, borderTopWidth: 1, borderTopColor: '#e2e6f3', gap: 12, backgroundColor: '#ffffff' },
+  agreeButton: { flex: 1, backgroundColor: '#3b5bdb', borderRadius: 10, paddingVertical: 12, alignItems: 'center' },
+  agreeButtonDisabled: { backgroundColor: '#c7d2fe' },
   agreeButtonText: { color: '#ffffff', fontSize: 15, fontWeight: '700' },
   agreeButtonTextDisabled: { color: '#8fa3e0' },
-  declineButton: {
-    flex: 1,
-    backgroundColor: '#e5e9f5',
-    borderRadius: 10,
-    paddingVertical: 12,
-    alignItems: 'center',
-  },
+  declineButton: { flex: 1, backgroundColor: '#e5e9f5', borderRadius: 10, paddingVertical: 12, alignItems: 'center' },
   declineButtonText: { color: '#4a5568', fontSize: 16, fontWeight: '600' },
-
-  scrollTopButton: {
-    position: 'absolute',
-    bottom: 80,
-    right: 20,
-    backgroundColor: '#3b5bdb',
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    justifyContent: 'center',
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 6,
-    zIndex: 10,
-  },
-
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#3b5bdb',
-    marginTop: 20,
-    marginBottom: 8,
-  },
+  scrollTopButton: { position: 'absolute', bottom: 80, right: 20, backgroundColor: '#3b5bdb', width: 48, height: 48, borderRadius: 24, justifyContent: 'center', alignItems: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8, elevation: 6, zIndex: 10 },
+  sectionTitle: { fontSize: 18, fontWeight: '700', color: '#3b5bdb', marginTop: 20, marginBottom: 8 },
   subSection: { fontSize: 16, fontWeight: '600', color: '#4a5568', marginTop: 12, marginBottom: 4 },
   text: { fontSize: 14, color: '#4a5568', lineHeight: 22, marginBottom: 8 },
-  footer: {
-    fontSize: 12,
-    color: '#8896b3',
-    textAlign: 'center',
-    marginTop: 24,
-    paddingTop: 16,
-    borderTopWidth: 1,
-    borderTopColor: '#e2e6f3',
-  },
+  footer: { fontSize: 12, color: '#8896b3', textAlign: 'center', marginTop: 24, paddingTop: 16, borderTopWidth: 1, borderTopColor: '#e2e6f3' },
 });
