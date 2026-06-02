@@ -1,7 +1,7 @@
-// PWA-FRIENDLY Service Worker v5 - Fixed API Blocking Issue
-// Date: 2026-05-27
+// PWA-FRIENDLY Service Worker v7 - Development + Production Ready
+// Date: 2026-06-03
 
-const CACHE_NAME = 'igraph-it-v5';
+const CACHE_NAME = 'igraph-it-v7';
 const STATIC_CACHE_URLS = [
   '/',
   '/index.html',
@@ -12,10 +12,33 @@ const STATIC_CACHE_URLS = [
 ];
 
 // ============================================
-// INSTALL EVENT - Cache static assets for PWA
+// DETECT DEVELOPMENT MODE
+// ============================================
+const isDevelopment = () => {
+  if (typeof self !== 'undefined' && self.location) {
+    const hostname = self.location.hostname;
+    const port = self.location.port;
+    return hostname === 'localhost' || 
+           hostname === '127.0.0.1' ||
+           port === '8081' ||
+           port === '19000' ||
+           port === '19006';
+  }
+  return false;
+};
+
+// ============================================
+// INSTALL EVENT
 // ============================================
 self.addEventListener('install', (event) => {
-  console.log('[SW] Installing PWA worker v5...');
+  console.log('[SW] Installing PWA worker v7...');
+  
+  // Skip caching in development
+  if (isDevelopment()) {
+    console.log('[SW] Development mode - skipping cache installation');
+    self.skipWaiting();
+    return;
+  }
   
   event.waitUntil(
     caches.open(CACHE_NAME).then(async (cache) => {
@@ -30,15 +53,26 @@ self.addEventListener('install', (event) => {
     })
   );
   
-  // Force activate immediately
   self.skipWaiting();
 });
 
 // ============================================
-// ACTIVATE EVENT - Clean up old caches
+// ACTIVATE EVENT
 // ============================================
 self.addEventListener('activate', (event) => {
-  console.log('[SW] Activating PWA worker v5...');
+  console.log('[SW] Activating PWA worker v7...');
+  
+  // In development, unregister immediately
+  if (isDevelopment()) {
+    console.log('[SW] Development mode - unregistering service worker');
+    event.waitUntil(
+      caches.keys().then((keys) => {
+        return Promise.all(keys.map(key => caches.delete(key)));
+      })
+    );
+    self.registration.unregister();
+    return;
+  }
   
   event.waitUntil(
     caches.keys().then((keys) => {
@@ -52,38 +86,55 @@ self.addEventListener('activate', (event) => {
     })
   );
   
-  // Take control of all clients immediately
   event.waitUntil(self.clients.claim());
 });
 
 // ============================================
-// FETCH EVENT - Smart caching strategy
+// FETCH EVENT
 // ============================================
 self.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url);
   
-  // 🔥 CRITICAL: NEVER intercept API calls or external requests
-  // These must go directly to the network
-  const isExternalRequest = (
-    url.pathname.startsWith('/api/') ||                           // Backend API
-    url.hostname.includes('googleapis.com') ||                    // Google APIs
-    url.hostname.includes('firebaseapp.com') ||                   // Firebase
-    url.hostname.includes('identitytoolkit.googleapis.com') ||    // Google Identity
-    url.hostname.includes('securetoken.googleapis.com') ||        // Firebase tokens
-    url.hostname.includes('brevo.com') ||                         // Email service
-    url.hostname !== self.location.hostname                       // Any other external domain
-  );
-  
-  if (isExternalRequest) {
-    // Pass through - don't intercept
+  // DEVELOPMENT MODE - Bypass all caching
+  if (isDevelopment()) {
     event.respondWith(fetch(event.request));
     return;
   }
   
-  // ✅ For static assets (JS, CSS, images) - Cache First strategy
+  // PRODUCTION MODE - Smart caching strategy
+  
+  // NEVER intercept navigation requests (HTML pages)
+  if (event.request.mode === 'navigate') {
+    event.respondWith(
+      fetch(event.request).catch(() => {
+        console.log('[SW] Offline - serving cached index.html');
+        return caches.match('/index.html');
+      })
+    );
+    return;
+  }
+  
+  // NEVER intercept API calls or external requests
+  const isExternalRequest = (
+    url.pathname.startsWith('/api/') ||
+    url.hostname.includes('googleapis.com') ||
+    url.hostname.includes('firebaseapp.com') ||
+    url.hostname.includes('identitytoolkit.googleapis.com') ||
+    url.hostname.includes('securetoken.googleapis.com') ||
+    url.hostname.includes('brevo.com') ||
+    url.hostname !== self.location.hostname
+  );
+  
+  if (isExternalRequest) {
+    event.respondWith(fetch(event.request));
+    return;
+  }
+  
+  // Cache static assets (JS, CSS, images, fonts)
   if (event.request.destination === 'script' || 
       event.request.destination === 'style' ||
-      event.request.destination === 'image') {
+      event.request.destination === 'image' ||
+      event.request.destination === 'font') {
     
     event.respondWith(
       caches.match(event.request).then((cachedResponse) => {
@@ -103,32 +154,43 @@ self.addEventListener('fetch', (event) => {
           return response;
         });
       }).catch(() => {
-        return new Response('Network error', { status: 408 });
+        return fetch(event.request);
       })
     );
     return;
   }
   
-  // ✅ For HTML navigation - Network First, fallback to cached index
-  if (event.request.mode === 'navigate') {
-    event.respondWith(
-      fetch(event.request).catch(() => {
-        console.log('[SW] Offline mode - serving cached index.html');
-        return caches.match('/index.html');
-      })
-    );
-    return;
-  }
-  
-  // Default - don't intercept anything else
+  // For everything else, just fetch normally
   event.respondWith(fetch(event.request));
 });
 
 // ============================================
-// MESSAGE EVENT - Handle messages from client
+// MESSAGE EVENT - Handle skip waiting
 // ============================================
 self.addEventListener('message', (event) => {
   if (event.data && event.data.type === 'SKIP_WAITING') {
     self.skipWaiting();
   }
+});
+
+// ============================================
+// ONLINE/OFFLINE HANDLING
+// ============================================
+self.addEventListener('online', () => {
+  console.log('[SW] App is online');
+  // Optionally trigger a cache update
+  self.clients.matchAll().then(clients => {
+    clients.forEach(client => {
+      client.postMessage({ type: 'ONLINE' });
+    });
+  });
+});
+
+self.addEventListener('offline', () => {
+  console.log('[SW] App is offline');
+  self.clients.matchAll().then(clients => {
+    clients.forEach(client => {
+      client.postMessage({ type: 'OFFLINE' });
+    });
+  });
 });

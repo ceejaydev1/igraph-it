@@ -1,5 +1,3 @@
-// app/(auth)/signin.tsx
-
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import {
   Pressable,
@@ -48,8 +46,6 @@ import * as authService from '../../services/authService';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
-
-// ─── ANIMATED LOGO COMPONENT ─────────────────────────────────────────────────
 
 const AnimatedLogo = ({
   size,
@@ -155,21 +151,18 @@ const getResponsiveLogoSize = (windowWidth: number): number => {
   return 56;
 };
 
-// ─── FIREBASE SETUP ───────────────────────────────────────────────────────────
-
 const firebaseConfig = {
-  apiKey: process.env.EXPO_PUBLIC_FIREBASE_API_KEY || "AIzaSyCyM0zjlTQ6cCuAf3CGWbxLnUUle_z88F8",
-  authDomain: process.env.EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN || "igraph-it.firebaseapp.com",
-  projectId: process.env.EXPO_PUBLIC_FIREBASE_PROJECT_ID || "igraph-it",
-  storageBucket: process.env.EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET || "igraph-it.firebasestorage.app",
-  messagingSenderId: process.env.EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID || "513560698622",
-  appId: process.env.EXPO_PUBLIC_FIREBASE_APP_ID || "1:513560698622:web:71e12cbf9a1bb95dab0faf"
+  apiKey: process.env.EXPO_PUBLIC_FIREBASE_API_KEY,
+  authDomain: process.env.EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN,
+  projectId: process.env.EXPO_PUBLIC_FIREBASE_PROJECT_ID,
+  storageBucket: process.env.EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: process.env.EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
+  appId: process.env.EXPO_PUBLIC_FIREBASE_APP_ID
 };
 
 let firebaseApp: FirebaseApp | undefined;
 let auth: Auth | undefined;
 
-// Initialize Firebase
 if (Platform.OS === 'web' && typeof window !== 'undefined') {
   try {
     if (!getApps().length) {
@@ -184,8 +177,7 @@ if (Platform.OS === 'web' && typeof window !== 'undefined') {
   }
 }
 
-// ─── TERMS AND PRIVACY POLICY CONTENT ────────────────────────────────────────
-
+//TERMS AND PRIVACY POLICY CONTENT
 const TermsContent = () => (
   <View style={modalStyles.tabContent}>
     <Text style={modalStyles.sectionTitle}>1. Acceptance of Terms</Text>
@@ -345,8 +337,6 @@ const PrivacyContent = () => (
   </View>
 );
 
-// ─── POLICY MODAL ────────────────────────────────────────────────────────────
-
 const PolicyModal = ({
   visible,
   onClose,
@@ -498,8 +488,7 @@ const PolicyModal = ({
   );
 };
 
-// ─── ERROR POPUP MODAL ────────────────────────────────────────────────────────
-
+//ERROR POPUP
 const ErrorPopupModal = ({
   visible,
   title,
@@ -547,8 +536,7 @@ const ErrorPopupModal = ({
   );
 };
 
-// ─── SUCCESS MODAL ────────────────────────────────────────────────────────────
-
+//SUCCESS MODAL
 const SuccessModal = ({
   visible,
   title,
@@ -585,8 +573,6 @@ const SuccessModal = ({
   );
 };
 
-// ─── BACKGROUND ───────────────────────────────────────────────────────────────
-
 const DiagramBackground = () => (
   <View style={StyleSheet.absoluteFillObject} pointerEvents="none">
     <Image source={require('../../assets/images/grid-bg.png')} style={styles.gridBackground} resizeMode="repeat" />
@@ -601,8 +587,6 @@ const DiagramBackground = () => (
     </Svg>
   </View>
 );
-
-// ─── ICONS ────────────────────────────────────────────────────────────────────
 
 const EyeIcon = ({ visible }: { visible: boolean }) => (
   <Svg width={18} height={18} viewBox="0 0 24 24" fill="none">
@@ -639,15 +623,12 @@ const EmailIcon = () => (
 
 WebBrowser.maybeCompleteAuthSession();
 
-// ─── SPLASH SCREEN ───────────────────────────────────────────────────────────
-
 const SplashScreen = () => (
   <View style={styles.splashContainer}>
     <ActivityIndicator size="large" color="#3b5bdb" />
   </View>
 );
 
-// Save "Remember Me" preference
 const saveRememberMe = async (email: string, remember: boolean) => {
   if (remember && email) {
     await AsyncStorage.setItem('rememberedEmail', email);
@@ -671,7 +652,7 @@ const loadRememberedEmail = async () => {
   return '';
 };
 
-// ─── MAIN COMPONENT ───────────────────────────────────────────────────────────
+//THE MAIN COMPONENT
 
 export default function SignIn() {
   const router = useRouter();
@@ -702,7 +683,6 @@ export default function SignIn() {
   const passwordRef = useRef<TextInput>(null);
   const logoSize = getResponsiveLogoSize(windowWidth);
 
-  // Load remembered email on mount
   useEffect(() => {
     const loadEmail = async () => {
       const remembered = await loadRememberedEmail();
@@ -714,7 +694,6 @@ export default function SignIn() {
     loadEmail();
   }, []);
 
-  // Handle Google Sign-In redirect result
   useEffect(() => {
     const handleRedirectResult = async () => {
       if (!auth) return;
@@ -746,7 +725,6 @@ export default function SignIn() {
     handleRedirectResult();
   }, [auth, router]);
 
-  // Check for existing session on initial load
   useEffect(() => {
     const checkExistingSession = async () => {
       try {
@@ -767,10 +745,8 @@ export default function SignIn() {
     checkExistingSession();
   }, [router]);
 
-  // ── Handlers ──────────────────────────────────────────────────────────────
-
+  //HANDLERS
   const openPolicyModal = () => setShowPolicyModal(true);
-
   const handleAgree = useCallback(() => {
     setAgreed(true);
     setErrors((prev) => ({ ...prev, terms: '' }));
@@ -802,8 +778,7 @@ export default function SignIn() {
     }
   };
 
-  // ─── GOOGLE SIGN-IN WITH POPUP + Redirect Fallback ─────────────────────────
-
+  //GOOGLE SIGN IN
   const handleFirebaseGoogleSignIn = async () => {
     if (!agreed) {
       setErrors((prev) => ({
@@ -914,8 +889,7 @@ export default function SignIn() {
     }
   };
 
-  // ── Email/Password Sign-In ────────────────────────────────────────────────
-
+  //EMAIL & PASSWORD SIGNIN
   const handleSignIn = async () => {
     const newErrors = { email: '', password: '', terms: '' };
 
@@ -1169,93 +1143,591 @@ export default function SignIn() {
   );
 }
 
-// ─── STYLES ─────────────────────────────────────────────────────────────────
-
 const styles = StyleSheet.create({
-  flex: { flex: 1, backgroundColor: '#eef2ff' },
-  splashContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#eef2ff' },
-  gridBackground: { ...StyleSheet.absoluteFillObject, width: '100%', height: '100%' },
-  gridOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(255,255,255,0.10)' },
-  scrollContent: { flexGrow: 1, justifyContent: 'center', alignItems: 'center', paddingVertical: 40, paddingHorizontal: 16, minHeight: SCREEN_HEIGHT },
-  card: { backgroundColor: '#ffffff', borderRadius: 24, paddingHorizontal: 28, paddingVertical: 28, width: '100%', maxWidth: 420, minWidth: 320, position: 'relative', shadowColor: '#1e293b', shadowOffset: { width: 0, height: 20 }, shadowOpacity: 0.08, shadowRadius: 40, elevation: 10, marginTop: -25, borderColor: '#f1f5ff' },
-  connectorTop: { position: 'absolute', top: -5, alignSelf: 'center', width: 10, height: 10, borderRadius: 5, backgroundColor: '#ffffff', borderWidth: 2, borderColor: '#c7d2fe' },
-  connectorBottom: { position: 'absolute', bottom: -5, alignSelf: 'center', width: 10, height: 10, borderRadius: 5, backgroundColor: '#ffffff', borderWidth: 2, borderColor: '#c7d2fe' },
-  connectorLeft: { position: 'absolute', left: -5, top: '50%', transform: [{ translateY: -5 }], width: 10, height: 10, borderRadius: 5, backgroundColor: '#ffffff', borderWidth: 2, borderColor: '#c7d2fe' },
-  connectorRight: { position: 'absolute', right: -5, top: '50%', transform: [{ translateY: -5 }], width: 10, height: 10, borderRadius: 5, backgroundColor: '#ffffff', borderWidth: 2, borderColor: '#c7d2fe' },
-  logoWrap: { alignItems: 'center', justifyContent: 'center', marginBottom: -10, minHeight: 80 },
-  logoWrapper: { alignItems: 'center', justifyContent: 'center' },
-  logo: { backgroundColor: 'transparent' },
-  heading: { fontSize: 28, fontWeight: '800', color: '#0f172a', textAlign: 'center' },
-  subtitle: { fontSize: 14, color: '#64748b', marginBottom: 24, textAlign: 'center' },
-  formGroup: { marginBottom: 16 },
-  label: { fontSize: 13, fontWeight: '600', color: '#334155', marginBottom: 6 },
-  inputWrap: { borderWidth: 1, borderColor: '#dde3fa', borderRadius: 12, backgroundColor: '#ffffff', minHeight: 40, justifyContent: 'center' },
-  inputWrapFocused: { backgroundColor: '#ffffff', shadowColor: '#3b5bdb', shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.15, shadowRadius: 12, elevation: 4 },
-  input: { flex: 1, paddingHorizontal: 14, paddingVertical: Platform.OS === 'ios' ? 13 : 11, fontSize: 14, color: '#1a1f36', backgroundColor: 'transparent', minHeight: 44, textAlignVertical: 'center' },
-  inputWithIcon: { paddingRight: 44 },
-  eyeBtn: { position: 'absolute', right: 12, padding: 10 },
-  optionsRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 8 },
-  rememberMeRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  checkbox: { width: 18, height: 18, borderRadius: 4, borderWidth: 2, borderColor: '#8896b3', alignItems: 'center', justifyContent: 'center' },
-  checkboxChecked: { backgroundColor: '#3b5bdb', borderColor: '#3b5bdb' },
-  rememberMeText: { fontSize: 12.5, color: '#4a5568' },
-  forgotWrap: { alignItems: 'flex-end' },
-  forgotText: { fontSize: 12.5, color: '#8896b3', fontWeight: '500' },
-  inputError: { borderColor: '#e11d48' },
-  termsError: { borderColor: '#e11d48' },
-  errorText: { fontSize: 12, color: '#e11d48', marginTop: 6, marginLeft: 4, fontWeight: '500' },
-  passwordHint: { fontSize: 11, color: '#8896b3', marginTop: 6, marginLeft: 4 },
-  btnSignIn: { backgroundColor: '#3b5bdb', borderRadius: 12, borderWidth: 1, borderColor: '#2f49c7', paddingVertical: 12, alignItems: 'center', marginTop: 5, overflow: 'hidden', shadowColor: '#3b5bdb', shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.25, shadowRadius: 20, elevation: 8 },
-  btnDisabled: { opacity: 0.75 },
-  btnSignInText: { color: '#ffffff', fontSize: 15, fontWeight: '700', letterSpacing: 0.3 },
-  divider: { flexDirection: 'row', alignItems: 'center', marginVertical: 10 },
-  line: { flex: 1, height: 1, backgroundColor: '#e5e9f5' },
-  orText: { marginHorizontal: 10, fontSize: 12, color: '#8896b3', fontWeight: '600' },
-  btnGoogle: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, borderWidth: 1, borderColor: '#e5e7eb', borderRadius: 12, paddingVertical: 8, marginTop: 5, backgroundColor: '#ffffff' },
-  btnGoogleText: { fontSize: 14, fontWeight: '500', color: '#1a1f36', marginLeft: 8 },
-  nativeGoogleFallback: { marginTop: 10, padding: 12, backgroundColor: '#fef3c7', borderRadius: 12, alignItems: 'center' },
-  nativeGoogleFallbackText: { fontSize: 12, color: '#92400e', textAlign: 'center' },
-  termsWrap: { flexDirection: 'row', alignItems: 'flex-start', gap: 10, marginTop: 14, padding: 10, borderWidth: 1.5, borderColor: '#e2e6f3', borderRadius: 10, backgroundColor: '#f8f9ff' },
-  customCheckbox: { width: 18, height: 18, borderRadius: 9, borderWidth: 2, borderColor: '#8896b3', alignItems: 'center', justifyContent: 'center', marginTop: 1, flexShrink: 0 },
-  customCheckboxChecked: { borderColor: '#3b5bdb', backgroundColor: '#3b5bdb' },
-  termsText: { fontSize: 12.5, color: '#4a5568', flex: 1, lineHeight: 18 },
-  termsLink: { fontWeight: '700', color: '#3b5bdb' },
-  signupWrap: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', marginTop: 20 },
-  signupText: { fontSize: 13, color: '#64748b' },
-  signupLink: { fontSize: 13, fontWeight: '700', color: '#3b5bdb' },
-  errorModalOverlay: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.5)', justifyContent: 'center', alignItems: 'center' },
-  errorModalContainer: { width: '85%', maxWidth: 340, backgroundColor: '#FFFFFF', borderRadius: 20, padding: 24, alignItems: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.15, shadowRadius: 12, elevation: 8 },
-  errorModalIconWrapper: { marginBottom: 16 },
-  errorModalIconCircle: { width: 64, height: 64, borderRadius: 32, backgroundColor: '#f0f4ff', justifyContent: 'center', alignItems: 'center' },
-  errorModalTitle: { fontSize: 20, fontWeight: '700', color: '#1e293b', textAlign: 'center', marginBottom: 8 },
-  errorModalMessage: { fontSize: 14, color: '#64748b', textAlign: 'center', lineHeight: 20, marginBottom: 24 },
-  errorModalButtonPrimary: { width: '100%', paddingVertical: 12, borderRadius: 10, alignItems: 'center', backgroundColor: '#3b5bdb', flexDirection: 'row', justifyContent: 'center' },
-  errorModalButtonTextPrimary: { color: '#ffffff', fontSize: 16, fontWeight: '600' },
+
+  // Layout & Background
+  flex: {
+    flex: 1,
+    backgroundColor: '#eef2ff',
+  },
+  splashContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#eef2ff',
+  },
+  gridBackground: {
+    ...StyleSheet.absoluteFillObject,
+    width: '100%',
+    height: '100%',
+  },
+  gridOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(255,255,255,0.10)',
+  },
+  scrollContent: {
+    flexGrow: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 40,
+    paddingHorizontal: 16,
+    minHeight: SCREEN_HEIGHT,
+  },
+
+  //FORM
+  card: {
+    backgroundColor: '#ffffff',
+    borderRadius: 24,
+    paddingHorizontal: 28,
+    paddingVertical: 28,
+    width: '100%',
+    maxWidth: 420,
+    minWidth: 320,
+    position: 'relative',
+    shadowColor: '#1e293b',
+    shadowOffset: { width: 0, height: 20 },
+    shadowOpacity: 0.08,
+    shadowRadius: 40,
+    elevation: 10,
+    marginTop: -25,
+    borderColor: '#f1f5ff',
+  },
+  connectorTop: {
+    position: 'absolute',
+    top: -5,
+    alignSelf: 'center',
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: '#ffffff',
+    borderWidth: 2,
+    borderColor: '#c7d2fe',
+  },
+  connectorBottom: {
+    position: 'absolute',
+    bottom: -5,
+    alignSelf: 'center',
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: '#ffffff',
+    borderWidth: 2,
+    borderColor: '#c7d2fe',
+  },
+  connectorLeft: {
+    position: 'absolute',
+    left: -5,
+    top: '50%',
+    transform: [{ translateY: -5 }],
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: '#ffffff',
+    borderWidth: 2,
+    borderColor: '#c7d2fe',
+  },
+  connectorRight: {
+    position: 'absolute',
+    right: -5,
+    top: '50%',
+    transform: [{ translateY: -5 }],
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: '#ffffff',
+    borderWidth: 2,
+    borderColor: '#c7d2fe',
+  },
+
+  //LOGO
+  logoWrap: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: -10,
+    minHeight: 80,
+  },
+  logoWrapper: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  logo: {
+    backgroundColor: 'transparent',
+  },
+  heading: {
+    fontSize: 28,
+    fontWeight: '800',
+    color: '#0f172a',
+    textAlign: 'center',
+  },
+  subtitle: {
+    fontSize: 14,
+    color: '#64748b',
+    marginBottom: 24,
+    textAlign: 'center',
+  },
+  formGroup: {
+    marginBottom: 16,
+  },
+  label: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#334155',
+    marginBottom: 6,
+  },
+  inputWrap: {
+    borderWidth: 1,
+    borderColor: '#dde3fa',
+    borderRadius: 12,
+    backgroundColor: '#ffffff',
+    minHeight: 40,
+    justifyContent: 'center',
+  },
+  inputWrapFocused: {
+    backgroundColor: '#ffffff',
+    shadowColor: '#3b5bdb',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+    elevation: 4,
+  },
+  input: {
+    flex: 1,
+    paddingHorizontal: 14,
+    paddingVertical: Platform.OS === 'ios' ? 13 : 11,
+    fontSize: 14,
+    color: '#1a1f36',
+    backgroundColor: 'transparent',
+    minHeight: 44,
+    textAlignVertical: 'center',
+  },
+  inputWithIcon: {
+    paddingRight: 44,
+  },
+  eyeBtn: {
+    position: 'absolute',
+    right: 12,
+    padding: 10,
+  },
+
+  optionsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: 8,
+  },
+  rememberMeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  checkbox: {
+    width: 18,
+    height: 18,
+    borderRadius: 4,
+    borderWidth: 2,
+    borderColor: '#8896b3',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  checkboxChecked: {
+    backgroundColor: '#3b5bdb',
+    borderColor: '#3b5bdb',
+  },
+  rememberMeText: {
+    fontSize: 12.5,
+    color: '#4a5568',
+  },
+  forgotWrap: {
+    alignItems: 'flex-end',
+  },
+  forgotText: {
+    fontSize: 12.5,
+    color: '#8896b3',
+    fontWeight: '500',
+  },
+
+  // Validation
+  inputError: {
+    borderColor: '#e11d48',
+  },
+  termsError: {
+    borderColor: '#e11d48',
+  },
+  errorText: {
+    fontSize: 12,
+    color: '#e11d48',
+    marginTop: 6,
+    marginLeft: 4,
+    fontWeight: '500',
+  },
+  passwordHint: {
+    fontSize: 11,
+    color: '#8896b3',
+    marginTop: 6,
+    marginLeft: 4,
+  },
+
+  // Buttons
+  btnSignIn: {
+    backgroundColor: '#3b5bdb',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#2f49c7',
+    paddingVertical: 12,
+    alignItems: 'center',
+    marginTop: 5,
+    overflow: 'hidden',
+    shadowColor: '#3b5bdb',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.25,
+    shadowRadius: 20,
+    elevation: 8,
+  },
+  btnDisabled: {
+    opacity: 0.75,
+  },
+  btnSignInText: {
+    color: '#ffffff',
+    fontSize: 15,
+    fontWeight: '700',
+    letterSpacing: 0.3,
+  },
+
+  // Divider
+  divider: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginVertical: 10,
+  },
+  line: {
+    flex: 1,
+    height: 1,
+    backgroundColor: '#e5e9f5',
+  },
+  orText: {
+    marginHorizontal: 10,
+    fontSize: 12,
+    color: '#8896b3',
+    fontWeight: '600',
+  },
+
+  // Google Button
+  btnGoogle: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    borderRadius: 12,
+    paddingVertical: 8,
+    marginTop: 5,
+    backgroundColor: '#ffffff',
+  },
+  btnGoogleText: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#1a1f36',
+    marginLeft: 8,
+  },
+  nativeGoogleFallback: {
+    marginTop: 10,
+    padding: 12,
+    backgroundColor: '#fef3c7',
+    borderRadius: 12,
+    alignItems: 'center',
+  },
+  nativeGoogleFallbackText: {
+    fontSize: 12,
+    color: '#92400e',
+    textAlign: 'center',
+  },
+
+  // Terms
+  termsWrap: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 10,
+    marginTop: 14,
+    padding: 10,
+    borderWidth: 1.5,
+    borderColor: '#e2e6f3',
+    borderRadius: 10,
+    backgroundColor: '#f8f9ff',
+  },
+  customCheckbox: {
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    borderWidth: 2,
+    borderColor: '#8896b3',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 1,
+    flexShrink: 0,
+  },
+  customCheckboxChecked: {
+    borderColor: '#3b5bdb',
+    backgroundColor: '#3b5bdb',
+  },
+  termsText: {
+    fontSize: 12.5,
+    color: '#4a5568',
+    flex: 1,
+    lineHeight: 18,
+  },
+  termsLink: {
+    fontWeight: '700',
+    color: '#3b5bdb',
+  },
+
+  // Sign Up Link
+  signupWrap: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginTop: 20,
+  },
+  signupText: {
+    fontSize: 13,
+    color: '#64748b',
+  },
+  signupLink: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#3b5bdb',
+  },
+
+  // Error Modal
+  errorModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  errorModalContainer: {
+    width: '85%',
+    maxWidth: 340,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
+    padding: 24,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+    elevation: 8,
+  },
+  errorModalIconWrapper: {
+    marginBottom: 16,
+  },
+  errorModalIconCircle: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: '#f0f4ff',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  errorModalTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#1e293b',
+    textAlign: 'center',
+    marginBottom: 8,
+  },
+  errorModalMessage: {
+    fontSize: 14,
+    color: '#64748b',
+    textAlign: 'center',
+    lineHeight: 20,
+    marginBottom: 24,
+  },
+  errorModalButtonPrimary: {
+    width: '100%',
+    paddingVertical: 12,
+    borderRadius: 10,
+    alignItems: 'center',
+    backgroundColor: '#3b5bdb',
+    flexDirection: 'row',
+    justifyContent: 'center',
+  },
+  errorModalButtonTextPrimary: {
+    color: '#ffffff',
+    fontSize: 16,
+    fontWeight: '600',
+  },
 });
 
+
+// ─── MODAL STYLES ────────────────────────────────────────────────────────────
+
 const modalStyles = StyleSheet.create({
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.5)', justifyContent: 'center', alignItems: 'center' },
-  modalContainer: { backgroundColor: '#ffffff', borderRadius: 24, overflow: 'hidden', shadowColor: '#000', shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.25, shadowRadius: 20, elevation: 15 },
-  modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, paddingVertical: 16, borderBottomWidth: 1, borderBottomColor: '#e2e6f3', backgroundColor: '#f8f9ff' },
-  modalTitle: { fontSize: 18, fontWeight: '700', color: '#1a1f36' },
-  tabBar: { flexDirection: 'row', borderBottomWidth: 1, borderBottomColor: '#e2e6f3', backgroundColor: '#ffffff' },
-  tab: { flex: 1, paddingVertical: 14, alignItems: 'center' },
-  activeTab: { borderBottomWidth: 2, borderBottomColor: '#3b5bdb' },
-  tabText: { fontSize: 14, fontWeight: '600', color: '#8896b3' },
-  activeTabText: { color: '#3b5bdb' },
-  tabContent: { padding: 20 },
-  scrollHintBanner: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: '#eef2ff', paddingHorizontal: 14, paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: '#c7d2fe' },
-  scrollHintText: { fontSize: 12, color: '#3b5bdb', flex: 1, fontWeight: '500' },
-  modalFooter: { flexDirection: 'row', padding: 16, borderTopWidth: 1, borderTopColor: '#e2e6f3', gap: 12, backgroundColor: '#ffffff' },
-  agreeButton: { flex: 1, backgroundColor: '#3b5bdb', borderRadius: 10, paddingVertical: 12, alignItems: 'center' },
-  agreeButtonDisabled: { backgroundColor: '#c7d2fe' },
-  agreeButtonText: { color: '#ffffff', fontSize: 15, fontWeight: '700' },
-  agreeButtonTextDisabled: { color: '#8fa3e0' },
-  declineButton: { flex: 1, backgroundColor: '#e5e9f5', borderRadius: 10, paddingVertical: 12, alignItems: 'center' },
-  declineButtonText: { color: '#4a5568', fontSize: 16, fontWeight: '600' },
-  scrollTopButton: { position: 'absolute', bottom: 80, right: 20, backgroundColor: '#3b5bdb', width: 48, height: 48, borderRadius: 24, justifyContent: 'center', alignItems: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8, elevation: 6, zIndex: 10 },
-  sectionTitle: { fontSize: 18, fontWeight: '700', color: '#3b5bdb', marginTop: 20, marginBottom: 8 },
-  subSection: { fontSize: 16, fontWeight: '600', color: '#4a5568', marginTop: 12, marginBottom: 4 },
-  text: { fontSize: 14, color: '#4a5568', lineHeight: 22, marginBottom: 8 },
-  footer: { fontSize: 12, color: '#8896b3', textAlign: 'center', marginTop: 24, paddingTop: 16, borderTopWidth: 1, borderTopColor: '#e2e6f3' },
+
+  // Modal Shell
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalContainer: {
+    backgroundColor: '#ffffff',
+    borderRadius: 24,
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.25,
+    shadowRadius: 20,
+    elevation: 15,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e2e6f3',
+    backgroundColor: '#f8f9ff',
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#1a1f36',
+  },
+
+  // Tabs
+  tabBar: {
+    flexDirection: 'row',
+    borderBottomWidth: 1,
+    borderBottomColor: '#e2e6f3',
+    backgroundColor: '#ffffff',
+  },
+  tab: {
+    flex: 1,
+    paddingVertical: 14,
+    alignItems: 'center',
+  },
+  activeTab: {
+    borderBottomWidth: 2,
+    borderBottomColor: '#3b5bdb',
+  },
+  tabText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#8896b3',
+  },
+  activeTabText: {
+    color: '#3b5bdb',
+  },
+  tabContent: {
+    padding: 20,
+  },
+
+  // Scroll Hint
+  scrollHintBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: '#eef2ff',
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: '#c7d2fe',
+  },
+  scrollHintText: {
+    fontSize: 12,
+    color: '#3b5bdb',
+    flex: 1,
+    fontWeight: '500',
+  },
+
+  // Footer & Buttons
+  modalFooter: {
+    flexDirection: 'row',
+    padding: 16,
+    borderTopWidth: 1,
+    borderTopColor: '#e2e6f3',
+    gap: 12,
+    backgroundColor: '#ffffff',
+  },
+  agreeButton: {
+    flex: 1,
+    backgroundColor: '#3b5bdb',
+    borderRadius: 10,
+    paddingVertical: 12,
+    alignItems: 'center',
+  },
+  agreeButtonDisabled: {
+    backgroundColor: '#c7d2fe',
+  },
+  agreeButtonText: {
+    color: '#ffffff',
+    fontSize: 15,
+    fontWeight: '700',
+  },
+  agreeButtonTextDisabled: {
+    color: '#8fa3e0',
+  },
+  declineButton: {
+    flex: 1,
+    backgroundColor: '#e5e9f5',
+    borderRadius: 10,
+    paddingVertical: 12,
+    alignItems: 'center',
+  },
+  declineButtonText: {
+    color: '#4a5568',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  scrollTopButton: {
+    position: 'absolute',
+    bottom: 80,
+    right: 20,
+    backgroundColor: '#3b5bdb',
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 6,
+    zIndex: 10,
+  },
+
+  // Content Typography
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#3b5bdb',
+    marginTop: 20,
+    marginBottom: 8,
+  },
+  subSection: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#4a5568',
+    marginTop: 12,
+    marginBottom: 4,
+  },
+  text: {
+    fontSize: 14,
+    color: '#4a5568',
+    lineHeight: 22,
+    marginBottom: 8,
+  },
+  footer: {
+    fontSize: 12,
+    color: '#8896b3',
+    textAlign: 'center',
+    marginTop: 24,
+    paddingTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: '#e2e6f3',
+  },
 });
