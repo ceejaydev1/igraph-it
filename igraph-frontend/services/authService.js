@@ -5,8 +5,6 @@ import axios from 'axios';
 import { Platform } from 'react-native';
 import API_BASE_URL from '../constants/api';
 
-
-
 // Conditional storage - works on both Web and Native
 const storage = {
   setItem: async (key, value) => {
@@ -159,7 +157,7 @@ export const signIn = async (email, password, consentTimestamp = null) => {
       payload,
       { 
         signal: controller.signal,
-        timeout: 5000 // 5 second timeout
+        timeout: 10000 // 10 second timeout
       }
     );
     pendingRequest = null;
@@ -238,24 +236,55 @@ export const refreshToken = async () => {
   const refresh = await getRefreshToken();
   if (!refresh) throw new Error('No refresh token');
   
-  const response = await api.post('/auth/refresh-token', { refreshToken: refresh });
-  if (response.data.success && response.data.data?.accessToken) {
-    await storage.setItem('accessToken', response.data.data.accessToken);
-    return response.data.data.accessToken;
+  try {
+    const response = await api.post('/auth/refresh-token', { refreshToken: refresh });
+    if (response.data.success && response.data.data?.accessToken) {
+      await storage.setItem('accessToken', response.data.data.accessToken);
+      return response.data.data.accessToken;
+    }
+    return null;
+  } catch (error) {
+    console.error('Refresh token error:', error);
+    // Clear tokens if refresh fails
+    await clearTokens();
+    throw error;
   }
-  return null;
 };
 
-// ✅ FIXED: Use /me endpoint instead of /verify (which doesn't exist)
+// ✅ FIXED: Properly handle /me endpoint response
 export const verifyToken = async () => {
   try {
     const token = await getAccessToken();
-    if (!token) return { success: false };
+    if (!token) {
+      console.log('🔐 verifyToken: No token found');
+      return { success: false };
+    }
     
-    // Changed from '/auth/verify' to '/auth/me' - this endpoint exists
+    console.log('🔐 verifyToken: Verifying token with /auth/me');
     const response = await api.get('/auth/me');
-    return response.data;
+    
+    console.log('🔐 verifyToken: Response status:', response.status);
+    console.log('🔐 verifyToken: Response data:', response.data);
+    
+    // ✅ Check the correct response structure
+    // Backend returns: { success: true, data: { user: {...} } }
+    if (response.data && response.data.success === true) {
+      return {
+        success: true,
+        data: response.data.data || null
+      };
+    }
+    
+    return { success: false };
   } catch (error) {
+    console.error('🔐 verifyToken error:', error.response?.status, error.response?.data?.message || error.message);
+    
+    // If token is expired or invalid, clear it
+    if (error.response?.status === 401) {
+      console.log('🔐 verifyToken: Token invalid/expired, clearing');
+      await clearTokens();
+    }
+    
     return { success: false };
   }
 };
