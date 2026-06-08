@@ -5,7 +5,6 @@ const sendVerificationEmail = async (toEmail, fullName, otp) => {
   const senderEmail = process.env.EMAIL_USER;
   const isProduction = process.env.NODE_ENV === 'production';
 
-  // REMOVED the xkeysib- check - that was blocking your valid key!
   if (!apiKey || apiKey === 'your_brevo_api_key_here') {
     console.log(`📧 [${isProduction ? 'BREVO_MISSING' : 'DEV_MODE'}] Verification OTP for ${toEmail}: ${otp}`);
     
@@ -25,24 +24,169 @@ const sendVerificationEmail = async (toEmail, fullName, otp) => {
   const emailData = {
     sender: { email: senderEmail, name: 'iGraph IT' },
     to: [{ email: toEmail, name: fullName || 'User' }],
-    subject: `Verify your account - OTP: ${otp}`,
+    subject: `Verify your iGraph IT account`,
     htmlContent: `
       <!DOCTYPE html>
       <html>
-      <head><meta charset="UTF-8"></head>
-      <body style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-        <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 30px; text-align: center;">
-          <h1 style="color: white; margin: 0;">iGraph IT</h1>
-        </div>
-        <div style="padding: 30px; border: 1px solid #e0e0e0; border-top: none;">
-          <h2>Welcome ${fullName || 'User'}!</h2>
-          <p>Your verification code is:</p>
-          <div style="background: #f5f5f5; padding: 20px; text-align: center; font-size: 32px; letter-spacing: 5px; border-radius: 8px;">
-            <strong style="color: #667eea;">${otp}</strong>
+      <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Verify Your Account</title>
+        <style>
+          * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+          }
+          
+          body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            background-color: #eef2ff;
+            margin: 0;
+            padding: 20px;
+          }
+          
+          .container {
+            max-width: 500px;
+            margin: 0 auto;
+            position: relative;
+          }
+          
+          /* Grid Background */
+          .grid-bg {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-image: radial-gradient(circle at 2px 2px, #4c6fff 1px, transparent 1px);
+            background-size: 32px 32px;
+            opacity: 0.12;
+            border-radius: 28px;
+            pointer-events: none;
+          }
+          
+          /* Card */
+          .card {
+            background-color: #ffffff;
+            border-radius: 28px;
+            padding: 40px 32px;
+            position: relative;
+            box-shadow: 0 12px 30px rgba(0, 0, 0, 0.08);
+            border: 1px solid #f1f5ff;
+          }
+          
+          /* Header */
+          .header {
+            text-align: center;
+            margin-bottom: 32px;
+          }
+          
+          .logo {
+            font-size: 28px;
+            font-weight: 800;
+            color: #0f172a;
+            letter-spacing: -0.5px;
+          }
+          
+          /* Content */
+          .content {
+            text-align: center;
+          }
+          
+          h2 {
+            font-size: 24px;
+            font-weight: 700;
+            color: #0f172a;
+            margin-bottom: 12px;
+          }
+          
+          .message {
+            font-size: 14px;
+            color: #64748b;
+            line-height: 1.6;
+            margin-bottom: 24px;
+          }
+          
+          /* OTP Box */
+          .otp-box {
+            background-color: #f8faff;
+            border: 2px solid #e2e8f0;
+            border-radius: 16px;
+            padding: 24px;
+            margin: 24px 0;
+            text-align: center;
+          }
+          
+          .otp-code {
+            font-size: 40px;
+            font-weight: 800;
+            letter-spacing: 8px;
+            color: #4c6fff;
+            font-family: 'Courier New', monospace;
+          }
+          
+          .expiry {
+            font-size: 12px;
+            color: #8896b3;
+            margin-top: 12px;
+          }
+          
+          .expiry strong {
+            color: #4c6fff;
+          }
+          
+          /* Footer */
+          .footer {
+            text-align: center;
+            margin-top: 32px;
+            padding-top: 24px;
+            border-top: 1px solid #eef2ff;
+          }
+          
+          .footer p {
+            font-size: 11px;
+            color: #94a3b8;
+          }
+          
+          /* Responsive */
+          @media (max-width: 480px) {
+            .card {
+              padding: 28px 20px;
+            }
+            .otp-code {
+              font-size: 32px;
+              letter-spacing: 6px;
+            }
+            h2 {
+              font-size: 20px;
+            }
+          }
+        </style>
+      </head>
+      <body>
+        <div class="container">
+          <div class="grid-bg"></div>
+          
+          <div class="card">
+            <div class="header">
+              <div class="logo">iGraph IT</div>
+            </div>
+            
+            <div class="content">
+              <h2>Verify Your Email</h2>
+              <p class="message">Hi ${fullName || 'User'},<br>Enter this code to verify your account.</p>
+              
+              <div class="otp-box">
+                <div class="otp-code">${otp}</div>
+                <div class="expiry">Expires in <strong>5 minutes</strong></div>
+              </div>
+            </div>
+            
+            <div class="footer">
+              <p>iGraph IT — Learn SDLC & Create UML Diagrams</p>
+            </div>
           </div>
-          <p>This code expires in <strong>5 minutes</strong>.</p>
-          <hr style="margin: 20px 0;">
-          <p style="color: #888; font-size: 12px;">iGraph IT - Learn SDLC & Create UML Diagrams</p>
         </div>
       </body>
       </html>
@@ -107,7 +251,6 @@ const sendPasswordResetEmail = async (toEmail, fullName, otp) => {
   const senderEmail = process.env.EMAIL_USER;
   const isProduction = process.env.NODE_ENV === 'production';
 
-  // REMOVED the xkeysib- check - that was blocking your valid key!
   if (!apiKey || apiKey === 'your_brevo_api_key_here') {
     console.log(`📧 [${isProduction ? 'BREVO_MISSING' : 'DEV_MODE'}] Reset OTP for ${toEmail}: ${otp}`);
     
@@ -127,25 +270,171 @@ const sendPasswordResetEmail = async (toEmail, fullName, otp) => {
   const emailData = {
     sender: { email: senderEmail, name: 'iGraph IT' },
     to: [{ email: toEmail, name: fullName || 'User' }],
-    subject: `Reset your password - OTP: ${otp}`,
+    subject: `Reset your iGraph IT password`,
     htmlContent: `
       <!DOCTYPE html>
       <html>
-      <head><meta charset="UTF-8"></head>
-      <body style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-        <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 30px; text-align: center;">
-          <h1 style="color: white; margin: 0;">iGraph IT</h1>
-        </div>
-        <div style="padding: 30px; border: 1px solid #e0e0e0; border-top: none;">
-          <h2>Hello ${fullName || 'User'},</h2>
-          <p>We received a request to reset your password. Use the code below:</p>
-          <div style="background: #f5f5f5; padding: 20px; text-align: center; font-size: 32px; letter-spacing: 5px; border-radius: 8px;">
-            <strong style="color: #667eea;">${otp}</strong>
+      <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Reset Your Password</title>
+        <style>
+          * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+          }
+          
+          body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            background-color: #eef2ff;
+            margin: 0;
+            padding: 20px;
+          }
+          
+          .container {
+            max-width: 500px;
+            margin: 0 auto;
+            position: relative;
+          }
+          
+          /* Grid Background */
+          .grid-bg {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-image: radial-gradient(circle at 2px 2px, #4c6fff 1px, transparent 1px);
+            background-size: 32px 32px;
+            opacity: 0.12;
+            border-radius: 28px;
+            pointer-events: none;
+          }
+          
+          /* Card */
+          .card {
+            background-color: #ffffff;
+            border-radius: 28px;
+            padding: 40px 32px;
+            position: relative;
+            box-shadow: 0 12px 30px rgba(0, 0, 0, 0.08);
+            border: 1px solid #f1f5ff;
+          }
+          
+          /* Header */
+          .header {
+            text-align: center;
+            margin-bottom: 32px;
+          }
+          
+          .logo {
+            font-size: 28px;
+            font-weight: 800;
+            color: #0f172a;
+            letter-spacing: -0.5px;
+          }
+          
+          /* Content */
+          .content {
+            text-align: center;
+          }
+          
+          h2 {
+            font-size: 24px;
+            font-weight: 700;
+            color: #0f172a;
+            margin-bottom: 12px;
+          }
+          
+          .message {
+            font-size: 14px;
+            color: #64748b;
+            line-height: 1.6;
+            margin-bottom: 24px;
+          }
+          
+          /* OTP Box */
+          .otp-box {
+            background-color: #f8faff;
+            border: 2px solid #fee2e2;
+            border-radius: 16px;
+            padding: 24px;
+            margin: 24px 0;
+            text-align: center;
+          }
+          
+          .otp-code {
+            font-size: 40px;
+            font-weight: 800;
+            letter-spacing: 8px;
+            color: #ef4444;
+            font-family: 'Courier New', monospace;
+          }
+          
+          .expiry {
+            font-size: 12px;
+            color: #8896b3;
+            margin-top: 12px;
+          }
+          
+          .expiry strong {
+            color: #ef4444;
+          }
+          
+          /* Footer */
+          .footer {
+            text-align: center;
+            margin-top: 32px;
+            padding-top: 24px;
+            border-top: 1px solid #eef2ff;
+          }
+          
+          .footer p {
+            font-size: 11px;
+            color: #94a3b8;
+          }
+          
+          /* Responsive */
+          @media (max-width: 480px) {
+            .card {
+              padding: 28px 20px;
+            }
+            .otp-code {
+              font-size: 32px;
+              letter-spacing: 6px;
+            }
+            h2 {
+              font-size: 20px;
+            }
+          }
+        </style>
+      </head>
+      <body>
+        <div class="container">
+          <div class="grid-bg"></div>
+          
+          <div class="card">
+            <div class="header">
+              <div class="logo">iGraph IT</div>
+            </div>
+            
+            <div class="content">
+              <h2>Reset Password</h2>
+              <p class="message">Hi ${fullName || 'User'},<br>Use this code to reset your password.</p>
+              
+              <div class="otp-box">
+                <div class="otp-code">${otp}</div>
+                <div class="expiry">Expires in <strong>5 minutes</strong></div>
+              </div>
+              
+              <p class="message" style="font-size: 12px; margin-top: 16px;">Didn't request this? You can ignore this email.</p>
+            </div>
+            
+            <div class="footer">
+              <p>iGraph IT — Learn SDLC & Create UML Diagrams</p>
+            </div>
           </div>
-          <p>This code expires in <strong>5 minutes</strong>.</p>
-          <p>If you didn't request this, please ignore this email.</p>
-          <hr style="margin: 20px 0;">
-          <p style="color: #888; font-size: 12px;">iGraph IT - Learn SDLC & Create UML Diagrams</p>
         </div>
       </body>
       </html>

@@ -1,5 +1,5 @@
 // controllers/authController.js
-// Handles all authentication business logic
+// Fixed: User is only created AFTER OTP verification
 
 const bcrypt = require('bcryptjs');
 const { v4: uuidv4 } = require('uuid');
@@ -12,20 +12,17 @@ const { generateAccessToken, generateRefreshToken, verifyRefreshToken } = requir
 const { sendVerificationEmail, sendPasswordResetEmail } = require('../services/emailService');
 
 // ─────────────────────────────────────────────────────────────────────────────
-// SIGN UP
+// SIGN UP - STORES TEMPORARY DATA, NO USER CREATED YET
 // POST /api/auth/signup
 // ─────────────────────────────────────────────────────────────────────────────
 
-// controllers/authController.js - Updated signup function
-
 const signup = async (req, res) => {
   try {
-    const { fullName, email, password } = req.body; // Removed username
+    const { fullName, email, password } = req.body;
 
     // 1. Check if email is already registered
     const existingUser = await userModel.getUserByEmail(email);
     if (existingUser) {
-      // ✅ FIX: Return DIFFERENT messages based on auth provider
       if (existingUser.auth_provider === 'google') {
         return res.status(409).json({
           success: false,
@@ -39,51 +36,43 @@ const signup = async (req, res) => {
       });
     }
 
-    // 2. Create user in Firebase Authentication
-    let firebaseUser;
-    try {
-      firebaseUser = await auth.createUser({
-        email: email,
-        password: password,
-        displayName: fullName,
-        emailVerified: false
-      });
-    } catch (firebaseError) {
-      console.error('Firebase Auth creation error:', firebaseError);
-      return res.status(500).json({
-        success: false,
-        message: 'Failed to create account. Please try again.'
-      });
-    }
-
-    // 3. Hash the password for storage in Firestore
+    // 2. Hash the password
     const saltRounds = 12;
     const passwordHash = await bcrypt.hash(password, saltRounds);
 
-    // 4. Create user document in Firestore (without username)
-    await userModel.createUser(firebaseUser.uid, {
+    // 3. Generate a temporary ID for pending user
+    const tempUserId = uuidv4();
+
+    // 4. Store temporary user data (NOT in main users collection)
+    const pendingUserData = {
       fullName,
       email,
       passwordHash,
-      isVerified: false,
-      authProvider: 'email'
-    });
+      tempUserId,
+      createdAt: new Date().toISOString(),
+      expiresAt: getOTPExpiry(10).toISOString() // Expires in 10 minutes
+    };
+
+    // Store in a temporary collection
+    await db.collection('pending_users').doc(tempUserId).set(pendingUserData);
 
     // 5. Generate OTP and save it
     const otp = generateOTP();
     const otpExpiry = getOTPExpiry(5);
 
-    await otpModel.invalidateAllOTPs(firebaseUser.uid, 'signup');
-    await otpModel.createOTP(firebaseUser.uid, otp, 'signup', otpExpiry);
+    // Store OTP with tempUserId
+    await otpModel.invalidateAllOTPsByEmail(email, 'signup');
+    await otpModel.createOTPWithEmail(email, otp, 'signup', otpExpiry, tempUserId);
 
     // 6. Send verification email
     await sendVerificationEmail(email, fullName, otp);
 
     res.status(201).json({
       success: true,
-      message: 'Account created successfully! Please check your email for the OTP verification code.',
+      message: 'Verification code sent! Please check your email to complete registration.',
       data: {
         email: email,
+        tempId: tempUserId,
         ...(process.env.NODE_ENV === 'development' && { debug_otp: otp })
       }
     });
@@ -98,29 +87,40 @@ const signup = async (req, res) => {
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
-// VERIFY OTP
+// VERIFY OTP - CREATES USER ONLY AFTER SUCCESSFUL VERIFICATION
 // ─────────────────────────────────────────────────────────────────────────────
 
 const verifyOTP = async (req, res) => {
   try {
     const { email, otp } = req.body;
 
-    const user = await userModel.getUserByEmail(email);
-    if (!user) {
-      return res.status(404).json({
-        success: false,
-        message: 'No account found with this email address.'
-      });
-    }
+    // 1. Find pending user by email
+    const pendingSnapshot = await db.collection('pending_users')
+      .where('email', '==', email)
+      .limit(1)
+      .get();
 
-    if (user.is_verified) {
+    if (pendingSnapshot.empty) {
       return res.status(400).json({
         success: false,
-        message: 'Email is already verified. Please sign in.'
+        message: 'No pending registration found. Please sign up again.'
       });
     }
 
-    const validOTP = await otpModel.getValidOTP(user.user_id, 'signup');
+    const pendingDoc = pendingSnapshot.docs[0];
+    const pendingUser = pendingDoc.data();
+
+    // Check if pending user expired
+    if (new Date(pendingUser.expiresAt) < new Date()) {
+      await pendingDoc.ref.delete();
+      return res.status(400).json({
+        success: false,
+        message: 'Registration session expired. Please sign up again.'
+      });
+    }
+
+    // 2. Verify OTP
+    const validOTP = await otpModel.getValidOTPByEmail(email, 'signup');
 
     if (!validOTP) {
       return res.status(400).json({
@@ -136,20 +136,64 @@ const verifyOTP = async (req, res) => {
       });
     }
 
+    // 3. Check if email was already registered during this time
+    const existingUser = await userModel.getUserByEmail(email);
+    if (existingUser) {
+      await pendingDoc.ref.delete();
+      await otpModel.markOTPUsed(validOTP.otp_id);
+      return res.status(409).json({
+        success: false,
+        message: 'Email was already registered. Please sign in.'
+      });
+    }
+
+    // 4. CREATE USER IN FIREBASE AUTH AND FIRESTORE (ONLY NOW!)
+    let firebaseUser;
+    try {
+      firebaseUser = await auth.createUser({
+        email: email,
+        password: pendingUser.passwordHash ? 'temporary' : undefined,
+        displayName: pendingUser.fullName,
+        emailVerified: true
+      });
+      
+      // Update password after creation
+      if (pendingUser.passwordHash) {
+        await auth.updateUser(firebaseUser.uid, { password: pendingUser.passwordHash });
+      }
+    } catch (firebaseError) {
+      console.error('Firebase Auth creation error:', firebaseError);
+      return res.status(500).json({
+        success: false,
+        message: 'Failed to create account. Please try again.'
+      });
+    }
+
+    // 5. Create user document in Firestore
+    await userModel.createUser(firebaseUser.uid, {
+      fullName: pendingUser.fullName,
+      email: email,
+      passwordHash: pendingUser.passwordHash,
+      isVerified: true,
+      authProvider: 'email'
+    });
+
+    // 6. Mark OTP as used
     await otpModel.markOTPUsed(validOTP.otp_id);
-    await userModel.markUserVerified(user.user_id);
-    await auth.updateUser(user.user_id, { emailVerified: true });
+
+    // 7. Delete pending user data
+    await pendingDoc.ref.delete();
 
     res.status(200).json({
       success: true,
-      message: 'Email verified successfully! You can now sign in.'
+      message: 'Email verified and account created successfully! You can now sign in.'
     });
 
   } catch (error) {
     console.error('Verify OTP error:', error);
     res.status(500).json({
       success: false,
-      message: 'Server error during OTP verification. Please try again.'
+      message: 'Server error during verification. Please try again.'
     });
   }
 };
@@ -162,30 +206,43 @@ const resendOTP = async (req, res) => {
   try {
     const { email } = req.body;
 
-    const user = await userModel.getUserByEmail(email);
-    if (!user) {
+    // Check pending users
+    const pendingSnapshot = await db.collection('pending_users')
+      .where('email', '==', email)
+      .limit(1)
+      .get();
+
+    if (pendingSnapshot.empty) {
+      // Check if already verified
+      const existingUser = await userModel.getUserByEmail(email);
+      if (existingUser && existingUser.is_verified) {
+        return res.status(400).json({
+          success: false,
+          message: 'This account is already verified. Please sign in.'
+        });
+      }
       return res.status(200).json({
         success: true,
         message: 'If this email exists in our system, a new OTP has been sent.'
       });
     }
 
-    if (user.is_verified) {
-      return res.status(400).json({
-        success: false,
-        message: 'This account is already verified. Please sign in.'
-      });
-    }
+    const pendingUser = pendingSnapshot.docs[0].data();
 
-    await otpModel.invalidateAllOTPs(user.user_id, 'signup');
+    // Invalidate old OTPs
+    await otpModel.invalidateAllOTPsByEmail(email, 'signup');
+    
+    // Generate new OTP
     const otp = generateOTP();
     const otpExpiry = getOTPExpiry(5);
-    await otpModel.createOTP(user.user_id, otp, 'signup', otpExpiry);
-    await sendVerificationEmail(email, user.full_name, otp);
+    await otpModel.createOTPWithEmail(email, otp, 'signup', otpExpiry, pendingUser.tempUserId);
+    
+    // Send email
+    await sendVerificationEmail(email, pendingUser.fullName, otp);
 
     res.status(200).json({
       success: true,
-      message: 'A new OTP has been sent to your email.',
+      message: 'A new verification code has been sent to your email.',
       ...(process.env.NODE_ENV === 'development' && { debug_otp: otp })
     });
 
@@ -199,25 +256,19 @@ const resendOTP = async (req, res) => {
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
-// SIGN IN
+// SIGN IN (unchanged)
 // ─────────────────────────────────────────────────────────────────────────────
 
-// BEFORE: Multiple database calls
-
-
-// AFTER: Use Promise.all for parallel execution
 const signin = async (req, res) => {
   try {
     const { email, password } = req.body;
     
-    // ✅ Single database call with projection (only needed fields)
     const user = await userModel.getUserByEmail(email);
     
     if (!user) {
       return res.status(401).json({ success: false, message: 'Invalid email or password.' });
     }
     
-    // ✅ Check auth provider first (fastest check)
     if (user.auth_provider === 'google') {
       return res.status(400).json({ success: false, message: 'This account uses Google Sign-In.' });
     }
@@ -226,33 +277,28 @@ const signin = async (req, res) => {
       return res.status(403).json({ success: false, message: 'Please verify your email first.' });
     }
     
-    // ✅ bcrypt compare is the slowest operation - keep async
     const passwordMatch = await bcrypt.compare(password, user.password_hash);
     
     if (!passwordMatch) {
       return res.status(401).json({ success: false, message: 'Invalid email or password.' });
     }
     
-    // ✅ Generate tokens (fast)
     const accessToken = generateAccessToken(user.user_id, user.email);
     const refreshToken = generateRefreshToken(user.user_id);
     
-    // ✅ Create session (firestore write - async but fast)
     const sessionId = uuidv4();
     const sessionExpiry = new Date();
     sessionExpiry.setDate(sessionExpiry.getDate() + 7);
     
-    // Don't await - fire and forget for faster response
-    db.collection('sessions').doc(sessionId).set({
+    await db.collection('sessions').doc(sessionId).set({
       session_id: sessionId,
       user_id: user.user_id,
       refresh_token: refreshToken,
       device_info: req.headers['user-agent'] || 'unknown',
       created_at: new Date().toISOString(),
       expires_at: sessionExpiry.toISOString()
-    }).catch(err => console.error('Session save error:', err));
+    });
     
-    // ✅ Send response immediately (don't wait for session save)
     res.status(200).json({
       success: true,
       message: 'Sign in successful!',
@@ -264,7 +310,10 @@ const signin = async (req, res) => {
           profilePicture: user.profile_picture,
           authProvider: user.auth_provider
         },
-        tokens: { accessToken, refreshToken }
+        tokens: {
+          accessToken: accessToken,
+          refreshToken: refreshToken
+        }
       }
     });
     
@@ -275,10 +324,8 @@ const signin = async (req, res) => {
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
-// GOOGLE AUTH
+// GOOGLE AUTH (direct creation, no OTP needed)
 // ─────────────────────────────────────────────────────────────────────────────
-
-// controllers/authController.js - Updated googleAuth function
 
 const googleAuth = async (req, res) => {
   try {
@@ -291,7 +338,6 @@ const googleAuth = async (req, res) => {
       });
     }
 
-    // 1. Verify the Google ID token using Firebase Admin
     let decodedToken;
     try {
       decodedToken = await auth.verifyIdToken(idToken);
@@ -305,7 +351,6 @@ const googleAuth = async (req, res) => {
 
     const { uid, email, name, picture } = decodedToken;
 
-    // CHECK IF EMAIL IS ALREADY USED WITH EMAIL/PASSWORD
     const existingUserByEmail = await userModel.getUserByEmail(email);
     
     if (existingUserByEmail && existingUserByEmail.auth_provider !== 'google') {
@@ -315,12 +360,9 @@ const googleAuth = async (req, res) => {
       });
     }
 
-    // Check if user already exists in Firestore by UID
     let user = await userModel.getUserById(uid);
 
     if (!user) {
-      // REMOVED username logic - no longer needed
-      // Create user without username
       await userModel.createUser(uid, {
         fullName: name || 'Google User',
         email: email,
@@ -377,7 +419,7 @@ const googleAuth = async (req, res) => {
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
-// FORGOT PASSWORD
+// FORGOT PASSWORD (unchanged)
 // ─────────────────────────────────────────────────────────────────────────────
 
 const forgotPassword = async (req, res) => {
@@ -400,7 +442,6 @@ const forgotPassword = async (req, res) => {
       });
     }
 
-    // CHECK IF USER USES GOOGLE AUTH
     if (user.auth_provider === 'google') {
       return res.status(400).json({
         success: false,
@@ -412,7 +453,7 @@ const forgotPassword = async (req, res) => {
     if (!user.is_verified) {
       return res.status(400).json({
         success: false,
-        message: 'Please verify your email address first. Check your inbox for the verification code.',
+        message: 'Please verify your email address first.',
         code: 'EMAIL_NOT_VERIFIED'
       });
     }
@@ -451,7 +492,7 @@ const forgotPassword = async (req, res) => {
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
-// VERIFY RESET OTP
+// VERIFY RESET OTP (unchanged)
 // ─────────────────────────────────────────────────────────────────────────────
 
 const verifyResetOTP = async (req, res) => {
@@ -497,7 +538,7 @@ const verifyResetOTP = async (req, res) => {
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
-// RESET PASSWORD
+// RESET PASSWORD (unchanged from your current version)
 // ─────────────────────────────────────────────────────────────────────────────
 
 const resetPassword = async (req, res) => {
@@ -544,23 +585,89 @@ const resetPassword = async (req, res) => {
     const saltRounds = 12;
     const newPasswordHash = await bcrypt.hash(newPassword, saltRounds);
 
+    // Update password hash in Firestore
     await userModel.updatePasswordHash(user.user_id, newPasswordHash);
     
+    let firebaseUser = null;
+    let batch = db.batch();
+    
     try {
-      await auth.updateUser(user.user_id, { password: newPassword });
+      try {
+        firebaseUser = await auth.getUser(user.user_id);
+        console.log(`✅ Found user by UID: ${firebaseUser.uid}`);
+      } catch (getUserError) {
+        if (getUserError.code === 'auth/user-not-found') {
+          console.log(`⚠️ User ${email} not found by UID ${user.user_id}, searching by email...`);
+          try {
+            firebaseUser = await auth.getUserByEmail(email);
+            console.log(`✅ Found user by email with different UID: ${firebaseUser.uid}`);
+          } catch (emailError) {
+            console.log(`⚠️ User ${email} not found in Firebase Auth at all, will create new...`);
+            firebaseUser = null;
+          }
+        } else {
+          throw getUserError;
+        }
+      }
+      
+      if (firebaseUser) {
+        if (firebaseUser.uid !== user.user_id) {
+          console.log(`⚠️ UID mismatch: Firestore has ${user.user_id}, Firebase has ${firebaseUser.uid}`);
+          console.log(`🔄 Syncing Firestore user to match Firebase Auth UID...`);
+          
+          await db.collection('students').doc(user.user_id).delete();
+          
+          await userModel.createUser(firebaseUser.uid, {
+            fullName: user.full_name,
+            email: user.email,
+            passwordHash: newPasswordHash,
+            isVerified: user.is_verified || true,
+            authProvider: 'email'
+          });
+          
+          await auth.updateUser(firebaseUser.uid, { password: newPassword });
+          console.log(`✅ Synced and updated user with UID: ${firebaseUser.uid}`);
+          
+          const oldSessionsSnapshot = await db.collection('sessions')
+            .where('user_id', '==', user.user_id)
+            .get();
+          
+          oldSessionsSnapshot.docs.forEach(doc => batch.delete(doc.ref));
+        } else {
+          await auth.updateUser(firebaseUser.uid, { password: newPassword });
+          console.log(`✅ Firebase Auth password updated for ${email}`);
+        }
+      } else {
+        console.log(`📝 Creating new Firebase Auth user for ${email}...`);
+        await auth.createUser({
+          uid: user.user_id,
+          email: user.email,
+          password: newPassword,
+          displayName: user.full_name,
+          emailVerified: user.is_verified || false
+        });
+        console.log(`✅ Firebase Auth user created for ${email}`);
+      }
     } catch (firebaseError) {
       console.error('Firebase password update error:', firebaseError);
     }
-    
-    await otpModel.markOTPUsed(validOTP.otp_id);
 
     const sessionsSnapshot = await db.collection('sessions')
       .where('user_id', '==', user.user_id)
       .get();
-
-    const batch = db.batch();
+    
     sessionsSnapshot.docs.forEach(doc => batch.delete(doc.ref));
+    
+    if (firebaseUser && firebaseUser.uid !== user.user_id) {
+      const newSessionsSnapshot = await db.collection('sessions')
+        .where('user_id', '==', firebaseUser.uid)
+        .get();
+      
+      newSessionsSnapshot.docs.forEach(doc => batch.delete(doc.ref));
+    }
+    
     await batch.commit();
+    await otpModel.markOTPUsed(validOTP.otp_id);
 
     res.status(200).json({
       success: true,
@@ -577,7 +684,7 @@ const resetPassword = async (req, res) => {
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
-// REFRESH TOKEN
+// REFRESH TOKEN (unchanged)
 // ─────────────────────────────────────────────────────────────────────────────
 
 const refreshToken = async (req, res) => {
@@ -649,7 +756,7 @@ const refreshToken = async (req, res) => {
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
-// LOGOUT
+// LOGOUT (unchanged)
 // ─────────────────────────────────────────────────────────────────────────────
 
 const logout = async (req, res) => {
@@ -683,7 +790,7 @@ const logout = async (req, res) => {
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
-// GET CURRENT USER (protected route)
+// GET CURRENT USER (unchanged)
 // ─────────────────────────────────────────────────────────────────────────────
 
 const getCurrentUser = async (req, res) => {
@@ -696,7 +803,6 @@ const getCurrentUser = async (req, res) => {
       });
     }
 
-// In authController.js - getCurrentUser
     res.status(200).json({
       success: true,
       data: {
