@@ -176,7 +176,7 @@ function useCountdown(initial: number) {
   return { seconds, expired: seconds <= 0, reset };
 }
 
-// OTP Input Component
+// OTP Input Component - FIXED
 const OTPInput = ({ 
   value, 
   onChange, 
@@ -205,6 +205,14 @@ const OTPInput = ({
     }
   };
 
+  // Get the index that should show the cursor/focused border
+  const getActiveIndex = () => {
+    if (!isFocused) return -1;
+    return value.length;
+  };
+
+  const activeIndex = getActiveIndex();
+
   return (
     <TouchableOpacity 
       activeOpacity={1} 
@@ -212,22 +220,27 @@ const OTPInput = ({
       style={styles.otpContainer}
     >
       <View style={styles.otpRow}>
-        {otpArray.map((digit, index) => (
-          <View
-            key={index}
-            style={[
-              styles.otpBox,
-              isFocused && styles.otpBoxFocused,
-              hasError && styles.otpBoxError,
-              digit && !hasError && styles.otpBoxFilled,
-            ]}
-          >
-            <Text style={[styles.otpDigit, hasError && styles.otpDigitError]}>
-              {digit}
-            </Text>
-            {isFocused && !digit && <View style={styles.cursor} />}
-          </View>
-        ))}
+        {otpArray.map((digit, index) => {
+          const isActive = activeIndex === index;
+          const hasDigit = digit !== '';
+          
+          return (
+            <View
+              key={index}
+              style={[
+                styles.otpBox,
+                isActive && styles.otpBoxFocused,
+                hasError && styles.otpBoxError,
+                hasDigit && !hasError && !isActive && styles.otpBoxFilled,
+              ]}
+            >
+              <Text style={[styles.otpDigit, hasError && styles.otpDigitError]}>
+                {digit}
+              </Text>
+              {isActive && !hasDigit && <View style={styles.cursor} />}
+            </View>
+          );
+        })}
       </View>
       <TextInput
         ref={inputRef}
@@ -344,10 +357,8 @@ export default function VerifyOTP() {
 
       if (result.success) {
         if (purpose === 'reset') {
-          // Show success overlay with smooth animation
           setShowSuccessOverlay(true);
           
-          // Wait for animation then redirect - OPTIMIZED: 400ms
           setTimeout(() => {
             router.push({
               pathname: '/(auth)/reset-password',
@@ -356,7 +367,7 @@ export default function VerifyOTP() {
                 otp: otpCode 
               },
             });
-          }, 400); // Changed from 800ms to 400ms
+          }, 400);
         } else {
           setShowSuccessModal(true);
         }

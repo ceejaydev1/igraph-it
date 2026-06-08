@@ -72,10 +72,18 @@ api.interceptors.response.use(
   (response) => response,
   async (error) => {
     const originalRequest = error.config;
-    
-    if (error.response?.status === 401 && !originalRequest._retry) {
+
+    // ✅ FIXED: skip retry for auth endpoints — they're not protected routes
+    const isAuthRoute = originalRequest.url?.includes('/auth/signin') ||
+                        originalRequest.url?.includes('/auth/signup') ||
+                        originalRequest.url?.includes('/auth/google') ||
+                        originalRequest.url?.includes('/auth/verify-otp') ||
+                        originalRequest.url?.includes('/auth/forgot-password') ||
+                        originalRequest.url?.includes('/auth/reset-password');
+
+    if (error.response?.status === 401 && !originalRequest._retry && !isAuthRoute) {
       originalRequest._retry = true;
-      
+
       try {
         const newAccessToken = await refreshToken();
         if (newAccessToken) {
@@ -83,22 +91,31 @@ api.interceptors.response.use(
           return api(originalRequest);
         }
       } catch (refreshError) {
-        // Redirect to login if refresh fails
         if (Platform.OS === 'web') {
           window.location.href = '/(auth)/signin';
         }
         return Promise.reject(refreshError);
       }
     }
-    
+
     return Promise.reject(error);
   }
 );
 
 // Token management
 export const storeTokens = async (accessToken, refreshToken) => {
+  if (!accessToken || !refreshToken) {
+    console.error('❌ Cannot store tokens: missing token', { 
+      hasAccess: !!accessToken, 
+      hasRefresh: !!refreshToken 
+    });
+    return;
+  }
+  
+  console.log('💾 Storing tokens...');
   await storage.setItem('accessToken', accessToken);
   await storage.setItem('refreshToken', refreshToken);
+  console.log('✅ Tokens stored successfully');
 };
 
 export const clearTokens = async () => {
@@ -162,18 +179,43 @@ export const signIn = async (email, password, consentTimestamp = null) => {
     );
     pendingRequest = null;
     
+    // Add debugging logs
+    console.log('🔐 Sign in response:', {
+      success: response.data.success,
+      hasTokens: !!response.data.data?.tokens,
+      hasAccessToken: !!response.data.data?.tokens?.accessToken,
+      hasRefreshToken: !!response.data.data?.tokens?.refreshToken
+    });
+    
     if (response.data.success && response.data.data?.tokens) {
-      await storeTokens(
-        response.data.data.tokens.accessToken,
-        response.data.data.tokens.refreshToken
-      );
+      const { accessToken, refreshToken } = response.data.data.tokens;
+      
+      // Verify tokens are not undefined
+      if (!accessToken || !refreshToken) {
+        console.error('❌ Missing tokens in response:', { accessToken: !!accessToken, refreshToken: !!refreshToken });
+      }
+      
+      await storeTokens(accessToken, refreshToken);
+      
+      // Verify tokens were stored
+      const storedAccess = await getAccessToken();
+      const storedRefresh = await getRefreshToken();
+      console.log('✅ Tokens stored:', { 
+        accessStored: !!storedAccess, 
+        refreshStored: !!storedRefresh 
+      });
+      
       if (Platform.OS === 'web' && response.data.data.user) {
         localStorage.setItem('user', JSON.stringify(response.data.data.user));
       }
+    } else {
+      console.warn('⚠️ No tokens in response:', response.data);
     }
+    
     return response.data;
   } catch (error) {
     pendingRequest = null;
+    console.error('❌ Sign in error:', error.response?.data || error.message);
     throw error;
   }
 };

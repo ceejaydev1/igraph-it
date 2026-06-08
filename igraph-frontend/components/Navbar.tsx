@@ -11,6 +11,7 @@ import {
   ScrollView,
   StatusBar,
   Animated,
+  Platform,
 } from 'react-native';
 import { useRouter, usePathname, Href } from 'expo-router';
 import { Svg, Path, Rect, Circle } from 'react-native-svg';
@@ -69,6 +70,13 @@ const CloseIcon = () => (
   </Svg>
 );
 
+// Chevron down icon for dropdown
+const ChevronDownIcon = () => (
+  <Svg width={16} height={16} viewBox="0 0 24 24" fill="none">
+    <Path d="M6 9l6 6 6-6" stroke="#64748b" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+  </Svg>
+);
+
 interface NavbarProps {
   fullName?: string;
   userEmail?: string;
@@ -85,7 +93,8 @@ export default function Navbar({
 
   const [screenWidth, setScreenWidth] = useState(Dimensions.get('window').width);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-  const [navbarHeight, setNavbarHeight] = useState(60);
+  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+  const navbarHeight = 60;
 
   // true  → phones & tablets  (burger)
   // false → desktop            (full nav)
@@ -95,6 +104,8 @@ export default function Navbar({
   const iconAnim = useRef(new Animated.Value(0)).current;
   // Menu slide + fade  (0 = hidden, 1 = visible)
   const menuAnim = useRef(new Animated.Value(0)).current;
+  // Dropdown animation
+  const dropdownAnim = useRef(new Animated.Value(0)).current;
 
   // Re-check on every orientation / resize event
   useEffect(() => {
@@ -104,9 +115,27 @@ export default function Navbar({
       if (window.width >= DESKTOP_BREAKPOINT && isMobileMenuOpen) {
         forceCloseMenu();
       }
+      // Close dropdown on resize
+      if (isDropdownOpen) {
+        closeDropdown();
+      }
     });
     return () => sub.remove();
-  }, [isMobileMenuOpen]);
+  }, [isMobileMenuOpen, isDropdownOpen]);
+
+  // Close dropdown when clicking outside (web only)
+  useEffect(() => {
+    if (Platform.OS === 'web' && isDropdownOpen) {
+      const handleClickOutside = (e: MouseEvent) => {
+        const target = e.target as HTMLElement;
+        if (!target.closest('.dropdown-container') && !target.closest('.dropdown-trigger')) {
+          closeDropdown();
+        }
+      };
+      document.addEventListener('click', handleClickOutside);
+      return () => document.removeEventListener('click', handleClickOutside);
+    }
+  }, [isDropdownOpen]);
 
   const forceCloseMenu = () => {
     iconAnim.setValue(0);
@@ -134,11 +163,43 @@ export default function Navbar({
 
   const toggleMenu = () => (isMobileMenuOpen ? closeMenu() : openMenu());
 
+  const openDropdown = () => {
+    setIsDropdownOpen(true);
+    Animated.spring(dropdownAnim, {
+      toValue: 1,
+      tension: 50,
+      friction: 7,
+      useNativeDriver: true,
+    }).start();
+  };
+
+  const closeDropdown = () => {
+    Animated.timing(dropdownAnim, {
+      toValue: 0,
+      duration: 200,
+      useNativeDriver: true,
+    }).start(() => {
+      setIsDropdownOpen(false);
+    });
+  };
+
+  const toggleDropdown = () => {
+    if (isDropdownOpen) {
+      closeDropdown();
+    } else {
+      openDropdown();
+    }
+  };
+
   const handleNavigation = (route: string) => {
     if (isMobileMenuOpen) {
       closeMenu(() => router.push(route as Href));
     } else {
       router.push(route as Href);
+    }
+    // Close dropdown if open
+    if (isDropdownOpen) {
+      closeDropdown();
     }
   };
 
@@ -153,6 +214,10 @@ export default function Navbar({
       await logout();
       router.replace('/(auth)/signin' as Href);
     }
+    // Close dropdown if open
+    if (isDropdownOpen) {
+      closeDropdown();
+    }
   };
 
   const navItems = [
@@ -162,10 +227,30 @@ export default function Navbar({
     { label: 'User Account',      route: '/(tabs)/userAccount', icon: UserAccountIcon },
   ];
 
+  // Get initials for avatar
+  const getInitials = () => {
+    return fullName
+      .split(' ')
+      .map(n => n[0])
+      .join('')
+      .toUpperCase()
+      .slice(0, 2);
+  };
+
   // ─────────────────────────────────────────────
   // DESKTOP  (≥ 1024 px)
   // ─────────────────────────────────────────────
   if (!isBurger) {
+    const dropdownTranslateY = dropdownAnim.interpolate({
+      inputRange: [0, 1],
+      outputRange: [-10, 0],
+    });
+
+    const dropdownOpacity = dropdownAnim.interpolate({
+      inputRange: [0, 1],
+      outputRange: [0, 1],
+    });
+
     return (
       <>
         <StatusBar barStyle="dark-content" backgroundColor="#ffffff" />
@@ -198,10 +283,61 @@ export default function Navbar({
               })}
             </View>
 
-            <TouchableOpacity style={styles.logoutBtn} onPress={handleLogout}>
-              <LogoutIcon />
-              <Text style={styles.logoutText}>Sign Out</Text>
-            </TouchableOpacity>
+            {/* Profile Dropdown - replaces sign out button */}
+            <View style={styles.dropdownContainer}>
+              <TouchableOpacity
+                style={styles.profileTrigger}
+                onPress={toggleDropdown}
+                activeOpacity={0.7}
+              >
+                {profilePicture ? (
+                  <Image source={{ uri: profilePicture }} style={styles.avatarImage} />
+                ) : (
+                  <View style={styles.avatarPlaceholder}>
+                    <Text style={styles.avatarInitials}>{getInitials()}</Text>
+                  </View>
+                )}
+                <ChevronDownIcon />
+              </TouchableOpacity>
+
+              {isDropdownOpen && (
+                <Animated.View
+                  style={[
+                    styles.dropdownMenu,
+                    {
+                      opacity: dropdownOpacity,
+                      transform: [{ translateY: dropdownTranslateY }],
+                    },
+                  ]}
+                >
+                  <View style={styles.dropdownHeader}>
+                    {profilePicture ? (
+                      <Image source={{ uri: profilePicture }} style={styles.dropdownAvatar} />
+                    ) : (
+                      <View style={styles.dropdownAvatarPlaceholder}>
+                        <Text style={styles.dropdownAvatarInitials}>{getInitials()}</Text>
+                      </View>
+                    )}
+                    <View style={styles.dropdownUserInfo}>
+                      <Text style={styles.dropdownUserName} numberOfLines={1}>
+                        {fullName}
+                      </Text>
+                      <Text style={styles.dropdownUserEmail} numberOfLines={1}>
+                        {userEmail}
+                      </Text>
+                    </View>
+                  </View>
+                  <View style={styles.dropdownDivider} />
+                  <TouchableOpacity
+                    style={styles.dropdownLogoutBtn}
+                    onPress={handleLogout}
+                  >
+                    <LogoutIcon />
+                    <Text style={styles.dropdownLogoutText}>Sign Out</Text>
+                  </TouchableOpacity>
+                </Animated.View>
+              )}
+            </View>
           </View>
         </View>
       </>
@@ -216,10 +352,7 @@ export default function Navbar({
       <StatusBar barStyle="dark-content" backgroundColor="#ffffff" />
 
       {/* ── Top bar — always visible, never moves ── */}
-      <View
-        style={styles.mobileContainer}
-        onLayout={(e) => setNavbarHeight(e.nativeEvent.layout.height)}
-      >
+      <View style={styles.mobileContainer}>
         <View style={styles.mobileNav}>
           {/* Logo */}
           <TouchableOpacity
@@ -332,6 +465,25 @@ export default function Navbar({
 
               <View style={styles.divider} />
 
+              {/* User Info Section in Mobile Menu */}
+              <View style={styles.mobileUserInfo}>
+                {profilePicture ? (
+                  <Image source={{ uri: profilePicture }} style={styles.mobileAvatar} />
+                ) : (
+                  <View style={styles.mobileAvatarPlaceholder}>
+                    <Text style={styles.mobileAvatarInitials}>{getInitials()}</Text>
+                  </View>
+                )}
+                <View style={styles.mobileUserText}>
+                  <Text style={styles.mobileUserName} numberOfLines={1}>
+                    {fullName}
+                  </Text>
+                  <Text style={styles.mobileUserEmail} numberOfLines={1}>
+                    {userEmail}
+                  </Text>
+                </View>
+              </View>
+
               <TouchableOpacity style={styles.mobileLogoutBtn} onPress={handleLogout}>
                 <LogoutIcon />
                 <Text style={styles.mobileLogoutText}>Sign Out</Text>
@@ -352,6 +504,7 @@ const styles = StyleSheet.create({
     borderBottomColor: '#eef2ff',
     paddingHorizontal: 32,
     paddingVertical: 12,
+    zIndex: 100,
   },
   desktopNav: {
     flexDirection: 'row',
@@ -401,17 +554,108 @@ const styles = StyleSheet.create({
     color: '#4c6fff',
     fontWeight: '600',
   },
-  logoutBtn: {
+
+  // ── Profile Dropdown (Desktop) ──────────────────
+  dropdownContainer: {
+    position: 'relative',
+  },
+  profileTrigger: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 8,
-    backgroundColor: '#fef2f2',
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+    borderRadius: 40,
+    backgroundColor: '#f8faff',
+    borderWidth: 1,
+    borderColor: '#eef2ff',
   },
-  logoutText: {
-    fontSize: 13,
+  avatarImage: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+  },
+  avatarPlaceholder: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#4c6fff',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  avatarInitials: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#ffffff',
+  },
+  dropdownMenu: {
+    position: 'absolute',
+    top: 52,
+    right: 0,
+    width: 260,
+    backgroundColor: '#ffffff',
+    borderRadius: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.12,
+    shadowRadius: 16,
+    elevation: 8,
+    borderWidth: 1,
+    borderColor: '#eef2ff',
+    zIndex: 1000,
+  },
+  dropdownHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    padding: 16,
+  },
+  dropdownAvatar: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+  },
+  dropdownAvatarPlaceholder: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: '#4c6fff',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  dropdownAvatarInitials: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#ffffff',
+  },
+  dropdownUserInfo: {
+    flex: 1,
+  },
+  dropdownUserName: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#1a1f36',
+    marginBottom: 2,
+  },
+  dropdownUserEmail: {
+    fontSize: 12,
+    color: '#8896b3',
+  },
+  dropdownDivider: {
+    height: 1,
+    backgroundColor: '#eef2ff',
+  },
+  dropdownLogoutBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    padding: 14,
+    borderRadius: 8,
+    margin: 8,
+    marginTop: 4,
+  },
+  dropdownLogoutText: {
+    fontSize: 14,
     fontWeight: '500',
     color: '#ef4444',
   },
@@ -493,6 +737,45 @@ const styles = StyleSheet.create({
     height: 1,
     backgroundColor: '#eef2ff',
     marginVertical: 12,
+  },
+  // Mobile User Info
+  mobileUserInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingVertical: 12,
+    marginBottom: 8,
+  },
+  mobileAvatar: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+  },
+  mobileAvatarPlaceholder: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: '#4c6fff',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  mobileAvatarInitials: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#ffffff',
+  },
+  mobileUserText: {
+    flex: 1,
+  },
+  mobileUserName: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#1a1f36',
+    marginBottom: 2,
+  },
+  mobileUserEmail: {
+    fontSize: 12,
+    color: '#8896b3',
   },
   mobileLogoutBtn: {
     flexDirection: 'row',

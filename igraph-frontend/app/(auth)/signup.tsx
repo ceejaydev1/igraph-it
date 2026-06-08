@@ -1,4 +1,4 @@
-// app/(auth)/signup.tsx - COMPLETE FIXED VERSION
+// app/(auth)/signup.tsx - UPDATED WITH SPECIAL CHARACTER INLINE ERROR
 
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import {
@@ -119,7 +119,7 @@ const EmailIcon = () => (
   </Svg>
 );
 
-// ─── TERMS AND PRIVACY POLICY CONTENT (keep as is from your original) ─────────
+// ─── TERMS AND PRIVACY POLICY CONTENT ─────────────────────────────────────────
 
 const TermsContent = () => (
   <View style={modalStyles.tabContent}>
@@ -455,7 +455,7 @@ const ErrorPopupModal = ({
   );
 };
 
-// ─── SUCCESS MODAL ────────────────────────────────────────────────────────────
+// ─── SUCCESS MODAL (FIXED) ────────────────────────────────────────────────────
 
 const SuccessModal = ({
   visible,
@@ -463,16 +463,34 @@ const SuccessModal = ({
   message,
   onClose,
   buttonText = 'Continue',
+  email,
+  purpose,
 }: {
   visible: boolean;
   title: string;
   message: string;
   onClose: () => void;
   buttonText?: string;
+  email?: string;
+  purpose?: string;
 }) => {
+  const router = useRouter();
+
+  const handleClose = () => {
+    onClose();
+    if (email && purpose) {
+      setTimeout(() => {
+        router.push({ 
+          pathname: '/(auth)/verify-otp', 
+          params: { email, purpose } 
+        });
+      }, 100);
+    }
+  };
+
   return (
-    <Modal animationType="fade" transparent={true} visible={visible} onRequestClose={onClose}>
-      <TouchableOpacity style={styles.errorModalOverlay} activeOpacity={1} onPress={onClose}>
+    <Modal animationType="fade" transparent={true} visible={visible} onRequestClose={handleClose}>
+      <TouchableOpacity style={styles.errorModalOverlay} activeOpacity={1} onPress={handleClose}>
         <View style={styles.errorModalContainer}>
           <View style={styles.errorModalIconWrapper}>
             <View style={[styles.errorModalIconCircle, { backgroundColor: '#d1fae5' }]}>
@@ -484,7 +502,7 @@ const SuccessModal = ({
           </View>
           <Text style={styles.errorModalTitle}>{title}</Text>
           <Text style={styles.errorModalMessage}>{message}</Text>
-          <TouchableOpacity style={[styles.errorModalButtonPrimary, { backgroundColor: '#10b981' }]} onPress={onClose}>
+          <TouchableOpacity style={[styles.errorModalButtonPrimary, { backgroundColor: '#10b981' }]} onPress={handleClose}>
             <Text style={styles.errorModalButtonTextPrimary}>{buttonText}</Text>
           </TouchableOpacity>
         </View>
@@ -510,14 +528,18 @@ const DiagramBackground = () => (
   </View>
 );
 
-// ─── PASSWORD PROGRESSIVE VALIDATION ──────────────────────────────────────────
+// ─── PASSWORD PROGRESSIVE VALIDATION WITH SPECIAL CHARACTER ────────────────────
 
 interface PasswordValidation {
   minLength: boolean;
   hasUpper: boolean;
   hasLower: boolean;
   hasNumber: boolean;
+  hasSpecial: boolean;
 }
+
+// Special characters regex
+const SPECIAL_CHARS_REGEX = /[!@#$%^&*(),.?":{}|<>]/;
 
 const PasswordStrengthIndicator = ({ password }: { password: string }) => {
   const [validation, setValidation] = useState<PasswordValidation>({
@@ -525,6 +547,7 @@ const PasswordStrengthIndicator = ({ password }: { password: string }) => {
     hasUpper: false,
     hasLower: false,
     hasNumber: false,
+    hasSpecial: false,
   });
 
   useEffect(() => {
@@ -533,14 +556,16 @@ const PasswordStrengthIndicator = ({ password }: { password: string }) => {
       hasUpper: /[A-Z]/.test(password),
       hasLower: /[a-z]/.test(password),
       hasNumber: /[0-9]/.test(password),
+      hasSpecial: SPECIAL_CHARS_REGEX.test(password),
     });
   }, [password]);
 
   const getStrength = () => {
     const passed = Object.values(validation).filter(Boolean).length;
-    if (passed === 4) return { text: 'Strong password!', color: '#10b981', percentage: 100 };
-    if (passed === 3) return { text: 'Good password', color: '#f59e0b', percentage: 75 };
-    if (passed > 0) return { text: 'Weak password', color: '#ef4444', percentage: 50 };
+    if (passed === 5) return { text: 'Strong password!', color: '#10b981', percentage: 100 };
+    if (passed >= 4) return { text: 'Good password', color: '#f59e0b', percentage: 75 };
+    if (passed >= 3) return { text: 'Weak password', color: '#ef4444', percentage: 50 };
+    if (passed > 0) return { text: 'Very weak password', color: '#ef4444', percentage: 25 };
     return { text: 'Enter a password', color: '#8896b3', percentage: 0 };
   };
 
@@ -584,6 +609,8 @@ export default function SignUp() {
   const [successModalData, setSuccessModalData] = useState({
     title: '',
     message: '',
+    email: '',
+    purpose: '',
   });
   const [errors, setErrors] = useState({
     fullName: '',
@@ -592,6 +619,9 @@ export default function SignUp() {
     confirmPassword: '',
     agreed: '',
   });
+
+  // Inline password error state
+  const [inlinePasswordError, setInlinePasswordError] = useState('');
 
   const [fullNameFocused, setFullNameFocused] = useState(false);
   const [emailFocused, setEmailFocused] = useState(false);
@@ -651,15 +681,29 @@ export default function SignUp() {
     setShowErrorModal(true);
   };
 
-  const showSuccessPopup = (title: string, message: string) => {
-    setSuccessModalData({ title, message });
+  const showSuccessPopup = (title: string, message: string, email: string, purpose: string) => {
+    setSuccessModalData({ title, message, email, purpose });
     setShowSuccessModal(true);
   };
 
   // ── Password Validation Helpers ──────────────────────────────────────────
 
   const isPasswordValid = (pwd: string) => {
-    return pwd.length >= 8 && /[A-Z]/.test(pwd) && /[a-z]/.test(pwd) && /[0-9]/.test(pwd);
+    return pwd.length >= 8 && 
+           /[A-Z]/.test(pwd) && 
+           /[a-z]/.test(pwd) && 
+           /[0-9]/.test(pwd) &&
+           SPECIAL_CHARS_REGEX.test(pwd);
+  };
+
+  const getPasswordMissingRequirements = (pwd: string): string[] => {
+    const missing: string[] = [];
+    if (pwd.length < 8) missing.push('8+ characters');
+    if (!/[A-Z]/.test(pwd)) missing.push('uppercase letter');
+    if (!/[a-z]/.test(pwd)) missing.push('lowercase letter');
+    if (!/[0-9]/.test(pwd)) missing.push('number');
+    if (!SPECIAL_CHARS_REGEX.test(pwd)) missing.push('special character (!@#$%^&* etc.)');
+    return missing;
   };
 
   const doPasswordsMatch = () => {
@@ -694,7 +738,8 @@ export default function SignUp() {
       newErrors.password = 'Password is required.';
       isValid = false;
     } else if (!isPasswordValid(password)) {
-      newErrors.password = 'Please meet all password requirements below.';
+      const missing = getPasswordMissingRequirements(password);
+      newErrors.password = `Password must include: ${missing.join(', ')}`;
       isValid = false;
     }
     if (!confirmPassword) {
@@ -762,14 +807,13 @@ export default function SignUp() {
     }
   };
 
-  // ⭐ THIS IS THE KEY FUNCTION - EXACT COPY FROM SIGNIN.TSX ⭐
   const handleGoogleSignInResult = async (result: any) => {
     try {
       const idToken = await result.user.getIdToken();
       const apiResult = await authService.googleAuth(idToken);
 
       if (apiResult.success) {
-        showSuccessPopup('Welcome!', 'Your Google account has been successfully signed up.');
+        showSuccessPopup('Welcome!', 'Your Google account has been successfully signed up.', '', '');
         setTimeout(() => {
           router.replace('/(tabs)/home');
         }, 400);
@@ -777,7 +821,6 @@ export default function SignUp() {
         await auth?.signOut();
         const msg = apiResult.message || '';
         
-        // Check if email already exists with email/password (409 conflict)
         if (msg.toLowerCase().includes('already registered') || 
             msg.toLowerCase().includes('already exists') ||
             msg.toLowerCase().includes('email/password')) {
@@ -819,91 +862,87 @@ export default function SignUp() {
     await handleGoogleSignIn();
   };
 
-  // ── Email/Password Sign Up ───────────────────────────────────────────────
+  // ── Email/Password Sign Up (FIXED) ─────────────────────────────────────────
 
   const handleSignUp = async () => {
-  if (!validate()) return;
+    if (!validate()) return;
 
-  setLoading(true);
-  const startTime = Date.now();
+    setLoading(true);
+    const startTime = Date.now();
 
-  try {
-    const result = await authService.signUp({ fullName, email, password });
-    const elapsed = Date.now() - startTime;
-    if (elapsed < 500) await new Promise((r) => setTimeout(r, 500 - elapsed));
+    try {
+      const result = await authService.signUp({ fullName, email, password });
+      const elapsed = Date.now() - startTime;
+      if (elapsed < 500) await new Promise((r) => setTimeout(r, 500 - elapsed));
 
-    if (result.success) {
-      showSuccessPopup(
-        'Verification Code Sent!',
-        `We've sent a 6-digit verification code to ${email.replace(/(.{2})(.*)(@.*)/, '$1•••$3')}`
-      );
-      setTimeout(() => {
-        router.push({ pathname: '/(auth)/verify-otp', params: { email, purpose: 'register' } });
-      }, 400);
-    } else {
-      const msg = result.message || '';
-      const errorCode = result.code; // ✅ Check for code field from backend
-      
-      // ✅ CHECK FOR GOOGLE ACCOUNT FIRST (using code field OR keywords)
-      if (errorCode === 'GOOGLE_ACCOUNT' || msg.toLowerCase().includes('google') || msg.toLowerCase().includes('oauth')) {
-        showErrorPopup(
-          'Google Account Detected',
-          'This email is registered with Google. Please sign in using Google instead.',
-          handleGoogleSignIn,
-          'Sign In with Google',
-          <GoogleIcon />
-        );
-      } 
-      // ✅ THEN CHECK FOR EXISTING EMAIL/PASSWORD ACCOUNT
-      else if (msg.toLowerCase().includes('already registered') || 
-                 msg.toLowerCase().includes('already exists')) {
-        showErrorPopup(
-          'Email Already Exists',
-          'An account with this email already exists. Would you like to sign in instead?',
-          () => router.push({ pathname: '/(auth)/signin', params: { prefilledEmail: email } }),
-          'Go to Sign In',
-          <EmailIcon />
-        );
+      if (result.success) {
+        setShowSuccessModal(true);
+        setSuccessModalData({
+          title: 'Verification Code Sent!',
+          message: `We've sent a 6-digit verification code to ${email.replace(/(.{2})(.*)(@.*)/, '$1•••$3')}`,
+          email: email,
+          purpose: 'register',
+        });
       } else {
-        showToastMessage(msg || 'Something went wrong', true);
+        const msg = result.message || '';
+        const errorCode = result.code;
+        
+        if (errorCode === 'GOOGLE_ACCOUNT' || msg.toLowerCase().includes('google') || msg.toLowerCase().includes('oauth')) {
+          showErrorPopup(
+            'Google Account Detected',
+            'This email is registered with Google. Please sign in using Google instead.',
+            handleGoogleSignIn,
+            'Sign In with Google',
+            <GoogleIcon />
+          );
+        } 
+        else if (msg.toLowerCase().includes('already registered') || 
+                   msg.toLowerCase().includes('already exists')) {
+          showErrorPopup(
+            'Email Already Exists',
+            'An account with this email already exists. Would you like to sign in instead?',
+            () => router.push({ pathname: '/(auth)/signin', params: { prefilledEmail: email } }),
+            'Go to Sign In',
+            <EmailIcon />
+          );
+        } else {
+          showToastMessage(msg || 'Something went wrong', true);
+        }
       }
-    }
-  } catch (error: any) {
-    console.error('Sign up error:', error);
-    if (error.response?.data?.message) {
-      const msg = error.response.data.message;
-      const errorCode = error.response.data.code; // ✅ Check for code field from backend
-      
-      // ✅ CHECK FOR GOOGLE ACCOUNT FIRST (using code field OR keywords)
-      if (errorCode === 'GOOGLE_ACCOUNT' || msg.toLowerCase().includes('google') || msg.toLowerCase().includes('oauth')) {
-        showErrorPopup(
-          'Google Account Detected',
-          'This email is registered with Google. Please sign in using Google instead.',
-          handleGoogleSignIn,
-          'Sign In with Google',
-          <GoogleIcon />
-        );
-      } 
-      // ✅ THEN CHECK FOR EXISTING EMAIL/PASSWORD ACCOUNT
-      else if (msg.toLowerCase().includes('already registered') || 
-                 msg.toLowerCase().includes('already exists')) {
-        showErrorPopup(
-          'Email Already Exists',
-          'An account with this email already exists. Would you like to sign in instead?',
-          () => router.push({ pathname: '/(auth)/signin', params: { prefilledEmail: email } }),
-          'Go to Sign In',
-          <EmailIcon />
-        );
+    } catch (error: any) {
+      console.error('Sign up error:', error);
+      if (error.response?.data?.message) {
+        const msg = error.response.data.message;
+        const errorCode = error.response.data.code;
+        
+        if (errorCode === 'GOOGLE_ACCOUNT' || msg.toLowerCase().includes('google') || msg.toLowerCase().includes('oauth')) {
+          showErrorPopup(
+            'Google Account Detected',
+            'This email is registered with Google. Please sign in using Google instead.',
+            handleGoogleSignIn,
+            'Sign In with Google',
+            <GoogleIcon />
+          );
+        } 
+        else if (msg.toLowerCase().includes('already registered') || 
+                   msg.toLowerCase().includes('already exists')) {
+          showErrorPopup(
+            'Email Already Exists',
+            'An account with this email already exists. Would you like to sign in instead?',
+            () => router.push({ pathname: '/(auth)/signin', params: { prefilledEmail: email } }),
+            'Go to Sign In',
+            <EmailIcon />
+          );
+        } else {
+          showToastMessage(msg || 'Something went wrong', true);
+        }
       } else {
-        showToastMessage(msg || 'Something went wrong', true);
+        showToastMessage(error.message || 'Something went wrong', true);
       }
-    } else {
-      showToastMessage(error.message || 'Something went wrong', true);
+    } finally {
+      setLoading(false);
     }
-  } finally {
-    setLoading(false);
-  }
-};
+  };
 
   // ── Render ─────────────────────────────────────────────────────────────────
 
@@ -913,7 +952,15 @@ export default function SignUp() {
 
       <PolicyModal visible={showPolicyModal} onClose={() => setShowPolicyModal(false)} onAgree={handleAgree} />
       <ErrorPopupModal visible={showErrorModal} title={errorModalData.title} message={errorModalData.message} onClose={() => setShowErrorModal(false)} onAction={errorModalData.onAction} actionButtonText={errorModalData.actionButtonText} actionIcon={errorModalData.actionIcon} />
-      <SuccessModal visible={showSuccessModal} title={successModalData.title} message={successModalData.message} onClose={() => setShowSuccessModal(false)} buttonText="Continue" />
+      <SuccessModal 
+        visible={showSuccessModal} 
+        title={successModalData.title} 
+        message={successModalData.message} 
+        onClose={() => setShowSuccessModal(false)} 
+        buttonText="Continue"
+        email={successModalData.email}
+        purpose={successModalData.purpose}
+      />
 
       <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined} keyboardVerticalOffset={Platform.OS === 'ios' ? 64 : 0}>
         <DiagramBackground />
@@ -925,7 +972,7 @@ export default function SignUp() {
             <View style={styles.connectorLeft} />
             <View style={styles.connectorRight} />
 
-            <Text style={styles.heading}>Create Account</Text>
+            <Text style={styles.heading}>Sign Up</Text>
 
             {/* Full Name */}
             <View style={styles.formGroup}>
@@ -980,7 +1027,7 @@ export default function SignUp() {
               {errors.email ? <Text style={styles.fieldError}>{errors.email}</Text> : null}
             </View>
 
-            {/* Password */}
+            {/* Password with Inline Error */}
             <View style={styles.formGroup}>
               <Text style={styles.label}>Password</Text>
               <View style={[styles.inputWrap, passwordFocused && styles.inputWrapFocused, errors.password ? styles.inputError : null]}>
@@ -990,9 +1037,21 @@ export default function SignUp() {
                   placeholder="Create a strong password"
                   placeholderTextColor="#b8c0d4"
                   value={password}
-                  onChangeText={(text) => { setPassword(text); if (errors.password) setErrors({ ...errors, password: '' }); }}
+                  onChangeText={(text) => { 
+                    setPassword(text); 
+                    if (errors.password) setErrors({ ...errors, password: '' });
+                    setInlinePasswordError('');
+                  }}
                   onFocus={() => setPasswordFocused(true)}
-                  onBlur={() => setPasswordFocused(false)}
+                  onBlur={() => {
+                    setPasswordFocused(false);
+                    if (password && !isPasswordValid(password)) {
+                      const missing = getPasswordMissingRequirements(password);
+                      setInlinePasswordError(`Password must have ${missing.join(', ')}`);
+                    } else {
+                      setInlinePasswordError('');
+                    }
+                  }}
                   secureTextEntry={!showPassword}
                   autoCapitalize="none"
                   returnKeyType="next"
@@ -1009,7 +1068,14 @@ export default function SignUp() {
                 </TouchableOpacity>
               </View>
               <PasswordStrengthIndicator password={password} />
+              {/* Inline error message */}
+              {inlinePasswordError ? (
+                <Text style={styles.inlineErrorText}>{inlinePasswordError}</Text>
+              ) : null}
               {errors.password ? <Text style={styles.fieldError}>{errors.password}</Text> : null}
+              
+              {/* Password requirements hint */}
+              
             </View>
 
             {/* Confirm Password */}
@@ -1056,7 +1122,7 @@ export default function SignUp() {
                   <Text style={styles.btnCreateText}>Creating Account...</Text>
                 </View>
               ) : (
-                <Text style={styles.btnCreateText}>Create Account</Text>
+                <Text style={styles.btnCreateText}>Sign up</Text>
               )}
             </TouchableOpacity>
 
@@ -1127,6 +1193,8 @@ const styles = StyleSheet.create({
   eyeBtn: { position: 'absolute', right: 12, padding: 10 },
   inputError: { borderColor: '#ef4444' },
   fieldError: { fontSize: 12, color: '#ef4444', marginTop: 6, marginLeft: 4, fontWeight: '500' },
+  inlineErrorText: { fontSize: 12, color: '#f59e0b', marginTop: 4, marginLeft: 4, fontWeight: '500' },
+  passwordHint: { fontSize: 11, color: '#8896b3', marginTop: 6, marginLeft: 4 },
   strengthContainer: { marginTop: 8 },
   strengthBar: { height: 4, backgroundColor: '#e2e6f3', borderRadius: 2, overflow: 'hidden', marginBottom: 6 },
   strengthFill: { height: '100%', borderRadius: 2 },

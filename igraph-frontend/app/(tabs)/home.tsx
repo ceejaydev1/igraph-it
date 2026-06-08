@@ -43,7 +43,7 @@ const DIAGRAMS: Diagram[] = [
   { id: 5, title: 'Fishbone Diagram', type: 'UML' },
   { id: 6, title: 'Schematic Diagram', type: 'UML' },
   { id: 7, title: 'Use Case Diagram', type: 'UML' },
-  { id: 8, title: 'Activity Diagram - Library', type: 'UML' },
+  { id: 8, title: 'Activity Diagram', type: 'UML' },
   { id: 9, title: 'Sequence Diagram', type: 'UML' },
   { id: 10, title: 'Class Diagram', type: 'UML' },
   { id: 11, title: 'Waterfall Model', type: 'SDLC' },
@@ -212,7 +212,7 @@ const TabButton = ({
 );
 
 // ─────────────────────────────────────────────────────────────────────────────
-// DIAGRAM CARD
+// DIAGRAM CARD WITH HOVER EFFECTS (No decorative dots)
 // ─────────────────────────────────────────────────────────────────────────────
 
 const DiagramCard = ({ 
@@ -227,37 +227,76 @@ const DiagramCard = ({
   const { width } = useWindowDimensions();
   const isDesktop = width >= 1024;
   const colors = TYPE_COLORS[type];
+  const [isHovered, setIsHovered] = useState(false);
+  const scaleAnim = useRef(new Animated.Value(1)).current;
+  const shadowAnim = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    Animated.parallel([
+      Animated.spring(scaleAnim, {
+        toValue: isHovered ? 1.02 : 1,
+        friction: 8,
+        tension: 40,
+        useNativeDriver: Platform.OS !== 'web',
+      }),
+      Animated.timing(shadowAnim, {
+        toValue: isHovered ? 1 : 0,
+        duration: 200,
+        useNativeDriver: Platform.OS !== 'web',
+      }),
+    ]).start();
+  }, [isHovered]);
+
+  const shadowOpacity = shadowAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0.04, 0.12],
+  });
+
+  const shadowRadius = shadowAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [8, 16],
+  });
+
+  const elevation = shadowAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [2, 6],
+  });
+
+  const borderColor = shadowAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: ['#eef2ff', colors.primary + '40'],
+  });
 
   return (
     <TouchableOpacity 
       onPress={onPress} 
       activeOpacity={0.95} 
       style={styles.cardTouchable}
+      // @ts-ignore - React Native Web specific props
+      onMouseEnter={() => setIsHovered(true)}
+      onMouseLeave={() => setIsHovered(false)}
     >
-      <View style={styles.diagramCard}>
+      <Animated.View 
+        style={[
+          styles.diagramCard,
+          {
+            transform: [{ scale: scaleAnim }],
+            shadowOpacity,
+            shadowRadius,
+            elevation,
+            borderColor,
+          },
+        ]}
+      >
         <View style={[
           styles.cardPreview, 
           isDesktop && styles.cardPreviewDesktop,
           { backgroundColor: colors.light }
         ]}>
-          <View style={styles.cardPreviewPattern}>
-            {[...Array(12)].map((_, i) => (
-              <View 
-                key={i} 
-                style={[
-                  styles.previewDot, 
-                  { 
-                    backgroundColor: colors.primary,
-                    opacity: 0.15 + (i % 3) * 0.1,
-                    width: 6 + (i % 4) * 2,
-                    height: 6 + (i % 4) * 2,
-                    top: 10 + (i * 15) % 80,
-                    left: 10 + (i * 30) % 90,
-                  }
-                ]} 
-              />
-            ))}
-          </View>
+          {/* Hover overlay */}
+          {isHovered && (
+            <View style={[styles.hoverOverlay, { backgroundColor: colors.primary + '08' }]} />
+          )}
         </View>
         
         <View style={styles.cardContent}>
@@ -268,14 +307,17 @@ const DiagramCard = ({
             {title}
           </Text>
           <View style={styles.cardMeta}>
-            <View style={[styles.cardTypeBadge, { backgroundColor: `${colors.primary}15` }]}>
+            <View style={[
+              styles.cardTypeBadge, 
+              { backgroundColor: isHovered ? colors.primary + '25' : `${colors.primary}15` }
+            ]}>
               <Text style={[styles.cardTypeText, { color: colors.primary }]}>
                 {type}
               </Text>
             </View>
           </View>
         </View>
-      </View>
+      </Animated.View>
     </TouchableOpacity>
   );
 };
@@ -722,16 +764,12 @@ const styles = StyleSheet.create({
   cardPreviewDesktop: {
     height: 140,
   },
-  cardPreviewPattern: {
+  hoverOverlay: {
     position: 'absolute',
     top: 0,
     left: 0,
     right: 0,
     bottom: 0,
-  },
-  previewDot: {
-    position: 'absolute',
-    borderRadius: 50,
   },
   cardContent: {
     padding: 14,

@@ -1,11 +1,10 @@
 // igraph-frontend/app/(tabs)/diagram/[id].tsx
 
-import React, { useState, useMemo, useRef, useEffect } from 'react';
+import React, { useState, useRef } from 'react';
 import {
   View,
   Text,
   StyleSheet,
-  ScrollView,
   TouchableOpacity,
   Platform,
   useWindowDimensions,
@@ -13,12 +12,21 @@ import {
   StatusBar,
   TextInput,
   Alert,
+  Image,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { Svg, Path, Circle, Rect, Polygon } from 'react-native-svg';
+import { Svg, Path, Circle } from 'react-native-svg';
 import { WebView } from 'react-native-webview';
 
+
 // ─── Types ───────────────────────────────────────────────────────────────────
+
+interface DiagramSection {
+  heading: string;
+  body: string;
+}
+
+import { ImageSourcePropType } from 'react-native';
 
 interface DiagramContent {
   id: number;
@@ -26,318 +34,99 @@ interface DiagramContent {
   type: 'UML' | 'SDLC';
   tagline: string;
   videoId: string;
-  sections: {
-    heading: string;
-    body: string;
-  }[];
+  sections: DiagramSection[];
   steps?: string[];
   keyPoints?: string[];
   imageAlt: string;
+  placeholderImage?: ImageSourcePropType;
+}
+
+interface TypeConfig {
+  primary: string;
+  light: string;
+  gradient: readonly [string, string];
+  accent: string;
 }
 
 // ─── Content Data ─────────────────────────────────────────────────────────────
 
-const LOREM_HEADING_1 = 'Lorem Ipsum Dolor Sit';
-const LOREM_HEADING_2 = 'Consectetur Adipiscing Elit';
-const LOREM_HEADING_3 = 'Sed Do Eiusmod Tempor';
+const LOREM_SHORT = 'Lorem ipsum dolor sit amet, consectetur adipiscing elit.';
+const LOREM_BODY = 'Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.';
+const LOREM_BODY_2 = 'Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.';
+const LOREM_BODY_3 = 'Sed ut perspiciatis unde omnis iste natus error sit voluptatem accusantium doloremque laudantium, totam rem aperiam, eaque ipsa quae ab illo inventore veritatis et quasi architecto beatae vitae dicta sunt explicabo.';
+
+const DEFAULT_SECTIONS: DiagramSection[] = [
+  { heading: 'Lorem Ipsum Dolor Sit', body: LOREM_BODY },
+  { heading: 'Consectetur Adipiscing Elit', body: LOREM_BODY_2 },
+  { heading: 'Sed Do Eiusmod Tempor', body: LOREM_BODY_3 },
+];
+
+const DEFAULT_STEPS = [
+  'Lorem ipsum dolor sit amet',
+  'Consectetur adipiscing elit',
+  'Sed do eiusmod tempor incididunt',
+  'Ut labore et dolore magna aliqua',
+  'Ut enim ad minim veniam',
+  'Quis nostrud exercitation ullamco',
+];
+
+const DEFAULT_KEY_POINTS = [
+  'Lorem ipsum dolor sit amet, consectetur',
+  'Sed do eiusmod tempor incididunt ut labore',
+  'Ut enim ad minim veniam, quis nostrud',
+  'Duis aute irure dolor in reprehenderit',
+];
+
+const PLACEHOLDER_VIDEO_ID = 'dQw4w9WgXcQ';
+
+const createUMLDiagram = (id: number, title: string, imageAlt: string): DiagramContent => ({
+  id,
+  title,
+  type: 'UML',
+  tagline: LOREM_SHORT,
+  videoId: PLACEHOLDER_VIDEO_ID,
+  imageAlt,
+  sections: DEFAULT_SECTIONS,
+  steps: DEFAULT_STEPS,
+  keyPoints: DEFAULT_KEY_POINTS,
+});
+
+const createSDLCDiagram = (id: number, title: string, imageAlt: string): DiagramContent => ({
+  id,
+  title,
+  type: 'SDLC',
+  tagline: LOREM_SHORT,
+  videoId: PLACEHOLDER_VIDEO_ID,
+  imageAlt,
+  sections: DEFAULT_SECTIONS,
+  steps: DEFAULT_STEPS,
+  keyPoints: DEFAULT_KEY_POINTS,
+});
 
 const DIAGRAM_CONTENT: Record<number, DiagramContent> = {
-  1: {
-    id: 1,
-    title: 'Functional Decomposition Diagram',
-    type: 'UML',
-    tagline: 'Lorem ipsum dolor sit amet, consectetur adipiscing elit.',
-    videoId: 'dQw4w9WgXcQ',
-    imageAlt: 'Functional Decomposition Diagram example',
-    sections: [
-      {
-        heading: LOREM_HEADING_1,
-        body: 'Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.',
-      },
-      {
-        heading: LOREM_HEADING_2,
-        body: 'Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.',
-      },
-      {
-        heading: LOREM_HEADING_3,
-        body: 'Sed ut perspiciatis unde omnis iste natus error sit voluptatem accusantium doloremque laudantium, totam rem aperiam, eaque ipsa quae ab illo inventore veritatis et quasi architecto beatae vitae dicta sunt explicabo.',
-      },
-    ],
-    steps: [
-      'Lorem ipsum dolor sit amet',
-      'Consectetur adipiscing elit',
-      'Sed do eiusmod tempor incididunt',
-      'Ut labore et dolore magna aliqua',
-      'Ut enim ad minim veniam',
-      'Quis nostrud exercitation ullamco',
-    ],
-    keyPoints: [
-      'Lorem ipsum dolor sit amet, consectetur',
-      'Sed do eiusmod tempor incididunt ut labore',
-      'Ut enim ad minim veniam, quis nostrud',
-      'Duis aute irure dolor in reprehenderit',
-    ],
-  },
-  2: {
-    id: 2,
-    title: 'Flowchart',
-    type: 'UML',
-    tagline: 'Lorem ipsum dolor sit amet, consectetur adipiscing elit.',
-    videoId: 'dQw4w9WgXcQ',
-    imageAlt: 'Flowchart example',
-    sections: [
-      { heading: LOREM_HEADING_1, body: 'Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.' },
-      { heading: LOREM_HEADING_2, body: 'Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.' },
-      { heading: LOREM_HEADING_3, body: 'Sed ut perspiciatis unde omnis iste natus error sit voluptatem accusantium doloremque laudantium, totam rem aperiam, eaque ipsa quae ab illo inventore veritatis et quasi architecto beatae vitae dicta sunt explicabo.' },
-    ],
-    steps: ['Lorem ipsum dolor sit amet', 'Consectetur adipiscing elit', 'Sed do eiusmod tempor incididunt', 'Ut labore et dolore magna aliqua', 'Ut enim ad minim veniam', 'Quis nostrud exercitation ullamco'],
-    keyPoints: ['Lorem ipsum dolor sit amet, consectetur', 'Sed do eiusmod tempor incididunt ut labore', 'Ut enim ad minim veniam, quis nostrud', 'Duis aute irure dolor in reprehenderit', 'Excepteur sint occaecat cupidatat non'],
-  },
-  3: {
-    id: 3,
-    title: 'Data Flow Diagram',
-    type: 'UML',
-    tagline: 'Lorem ipsum dolor sit amet, consectetur adipiscing elit.',
-    videoId: 'dQw4w9WgXcQ',
-    imageAlt: 'Data Flow Diagram example',
-    sections: [
-      { heading: LOREM_HEADING_1, body: 'Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.' },
-      { heading: LOREM_HEADING_2, body: 'Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.' },
-      { heading: LOREM_HEADING_3, body: 'Sed ut perspiciatis unde omnis iste natus error sit voluptatem accusantium doloremque laudantium, totam rem aperiam, eaque ipsa quae ab illo inventore veritatis et quasi architecto beatae vitae dicta sunt explicabo.' },
-    ],
-    steps: ['Lorem ipsum dolor sit amet', 'Consectetur adipiscing elit', 'Sed do eiusmod tempor incididunt', 'Ut labore et dolore magna aliqua', 'Ut enim ad minim veniam', 'Quis nostrud exercitation ullamco'],
-    keyPoints: ['Lorem ipsum dolor sit amet, consectetur', 'Sed do eiusmod tempor incididunt ut labore', 'Ut enim ad minim veniam, quis nostrud', 'Duis aute irure dolor in reprehenderit'],
-  },
-  4: {
-    id: 4,
-    title: 'Entity Relationship Diagram',
-    type: 'UML',
-    tagline: 'Lorem ipsum dolor sit amet, consectetur adipiscing elit.',
-    videoId: 'dQw4w9WgXcQ',
-    imageAlt: 'Entity Relationship Diagram example',
-    sections: [
-      { heading: LOREM_HEADING_1, body: 'Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.' },
-      { heading: LOREM_HEADING_2, body: 'Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.' },
-      { heading: LOREM_HEADING_3, body: 'Sed ut perspiciatis unde omnis iste natus error sit voluptatem accusantium doloremque laudantium, totam rem aperiam, eaque ipsa quae ab illo inventore veritatis et quasi architecto beatae vitae dicta sunt explicabo.' },
-    ],
-    steps: ['Lorem ipsum dolor sit amet', 'Consectetur adipiscing elit', 'Sed do eiusmod tempor incididunt', 'Ut labore et dolore magna aliqua', 'Ut enim ad minim veniam', 'Quis nostrud exercitation ullamco'],
-    keyPoints: ['Lorem ipsum dolor sit amet, consectetur', 'Sed do eiusmod tempor incididunt ut labore', 'Ut enim ad minim veniam, quis nostrud', 'Duis aute irure dolor in reprehenderit', 'Excepteur sint occaecat cupidatat non'],
-  },
-  5: {
-    id: 5,
-    title: 'Fishbone Diagram',
-    type: 'UML',
-    tagline: 'Lorem ipsum dolor sit amet, consectetur adipiscing elit.',
-    videoId: 'dQw4w9WgXcQ',
-    imageAlt: 'Fishbone Diagram example',
-    sections: [
-      { heading: LOREM_HEADING_1, body: 'Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.' },
-      { heading: LOREM_HEADING_2, body: 'Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.' },
-      { heading: LOREM_HEADING_3, body: 'Sed ut perspiciatis unde omnis iste natus error sit voluptatem accusantium doloremque laudantium, totam rem aperiam, eaque ipsa quae ab illo inventore veritatis et quasi architecto beatae vitae dicta sunt explicabo.' },
-    ],
-    steps: ['Lorem ipsum dolor sit amet', 'Consectetur adipiscing elit', 'Sed do eiusmod tempor incididunt', 'Ut labore et dolore magna aliqua', 'Ut enim ad minim veniam', 'Quis nostrud exercitation ullamco'],
-    keyPoints: ['Lorem ipsum dolor sit amet, consectetur', 'Sed do eiusmod tempor incididunt ut labore', 'Ut enim ad minim veniam, quis nostrud', 'Duis aute irure dolor in reprehenderit'],
-  },
-  6: {
-    id: 6,
-    title: 'Schematic Diagram',
-    type: 'UML',
-    tagline: 'Lorem ipsum dolor sit amet, consectetur adipiscing elit.',
-    videoId: 'dQw4w9WgXcQ',
-    imageAlt: 'Schematic Diagram example',
-    sections: [
-      { heading: LOREM_HEADING_1, body: 'Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.' },
-      { heading: LOREM_HEADING_2, body: 'Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.' },
-      { heading: LOREM_HEADING_3, body: 'Sed ut perspiciatis unde omnis iste natus error sit voluptatem accusantium doloremque laudantium, totam rem aperiam, eaque ipsa quae ab illo inventore veritatis et quasi architecto beatae vitae dicta sunt explicabo.' },
-    ],
-    steps: ['Lorem ipsum dolor sit amet', 'Consectetur adipiscing elit', 'Sed do eiusmod tempor incididunt', 'Ut labore et dolore magna aliqua', 'Ut enim ad minim veniam', 'Quis nostrud exercitation ullamco'],
-    keyPoints: ['Lorem ipsum dolor sit amet, consectetur', 'Sed do eiusmod tempor incididunt ut labore', 'Ut enim ad minim veniam, quis nostrud', 'Duis aute irure dolor in reprehenderit'],
-  },
-  7: {
-    id: 7,
-    title: 'Use Case Diagram',
-    type: 'UML',
-    tagline: 'Lorem ipsum dolor sit amet, consectetur adipiscing elit.',
-    videoId: 'dQw4w9WgXcQ',
-    imageAlt: 'Use Case Diagram example',
-    sections: [
-      { heading: LOREM_HEADING_1, body: 'Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.' },
-      { heading: LOREM_HEADING_2, body: 'Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.' },
-      { heading: LOREM_HEADING_3, body: 'Sed ut perspiciatis unde omnis iste natus error sit voluptatem accusantium doloremque laudantium, totam rem aperiam, eaque ipsa quae ab illo inventore veritatis et quasi architecto beatae vitae dicta sunt explicabo.' },
-    ],
-    steps: ['Lorem ipsum dolor sit amet', 'Consectetur adipiscing elit', 'Sed do eiusmod tempor incididunt', 'Ut labore et dolore magna aliqua', 'Ut enim ad minim veniam', 'Quis nostrud exercitation ullamco', 'Duis aute irure dolor in reprehenderit'],
-    keyPoints: ['Lorem ipsum dolor sit amet, consectetur', 'Sed do eiusmod tempor incididunt ut labore', 'Ut enim ad minim veniam, quis nostrud', 'Duis aute irure dolor in reprehenderit', 'Excepteur sint occaecat cupidatat non'],
-  },
-  8: {
-    id: 8,
-    title: 'Activity Diagram - Library',
-    type: 'UML',
-    tagline: 'Lorem ipsum dolor sit amet, consectetur adipiscing elit.',
-    videoId: 'dQw4w9WgXcQ',
-    imageAlt: 'Activity Diagram example',
-    sections: [
-      { heading: LOREM_HEADING_1, body: 'Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.' },
-      { heading: LOREM_HEADING_2, body: 'Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.' },
-      { heading: LOREM_HEADING_3, body: 'Sed ut perspiciatis unde omnis iste natus error sit voluptatem accusantium doloremque laudantium, totam rem aperiam, eaque ipsa quae ab illo inventore veritatis et quasi architecto beatae vitae dicta sunt explicabo.' },
-    ],
-    steps: ['Lorem ipsum dolor sit amet', 'Consectetur adipiscing elit', 'Sed do eiusmod tempor incididunt', 'Ut labore et dolore magna aliqua', 'Ut enim ad minim veniam', 'Quis nostrud exercitation ullamco'],
-    keyPoints: ['Lorem ipsum dolor sit amet, consectetur', 'Sed do eiusmod tempor incididunt ut labore', 'Ut enim ad minim veniam, quis nostrud', 'Duis aute irure dolor in reprehenderit', 'Excepteur sint occaecat cupidatat non', 'Nemo enim ipsam voluptatem quia voluptas'],
-  },
-  9: {
-    id: 9,
-    title: 'Sequence Diagram',
-    type: 'UML',
-    tagline: 'Lorem ipsum dolor sit amet, consectetur adipiscing elit.',
-    videoId: 'dQw4w9WgXcQ',
-    imageAlt: 'Sequence Diagram example',
-    sections: [
-      { heading: LOREM_HEADING_1, body: 'Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.' },
-      { heading: LOREM_HEADING_2, body: 'Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.' },
-      { heading: LOREM_HEADING_3, body: 'Sed ut perspiciatis unde omnis iste natus error sit voluptatem accusantium doloremque laudantium, totam rem aperiam, eaque ipsa quae ab illo inventore veritatis et quasi architecto beatae vitae dicta sunt explicabo.' },
-    ],
-    steps: ['Lorem ipsum dolor sit amet', 'Consectetur adipiscing elit', 'Sed do eiusmod tempor incididunt', 'Ut labore et dolore magna aliqua', 'Ut enim ad minim veniam', 'Quis nostrud exercitation ullamco'],
-    keyPoints: ['Lorem ipsum dolor sit amet, consectetur', 'Sed do eiusmod tempor incididunt ut labore', 'Ut enim ad minim veniam, quis nostrud', 'Duis aute irure dolor in reprehenderit', 'Excepteur sint occaecat cupidatat non'],
-  },
-  10: {
-    id: 10,
-    title: 'Class Diagram',
-    type: 'UML',
-    tagline: 'Lorem ipsum dolor sit amet, consectetur adipiscing elit.',
-    videoId: 'dQw4w9WgXcQ',
-    imageAlt: 'Class Diagram example',
-    sections: [
-      { heading: LOREM_HEADING_1, body: 'Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.' },
-      { heading: LOREM_HEADING_2, body: 'Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.' },
-      { heading: LOREM_HEADING_3, body: 'Sed ut perspiciatis unde omnis iste natus error sit voluptatem accusantium doloremque laudantium, totam rem aperiam, eaque ipsa quae ab illo inventore veritatis et quasi architecto beatae vitae dicta sunt explicabo.' },
-    ],
-    steps: ['Lorem ipsum dolor sit amet', 'Consectetur adipiscing elit', 'Sed do eiusmod tempor incididunt', 'Ut labore et dolore magna aliqua', 'Ut enim ad minim veniam', 'Quis nostrud exercitation ullamco'],
-    keyPoints: ['Lorem ipsum dolor sit amet, consectetur', 'Sed do eiusmod tempor incididunt ut labore', 'Ut enim ad minim veniam, quis nostrud', 'Duis aute irure dolor in reprehenderit', 'Excepteur sint occaecat cupidatat non', '+Public, -Private, #Protected, ~Package'],
-  },
-  11: {
-    id: 11,
-    title: 'Waterfall Model',
-    type: 'SDLC',
-    tagline: 'Lorem ipsum dolor sit amet, consectetur adipiscing elit.',
-    videoId: 'dQw4w9WgXcQ',
-    imageAlt: 'Waterfall Model diagram',
-    sections: [
-      { heading: LOREM_HEADING_1, body: 'Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.' },
-      { heading: LOREM_HEADING_2, body: 'Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.' },
-      { heading: LOREM_HEADING_3, body: 'Sed ut perspiciatis unde omnis iste natus error sit voluptatem accusantium doloremque laudantium, totam rem aperiam, eaque ipsa quae ab illo inventore veritatis et quasi architecto beatae vitae dicta sunt explicabo.' },
-    ],
-    steps: ['Lorem ipsum dolor sit amet', 'Consectetur adipiscing elit', 'Sed do eiusmod tempor incididunt', 'Ut labore et dolore magna aliqua', 'Ut enim ad minim veniam', 'Quis nostrud exercitation ullamco'],
-    keyPoints: ['Lorem ipsum dolor sit amet, consectetur', 'Sed do eiusmod tempor incididunt ut labore', 'Ut enim ad minim veniam, quis nostrud', 'Duis aute irure dolor in reprehenderit', 'Excepteur sint occaecat cupidatat non'],
-  },
-  12: {
-    id: 12,
-    title: 'Big Bang Model',
-    type: 'SDLC',
-    tagline: 'Lorem ipsum dolor sit amet, consectetur adipiscing elit.',
-    videoId: 'dQw4w9WgXcQ',
-    imageAlt: 'Big Bang Model diagram',
-    sections: [
-      { heading: LOREM_HEADING_1, body: 'Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.' },
-      { heading: LOREM_HEADING_2, body: 'Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.' },
-      { heading: LOREM_HEADING_3, body: 'Sed ut perspiciatis unde omnis iste natus error sit voluptatem accusantium doloremque laudantium, totam rem aperiam, eaque ipsa quae ab illo inventore veritatis et quasi architecto beatae vitae dicta sunt explicabo.' },
-    ],
-    steps: ['Lorem ipsum dolor sit amet', 'Consectetur adipiscing elit', 'Sed do eiusmod tempor incididunt', 'Ut labore et dolore magna aliqua', 'Ut enim ad minim veniam', 'Quis nostrud exercitation ullamco'],
-    keyPoints: ['Lorem ipsum dolor sit amet, consectetur', 'Sed do eiusmod tempor incididunt ut labore', 'Ut enim ad minim veniam, quis nostrud', 'Duis aute irure dolor in reprehenderit', 'Excepteur sint occaecat cupidatat non'],
-  },
-  13: {
-    id: 13,
-    title: 'Prototype Model',
-    type: 'SDLC',
-    tagline: 'Lorem ipsum dolor sit amet, consectetur adipiscing elit.',
-    videoId: 'dQw4w9WgXcQ',
-    imageAlt: 'Prototype Model diagram',
-    sections: [
-      { heading: LOREM_HEADING_1, body: 'Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.' },
-      { heading: LOREM_HEADING_2, body: 'Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.' },
-      { heading: LOREM_HEADING_3, body: 'Sed ut perspiciatis unde omnis iste natus error sit voluptatem accusantium doloremque laudantium, totam rem aperiam, eaque ipsa quae ab illo inventore veritatis et quasi architecto beatae vitae dicta sunt explicabo.' },
-    ],
-    steps: ['Lorem ipsum dolor sit amet', 'Consectetur adipiscing elit', 'Sed do eiusmod tempor incididunt', 'Ut labore et dolore magna aliqua', 'Ut enim ad minim veniam', 'Quis nostrud exercitation ullamco'],
-    keyPoints: ['Lorem ipsum dolor sit amet, consectetur', 'Sed do eiusmod tempor incididunt ut labore', 'Ut enim ad minim veniam, quis nostrud', 'Duis aute irure dolor in reprehenderit'],
-  },
-  14: {
-    id: 14,
-    title: 'Agile Model',
-    type: 'SDLC',
-    tagline: 'Lorem ipsum dolor sit amet, consectetur adipiscing elit.',
-    videoId: 'dQw4w9WgXcQ',
-    imageAlt: 'Agile Model diagram',
-    sections: [
-      { heading: LOREM_HEADING_1, body: 'Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.' },
-      { heading: LOREM_HEADING_2, body: 'Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.' },
-      { heading: LOREM_HEADING_3, body: 'Sed ut perspiciatis unde omnis iste natus error sit voluptatem accusantium doloremque laudantium, totam rem aperiam, eaque ipsa quae ab illo inventore veritatis et quasi architecto beatae vitae dicta sunt explicabo.' },
-    ],
-    steps: ['Lorem ipsum dolor sit amet', 'Consectetur adipiscing elit', 'Sed do eiusmod tempor incididunt', 'Ut labore et dolore magna aliqua', 'Ut enim ad minim veniam', 'Quis nostrud exercitation ullamco'],
-    keyPoints: ['Lorem ipsum dolor sit amet, consectetur', 'Sed do eiusmod tempor incididunt ut labore', 'Ut enim ad minim veniam, quis nostrud', 'Duis aute irure dolor in reprehenderit', 'Excepteur sint occaecat cupidatat non'],
-  },
-  15: {
-    id: 15,
-    title: 'Iterative Model',
-    type: 'SDLC',
-    tagline: 'Lorem ipsum dolor sit amet, consectetur adipiscing elit.',
-    videoId: 'dQw4w9WgXcQ',
-    imageAlt: 'Iterative Model diagram',
-    sections: [
-      { heading: LOREM_HEADING_1, body: 'Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.' },
-      { heading: LOREM_HEADING_2, body: 'Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.' },
-      { heading: LOREM_HEADING_3, body: 'Sed ut perspiciatis unde omnis iste natus error sit voluptatem accusantium doloremque laudantium, totam rem aperiam, eaque ipsa quae ab illo inventore veritatis et quasi architecto beatae vitae dicta sunt explicabo.' },
-    ],
-    steps: ['Lorem ipsum dolor sit amet', 'Consectetur adipiscing elit', 'Sed do eiusmod tempor incididunt', 'Ut labore et dolore magna aliqua', 'Ut enim ad minim veniam', 'Quis nostrud exercitation ullamco'],
-    keyPoints: ['Lorem ipsum dolor sit amet, consectetur', 'Sed do eiusmod tempor incididunt ut labore', 'Ut enim ad minim veniam, quis nostrud', 'Duis aute irure dolor in reprehenderit'],
-  },
-  16: {
-    id: 16,
-    title: 'V Model',
-    type: 'SDLC',
-    tagline: 'Lorem ipsum dolor sit amet, consectetur adipiscing elit.',
-    videoId: 'dQw4w9WgXcQ',
-    imageAlt: 'V Model diagram',
-    sections: [
-      { heading: LOREM_HEADING_1, body: 'Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.' },
-      { heading: LOREM_HEADING_2, body: 'Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.' },
-      { heading: LOREM_HEADING_3, body: 'Sed ut perspiciatis unde omnis iste natus error sit voluptatem accusantium doloremque laudantium, totam rem aperiam, eaque ipsa quae ab illo inventore veritatis et quasi architecto beatae vitae dicta sunt explicabo.' },
-    ],
-    steps: ['Lorem ipsum dolor sit amet', 'Consectetur adipiscing elit', 'Sed do eiusmod tempor incididunt', 'Ut labore et dolore magna aliqua', 'Ut enim ad minim veniam', 'Quis nostrud exercitation ullamco'],
-    keyPoints: ['Lorem ipsum dolor sit amet, consectetur', 'Sed do eiusmod tempor incididunt ut labore', 'Ut enim ad minim veniam, quis nostrud', 'Duis aute irure dolor in reprehenderit', 'Excepteur sint occaecat cupidatat non'],
-  },
-  17: {
-    id: 17,
-    title: 'Rapid Application Development',
-    type: 'SDLC',
-    tagline: 'Lorem ipsum dolor sit amet, consectetur adipiscing elit.',
-    videoId: 'dQw4w9WgXcQ',
-    imageAlt: 'RAD Model diagram',
-    sections: [
-      { heading: LOREM_HEADING_1, body: 'Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.' },
-      { heading: LOREM_HEADING_2, body: 'Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.' },
-      { heading: LOREM_HEADING_3, body: 'Sed ut perspiciatis unde omnis iste natus error sit voluptatem accusantium doloremque laudantium, totam rem aperiam, eaque ipsa quae ab illo inventore veritatis et quasi architecto beatae vitae dicta sunt explicabo.' },
-    ],
-    steps: ['Lorem ipsum dolor sit amet', 'Consectetur adipiscing elit', 'Sed do eiusmod tempor incididunt', 'Ut labore et dolore magna aliqua', 'Ut enim ad minim veniam', 'Quis nostrud exercitation ullamco'],
-    keyPoints: ['Lorem ipsum dolor sit amet, consectetur', 'Sed do eiusmod tempor incididunt ut labore', 'Ut enim ad minim veniam, quis nostrud', 'Duis aute irure dolor in reprehenderit'],
-  },
-  18: {
-    id: 18,
-    title: 'Spiral Model',
-    type: 'SDLC',
-    tagline: 'Lorem ipsum dolor sit amet, consectetur adipiscing elit.',
-    videoId: 'dQw4w9WgXcQ',
-    imageAlt: 'Spiral Model diagram',
-    sections: [
-      { heading: LOREM_HEADING_1, body: 'Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.' },
-      { heading: LOREM_HEADING_2, body: 'Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.' },
-      { heading: LOREM_HEADING_3, body: 'Sed ut perspiciatis unde omnis iste natus error sit voluptatem accusantium doloremque laudantium, totam rem aperiam, eaque ipsa quae ab illo inventore veritatis et quasi architecto beatae vitae dicta sunt explicabo.' },
-    ],
-    steps: ['Lorem ipsum dolor sit amet', 'Consectetur adipiscing elit', 'Sed do eiusmod tempor incididunt', 'Ut labore et dolore magna aliqua', 'Ut enim ad minim veniam', 'Quis nostrud exercitation ullamco'],
-    keyPoints: ['Lorem ipsum dolor sit amet, consectetur', 'Sed do eiusmod tempor incididunt ut labore', 'Ut enim ad minim veniam, quis nostrud', 'Duis aute irure dolor in reprehenderit'],
-  },
+  1: createUMLDiagram(1, 'Functional Decomposition Diagram', 'Functional Decomposition Diagram example'),
+  2: createUMLDiagram(2, 'Flowchart', 'Flowchart example'),
+  3: createUMLDiagram(3, 'Data Flow Diagram', 'Data Flow Diagram example'),
+  4: createUMLDiagram(4, 'Entity Relationship Diagram', 'Entity Relationship Diagram example'),
+  5: createUMLDiagram(5, 'Fishbone Diagram', 'Fishbone Diagram example'),
+  6: createUMLDiagram(6, 'Schematic Diagram', 'Schematic Diagram example'),
+  7: createUMLDiagram(7, 'Use Case Diagram', 'Use Case Diagram example'),
+  8: createUMLDiagram(8, 'Activity Diagram - Library', 'Activity Diagram example'),
+  9: createUMLDiagram(9, 'Sequence Diagram', 'Sequence Diagram example'),
+  10: createUMLDiagram(10, 'Class Diagram', 'Class Diagram example'),
+  11: createSDLCDiagram(11, 'Waterfall Model', 'Waterfall Model diagram'),
+  12: createSDLCDiagram(12, 'Big Bang Model', 'Big Bang Model diagram'),
+  13: createSDLCDiagram(13, 'Prototype Model', 'Prototype Model diagram'),
+  14: createSDLCDiagram(14, 'Agile Model', 'Agile Model diagram'),
+  15: createSDLCDiagram(15, 'Iterative Model', 'Iterative Model diagram'),
+  16: createSDLCDiagram(16, 'V Model', 'V Model diagram'),
+  17: createSDLCDiagram(17, 'Rapid Application Development', 'RAD Model diagram'),
+  18: createSDLCDiagram(18, 'Spiral Model', 'Spiral Model diagram'),
 };
 
-// ─── Colors ──────────────────────────────────────────────────────────────────
+// ─── Color Configuration ─────────────────────────────────────────────────────
 
-const TYPE_CONFIG = {
+const TYPE_CONFIG: Record<'UML' | 'SDLC', TypeConfig> = {
   UML: {
     primary: '#4c6fff',
     light: '#eef2ff',
@@ -352,40 +141,124 @@ const TYPE_CONFIG = {
   },
 } as const;
 
+// ─── Responsive Breakpoints ──────────────────────────────────────────────────
+
+const BREAKPOINTS = {
+  tablet: 768,
+  desktop: 1024,
+  maxContentWidth: 1280,
+} as const;
+
 // ─── SVG Icons ────────────────────────────────────────────────────────────────
 
-const BackIcon = ({ color }: { color: string }) => (
+interface IconProps {
+  color: string;
+}
+
+const BackIcon: React.FC<IconProps> = ({ color }) => (
   <Svg width={20} height={20} viewBox="0 0 24 24" fill="none">
-    <Path d="M19 12H5M5 12L12 19M5 12L12 5" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+    <Path
+      d="M19 12H5M5 12L12 19M5 12L12 5"
+      stroke={color}
+      strokeWidth={2}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
   </Svg>
 );
 
-const PlayIcon = () => (
+const PlayIcon: React.FC = () => (
   <Svg width={28} height={28} viewBox="0 0 24 24" fill="none">
     <Circle cx="12" cy="12" r="10" fill="rgba(255,255,255,0.2)" />
     <Path d="M10 8L16 12L10 16V8Z" fill="#ffffff" />
   </Svg>
 );
 
-const CheckIcon = ({ color }: { color: string }) => (
+const CheckIcon: React.FC<IconProps> = ({ color }) => (
   <Svg width={14} height={14} viewBox="0 0 24 24" fill="none">
-    <Path d="M20 6L9 17L4 12" stroke={color} strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round" />
+    <Path
+      d="M20 6L9 17L4 12"
+      stroke={color}
+      strokeWidth={2.5}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
   </Svg>
 );
 
-// ─── Video Player ─────────────────────────────────────────────────────────────
+// ─── Diagram Placeholder Component ──────────────────────────────────────────
 
-const VideoPlayer = ({ videoId, color }: { videoId: string; color: string }) => {
-  const [playing, setPlaying] = useState(false);
+interface DiagramPlaceholderProps {
+  color: string;
+  label: string;
+}
+
+const DiagramPlaceholder: React.FC<DiagramPlaceholderProps> = ({ color, label }) => (
+  <View style={placeholderStyles.container}>
+    <View style={[placeholderStyles.imageBox, { backgroundColor: `${color}15`, borderColor: `${color}30` }]}>
+      <Svg width={32} height={32} viewBox="0 0 24 24" fill="none">
+        <Path
+          d="M4 16L8.586 11.414C9.367 10.633 10.633 10.633 11.414 11.414L16 16M14 14L15.586 12.414C16.367 11.633 17.633 11.633 18.414 12.414L20 14M14 8H14.01M6 20H18C19.1046 20 20 19.1046 20 18V6C20 4.89543 19.1046 4 18 4H6C4.89543 4 4 4.89543 4 6V18C4 19.1046 4.89543 20 6 20Z"
+          stroke={color}
+          strokeWidth={1.5}
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+      </Svg>
+      <Text style={[placeholderStyles.text, { color }]} numberOfLines={2}>{label}</Text>
+    </View>
+  </View>
+);
+
+const placeholderStyles = StyleSheet.create({
+  container: {
+    width: '100%',
+    flexShrink: 0,
+  },
+  imageBox: {
+    width: '100%',
+    maxHeight: 180,
+    aspectRatio: 16 / 9,
+    borderRadius: 8,
+    borderWidth: 1.5,
+    borderStyle: 'dashed',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 6,
+    padding: 8,
+  },
+  text: {
+    fontSize: 10,
+    fontWeight: '500',
+    textAlign: 'center',
+    opacity: 0.8,
+  },
+});
+
+// ─── Video Player Component ──────────────────────────────────────────────────
+
+interface VideoPlayerProps {
+  videoId: string;
+  color: string;
+}
+
+const VideoPlayer: React.FC<VideoPlayerProps> = ({ videoId, color }) => {
+  const [isPlaying, setIsPlaying] = useState(false);
+
+  const handlePlay = () => setIsPlaying(true);
+
+  const embedUrl = `https://www.youtube.com/embed/${videoId}?autoplay=1`;
 
   if (Platform.OS === 'web') {
     return (
       <View style={videoStyles.container}>
-        {!playing ? (
+        {!isPlaying ? (
           <TouchableOpacity
             style={[videoStyles.thumbnail, { backgroundColor: `${color}15` }]}
-            onPress={() => setPlaying(true)}
+            onPress={handlePlay}
             activeOpacity={0.9}
+            accessibilityLabel="Play tutorial video"
+            accessibilityRole="button"
           >
             <View style={[videoStyles.playButton, { backgroundColor: color }]}>
               <PlayIcon />
@@ -397,7 +270,7 @@ const VideoPlayer = ({ videoId, color }: { videoId: string; color: string }) => 
             <iframe
               width="100%"
               height="100%"
-              src={`https://www.youtube.com/embed/${videoId}?autoplay=1`}
+              src={embedUrl}
               title="Tutorial Video"
               frameBorder="0"
               allow="autoplay; encrypted-media"
@@ -412,11 +285,13 @@ const VideoPlayer = ({ videoId, color }: { videoId: string; color: string }) => 
 
   return (
     <View style={videoStyles.container}>
-      {!playing ? (
+      {!isPlaying ? (
         <TouchableOpacity
           style={[videoStyles.thumbnail, { backgroundColor: `${color}15` }]}
-          onPress={() => setPlaying(true)}
+          onPress={handlePlay}
           activeOpacity={0.9}
+          accessibilityLabel="Play tutorial video"
+          accessibilityRole="button"
         >
           <View style={[videoStyles.playButton, { backgroundColor: color }]}>
             <PlayIcon />
@@ -427,7 +302,7 @@ const VideoPlayer = ({ videoId, color }: { videoId: string; color: string }) => 
         <WebView
           style={videoStyles.webview}
           javaScriptEnabled
-          source={{ uri: `https://www.youtube.com/embed/${videoId}?autoplay=1` }}
+          source={{ uri: embedUrl }}
         />
       )}
     </View>
@@ -473,16 +348,20 @@ const videoStyles = StyleSheet.create({
   },
 });
 
-// ─── Section Card ─────────────────────────────────────────────────────────────
+// ─── Section Card Component ──────────────────────────────────────────────────
 
-const SectionCard = ({ heading, body, color }: { heading: string; body: string; color: string }) => {
-  return (
-    <View style={[sectionStyles.card, { borderLeftColor: color }]}>
-      <Text style={[sectionStyles.heading, { color }]}>{heading}</Text>
-      <Text style={sectionStyles.body}>{body}</Text>
-    </View>
-  );
-};
+interface SectionCardProps {
+  heading: string;
+  body: string;
+  color: string;
+}
+
+const SectionCard: React.FC<SectionCardProps> = ({ heading, body, color }) => (
+  <View style={[sectionStyles.card, { borderLeftColor: color }]}>
+    <Text style={[sectionStyles.heading, { color }]}>{heading}</Text>
+    <Text style={sectionStyles.body}>{body}</Text>
+  </View>
+);
 
 const sectionStyles = StyleSheet.create({
   card: {
@@ -515,9 +394,14 @@ const sectionStyles = StyleSheet.create({
   },
 });
 
-// ─── Steps List ───────────────────────────────────────────────────────────────
+// ─── Steps List Component ────────────────────────────────────────────────────
 
-const StepsList = ({ steps, color }: { steps: string[]; color: string }) => (
+interface StepsListProps {
+  steps: string[];
+  color: string;
+}
+
+const StepsList: React.FC<StepsListProps> = ({ steps, color }) => (
   <View style={stepsStyles.container}>
     <Text style={[stepsStyles.title, { color }]}>Step-by-Step Process</Text>
     {steps.map((step, index) => (
@@ -580,23 +464,28 @@ const stepsStyles = StyleSheet.create({
   },
 });
 
-// ─── Key Points ───────────────────────────────────────────────────────────────
+// ─── Key Points Component ────────────────────────────────────────────────────
 
-const KeyPoints = ({ points, color }: { points: string[]; color: string }) => (
-  <View style={keyStyles.container}>
-    <Text style={[keyStyles.title, { color }]}>Key Points to Remember</Text>
+interface KeyPointsProps {
+  points: string[];
+  color: string;
+}
+
+const KeyPoints: React.FC<KeyPointsProps> = ({ points, color }) => (
+  <View style={keyPointsStyles.container}>
+    <Text style={[keyPointsStyles.title, { color }]}>Key Points to Remember</Text>
     {points.map((point, index) => (
-      <View key={index} style={keyStyles.row}>
-        <View style={[keyStyles.icon, { backgroundColor: `${color}15` }]}>
+      <View key={index} style={keyPointsStyles.row}>
+        <View style={[keyPointsStyles.icon, { backgroundColor: `${color}15` }]}>
           <CheckIcon color={color} />
         </View>
-        <Text style={keyStyles.text}>{point}</Text>
+        <Text style={keyPointsStyles.text}>{point}</Text>
       </View>
     ))}
   </View>
 );
 
-const keyStyles = StyleSheet.create({
+const keyPointsStyles = StyleSheet.create({
   container: {
     backgroundColor: '#ffffff',
     borderRadius: 16,
@@ -640,26 +529,31 @@ const keyStyles = StyleSheet.create({
   },
 });
 
-// ─── SDLC Feedback Form ───────────────────────────────────────────────────────
+// ─── SDLC Feedback Form Component ────────────────────────────────────────────
 
-const SDLCFeedbackForm = ({ color }: { color: string }) => {
+interface FeedbackFormProps {
+  color: string;
+}
+
+const SDLCFeedbackForm: React.FC<FeedbackFormProps> = ({ color }) => {
   const [feedback, setFeedback] = useState('');
 
   const handleSubmit = () => {
-    if (feedback.trim()) {
-      Alert.alert(
-        'Thank You!',
-        'Your feedback has been submitted successfully.',
-        [{ text: 'OK' }]
-      );
-      setFeedback('');
-    } else {
+    if (!feedback.trim()) {
       Alert.alert(
         'Empty Response',
         'Please write something about what you learned.',
         [{ text: 'OK' }]
       );
+      return;
     }
+
+    Alert.alert(
+      'Thank You!',
+      'Your feedback has been submitted successfully.',
+      [{ text: 'OK' }]
+    );
+    setFeedback('');
   };
 
   return (
@@ -736,22 +630,27 @@ const feedbackStyles = StyleSheet.create({
   },
 });
 
-// ─── Main DiagramDetail Screen ────────────────────────────────────────────────
+// ─── Helper Hook: useDiagramParams ───────────────────────────────────────────
 
-export default function DiagramDetail() {
+const useDiagramParams = () => {
   const params = useLocalSearchParams();
   const rawId = params.id;
-  const id = Array.isArray(rawId) ? rawId[0] : rawId;
+  return Array.isArray(rawId) ? rawId[0] : rawId;
+};
+
+// ─── Main Screen Component ───────────────────────────────────────────────────
+
+const DiagramDetail: React.FC = () => {
+  const id = useDiagramParams();
   const router = useRouter();
   const { width } = useWindowDimensions();
   const scrollY = useRef(new Animated.Value(0)).current;
 
-  const isDesktop = width >= 1024;
-  const isTablet = width >= 768;
+  const isDesktop = width >= BREAKPOINTS.desktop;
+  const isTablet = width >= BREAKPOINTS.tablet;
 
   const diagramId = parseInt(id ?? '1', 10);
   const content = DIAGRAM_CONTENT[diagramId];
-
   const colors = content ? TYPE_CONFIG[content.type] : TYPE_CONFIG.UML;
 
   const headerOpacity = scrollY.interpolate({
@@ -760,115 +659,200 @@ export default function DiagramDetail() {
     extrapolate: 'clamp',
   });
 
-  const goToHome = () => {
+  const handleGoToHome = () => {
     router.replace('/(tabs)');
   };
+
+  const handleScroll = Animated.event(
+    [{ nativeEvent: { contentOffset: { y: scrollY } } }],
+    { useNativeDriver: true }
+  );
 
   if (!content) {
     return (
       <View style={styles.errorContainer}>
         <Text style={styles.errorText}>Diagram not found.</Text>
-        <TouchableOpacity onPress={goToHome} style={styles.backBtn}>
+        <TouchableOpacity onPress={handleGoToHome} style={styles.backBtn}>
           <Text style={[styles.backBtnText, { color: colors.primary }]}>Go Back</Text>
         </TouchableOpacity>
       </View>
     );
   }
 
-  const VisualColumn = () => (
-    <View style={[
-      styles.visualColumn,
-      isDesktop && styles.visualColumnDesktop,
-    ]}>
-      <View style={styles.videoWrap}>
-        <Text style={[styles.sectionLabel, { color: colors.primary }]}>Video Tutorial</Text>
-        <VideoPlayer videoId={content.videoId} color={colors.primary} />
+  // Desktop: sticky sidebar with video, key points, and feedback (NO diagram preview)
+  const renderDesktopSidebar = () => {
+    if (!isDesktop) return null;
+    
+    return (
+      <View style={[styles.sidebar, styles.sidebarDesktop]}>
+        <View style={styles.videoWrap}>
+          <Text style={[styles.sectionLabel, { color: colors.primary }]}>Video Tutorial</Text>
+          <VideoPlayer videoId={content.videoId} color={colors.primary} />
+        </View>
+        
+        {content.keyPoints && (
+          <KeyPoints points={content.keyPoints} color={colors.primary} />
+        )}
+        
+        {content.type === 'SDLC' && (
+          <SDLCFeedbackForm color={colors.primary} />
+        )}
       </View>
-      {isDesktop && content.keyPoints && (
-        <KeyPoints points={content.keyPoints} color={colors.primary} />
-      )}
-    </View>
-  );
+    );
+  };
 
-  const ContentColumn = () => (
-    <View style={[
-      styles.contentColumn,
-      isDesktop && styles.contentColumnDesktop,
-    ]}>
-      {content.sections.map((section, i) => (
-        <SectionCard
-          key={i}
-          heading={section.heading}
-          body={section.body}
-          color={colors.primary}
-        />
-      ))}
-      {content.steps && (
-        <StepsList steps={content.steps} color={colors.primary} />
-      )}
-      {!isDesktop && content.keyPoints && (
-        <KeyPoints points={content.keyPoints} color={colors.primary} />
-      )}
-      {content.type === 'SDLC' && (
-        <SDLCFeedbackForm color={colors.primary} />
-      )}
-    </View>
-  );
+  // Desktop: main content column
+  const renderDesktopContent = () => {
+    if (!isDesktop) return null;
+    
+    return (
+      <View style={styles.contentColumnDesktop}>
+        {content.sections.map((section, i) => (
+          <SectionCard
+            key={`section-${i}`}
+            heading={section.heading}
+            body={section.body}
+            color={colors.primary}
+          />
+        ))}
+        
+        {content.steps && (
+          <StepsList steps={content.steps} color={colors.primary} />
+        )}
+      </View>
+    );
+  };
+
+  // Mobile/Tablet: single column layout
+  const renderMobileContent = () => {
+    if (isDesktop) return null;
+    
+    return (
+      <View style={styles.contentColumn}>
+        {content.sections.map((section, i) => (
+          <SectionCard
+            key={`section-${i}`}
+            heading={section.heading}
+            body={section.body}
+            color={colors.primary}
+          />
+        ))}
+        
+        {content.steps && (
+          <StepsList steps={content.steps} color={colors.primary} />
+        )}
+        
+        {content.type === 'SDLC' && (
+          <SDLCFeedbackForm color={colors.primary} />
+        )}
+        
+        {content.keyPoints && (
+          <KeyPoints points={content.keyPoints} color={colors.primary} />
+        )}
+      </View>
+    );
+  };
 
   return (
     <View style={styles.root}>
       <StatusBar barStyle="dark-content" />
 
-      <Animated.View style={[styles.floatingBar, { opacity: headerOpacity, borderBottomColor: `${colors.primary}20` }]}>
-        <TouchableOpacity onPress={goToHome} style={styles.floatingBackBtn} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+      <Animated.View style={[
+        styles.floatingBar,
+        {
+          opacity: headerOpacity,
+          borderBottomColor: `${colors.primary}20`,
+        },
+      ]}>
+        <TouchableOpacity
+          onPress={handleGoToHome}
+          style={styles.floatingBackBtn}
+          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          accessibilityLabel="Go back to home"
+          accessibilityRole="button"
+        >
           <BackIcon color={colors.primary} />
         </TouchableOpacity>
-        <Text style={[styles.floatingTitle, { color: '#1a1f36' }]} numberOfLines={1}>{content.title}</Text>
+        <Text
+          style={[styles.floatingTitle, { color: '#1a1f36' }]}
+          numberOfLines={1}
+        >
+          {content.title}
+        </Text>
       </Animated.View>
 
       <Animated.ScrollView
         showsVerticalScrollIndicator={false}
-        onScroll={Animated.event(
-          [{ nativeEvent: { contentOffset: { y: scrollY } } }],
-          { useNativeDriver: true }
-        )}
+        onScroll={handleScroll}
         scrollEventThrottle={16}
         contentContainerStyle={[
           styles.scrollContent,
           isDesktop && styles.scrollContentDesktop,
         ]}
       >
+        {/* Hero Section with Title, Tagline, Diagram, and Video */}
         <View style={[styles.hero, { backgroundColor: colors.light }]}>
           <TouchableOpacity
-            onPress={goToHome}
+            onPress={handleGoToHome}
             style={styles.heroBackBtn}
             hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            accessibilityLabel="Go back to home"
+            accessibilityRole="button"
           >
             <BackIcon color={colors.primary} />
             <Text style={[styles.heroBackText, { color: colors.primary }]}>Back</Text>
           </TouchableOpacity>
 
           <View style={styles.heroContent}>
-            <View style={styles.titleRow}>
-              <Text style={[styles.heroTitle, isTablet && styles.heroTitleTablet, isDesktop && styles.heroTitleDesktop]}>
+            <View style={styles.titleStack}>
+              <Text style={[
+                styles.heroTitle,
+                isTablet && styles.heroTitleTablet,
+                isDesktop && styles.heroTitleDesktop,
+              ]}>
                 {content.title}
               </Text>
+              <Text style={styles.heroTagline}>{content.tagline}</Text>
             </View>
+            
+            {/* Diagram preview — only once in hero */}
+            {content.placeholderImage ? (
+              <Image
+                source={content.placeholderImage}
+                style={styles.heroImage}
+                accessibilityLabel={content.imageAlt}
+                resizeMode="contain"
+              />
+            ) : (
+              <DiagramPlaceholder color={colors.primary} label={content.imageAlt} />
+            )}
+            
+            {/* Video directly below diagram on mobile/tablet only */}
+            {!isDesktop && (
+              <View style={styles.videoWrap}>
+                <Text style={[styles.sectionLabel, { color: colors.primary }]}>Video Tutorial</Text>
+                <VideoPlayer videoId={content.videoId} color={colors.primary} />
+              </View>
+            )}
           </View>
         </View>
 
+        {/* Body Section */}
         <View style={[
           styles.body,
           isDesktop ? styles.bodyDesktop : styles.bodyMobile,
           isTablet && !isDesktop && styles.bodyTablet,
         ]}>
-          <VisualColumn />
-          <ContentColumn />
+          {renderDesktopSidebar()}
+          {renderMobileContent()}
+          {renderDesktopContent()}
         </View>
       </Animated.ScrollView>
     </View>
   );
-}
+};
+
+export default DiagramDetail;
 
 // ─── Styles ───────────────────────────────────────────────────────────────────
 
@@ -921,14 +905,10 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   heroContent: {
-    gap: 12,
+    gap: 24,
   },
-  titleRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    gap: 16,
-    flexWrap: 'wrap',
+  titleStack: {
+    gap: 8,
   },
   heroTitle: {
     fontSize: 28,
@@ -936,8 +916,6 @@ const styles = StyleSheet.create({
     color: '#1a1f36',
     lineHeight: 36,
     letterSpacing: -0.5,
-    flex: 1,
-    minWidth: 200,
   },
   heroTitleTablet: {
     fontSize: 32,
@@ -947,12 +925,25 @@ const styles = StyleSheet.create({
     fontSize: 36,
     lineHeight: 44,
   },
+  heroTagline: {
+    fontSize: 15,
+    color: '#64748b',
+    lineHeight: 22,
+  },
+  heroImage: {
+    width: '100%',
+    maxHeight: 180,
+    borderRadius: 8,
+    backgroundColor: '#ffffff',
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+  },
   scrollContent: {
     flexGrow: 1,
     paddingBottom: 48,
   },
   scrollContentDesktop: {
-    maxWidth: 1280,
+    maxWidth: BREAKPOINTS.maxContentWidth,
     alignSelf: 'center',
     width: '100%',
   },
@@ -973,13 +964,13 @@ const styles = StyleSheet.create({
     paddingTop: 24,
     alignItems: 'flex-start',
   },
-  visualColumn: {
+  sidebar: {
     gap: 20,
   },
-  visualColumnDesktop: {
+  sidebarDesktop: {
     width: 380,
     flexShrink: 0,
-    position: 'sticky' as any,
+    position: Platform.OS === 'web' ? 'sticky' : 'relative',
     top: 90,
     alignSelf: 'flex-start',
   },
