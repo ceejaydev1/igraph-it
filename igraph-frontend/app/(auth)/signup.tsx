@@ -1,5 +1,3 @@
-// app/(auth)/signup.tsx - UPDATED WITH SPECIAL CHARACTER INLINE ERROR
-
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import {
   View,

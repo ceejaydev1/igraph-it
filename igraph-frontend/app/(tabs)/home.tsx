@@ -1,5 +1,4 @@
 // igraph-frontend/app/(tabs)/home.tsx
-// No spinner - only skeleton loading
 
 import React, { useState, useCallback, useMemo, useRef, useEffect } from 'react';
 import { 
@@ -8,7 +7,7 @@ import {
   StyleSheet, 
   TextInput, 
   Platform, 
-  TouchableOpacity, 
+  Pressable, 
   Keyboard, 
   ScrollView,
   useWindowDimensions,
@@ -17,12 +16,13 @@ import {
   Animated,
 } from 'react-native';
 import { useRouter } from 'expo-router';
-import * as authService from '../../services/authService';
 import { Svg, Path, Circle } from 'react-native-svg';
 
-// Enable LayoutAnimation on Android
-if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
-  UIManager.setLayoutAnimationEnabledExperimental(true);
+// Enable LayoutAnimation on Android (safe check)
+if (Platform.OS === 'android') {
+  if (UIManager.setLayoutAnimationEnabledExperimental) {
+    UIManager.setLayoutAnimationEnabledExperimental(true);
+  }
 }
 
 // Types
@@ -64,10 +64,52 @@ const TYPE_COLORS = {
 const TABS: TabType[] = ['All', 'SDLC', 'UML'];
 
 // ─────────────────────────────────────────────────────────────────────────────
-// SKELETON LOADER COMPONENTS (Inline - no external imports)
+// DOT GRID PATTERN - Cross-platform compatible
 // ─────────────────────────────────────────────────────────────────────────────
 
-const Shimmer = ({ width, height, borderRadius = 8, style = {} }: any) => {
+const DotGrid = () => {
+  const { width: screenWidth, height: screenHeight } = useWindowDimensions();
+  const DOT_SPACING = 32;
+  const DOT_SIZE = 2;
+  
+  const columns = Math.ceil(screenWidth / DOT_SPACING);
+  const rows = Math.ceil(screenHeight / DOT_SPACING);
+  const totalDots = columns * rows;
+  
+  return (
+    <View style={styles.dotGridContainer} pointerEvents="none">
+      {[...Array(Math.min(totalDots, 200))].map((_, i) => {
+        const col = i % columns;
+        const row = Math.floor(i / columns);
+        return (
+          <View
+            key={i}
+            style={[
+              styles.dotGridItem,
+              {
+                left: col * DOT_SPACING,
+                top: row * DOT_SPACING,
+                width: DOT_SIZE,
+                height: DOT_SIZE,
+              },
+            ]}
+          />
+        );
+      })}
+    </View>
+  );
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SKELETON LOADER COMPONENTS
+// ─────────────────────────────────────────────────────────────────────────────
+
+const Shimmer = ({ width, height, borderRadius = 8, style = {} }: { 
+  width: number | string; 
+  height: number; 
+  borderRadius?: number; 
+  style?: any;
+}) => {
   const shimmerValue = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
@@ -94,6 +136,8 @@ const Shimmer = ({ width, height, borderRadius = 8, style = {} }: any) => {
     outputRange: [-200, 200],
   });
 
+  const numericWidth = typeof width === 'number' ? width : 400;
+
   return (
     <View style={[styles.shimmerContainer, { width, height, borderRadius }, style]}>
       <Animated.View
@@ -101,7 +145,7 @@ const Shimmer = ({ width, height, borderRadius = 8, style = {} }: any) => {
           styles.shimmer,
           {
             transform: [{ translateX: shimmerTranslate }],
-            width: typeof width === 'number' ? width * 2 : 400,
+            width: numericWidth * 2,
           },
         ]}
       />
@@ -109,10 +153,7 @@ const Shimmer = ({ width, height, borderRadius = 8, style = {} }: any) => {
   );
 };
 
-const CardSkeleton = () => {
-  const { width } = useWindowDimensions();
-  const cardWidth = width < 768 ? width - 32 : width < 1024 ? (width - 44) / 2 : 300;
-  
+const CardSkeleton = ({ cardWidth }: { cardWidth: number }) => {
   return (
     <View style={[styles.skeletonCard, { width: cardWidth }]}>
       <Shimmer width="100%" height={120} borderRadius={12} />
@@ -127,9 +168,11 @@ const CardSkeleton = () => {
 const HomeGridSkeleton = () => {
   const { width } = useWindowDimensions();
   const isDesktop = width >= 1024;
+  const cardWidth = width < 768 ? width - 32 : width < 1024 ? (width - 44) / 2 : 300;
   
   return (
     <View style={styles.skeletonContainer}>
+      <DotGrid />
       <View style={styles.skeletonHeader}>
         <Shimmer width="100%" height={44} borderRadius={12} style={{ maxWidth: 640 }} />
         <View style={styles.skeletonTabs}>
@@ -141,7 +184,7 @@ const HomeGridSkeleton = () => {
       
       <View style={styles.skeletonGrid}>
         {[...Array(isDesktop ? 12 : 6)].map((_, i) => (
-          <CardSkeleton key={i} />
+          <CardSkeleton key={i} cardWidth={cardWidth} />
         ))}
       </View>
     </View>
@@ -174,7 +217,7 @@ const EmptySearchIcon = () => (
   <Svg width={80} height={80} viewBox="0 0 24 24" fill="none">
     <Path
       d="M21 21L16.65 16.65M19 11C19 15.4183 15.4183 19 11 19C6.58172 19 3 15.4183 3 11C3 6.58172 6.58172 3 11 3C15.4183 3 19 6.58172 19 11Z"
-      stroke="#e2e6f3"
+      stroke="#cbd5e1"
       strokeWidth={1.5}
     />
   </Svg>
@@ -195,10 +238,13 @@ const TabButton = ({
   isActive: boolean; 
   onPress: () => void;
 }) => (
-  <TouchableOpacity
-    style={[styles.tabButton, isActive && styles.tabButtonActive]}
+  <Pressable
+    style={({ pressed }) => [
+      styles.tabButton,
+      isActive && styles.tabButtonActive,
+      pressed && !isActive && styles.tabButtonPressed,
+    ]}
     onPress={onPress}
-    activeOpacity={0.7}
   >
     <Text style={[styles.tabButtonText, isActive && styles.tabButtonTextActive]}>
       {label}
@@ -208,11 +254,11 @@ const TabButton = ({
         {count}
       </Text>
     </View>
-  </TouchableOpacity>
+  </Pressable>
 );
 
 // ─────────────────────────────────────────────────────────────────────────────
-// DIAGRAM CARD WITH HOVER EFFECTS (No decorative dots)
+// DIAGRAM CARD
 // ─────────────────────────────────────────────────────────────────────────────
 
 const DiagramCard = ({ 
@@ -237,12 +283,12 @@ const DiagramCard = ({
         toValue: isHovered ? 1.02 : 1,
         friction: 8,
         tension: 40,
-        useNativeDriver: Platform.OS !== 'web',
+        useNativeDriver: true,
       }),
       Animated.timing(shadowAnim, {
         toValue: isHovered ? 1 : 0,
         duration: 200,
-        useNativeDriver: Platform.OS !== 'web',
+        useNativeDriver: false,
       }),
     ]).start();
   }, [isHovered]);
@@ -252,26 +298,18 @@ const DiagramCard = ({
     outputRange: [0.04, 0.12],
   });
 
-  const shadowRadius = shadowAnim.interpolate({
-    inputRange: [0, 1],
-    outputRange: [8, 16],
-  });
-
   const elevation = shadowAnim.interpolate({
     inputRange: [0, 1],
     outputRange: [2, 6],
   });
 
-  const borderColor = shadowAnim.interpolate({
-    inputRange: [0, 1],
-    outputRange: ['#eef2ff', colors.primary + '40'],
-  });
-
   return (
-    <TouchableOpacity 
-      onPress={onPress} 
-      activeOpacity={0.95} 
-      style={styles.cardTouchable}
+    <Pressable 
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.cardTouchable,
+        pressed && styles.cardPressed,
+      ]}
       // @ts-ignore - React Native Web specific props
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
@@ -279,12 +317,11 @@ const DiagramCard = ({
       <Animated.View 
         style={[
           styles.diagramCard,
+          isHovered && styles.diagramCardHovered,
           {
             transform: [{ scale: scaleAnim }],
             shadowOpacity,
-            shadowRadius,
             elevation,
-            borderColor,
           },
         ]}
       >
@@ -293,7 +330,6 @@ const DiagramCard = ({
           isDesktop && styles.cardPreviewDesktop,
           { backgroundColor: colors.light }
         ]}>
-          {/* Hover overlay */}
           {isHovered && (
             <View style={[styles.hoverOverlay, { backgroundColor: colors.primary + '08' }]} />
           )}
@@ -318,7 +354,7 @@ const DiagramCard = ({
           </View>
         </View>
       </Animated.View>
-    </TouchableOpacity>
+    </Pressable>
   );
 };
 
@@ -358,7 +394,7 @@ const useResponsiveLayout = () => {
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
-// MAIN HOME COMPONENT - NO SPINNER, ONLY SKELETON
+// MAIN HOME COMPONENT
 // ─────────────────────────────────────────────────────────────────────────────
 
 export default function Home() {
@@ -371,9 +407,7 @@ export default function Home() {
   const filteredDiagrams = useFilteredDiagrams(activeTab, searchQuery);
   const layout = useResponsiveLayout();
 
-  // Show skeleton on mount, then show content after a short delay
   useEffect(() => {
-    // Brief skeleton display for smooth transition
     const timer = setTimeout(() => {
       setShowContent(true);
     }, 400);
@@ -422,14 +456,13 @@ export default function Home() {
     });
   }, [router]);
 
-  // ✅ ONLY skeleton loading - NO spinner anywhere
   if (!showContent) {
     return <HomeGridSkeleton />;
   }
 
   return (
     <View style={styles.container}>
-      <View style={styles.dotPattern} />
+      <DotGrid />
       
       <View style={styles.headerSection}>
         <View style={styles.searchBarContainer}>
@@ -438,7 +471,7 @@ export default function Home() {
               ref={inputRef}
               style={styles.searchInput}
               placeholder="Search SDLC and UML diagrams"
-              placeholderTextColor="#b8c0d4"
+              placeholderTextColor="#94a3b8"
               value={searchQuery}
               onChangeText={setSearchQuery}
               onSubmitEditing={handleSearchSubmit}
@@ -446,21 +479,26 @@ export default function Home() {
               returnKeyType="search"
             />
             {searchQuery.length > 0 && (
-              <TouchableOpacity 
+              <Pressable 
                 onPress={handleClearSearch} 
-                style={styles.clearButton}
+                style={({ pressed }) => [
+                  styles.clearButton,
+                  pressed && styles.clearButtonPressed,
+                ]}
                 hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
               >
                 <ClearIcon />
-              </TouchableOpacity>
+              </Pressable>
             )}
-            <TouchableOpacity 
-              style={styles.searchButton} 
+            <Pressable 
+              style={({ pressed }) => [
+                styles.searchButton,
+                pressed && styles.searchButtonPressed,
+              ]}
               onPress={handleSearchSubmit}
-              activeOpacity={0.85}
             >
               <SearchIcon />
-            </TouchableOpacity>
+            </Pressable>
           </View>
         </View>
 
@@ -529,13 +567,29 @@ export default function Home() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f8faff',
+    backgroundColor: '#f8fafc',
+  },
+  
+  // Dot Grid Pattern - Cross platform
+  dotGridContainer: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    overflow: 'hidden',
+  },
+  dotGridItem: {
+    position: 'absolute',
+    backgroundColor: '#4c6fff',
+    borderRadius: 1,
+    opacity: 0.12,
   },
   
   // Skeleton styles
   skeletonContainer: {
     flex: 1,
-    backgroundColor: '#f8faff',
+    backgroundColor: '#f8fafc',
   },
   skeletonHeader: {
     paddingTop: Platform.OS === 'ios' ? 60 : 20,
@@ -560,17 +614,17 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     overflow: 'hidden',
     marginBottom: 4,
+    elevation: 2,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.04,
     shadowRadius: 8,
-    elevation: 2,
   },
   skeletonCardContent: {
     padding: 14,
   },
   shimmerContainer: {
-    backgroundColor: '#e2e6f3',
+    backgroundColor: '#e2e8f0',
     overflow: 'hidden',
     position: 'relative',
   },
@@ -586,19 +640,6 @@ const styles = StyleSheet.create({
         background: 'linear-gradient(90deg, transparent, rgba(255,255,255,0.6), transparent)',
       },
     }),
-  },
-  
-  // Dot pattern background
-  dotPattern: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    opacity: 0.4,
-    backgroundColor: 'transparent',
-    backgroundImage: 'radial-gradient(circle at 2px 2px, #4c6fff 1px, transparent 1px)',
-    backgroundSize: '32px 32px',
   },
   
   // Header
@@ -623,35 +664,32 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 6,
     borderWidth: 1,
-    borderColor: '#e2e6f3',
+    borderColor: '#e2e8f0',
     gap: 10,
     width: '100%',
+    elevation: 1,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.04,
     shadowRadius: 3,
-    elevation: 1,
   },
   searchInput: {
     flex: 1,
     fontSize: 15,
-    color: '#1a1f36',
+    color: '#0f172a',
     paddingVertical: 8,
     ...Platform.select({
       web: {
         outlineStyle: 'none',
-        fontFamily: '"Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
-      },
-      ios: {
-        fontFamily: 'System',
-      },
-      android: {
-        fontFamily: 'Roboto',
       },
     }),
   },
   clearButton: {
     padding: 4,
+    borderRadius: 4,
+  },
+  clearButtonPressed: {
+    backgroundColor: '#f1f5f9',
   },
   searchButton: {
     backgroundColor: '#4c6fff',
@@ -660,6 +698,9 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  searchButtonPressed: {
+    backgroundColor: '#3b5de7',
   },
   searchInfo: {
     marginTop: 12,
@@ -688,20 +729,23 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 8,
     borderRadius: 20,
-    backgroundColor: '#f0f4ff',
+    backgroundColor: '#f1f5f9',
   },
   tabButtonActive: {
     backgroundColor: '#4c6fff',
+    elevation: 3,
     shadowColor: '#4c6fff',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.2,
     shadowRadius: 4,
-    elevation: 3,
+  },
+  tabButtonPressed: {
+    backgroundColor: '#e2e8f0',
   },
   tabButtonText: {
     fontSize: 13,
     fontWeight: '600',
-    color: '#64748b',
+    color: '#475569',
   },
   tabButtonTextActive: {
     color: '#ffffff',
@@ -744,18 +788,25 @@ const styles = StyleSheet.create({
   // Diagram card
   cardTouchable: {
     flex: 1,
+    borderRadius: 16,
+  },
+  cardPressed: {
+    opacity: 0.9,
   },
   diagramCard: {
     backgroundColor: '#ffffff',
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: '#eef2ff',
+    borderColor: '#e2e8f0',
     overflow: 'hidden',
+    elevation: 2,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.04,
     shadowRadius: 8,
-    elevation: 2,
+  },
+  diagramCardHovered: {
+    borderColor: '#cbd5e1',
   },
   cardPreview: {
     height: 120,
@@ -778,7 +829,7 @@ const styles = StyleSheet.create({
   cardTitle: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#1a1f36',
+    color: '#0f172a',
     marginBottom: 10,
     lineHeight: 20,
   },
@@ -811,13 +862,13 @@ const styles = StyleSheet.create({
   emptyStateTitle: {
     fontSize: 18,
     fontWeight: '600',
-    color: '#1a1f36',
+    color: '#0f172a',
     marginTop: 16,
     marginBottom: 8,
   },
   emptyStateText: {
     fontSize: 14,
-    color: '#8896b3',
+    color: '#64748b',
     textAlign: 'center',
     lineHeight: 20,
   },
