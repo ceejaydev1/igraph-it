@@ -67,7 +67,7 @@ const TYPOGRAPHY = {
   tiny: { fontSize: 10, fontWeight: '700' as const, lineHeight: 14 },
 };
 
-const SPACING = { xs: 4, sm: 8, md: 12, lg: 16, xl: 20, xxl: 24, xxxl: 32 };
+const SPACING = { xs: 4, sm: 8, md: 12, lg: 16, xl: 20, xxl: 24, xxxl: 17 };
 const RADIUS = { sm: 6, md: 10, lg: 14, xl: 18, xxl: 24, full: 999 };
 
 const SHADOWS = {
@@ -137,7 +137,7 @@ const DotGrid = () => {
 };
 
 // ============================================================================
-// ICONS - Black color, no background containers
+// ICONS
 // ============================================================================
 
 const CameraIcon = () => (
@@ -235,7 +235,7 @@ const SkeletonLoader = () => {
 
   return (
     <View style={styles.skeletonContainer}>
-      <DotGrid />
+      {/* <DotGrid /> */}
       <View style={[styles.skeletonContent, { paddingTop: Platform.OS === 'ios' ? 60 : SPACING.xxl }]}>
         <View style={styles.skeletonCard}>
           <View style={styles.skeletonRow}>
@@ -265,19 +265,20 @@ const SkeletonLoader = () => {
 };
 
 // ============================================================================
-// PASSWORD CHANGE MODAL
+// PASSWORD CHANGE MODAL (with router passed as parameter)
 // ============================================================================
 
 const ChangePasswordModal = ({ 
   visible, 
   onClose, 
-  onSuccess 
+  onSuccess,
+  router 
 }: { 
   visible: boolean; 
   onClose: () => void; 
   onSuccess: () => void;
+  router: any;
 }) => {
-  const [step, setStep] = useState<'verify' | 'change'>('verify');
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -286,7 +287,6 @@ const ChangePasswordModal = ({
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [verifyError, setVerifyError] = useState('');
   const [passwordErrors, setPasswordErrors] = useState<string[]>([]);
 
   const validateNewPassword = (pwd: string) => {
@@ -295,50 +295,18 @@ const ChangePasswordModal = ({
     if (!/[A-Z]/.test(pwd)) errors.push('One uppercase letter');
     if (!/[a-z]/.test(pwd)) errors.push('One lowercase letter');
     if (!/[0-9]/.test(pwd)) errors.push('One number');
+    if (!/[!@#$%^&*(),.?":{}|<>]/.test(pwd)) errors.push('One special character');
     setPasswordErrors(errors);
     return errors.length === 0;
   };
 
-  const handleVerifyCurrent = async () => {
-    if (!currentPassword) {
-      setVerifyError('Please enter your current password');
-      return;
-    }
-    
-    setLoading(true);
-    setVerifyError('');
-    
-    try {
-      const API_URL = process.env.EXPO_PUBLIC_API_URL || 'https://igraph-backend.onrender.com';
-      const token = await authService.getAccessToken();
-      
-      const response = await fetch(`${API_URL}/api/auth/verify-password`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
-        },
-        body: JSON.stringify({ password: currentPassword }),
-      });
-      
-      const responseData = await response.json();
-      
-      if (responseData.success) {
-        setStep('change');
-        setCurrentPassword('');
-        setError('');
-      } else {
-        setVerifyError(responseData.message || 'Incorrect password. Please try again.');
-      }
-    } catch (err) {
-      setVerifyError('Unable to verify password. Please try again.');
-    } finally {
-      setLoading(false);
-    }
-  };
-
   const handleChangePassword = async () => {
     setError('');
+    
+    if (!currentPassword) {
+      setError('Please enter your current password');
+      return;
+    }
     
     if (!validateNewPassword(newPassword)) {
       setError('Please meet all password requirements');
@@ -353,40 +321,39 @@ const ChangePasswordModal = ({
     setLoading(true);
     
     try {
-      const API_URL = process.env.EXPO_PUBLIC_API_URL || 'https://igraph-backend.onrender.com';
-      const token = await authService.getAccessToken();
+      const result = await authService.changePassword(currentPassword, newPassword);
       
-      const response = await fetch(`${API_URL}/api/auth/change-password`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
-        },
-        body: JSON.stringify({ currentPassword, newPassword }),
-      });
-      
-      const responseData = await response.json();
-      
-      if (responseData.success) {
+      if (result.success) {
         onSuccess();
         handleClose();
+        Alert.alert(
+          'Password Changed',
+          'Your password has been changed successfully. Please sign in again.',
+          [
+            {
+              text: 'OK',
+              onPress: async () => {
+                await authService.logout();
+                router.replace('/(auth)/signin');
+              }
+            }
+          ]
+        );
       } else {
-        setError(responseData.message || 'Failed to change password');
+        setError(result.message || 'Failed to change password');
       }
-    } catch (err) {
-      setError('Unable to change password. Please try again.');
+    } catch (err: any) {
+      setError(err.response?.data?.message || 'Unable to change password. Please try again.');
     } finally {
       setLoading(false);
     }
   };
 
   const handleClose = () => {
-    setStep('verify');
     setCurrentPassword('');
     setNewPassword('');
     setConfirmPassword('');
     setError('');
-    setVerifyError('');
     setPasswordErrors([]);
     onClose();
   };
@@ -397,8 +364,9 @@ const ChangePasswordModal = ({
     if (/[A-Z]/.test(newPassword)) score++;
     if (/[a-z]/.test(newPassword)) score++;
     if (/[0-9]/.test(newPassword)) score++;
+    if (/[!@#$%^&*(),.?":{}|<>]/.test(newPassword)) score++;
     
-    if (score === 4) return { text: 'Strong', color: COLORS.success, width: '100%' as const };
+    if (score >= 4) return { text: 'Strong', color: COLORS.success, width: '100%' as const };
     if (score === 3) return { text: 'Good', color: COLORS.warning, width: '75%' as const };
     if (score > 0) return { text: 'Weak', color: COLORS.danger, width: '50%' as const };
     return { text: '', color: COLORS.gray200, width: '0%' as const };
@@ -415,163 +383,131 @@ const ChangePasswordModal = ({
     >
       <Pressable style={styles.modalOverlay} onPress={handleClose}>
         <Pressable style={styles.modalContainer}>
-          <View style={styles.stepIndicator}>
-            <View style={[styles.stepDot, styles.stepDotActive]}>
-              <CheckCircleIcon />
-            </View>
-            <View style={[styles.stepLine, step === 'change' && styles.stepLineActive]} />
-            <View style={[styles.stepDot, step === 'change' && styles.stepDotActive]}>
-              {step === 'change' ? <CheckCircleIcon /> : <Text style={styles.stepDotText}>2</Text>}
-            </View>
-          </View>
-
           <View style={styles.modalHeader}>
-            <Text style={styles.modalTitle}>
-              {step === 'verify' ? 'Verify Password' : 'Change Password'}
-            </Text>
+            <Text style={styles.modalTitle}>Change Password</Text>
             <TouchableOpacity onPress={handleClose} style={styles.modalClose} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
               <CloseIcon />
             </TouchableOpacity>
           </View>
           
-          {step === 'verify' ? (
-            <>
-              <Text style={styles.modalDescription}>
-                For security, please enter your current password to continue.
-              </Text>
-              
-              <View style={styles.passwordInputWrapper}>
-                <View style={[styles.passwordInputContainer, verifyError ? styles.inputError : null]}>
-                  <LockIcon color={COLORS.gray400} />
-                  <TextInput
-                    style={styles.passwordInput}
-                    placeholder="Current Password"
-                    placeholderTextColor={COLORS.gray400}
-                    value={currentPassword}
-                    onChangeText={(text) => {
-                      setCurrentPassword(text);
-                      setVerifyError('');
-                    }}
-                    secureTextEntry={!showCurrentPassword}
-                    autoCapitalize="none"
-                  />
-                  <TouchableOpacity 
-                    style={styles.passwordEyeBtn}
-                    onPress={() => setShowCurrentPassword(!showCurrentPassword)}
-                  >
-                    <EyeIcon visible={showCurrentPassword} />
-                  </TouchableOpacity>
-                </View>
-                {verifyError ? <Text style={styles.modalError}>{verifyError}</Text> : null}
-              </View>
-              
-              <TouchableOpacity
-                style={[styles.modalButton, loading && styles.modalButtonDisabled]}
-                onPress={handleVerifyCurrent}
-                disabled={loading}
-                activeOpacity={0.8}
+          <View style={styles.passwordInputWrapper}>
+            <Text style={styles.inputLabel}>Current Password</Text>
+            <View style={[styles.passwordInputContainer, error && !currentPassword ? styles.inputError : null]}>
+              <LockIcon color={COLORS.gray400} />
+              <TextInput
+                style={styles.passwordInput}
+                placeholder="Enter your current password"
+                placeholderTextColor={COLORS.gray400}
+                value={currentPassword}
+                onChangeText={(text) => {
+                  setCurrentPassword(text);
+                  setError('');
+                }}
+                secureTextEntry={!showCurrentPassword}
+                autoCapitalize="none"
+              />
+              <TouchableOpacity 
+                style={styles.passwordEyeBtn}
+                onPress={() => setShowCurrentPassword(!showCurrentPassword)}
               >
-                {loading ? (
-                  <ActivityIndicator color={COLORS.white} size="small" />
-                ) : (
-                  <Text style={styles.modalButtonText}>Verify & Continue</Text>
-                )}
+                <EyeIcon visible={showCurrentPassword} />
               </TouchableOpacity>
-            </>
-          ) : (
-            <>
-              <View style={styles.passwordInputWrapper}>
-                <Text style={styles.inputLabel}>New Password</Text>
-                <View style={styles.passwordInputContainer}>
-                  <LockIcon color={COLORS.gray400} />
-                  <TextInput
-                    style={styles.passwordInput}
-                    placeholder="Enter new password"
-                    placeholderTextColor={COLORS.gray400}
-                    value={newPassword}
-                    onChangeText={(text) => {
-                      setNewPassword(text);
-                      validateNewPassword(text);
-                      setError('');
-                    }}
-                    secureTextEntry={!showNewPassword}
-                    autoCapitalize="none"
-                  />
-                  <TouchableOpacity 
-                    style={styles.passwordEyeBtn}
-                    onPress={() => setShowNewPassword(!showNewPassword)}
-                  >
-                    <EyeIcon visible={showNewPassword} />
-                  </TouchableOpacity>
-                </View>
-                
-                {newPassword.length > 0 && (
-                  <View style={styles.passwordStrengthContainer}>
-                    <View style={styles.passwordStrengthBar}>
-                      <View style={[styles.passwordStrengthFill, { width: strength.width, backgroundColor: strength.color }]} />
-                    </View>
-                    {strength.text ? (
-                      <Text style={[styles.passwordStrengthText, { color: strength.color }]}>{strength.text}</Text>
-                    ) : null}
-                  </View>
-                )}
-                
-                {passwordErrors.length > 0 && (
-                  <View style={styles.passwordRequirements}>
-                    {passwordErrors.map((err, i) => (
-                      <View key={i} style={styles.passwordRequirementRow}>
-                        <View style={styles.passwordRequirementDot} />
-                        <Text style={styles.passwordRequirementText}>{err}</Text>
-                      </View>
-                    ))}
-                  </View>
-                )}
-              </View>
-              
-              <View style={styles.passwordInputWrapper}>
-                <Text style={styles.inputLabel}>Confirm Password</Text>
-                <View style={[styles.passwordInputContainer, confirmPassword && newPassword !== confirmPassword ? styles.inputError : null]}>
-                  <LockIcon color={COLORS.gray400} />
-                  <TextInput
-                    style={styles.passwordInput}
-                    placeholder="Confirm new password"
-                    placeholderTextColor={COLORS.gray400}
-                    value={confirmPassword}
-                    onChangeText={(text) => {
-                      setConfirmPassword(text);
-                      setError('');
-                    }}
-                    secureTextEntry={!showConfirmPassword}
-                    autoCapitalize="none"
-                  />
-                  <TouchableOpacity 
-                    style={styles.passwordEyeBtn}
-                    onPress={() => setShowConfirmPassword(!showConfirmPassword)}
-                  >
-                    <EyeIcon visible={showConfirmPassword} />
-                  </TouchableOpacity>
-                </View>
-                {confirmPassword && newPassword !== confirmPassword && (
-                  <Text style={styles.passwordMismatchText}>Passwords do not match</Text>
-                )}
-              </View>
-              
-              {error ? <Text style={styles.modalError}>{error}</Text> : null}
-              
-              <TouchableOpacity
-                style={[styles.modalButton, loading && styles.modalButtonDisabled]}
-                onPress={handleChangePassword}
-                disabled={loading}
-                activeOpacity={0.8}
+            </View>
+          </View>
+          
+          <View style={styles.passwordInputWrapper}>
+            <Text style={styles.inputLabel}>New Password</Text>
+            <View style={styles.passwordInputContainer}>
+              <LockIcon color={COLORS.gray400} />
+              <TextInput
+                style={styles.passwordInput}
+                placeholder="Enter new password"
+                placeholderTextColor={COLORS.gray400}
+                value={newPassword}
+                onChangeText={(text) => {
+                  setNewPassword(text);
+                  validateNewPassword(text);
+                  setError('');
+                }}
+                secureTextEntry={!showNewPassword}
+                autoCapitalize="none"
+              />
+              <TouchableOpacity 
+                style={styles.passwordEyeBtn}
+                onPress={() => setShowNewPassword(!showNewPassword)}
               >
-                {loading ? (
-                  <ActivityIndicator color={COLORS.white} size="small" />
-                ) : (
-                  <Text style={styles.modalButtonText}>Update Password</Text>
-                )}
+                <EyeIcon visible={showNewPassword} />
               </TouchableOpacity>
-            </>
-          )}
+            </View>
+            
+            {newPassword.length > 0 && (
+              <View style={styles.passwordStrengthContainer}>
+                <View style={styles.passwordStrengthBar}>
+                  <View style={[styles.passwordStrengthFill, { width: strength.width, backgroundColor: strength.color }]} />
+                </View>
+                {strength.text ? (
+                  <Text style={[styles.passwordStrengthText, { color: strength.color }]}>{strength.text}</Text>
+                ) : null}
+              </View>
+            )}
+            
+            {passwordErrors.length > 0 && (
+              <View style={styles.passwordRequirements}>
+                {passwordErrors.map((err, i) => (
+                  <View key={i} style={styles.passwordRequirementRow}>
+                    <View style={styles.passwordRequirementDot} />
+                    <Text style={styles.passwordRequirementText}>{err}</Text>
+                  </View>
+                ))}
+              </View>
+            )}
+          </View>
+          
+          <View style={styles.passwordInputWrapper}>
+            <Text style={styles.inputLabel}>Confirm New Password</Text>
+            <View style={[styles.passwordInputContainer, confirmPassword && newPassword !== confirmPassword ? styles.inputError : null]}>
+              <LockIcon color={COLORS.gray400} />
+              <TextInput
+                style={styles.passwordInput}
+                placeholder="Confirm new password"
+                placeholderTextColor={COLORS.gray400}
+                value={confirmPassword}
+                onChangeText={(text) => {
+                  setConfirmPassword(text);
+                  setError('');
+                }}
+                secureTextEntry={!showConfirmPassword}
+                autoCapitalize="none"
+              />
+              <TouchableOpacity 
+                style={styles.passwordEyeBtn}
+                onPress={() => setShowConfirmPassword(!showConfirmPassword)}
+              >
+                <EyeIcon visible={showConfirmPassword} />
+              </TouchableOpacity>
+            </View>
+            {confirmPassword && newPassword !== confirmPassword && (
+              <Text style={styles.passwordMismatchText}>Passwords do not match</Text>
+            )}
+            {confirmPassword && newPassword === confirmPassword && newPassword.length > 0 && (
+              <Text style={styles.matchSuccess}>✓ Passwords match</Text>
+            )}
+          </View>
+          
+          {error ? <Text style={styles.modalError}>{error}</Text> : null}
+          
+          <TouchableOpacity
+            style={[styles.modalButton, loading && styles.modalButtonDisabled]}
+            onPress={handleChangePassword}
+            disabled={loading}
+            activeOpacity={0.8}
+          >
+            {loading ? (
+              <ActivityIndicator color={COLORS.white} size="small" />
+            ) : (
+              <Text style={styles.modalButtonText}>Update Password</Text>
+            )}
+          </TouchableOpacity>
         </Pressable>
       </Pressable>
     </Modal>
@@ -687,9 +623,13 @@ export default function UserAccount() {
           username: username || '',
           profilePicture: profilePicture || null,
         });
+      } else if (result.success === false && result.message === 'User not found') {
+        await authService.clearTokens();
+        router.replace('/(auth)/signin');
       }
     } catch (error) {
       console.error('Failed to load user data:', error);
+      showToast('Failed to load user data. Pull down to refresh.', true);
     } finally {
       setLoading(false);
     }
@@ -743,17 +683,15 @@ export default function UserAccount() {
         const token = await authService.getAccessToken();
         const API_URL = process.env.EXPO_PUBLIC_API_URL || 'https://igraph-backend.onrender.com';
         
-        const formData = new FormData();
-        formData.append('profilePicture', {
-          uri: asset.uri,
-          type: asset.mimeType || 'image/jpeg',
-          name: 'profile.jpg',
-        } as any);
-        
         const response = await fetch(`${API_URL}/api/auth/upload-profile-picture`, {
           method: 'POST',
-          headers: { 'Authorization': `Bearer ${token}` },
-          body: formData,
+          headers: { 
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ 
+            profilePictureUrl: asset.uri
+          }),
         });
         
         const responseData = await response.json();
@@ -777,25 +715,38 @@ export default function UserAccount() {
     showToast('Password changed successfully');
   };
 
-  const handleSignOut = async () => {
-    Alert.alert(
-      'Sign Out',
-      'Are you sure you want to sign out?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        { 
-          text: 'Sign Out', 
-          style: 'destructive',
-          onPress: async () => {
+const handleSignOut = async () => {
+  Alert.alert(
+    'Sign Out',
+    'Are you sure you want to sign out?',
+    [
+      { text: 'Cancel', style: 'cancel' },
+      { 
+        text: 'Sign Out', 
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            setLoading(true); // Optional: Add loading state
             await authService.logout();
+            // Clear any local user data
+            setUserData({ fullName: '', email: '', username: '', profilePicture: null });
+            // Use replace to prevent going back to userAccount
             router.replace('/(auth)/signin');
+          } catch (error) {
+            console.error('Sign out error:', error);
+            // Still redirect even if API fails
+            router.replace('/(auth)/signin');
+          } finally {
+            setLoading(false);
           }
-        },
-      ]
-    );
-  };
+        }
+      },
+    ]
+  );
+};
 
   const getInitials = useCallback(() => {
+    if (!userData.fullName) return 'U';
     return userData.fullName
       .split(' ')
       .map(n => n[0])
@@ -803,6 +754,12 @@ export default function UserAccount() {
       .toUpperCase()
       .slice(0, 2);
   }, [userData.fullName]);
+
+  const getDisplayName = useCallback(() => {
+    if (userData.fullName && userData.fullName.trim()) return userData.fullName;
+    if (userData.email) return userData.email.split('@')[0];
+    return 'User';
+  }, [userData.fullName, userData.email]);
 
   if (loading) {
     return <SkeletonLoader />;
@@ -855,13 +812,8 @@ export default function UserAccount() {
                 </TouchableOpacity>
                 
                 <View style={styles.userInfo}>
-                  <Text style={styles.userName}>{userData.fullName}</Text>
+                  <Text style={styles.userName}>{getDisplayName()}</Text>
                   <Text style={styles.userEmail}>{userData.email}</Text>
-                  {userData.username && (
-                    <View style={styles.usernameBadge}>
-                      <Text style={styles.userUsername}>@{userData.username}</Text>
-                    </View>
-                  )}
                 </View>
               </View>
             </View>
@@ -883,7 +835,7 @@ export default function UserAccount() {
 
             <Pressable 
               style={({ pressed }) => [styles.actionCard, pressed && styles.actionCardPressed]}
-              onPress={() => setShowSavedDiagrams(!showSavedDiagrams)}
+              onPress={() => router.push('/(tabs)/savedDiagrams')}
             >
               <DiagramIcon />
               <View style={styles.actionContent}>
@@ -908,8 +860,28 @@ export default function UserAccount() {
             </Pressable>
 
             <Pressable 
+              style={({ pressed }) => [styles.actionCard, pressed && styles.actionCardPressed]}
+              onPress={() => router.push('/(tabs)/aboutUs')}
+            >
+              <ShieldIcon />
+              <View style={styles.actionContent}>
+                <Text style={styles.actionTitle}>About Us</Text>
+                <Text style={styles.actionDescription}>Team & system info</Text>
+              </View>
+              <ChevronRight />
+            </Pressable>
+
+            <Pressable 
               style={({ pressed }) => [styles.actionCard, styles.signOutCard, pressed && styles.actionCardPressed]}
-              onPress={handleSignOut}
+              onPress={async () => {
+                try {
+                  await authService.logout();
+                  router.replace('/(auth)/signin');
+                } catch (error) {
+                  console.error('Sign out error:', error);
+                  router.replace('/(auth)/signin');
+                }
+              }}
             >
               <SignOutIcon color={COLORS.danger} />
               <View style={styles.actionContent}>
@@ -920,13 +892,20 @@ export default function UserAccount() {
           </View>
 
           {/* Saved Diagrams Section */}
-          {showSavedDiagrams && savedDiagrams.length > 0 && (
+          {showSavedDiagrams && (
             <View style={styles.savedDiagramsSection}>
-              {savedDiagrams.map((diagram, index) => (
-                <View key={diagram.id || index} style={styles.savedDiagramItem}>
-                  <Text style={styles.savedDiagramTitle}>{diagram.title}</Text>
+              {savedDiagrams.length === 0 ? (
+                <View style={styles.emptyDiagrams}>
+                  <Text style={styles.emptyDiagramsText}>No saved diagrams yet</Text>
+                  <Text style={styles.emptyDiagramsSubtext}>Diagrams you save will appear here</Text>
                 </View>
-              ))}
+              ) : (
+                savedDiagrams.map((diagram, index) => (
+                  <View key={diagram.id || index} style={styles.savedDiagramItem}>
+                    <Text style={styles.savedDiagramTitle}>{diagram.title}</Text>
+                  </View>
+                ))
+              )}
             </View>
           )}
         </ScrollView>
@@ -936,6 +915,7 @@ export default function UserAccount() {
         visible={showPasswordModal}
         onClose={() => setShowPasswordModal(false)}
         onSuccess={handlePasswordSuccess}
+        router={router}
       />
 
       <Toast
@@ -1069,18 +1049,6 @@ const styles = StyleSheet.create({
     color: 'rgba(255, 255, 255, 0.9)',
     marginTop: 2,
   },
-  usernameBadge: {
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
-    paddingHorizontal: SPACING.sm,
-    paddingVertical: SPACING.xs,
-    borderRadius: RADIUS.sm,
-    alignSelf: 'flex-start',
-    marginTop: SPACING.sm,
-  },
-  userUsername: {
-    ...TYPOGRAPHY.small,
-    color: COLORS.white,
-  },
   
   actionsGrid: {
     gap: SPACING.md,
@@ -1132,37 +1100,22 @@ const styles = StyleSheet.create({
     ...TYPOGRAPHY.bodyBold,
     color: COLORS.gray900,
   },
-  
-  stepIndicator: {
-    flexDirection: 'row',
+  emptyDiagrams: {
+    backgroundColor: COLORS.white,
+    borderRadius: RADIUS.lg,
+    padding: SPACING.xxxl,
     alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: SPACING.xl,
-    paddingHorizontal: SPACING.xl,
+    ...SHADOWS.sm,
   },
-  stepDot: {
-    width: 32,
-    height: 32,
-    borderRadius: RADIUS.full,
-    backgroundColor: COLORS.gray200,
-    justifyContent: 'center',
-    alignItems: 'center',
+  emptyDiagramsText: {
+    ...TYPOGRAPHY.bodyBold,
+    color: COLORS.gray600,
+    marginBottom: SPACING.sm,
   },
-  stepDotActive: {
-    backgroundColor: COLORS.primaryLight,
-  },
-  stepDotText: {
-    ...TYPOGRAPHY.captionBold,
-    color: COLORS.gray500,
-  },
-  stepLine: {
-    flex: 1,
-    height: 2,
-    backgroundColor: COLORS.gray200,
-    marginHorizontal: SPACING.sm,
-  },
-  stepLineActive: {
-    backgroundColor: COLORS.primary,
+  emptyDiagramsSubtext: {
+    ...TYPOGRAPHY.small,
+    color: COLORS.gray400,
+    textAlign: 'center',
   },
   
   modalOverlay: {
@@ -1194,13 +1147,6 @@ const styles = StyleSheet.create({
   },
   modalClose: {
     padding: SPACING.xs,
-  },
-  modalDescription: {
-    ...TYPOGRAPHY.caption,
-    color: COLORS.gray500,
-    paddingHorizontal: SPACING.xl,
-    paddingTop: SPACING.xl,
-    paddingBottom: SPACING.sm,
   },
   modalError: {
     ...TYPOGRAPHY.small,
@@ -1293,6 +1239,11 @@ const styles = StyleSheet.create({
   passwordMismatchText: {
     ...TYPOGRAPHY.small,
     color: COLORS.danger,
+    marginTop: SPACING.sm,
+  },
+  matchSuccess: {
+    color: COLORS.success,
+    fontSize: 12,
     marginTop: SPACING.sm,
   },
   
