@@ -1,9 +1,6 @@
-// controllers/authController.js
-// Fixed: User is only created AFTER OTP verification
-
 const bcrypt = require('bcryptjs');
 const { v4: uuidv4 } = require('uuid');
-const { db, auth } = require('../config/firebase');
+const { db, auth, bucket } = require('../config/firebase');
 
 const userModel = require('../models/userModel');
 const otpModel = require('../models/otpModel');
@@ -11,16 +8,95 @@ const { generateOTP, getOTPExpiry } = require('../utils/generateOTP');
 const { generateAccessToken, generateRefreshToken, verifyRefreshToken } = require('../utils/generateJWT');
 const { sendVerificationEmail, sendPasswordResetEmail } = require('../services/emailService');
 
+// ============================================================================
+// CONSTANTS
+// ============================================================================
+
+const MAX_IMAGE_SIZE = 5 * 1024 * 1024; // 5MB
+const ALLOWED_IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/jpg', 'image/gif', 'image/webp'];
+
+// ============================================================================
+// UPLOAD PROFILE PICTURE - Firebase Storage (Supports both base64 and buffer)
+// ============================================================================
+
+const uploadProfilePicture = async (fileData, userId) => {
+  // If no picture, return null
+  if (!fileData) return null;
+  
+  let buffer;
+  let mimeType;
+  let fileName;
+
+  // Check if it's a buffer (from multer) or base64 string
+  if (Buffer.isBuffer(fileData)) {
+    // It's a buffer from multer
+    buffer = fileData;
+    mimeType = 'image/jpeg'; // Default
+    const fileExtension = 'jpg';
+    fileName = `profiles/${userId}/profile-${Date.now()}.${fileExtension}`;
+  } else if (typeof fileData === 'string' && fileData.startsWith('data:image')) {
+    // It's a base64 string
+    const matches = fileData.match(/^data:([A-Za-z-+/]+);base64,(.+)$/);
+    if (!matches) {
+      throw new Error('Invalid image format. Please upload a valid image.');
+    }
+
+    mimeType = matches[1];
+    if (!ALLOWED_IMAGE_TYPES.includes(mimeType)) {
+      throw new Error('Invalid image type. Please use PNG, JPEG, GIF, or WebP.');
+    }
+
+    const base64Data = matches[2];
+    buffer = Buffer.from(base64Data, 'base64');
+    
+    if (buffer.length > MAX_IMAGE_SIZE) {
+      throw new Error(`Image too large. Maximum size is ${MAX_IMAGE_SIZE / (1024 * 1024)}MB.`);
+    }
+
+    const fileExtension = mimeType.split('/')[1] || 'jpg';
+    fileName = `profiles/${userId}/profile-${Date.now()}.${fileExtension}`;
+  } else {
+    throw new Error('Invalid image format. Please upload a valid image.');
+  }
+
+  // Upload to Firebase Storage
+  try {
+    const file = bucket.file(fileName);
+    
+    await file.save(buffer, {
+      metadata: {
+        contentType: mimeType || 'image/jpeg',
+        metadata: {
+          userId: userId,
+          uploadedAt: new Date().toISOString(),
+        },
+      },
+      public: true,
+    });
+
+    const publicUrl = `https://storage.googleapis.com/${bucket.name}/${fileName}`;
+    console.log(`✅ Profile picture uploaded: ${publicUrl}`);
+    
+    return publicUrl;
+  } catch (error) {
+    console.error('❌ Storage upload error:', error);
+    
+    if (error.code === 403 || error.message?.includes('permission')) {
+      throw new Error('Storage permission denied. Please check Firebase Storage rules.');
+    }
+    
+    throw new Error('Failed to upload image. Please try again.');
+  }
+};
+
 // ─────────────────────────────────────────────────────────────────────────────
-// SIGN UP - STORES TEMPORARY DATA, NO USER CREATED YET
-// POST /api/auth/signup
+// SIGN UP
 // ─────────────────────────────────────────────────────────────────────────────
 
 const signup = async (req, res) => {
   try {
     const { fullName, email, password } = req.body;
 
-    // 1. Check if email is already registered
     const existingUser = await userModel.getUserByEmail(email);
     if (existingUser) {
       if (existingUser.auth_provider === 'google') {
@@ -36,35 +112,28 @@ const signup = async (req, res) => {
       });
     }
 
-    // 2. Hash the password
     const saltRounds = 12;
     const passwordHash = await bcrypt.hash(password, saltRounds);
 
-    // 3. Generate a temporary ID for pending user
     const tempUserId = uuidv4();
 
-    // 4. Store temporary user data (NOT in main users collection)
     const pendingUserData = {
       fullName,
       email,
       passwordHash,
       tempUserId,
       createdAt: new Date().toISOString(),
-      expiresAt: getOTPExpiry(10).toISOString() // Expires in 10 minutes
+      expiresAt: getOTPExpiry(10).toISOString()
     };
 
-    // Store in a temporary collection
     await db.collection('pending_users').doc(tempUserId).set(pendingUserData);
 
-    // 5. Generate OTP and save it
     const otp = generateOTP();
     const otpExpiry = getOTPExpiry(5);
 
-    // Store OTP with tempUserId
     await otpModel.invalidateAllOTPsByEmail(email, 'signup');
     await otpModel.createOTPWithEmail(email, otp, 'signup', otpExpiry, tempUserId);
 
-    // 6. Send verification email
     await sendVerificationEmail(email, fullName, otp);
 
     res.status(201).json({
@@ -87,14 +156,13 @@ const signup = async (req, res) => {
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
-// VERIFY OTP - CREATES USER ONLY AFTER SUCCESSFUL VERIFICATION
+// VERIFY OTP
 // ─────────────────────────────────────────────────────────────────────────────
 
 const verifyOTP = async (req, res) => {
   try {
     const { email, otp } = req.body;
 
-    // 1. Find pending user by email
     const pendingSnapshot = await db.collection('pending_users')
       .where('email', '==', email)
       .limit(1)
@@ -110,7 +178,6 @@ const verifyOTP = async (req, res) => {
     const pendingDoc = pendingSnapshot.docs[0];
     const pendingUser = pendingDoc.data();
 
-    // Check if pending user expired
     if (new Date(pendingUser.expiresAt) < new Date()) {
       await pendingDoc.ref.delete();
       return res.status(400).json({
@@ -119,7 +186,6 @@ const verifyOTP = async (req, res) => {
       });
     }
 
-    // 2. Verify OTP
     const validOTP = await otpModel.getValidOTPByEmail(email, 'signup');
 
     if (!validOTP) {
@@ -136,7 +202,6 @@ const verifyOTP = async (req, res) => {
       });
     }
 
-    // 3. Check if email was already registered during this time
     const existingUser = await userModel.getUserByEmail(email);
     if (existingUser) {
       await pendingDoc.ref.delete();
@@ -147,7 +212,6 @@ const verifyOTP = async (req, res) => {
       });
     }
 
-    // 4. CREATE USER IN FIREBASE AUTH AND FIRESTORE (ONLY NOW!)
     let firebaseUser;
     try {
       firebaseUser = await auth.createUser({
@@ -157,7 +221,6 @@ const verifyOTP = async (req, res) => {
         emailVerified: true
       });
       
-      // Update password after creation
       if (pendingUser.passwordHash) {
         await auth.updateUser(firebaseUser.uid, { password: pendingUser.passwordHash });
       }
@@ -169,7 +232,6 @@ const verifyOTP = async (req, res) => {
       });
     }
 
-    // 5. Create user document in Firestore
     await userModel.createUser(firebaseUser.uid, {
       fullName: pendingUser.fullName,
       email: email,
@@ -178,10 +240,7 @@ const verifyOTP = async (req, res) => {
       authProvider: 'email'
     });
 
-    // 6. Mark OTP as used
     await otpModel.markOTPUsed(validOTP.otp_id);
-
-    // 7. Delete pending user data
     await pendingDoc.ref.delete();
 
     res.status(200).json({
@@ -206,14 +265,12 @@ const resendOTP = async (req, res) => {
   try {
     const { email } = req.body;
 
-    // Check pending users
     const pendingSnapshot = await db.collection('pending_users')
       .where('email', '==', email)
       .limit(1)
       .get();
 
     if (pendingSnapshot.empty) {
-      // Check if already verified
       const existingUser = await userModel.getUserByEmail(email);
       if (existingUser && existingUser.is_verified) {
         return res.status(400).json({
@@ -229,15 +286,12 @@ const resendOTP = async (req, res) => {
 
     const pendingUser = pendingSnapshot.docs[0].data();
 
-    // Invalidate old OTPs
     await otpModel.invalidateAllOTPsByEmail(email, 'signup');
     
-    // Generate new OTP
     const otp = generateOTP();
     const otpExpiry = getOTPExpiry(5);
     await otpModel.createOTPWithEmail(email, otp, 'signup', otpExpiry, pendingUser.tempUserId);
     
-    // Send email
     await sendVerificationEmail(email, pendingUser.fullName, otp);
 
     res.status(200).json({
@@ -256,7 +310,7 @@ const resendOTP = async (req, res) => {
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
-// SIGN IN (unchanged)
+// SIGN IN
 // ─────────────────────────────────────────────────────────────────────────────
 
 const signin = async (req, res) => {
@@ -307,7 +361,7 @@ const signin = async (req, res) => {
           uid: user.user_id,
           fullName: user.full_name,
           email: user.email,
-          profilePicture: user.profile_picture,
+          profilePicture: user.profile_picture || null,
           authProvider: user.auth_provider
         },
         tokens: {
@@ -324,7 +378,7 @@ const signin = async (req, res) => {
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
-// GOOGLE AUTH (direct creation, no OTP needed)
+// GOOGLE AUTH
 // ─────────────────────────────────────────────────────────────────────────────
 
 const googleAuth = async (req, res) => {
@@ -399,7 +453,7 @@ const googleAuth = async (req, res) => {
           uid: user.user_id,
           fullName: user.full_name,
           email: user.email,
-          profilePicture: user.profile_picture,
+          profilePicture: user.profile_picture || null,
           authProvider: user.auth_provider
         },
         tokens: {
@@ -419,7 +473,7 @@ const googleAuth = async (req, res) => {
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
-// FORGOT PASSWORD (unchanged)
+// FORGOT PASSWORD
 // ─────────────────────────────────────────────────────────────────────────────
 
 const forgotPassword = async (req, res) => {
@@ -492,7 +546,7 @@ const forgotPassword = async (req, res) => {
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
-// VERIFY RESET OTP (unchanged)
+// VERIFY RESET OTP
 // ─────────────────────────────────────────────────────────────────────────────
 
 const verifyResetOTP = async (req, res) => {
@@ -538,7 +592,7 @@ const verifyResetOTP = async (req, res) => {
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
-// RESET PASSWORD (unchanged from your current version)
+// RESET PASSWORD
 // ─────────────────────────────────────────────────────────────────────────────
 
 const resetPassword = async (req, res) => {
@@ -585,87 +639,21 @@ const resetPassword = async (req, res) => {
     const saltRounds = 12;
     const newPasswordHash = await bcrypt.hash(newPassword, saltRounds);
 
-    // Update password hash in Firestore
     await userModel.updatePasswordHash(user.user_id, newPasswordHash);
     
-    let firebaseUser = null;
-    let batch = db.batch();
-    
     try {
-      try {
-        firebaseUser = await auth.getUser(user.user_id);
-        console.log(`✅ Found user by UID: ${firebaseUser.uid}`);
-      } catch (getUserError) {
-        if (getUserError.code === 'auth/user-not-found') {
-          console.log(`⚠️ User ${email} not found by UID ${user.user_id}, searching by email...`);
-          try {
-            firebaseUser = await auth.getUserByEmail(email);
-            console.log(`✅ Found user by email with different UID: ${firebaseUser.uid}`);
-          } catch (emailError) {
-            console.log(`⚠️ User ${email} not found in Firebase Auth at all, will create new...`);
-            firebaseUser = null;
-          }
-        } else {
-          throw getUserError;
-        }
-      }
-      
-      if (firebaseUser) {
-        if (firebaseUser.uid !== user.user_id) {
-          console.log(`⚠️ UID mismatch: Firestore has ${user.user_id}, Firebase has ${firebaseUser.uid}`);
-          console.log(`🔄 Syncing Firestore user to match Firebase Auth UID...`);
-          
-          await db.collection('students').doc(user.user_id).delete();
-          
-          await userModel.createUser(firebaseUser.uid, {
-            fullName: user.full_name,
-            email: user.email,
-            passwordHash: newPasswordHash,
-            isVerified: user.is_verified || true,
-            authProvider: 'email'
-          });
-          
-          await auth.updateUser(firebaseUser.uid, { password: newPassword });
-          console.log(`✅ Synced and updated user with UID: ${firebaseUser.uid}`);
-          
-          const oldSessionsSnapshot = await db.collection('sessions')
-            .where('user_id', '==', user.user_id)
-            .get();
-          
-          oldSessionsSnapshot.docs.forEach(doc => batch.delete(doc.ref));
-        } else {
-          await auth.updateUser(firebaseUser.uid, { password: newPassword });
-          console.log(`✅ Firebase Auth password updated for ${email}`);
-        }
-      } else {
-        console.log(`📝 Creating new Firebase Auth user for ${email}...`);
-        await auth.createUser({
-          uid: user.user_id,
-          email: user.email,
-          password: newPassword,
-          displayName: user.full_name,
-          emailVerified: user.is_verified || false
-        });
-        console.log(`✅ Firebase Auth user created for ${email}`);
-      }
+      await auth.updateUser(user.user_id, { password: newPassword });
+      console.log(`✅ Firebase Auth password updated for ${email}`);
     } catch (firebaseError) {
-      console.error('Firebase password update error:', firebaseError);
+      console.error('Firebase Auth password update error:', firebaseError);
     }
 
     const sessionsSnapshot = await db.collection('sessions')
       .where('user_id', '==', user.user_id)
       .get();
-    
+
+    const batch = db.batch();
     sessionsSnapshot.docs.forEach(doc => batch.delete(doc.ref));
-    
-    if (firebaseUser && firebaseUser.uid !== user.user_id) {
-      const newSessionsSnapshot = await db.collection('sessions')
-        .where('user_id', '==', firebaseUser.uid)
-        .get();
-      
-      newSessionsSnapshot.docs.forEach(doc => batch.delete(doc.ref));
-    }
-    
     await batch.commit();
     await otpModel.markOTPUsed(validOTP.otp_id);
 
@@ -684,7 +672,7 @@ const resetPassword = async (req, res) => {
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
-// REFRESH TOKEN (unchanged)
+// REFRESH TOKEN
 // ─────────────────────────────────────────────────────────────────────────────
 
 const refreshToken = async (req, res) => {
@@ -756,7 +744,7 @@ const refreshToken = async (req, res) => {
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
-// LOGOUT (unchanged)
+// LOGOUT
 // ─────────────────────────────────────────────────────────────────────────────
 
 const logout = async (req, res) => {
@@ -790,7 +778,7 @@ const logout = async (req, res) => {
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
-// GET CURRENT USER (unchanged)
+// GET CURRENT USER
 // ─────────────────────────────────────────────────────────────────────────────
 
 const getCurrentUser = async (req, res) => {
@@ -824,9 +812,244 @@ const getCurrentUser = async (req, res) => {
   }
 };
 
-// ─────────────────────────────────────────────────────────────────────────────
+// ============================================================================
+// ✅ UPDATE PROFILE - Supports both JSON (base64) and FormData (multer)
+// ============================================================================
+
+// ============================================================================
+// ✅ UPDATE PROFILE - Supports both JSON and FormData
+// ============================================================================
+
+const updateProfile = async (req, res) => {
+  try {
+    const userId = req.user.uid;
+    let { fullName } = req.body;
+    let profilePicture = null;
+
+    console.log('📝 Updating profile for user:', userId);
+    console.log('📝 Request body:', req.body);
+    console.log('📝 File:', req.file ? 'File present' : 'No file');
+
+    // Validate full name
+    if (!fullName || fullName.trim().length < 2) {
+      return res.status(400).json({
+        success: false,
+        message: 'Name must be at least 2 characters'
+      });
+    }
+
+    const updateData = {
+      full_name: fullName.trim(),
+      updated_at: new Date().toISOString()
+    };
+
+    // ✅ Handle profile picture from multer (FormData)
+    if (req.file) {
+      console.log('🖼️ Processing file upload from multer...');
+      console.log('📸 File info:', {
+        originalname: req.file.originalname,
+        mimetype: req.file.mimetype,
+        size: req.file.size
+      });
+      
+      try {
+        const imageUrl = await uploadProfilePicture(req.file.buffer, userId);
+        if (imageUrl) {
+          updateData.profile_picture = imageUrl;
+          profilePicture = imageUrl;
+          console.log('✅ Profile picture uploaded from file:', imageUrl);
+        }
+      } catch (uploadError) {
+        console.error('❌ Upload error:', uploadError.message);
+        return res.status(400).json({
+          success: false,
+          message: uploadError.message
+        });
+      }
+    } 
+    // ✅ Handle base64 from JSON
+    else if (req.body.profilePicture) {
+      console.log('🖼️ Processing base64 image from JSON...');
+      
+      // Check size before processing
+      const base64Data = req.body.profilePicture.split(',')[1];
+      if (base64Data) {
+        const sizeInBytes = Buffer.from(base64Data, 'base64').length;
+        const sizeInMB = sizeInBytes / (1024 * 1024);
+        console.log(`📸 Base64 image size: ${sizeInMB.toFixed(2)}MB`);
+        
+        if (sizeInMB > 10) {
+          return res.status(413).json({
+            success: false,
+            message: 'Image too large. Maximum size is 10MB.'
+          });
+        }
+      }
+      
+      try {
+        const imageUrl = await uploadProfilePicture(req.body.profilePicture, userId);
+        if (imageUrl) {
+          updateData.profile_picture = imageUrl;
+          profilePicture = imageUrl;
+          console.log('✅ Profile picture uploaded from base64:', imageUrl);
+        }
+      } catch (uploadError) {
+        console.error('❌ Upload error:', uploadError.message);
+        return res.status(400).json({
+          success: false,
+          message: uploadError.message
+        });
+      }
+    }
+
+    // Update Firestore
+    console.log('💾 Updating Firestore with data:', updateData);
+    await db.collection('students').doc(userId).update(updateData);
+
+    // Get updated user data
+    const updatedUser = await userModel.getUserById(userId);
+    console.log('✅ Profile updated successfully');
+
+    res.status(200).json({
+      success: true,
+      message: 'Profile updated successfully',
+      data: {
+        user: {
+          uid: updatedUser.user_id,
+          fullName: updatedUser.full_name,
+          email: updatedUser.email,
+          profilePicture: updatedUser.profile_picture || null,
+          authProvider: updatedUser.auth_provider
+        }
+      }
+    });
+
+  } catch (error) {
+    console.error('❌ Update profile error:', error);
+    
+    if (error.code === 413 || error.message?.includes('too large')) {
+      return res.status(413).json({
+        success: false,
+        message: 'Image too large. Please use a smaller image (under 5MB).'
+      });
+    }
+    
+    res.status(500).json({
+      success: false,
+      message: 'Failed to update profile. Please try again.'
+    });
+  }
+};
+
+// ============================================================================
+// ✅ CHANGE PASSWORD
+// ============================================================================
+
+const changePassword = async (req, res) => {
+  try {
+    const { currentPassword, newPassword } = req.body;
+    const userId = req.user.uid;
+
+    console.log('🔐 Changing password for user:', userId);
+
+    if (!currentPassword) {
+      return res.status(400).json({
+        success: false,
+        message: 'Current password is required'
+      });
+    }
+
+    if (!newPassword || newPassword.length < 8) {
+      return res.status(400).json({
+        success: false,
+        message: 'New password must be at least 8 characters'
+      });
+    }
+
+    // Check password strength
+    const hasUpperCase = /[A-Z]/.test(newPassword);
+    const hasLowerCase = /[a-z]/.test(newPassword);
+    const hasNumber = /[0-9]/.test(newPassword);
+    const hasSpecial = /[!@#$%^&*(),.?":{}|<>]/.test(newPassword);
+
+    if (!hasUpperCase || !hasLowerCase || !hasNumber || !hasSpecial) {
+      return res.status(400).json({
+        success: false,
+        message: 'Password must contain at least one uppercase letter, one lowercase letter, one number, and one special character'
+      });
+    }
+
+    const user = await userModel.getUserById(userId);
+    if (!user) {
+      console.log('❌ User not found in Firestore:', userId);
+      return res.status(404).json({
+        success: false,
+        message: 'User not found'
+      });
+    }
+
+    if (user.auth_provider === 'google') {
+      console.log('❌ Google user trying to change password');
+      return res.status(400).json({
+        success: false,
+        message: 'Google users cannot change password. Please use Google Sign-In.'
+      });
+    }
+
+    console.log('🔍 Verifying current password...');
+    const passwordMatch = await bcrypt.compare(currentPassword, user.password_hash);
+    if (!passwordMatch) {
+      console.log('❌ Current password is incorrect');
+      return res.status(401).json({
+        success: false,
+        message: 'Current password is incorrect'
+      });
+    }
+    console.log('✅ Current password verified');
+
+    const saltRounds = 12;
+    const newPasswordHash = await bcrypt.hash(newPassword, saltRounds);
+    console.log('🔐 New password hashed');
+
+    console.log('💾 Updating password in Firestore...');
+    await userModel.updatePasswordHash(userId, newPasswordHash);
+
+    try {
+      console.log('🔥 Updating password in Firebase Auth...');
+      await auth.updateUser(userId, { password: newPassword });
+      console.log('✅ Firebase Auth password updated');
+    } catch (firebaseError) {
+      console.error('❌ Firebase Auth password update error:', firebaseError);
+      // Continue anyway - Firestore has the update
+    }
+
+    console.log('🔄 Invalidating all sessions...');
+    const sessionsSnapshot = await db.collection('sessions')
+      .where('user_id', '==', userId)
+      .get();
+
+    const batch = db.batch();
+    sessionsSnapshot.docs.forEach(doc => batch.delete(doc.ref));
+    await batch.commit();
+    console.log('✅ All sessions invalidated');
+
+    res.status(200).json({
+      success: true,
+      message: 'Password changed successfully. Please sign in again.'
+    });
+
+  } catch (error) {
+    console.error('❌ Change password error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to change password. Please try again.'
+    });
+  }
+};
+
+// ============================================================================
 // MODULE EXPORTS
-// ─────────────────────────────────────────────────────────────────────────────
+// ============================================================================
 
 module.exports = {
   signup,
@@ -840,4 +1063,6 @@ module.exports = {
   refreshToken,
   logout,
   getCurrentUser,
+  updateProfile,
+  changePassword,
 };

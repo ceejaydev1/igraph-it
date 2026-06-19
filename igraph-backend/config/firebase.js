@@ -12,7 +12,6 @@ if (!admin.apps.length) {
         : undefined
     }),
     projectId: projectId,
-    // ✅ Add these for faster connections
     databaseURL: `https://${projectId}.firebaseio.com`,
     storageBucket: `${projectId}.firebasestorage.app`,
   });
@@ -22,14 +21,14 @@ if (!admin.apps.length) {
 
 const db = admin.firestore();
 const auth = admin.auth();
+const bucket = admin.storage().bucket();
 
-// ✅ Optimize Firestore settings
+// Optimize Firestore settings
 db.settings({
   ignoreUndefinedProperties: true,
-  // For production
   ...(process.env.NODE_ENV === 'production' && {
-    cacheSizeBytes: 100 * 1024 * 1024, // 100MB cache
+    cacheSizeBytes: 100 * 1024 * 1024,
   })
 });
 
-module.exports = { db, auth, admin };
+module.exports = { db, auth, admin, bucket };

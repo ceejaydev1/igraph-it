@@ -1,3 +1,5 @@
+// igraph-backend/models/userModel.js
+
 const { db } = require('../config/firebase');
 
 const COLLECTION = 'students';
@@ -16,7 +18,6 @@ const createUser = async (userId, userData) => {
     created_at: now,
     updated_at: now
   };
-  // REMOVED username field
 
   await db.collection(COLLECTION).doc(userId).set(userDoc);
   return userDoc;
@@ -37,8 +38,6 @@ const getUserByEmail = async (email) => {
   if (snapshot.empty) return null;
   return snapshot.docs[0].data();
 };
-
-// REMOVED isUsernameExists function - no longer needed
 
 const updateUser = async (userId, updates) => {
   updates.updated_at = new Date().toISOString();
