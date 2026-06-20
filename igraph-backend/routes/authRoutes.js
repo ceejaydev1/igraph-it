@@ -3,7 +3,6 @@
 const express = require('express');
 const router = express.Router();
 const rateLimit = require('express-rate-limit');
-const multer = require('multer');
 
 const authController = require('../controllers/authController');
 const {
@@ -52,52 +51,10 @@ router.post('/logout', protect, authController.logout);
 router.get('/me', protect, authController.getCurrentUser);
 
 // ============================================================================
-// ✅ UPDATE PROFILE ROUTE WITH MULTER SUPPORT
+// ✅ UPDATE PROFILE ROUTE - Name only (no profile picture upload)
 // ============================================================================
 
-router.put(
-  '/update-profile', 
-  protect, 
-  (req, res, next) => {
-    const contentType = req.headers['content-type'] || '';
-    const isMultipart = contentType.includes('multipart/form-data');
-    
-    console.log(`📤 Content-Type: ${contentType}`);
-    console.log(`📤 Is multipart: ${isMultipart}`);
-    
-    if (isMultipart) {
-      const upload = req.app.get('upload');
-      upload.single('profilePicture')(req, res, (err) => {
-        if (err) {
-          console.error('❌ Multer error:', err);
-          if (err instanceof multer.MulterError) {
-            if (err.code === 'LIMIT_FILE_SIZE') {
-              return res.status(413).json({
-                success: false,
-                message: 'Image too large. Maximum size is 5MB.',
-                code: 'FILE_TOO_LARGE'
-              });
-            }
-            return res.status(400).json({
-              success: false,
-              message: err.message,
-              code: 'UPLOAD_ERROR'
-            });
-          }
-          return res.status(400).json({
-            success: false,
-            message: err.message || 'File upload error'
-          });
-        }
-        next();
-      });
-    } else {
-      next();
-    }
-  },
-  authController.updateProfile
-);
-
+router.put('/update-profile', protect, authController.updateProfile);
 router.post('/change-password', protect, authController.changePassword);
 
 module.exports = router;

@@ -5,7 +5,6 @@ const helmet = require('helmet');
 const cors = require('cors');
 const rateLimit = require('express-rate-limit');
 const compression = require('compression');
-const multer = require('multer');
 
 const authRoutes = require('./routes/authRoutes');
 
@@ -28,7 +27,7 @@ const allowedOrigins = [
   'http://localhost:3001',
   'http://localhost:5000',
   'http://localhost:8080',
-  'http://localhost:8081',  // ✅ YOUR PORT
+  'http://localhost:8081',
   'http://localhost:8082',
   'http://localhost:19000',
   'http://localhost:19001',
@@ -36,7 +35,7 @@ const allowedOrigins = [
   'http://127.0.0.1:3000',
   'http://127.0.0.1:5000',
   'http://127.0.0.1:8080',
-  'http://127.0.0.1:8081',  // ✅ YOUR PORT
+  'http://127.0.0.1:8081',
   'http://127.0.0.1:19000',
   'http://127.0.0.1:19006',
   
@@ -135,49 +134,11 @@ app.use((req, res, next) => {
 });
 
 // ============================================================================
-// ✅ MULTER CONFIGURATION - For file uploads
-// ============================================================================
-
-const storage = multer.memoryStorage();
-
-const fileFilter = (req, file, cb) => {
-  const allowedTypes = ['image/png', 'image/jpeg', 'image/jpg', 'image/gif', 'image/webp'];
-  if (allowedTypes.includes(file.mimetype)) {
-    cb(null, true);
-  } else {
-    cb(new Error('Invalid file type. Only PNG, JPEG, GIF, and WebP are allowed.'), false);
-  }
-};
-
-const upload = multer({
-  storage: storage,
-  limits: {
-    fileSize: 5 * 1024 * 1024, // 5MB
-  },
-  fileFilter: fileFilter,
-});
-
-app.set('upload', upload);
-
-// ============================================================================
 // ✅ BODY PARSER - With increased limits
 // ============================================================================
 
-// ✅ Increase JSON limit to 50MB
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
-
-// ✅ Custom middleware to skip JSON parsing for FormData
-app.use((req, res, next) => {
-  const contentType = req.headers['content-type'] || '';
-  
-  if (contentType.includes('multipart/form-data')) {
-    console.log('📦 Skipping JSON parse - multipart/form-data detected');
-    // Don't parse JSON, let multer handle it
-    return next();
-  }
-  next();
-});
 
 // Compression
 app.use(compression());
@@ -200,21 +161,6 @@ app.use((err, req, res, next) => {
       success: false,
       message: 'Request too large. Maximum size is 50MB.',
       code: 'PAYLOAD_TOO_LARGE'
-    });
-  }
-  
-  if (err instanceof multer.MulterError) {
-    if (err.code === 'LIMIT_FILE_SIZE') {
-      return res.status(413).json({
-        success: false,
-        message: 'Image too large. Maximum size is 5MB.',
-        code: 'FILE_TOO_LARGE'
-      });
-    }
-    return res.status(400).json({
-      success: false,
-      message: err.message,
-      code: 'UPLOAD_ERROR'
     });
   }
   
@@ -277,7 +223,7 @@ app.use((err, req, res, next) => {
   if (err.type === 'entity.too.large' || err.message?.includes('too large')) {
     return res.status(413).json({
       success: false,
-      message: 'Request too large. Please use a smaller image (under 5MB).',
+      message: 'Request too large. Please use a smaller payload.',
       code: 'PAYLOAD_TOO_LARGE'
     });
   }
@@ -297,7 +243,6 @@ app.listen(PORT, '0.0.0.0', () => {
   console.log(`✅ iGraph IT Backend running on port ${PORT}`);
   console.log(`🌍 Environment: ${process.env.NODE_ENV || 'development'}`);
   console.log(`📦 JSON limit: 50mb`);
-  console.log(`📦 File upload limit: 5mb`);
   console.log(`🔒 CORS enabled for ${allowedOrigins.length} origins`);
   console.log(`📡 Local: http://localhost:${PORT}`);
 });

@@ -1,6 +1,6 @@
 const bcrypt = require('bcryptjs');
 const { v4: uuidv4 } = require('uuid');
-const { db, auth, bucket } = require('../config/firebase');
+const { db, auth } = require('../config/firebase');
 
 const userModel = require('../models/userModel');
 const otpModel = require('../models/otpModel');
@@ -9,89 +9,8 @@ const { generateAccessToken, generateRefreshToken, verifyRefreshToken } = requir
 const { sendVerificationEmail, sendPasswordResetEmail } = require('../services/emailService');
 
 // ============================================================================
-// CONSTANTS
-// ============================================================================
-
-const MAX_IMAGE_SIZE = 5 * 1024 * 1024; // 5MB
-const ALLOWED_IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/jpg', 'image/gif', 'image/webp'];
-
-// ============================================================================
-// UPLOAD PROFILE PICTURE - Firebase Storage (Supports both base64 and buffer)
-// ============================================================================
-
-const uploadProfilePicture = async (fileData, userId) => {
-  // If no picture, return null
-  if (!fileData) return null;
-  
-  let buffer;
-  let mimeType;
-  let fileName;
-
-  // Check if it's a buffer (from multer) or base64 string
-  if (Buffer.isBuffer(fileData)) {
-    // It's a buffer from multer
-    buffer = fileData;
-    mimeType = 'image/jpeg'; // Default
-    const fileExtension = 'jpg';
-    fileName = `profiles/${userId}/profile-${Date.now()}.${fileExtension}`;
-  } else if (typeof fileData === 'string' && fileData.startsWith('data:image')) {
-    // It's a base64 string
-    const matches = fileData.match(/^data:([A-Za-z-+/]+);base64,(.+)$/);
-    if (!matches) {
-      throw new Error('Invalid image format. Please upload a valid image.');
-    }
-
-    mimeType = matches[1];
-    if (!ALLOWED_IMAGE_TYPES.includes(mimeType)) {
-      throw new Error('Invalid image type. Please use PNG, JPEG, GIF, or WebP.');
-    }
-
-    const base64Data = matches[2];
-    buffer = Buffer.from(base64Data, 'base64');
-    
-    if (buffer.length > MAX_IMAGE_SIZE) {
-      throw new Error(`Image too large. Maximum size is ${MAX_IMAGE_SIZE / (1024 * 1024)}MB.`);
-    }
-
-    const fileExtension = mimeType.split('/')[1] || 'jpg';
-    fileName = `profiles/${userId}/profile-${Date.now()}.${fileExtension}`;
-  } else {
-    throw new Error('Invalid image format. Please upload a valid image.');
-  }
-
-  // Upload to Firebase Storage
-  try {
-    const file = bucket.file(fileName);
-    
-    await file.save(buffer, {
-      metadata: {
-        contentType: mimeType || 'image/jpeg',
-        metadata: {
-          userId: userId,
-          uploadedAt: new Date().toISOString(),
-        },
-      },
-      public: true,
-    });
-
-    const publicUrl = `https://storage.googleapis.com/${bucket.name}/${fileName}`;
-    console.log(`✅ Profile picture uploaded: ${publicUrl}`);
-    
-    return publicUrl;
-  } catch (error) {
-    console.error('❌ Storage upload error:', error);
-    
-    if (error.code === 403 || error.message?.includes('permission')) {
-      throw new Error('Storage permission denied. Please check Firebase Storage rules.');
-    }
-    
-    throw new Error('Failed to upload image. Please try again.');
-  }
-};
-
-// ─────────────────────────────────────────────────────────────────────────────
 // SIGN UP
-// ─────────────────────────────────────────────────────────────────────────────
+// ============================================================================
 
 const signup = async (req, res) => {
   try {
@@ -155,9 +74,9 @@ const signup = async (req, res) => {
   }
 };
 
-// ─────────────────────────────────────────────────────────────────────────────
+// ============================================================================
 // VERIFY OTP
-// ─────────────────────────────────────────────────────────────────────────────
+// ============================================================================
 
 const verifyOTP = async (req, res) => {
   try {
@@ -257,9 +176,9 @@ const verifyOTP = async (req, res) => {
   }
 };
 
-// ─────────────────────────────────────────────────────────────────────────────
+// ============================================================================
 // RESEND OTP
-// ─────────────────────────────────────────────────────────────────────────────
+// ============================================================================
 
 const resendOTP = async (req, res) => {
   try {
@@ -309,9 +228,9 @@ const resendOTP = async (req, res) => {
   }
 };
 
-// ─────────────────────────────────────────────────────────────────────────────
+// ============================================================================
 // SIGN IN
-// ─────────────────────────────────────────────────────────────────────────────
+// ============================================================================
 
 const signin = async (req, res) => {
   try {
@@ -377,9 +296,9 @@ const signin = async (req, res) => {
   }
 };
 
-// ─────────────────────────────────────────────────────────────────────────────
+// ============================================================================
 // GOOGLE AUTH
-// ─────────────────────────────────────────────────────────────────────────────
+// ============================================================================
 
 const googleAuth = async (req, res) => {
   try {
@@ -472,9 +391,9 @@ const googleAuth = async (req, res) => {
   }
 };
 
-// ─────────────────────────────────────────────────────────────────────────────
+// ============================================================================
 // FORGOT PASSWORD
-// ─────────────────────────────────────────────────────────────────────────────
+// ============================================================================
 
 const forgotPassword = async (req, res) => {
   try {
@@ -545,9 +464,9 @@ const forgotPassword = async (req, res) => {
   }
 };
 
-// ─────────────────────────────────────────────────────────────────────────────
+// ============================================================================
 // VERIFY RESET OTP
-// ─────────────────────────────────────────────────────────────────────────────
+// ============================================================================
 
 const verifyResetOTP = async (req, res) => {
   try {
@@ -591,9 +510,9 @@ const verifyResetOTP = async (req, res) => {
   }
 };
 
-// ─────────────────────────────────────────────────────────────────────────────
+// ============================================================================
 // RESET PASSWORD
-// ─────────────────────────────────────────────────────────────────────────────
+// ============================================================================
 
 const resetPassword = async (req, res) => {
   try {
@@ -671,9 +590,9 @@ const resetPassword = async (req, res) => {
   }
 };
 
-// ─────────────────────────────────────────────────────────────────────────────
+// ============================================================================
 // REFRESH TOKEN
-// ─────────────────────────────────────────────────────────────────────────────
+// ============================================================================
 
 const refreshToken = async (req, res) => {
   try {
@@ -743,9 +662,9 @@ const refreshToken = async (req, res) => {
   }
 };
 
-// ─────────────────────────────────────────────────────────────────────────────
+// ============================================================================
 // LOGOUT
-// ─────────────────────────────────────────────────────────────────────────────
+// ============================================================================
 
 const logout = async (req, res) => {
   try {
@@ -777,9 +696,9 @@ const logout = async (req, res) => {
   }
 };
 
-// ─────────────────────────────────────────────────────────────────────────────
+// ============================================================================
 // GET CURRENT USER
-// ─────────────────────────────────────────────────────────────────────────────
+// ============================================================================
 
 const getCurrentUser = async (req, res) => {
   try {
@@ -813,22 +732,16 @@ const getCurrentUser = async (req, res) => {
 };
 
 // ============================================================================
-// ✅ UPDATE PROFILE - Supports both JSON (base64) and FormData (multer)
-// ============================================================================
-
-// ============================================================================
-// ✅ UPDATE PROFILE - Supports both JSON and FormData
+// ✅ UPDATE PROFILE - Name only (no profile picture)
 // ============================================================================
 
 const updateProfile = async (req, res) => {
   try {
     const userId = req.user.uid;
-    let { fullName } = req.body;
-    let profilePicture = null;
+    const { fullName } = req.body;
 
     console.log('📝 Updating profile for user:', userId);
-    console.log('📝 Request body:', req.body);
-    console.log('📝 File:', req.file ? 'File present' : 'No file');
+    console.log('📝 Full name:', fullName);
 
     // Validate full name
     if (!fullName || fullName.trim().length < 2) {
@@ -842,65 +755,6 @@ const updateProfile = async (req, res) => {
       full_name: fullName.trim(),
       updated_at: new Date().toISOString()
     };
-
-    // ✅ Handle profile picture from multer (FormData)
-    if (req.file) {
-      console.log('🖼️ Processing file upload from multer...');
-      console.log('📸 File info:', {
-        originalname: req.file.originalname,
-        mimetype: req.file.mimetype,
-        size: req.file.size
-      });
-      
-      try {
-        const imageUrl = await uploadProfilePicture(req.file.buffer, userId);
-        if (imageUrl) {
-          updateData.profile_picture = imageUrl;
-          profilePicture = imageUrl;
-          console.log('✅ Profile picture uploaded from file:', imageUrl);
-        }
-      } catch (uploadError) {
-        console.error('❌ Upload error:', uploadError.message);
-        return res.status(400).json({
-          success: false,
-          message: uploadError.message
-        });
-      }
-    } 
-    // ✅ Handle base64 from JSON
-    else if (req.body.profilePicture) {
-      console.log('🖼️ Processing base64 image from JSON...');
-      
-      // Check size before processing
-      const base64Data = req.body.profilePicture.split(',')[1];
-      if (base64Data) {
-        const sizeInBytes = Buffer.from(base64Data, 'base64').length;
-        const sizeInMB = sizeInBytes / (1024 * 1024);
-        console.log(`📸 Base64 image size: ${sizeInMB.toFixed(2)}MB`);
-        
-        if (sizeInMB > 10) {
-          return res.status(413).json({
-            success: false,
-            message: 'Image too large. Maximum size is 10MB.'
-          });
-        }
-      }
-      
-      try {
-        const imageUrl = await uploadProfilePicture(req.body.profilePicture, userId);
-        if (imageUrl) {
-          updateData.profile_picture = imageUrl;
-          profilePicture = imageUrl;
-          console.log('✅ Profile picture uploaded from base64:', imageUrl);
-        }
-      } catch (uploadError) {
-        console.error('❌ Upload error:', uploadError.message);
-        return res.status(400).json({
-          success: false,
-          message: uploadError.message
-        });
-      }
-    }
 
     // Update Firestore
     console.log('💾 Updating Firestore with data:', updateData);
@@ -926,14 +780,6 @@ const updateProfile = async (req, res) => {
 
   } catch (error) {
     console.error('❌ Update profile error:', error);
-    
-    if (error.code === 413 || error.message?.includes('too large')) {
-      return res.status(413).json({
-        success: false,
-        message: 'Image too large. Please use a smaller image (under 5MB).'
-      });
-    }
-    
     res.status(500).json({
       success: false,
       message: 'Failed to update profile. Please try again.'
