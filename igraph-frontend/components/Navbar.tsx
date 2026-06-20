@@ -67,6 +67,80 @@ interface NavbarProps {
   profilePicture?: string | null;
 }
 
+// ============================================================================
+// ✅ EMAIL-BASED AVATAR HELPER FUNCTIONS
+// ============================================================================
+
+const getInitials = (fullName: string): string => {
+  if (!fullName) return 'U';
+  return fullName
+    .split(' ')
+    .map(n => n[0])
+    .join('')
+    .toUpperCase()
+    .slice(0, 2);
+};
+
+const getDisplayName = (fullName: string, email: string): string => {
+  if (fullName && fullName.trim()) return fullName;
+  if (email) return email.split('@')[0];
+  return 'User';
+};
+
+const getAvatarColor = (email: string): string => {
+  const colors = [
+    '#4c6fff', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6',
+    '#ec4899', '#14b8a6', '#f97316', '#6366f1', '#84cc16'
+  ];
+  let hash = 0;
+  for (let i = 0; i < email.length; i++) {
+    hash = email.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  return colors[Math.abs(hash) % colors.length];
+};
+
+// ============================================================================
+// ✅ ROUTE HELPER — strips Expo Router group segments e.g. "(tabs)"
+// so comparisons against usePathname() (which never includes groups)
+// actually match. This is the fix for the underline/active-state bug.
+// ============================================================================
+
+const stripGroups = (path: string): string => {
+  if (!path) return '/';
+  const stripped = path.replace(/\/\([^)]+\)/g, '');
+  return stripped === '' ? '/' : stripped;
+};
+
+const isRouteActive = (pathname: string, route: string): boolean => {
+  const cleanPathname = stripGroups(pathname);
+  const cleanRoute = stripGroups(route);
+  // Handle the tab-group index route, which Expo Router may resolve to "/"
+  if (cleanRoute === '/home') {
+    return cleanPathname === '/home' || cleanPathname === '/';
+  }
+  return cleanPathname === cleanRoute;
+};
+
+// ============================================================================
+// AVATAR COMPONENT
+// ============================================================================
+
+const Avatar = ({ fullName, email, size = 28 }: { fullName: string; email: string; size?: number }) => {
+  const initials = getInitials(fullName);
+  const color = getAvatarColor(email);
+  const fontSize = size * 0.45;
+
+  return (
+    <View style={[styles.avatarContainer, { width: size, height: size, borderRadius: size / 2, backgroundColor: color }]}>
+      <Text style={[styles.avatarText, { fontSize: Math.max(fontSize, 10) }]}>{initials}</Text>
+    </View>
+  );
+};
+
+// ============================================================================
+// NAVBAR COMPONENT
+// ============================================================================
+
 export default function Navbar({
   fullName = 'User',
   userEmail = '',
@@ -134,20 +208,6 @@ export default function Navbar({
     { label: 'Account', route: '/(tabs)/userAccount', icon: UserAccountIcon },
   ];
 
-  const getInitials = () => {
-    return fullName
-      .split(' ')
-      .map(n => n[0])
-      .join('')
-      .toUpperCase()
-      .slice(0, 2);
-  };
-
-  // Get full name for display
-  const getDisplayName = () => {
-    return fullName;
-  };
-
   // ─────────────────────────────────────────────
   // DESKTOP  (≥ 1024 px)
   // ─────────────────────────────────────────────
@@ -169,10 +229,10 @@ export default function Navbar({
               <Text style={styles.logoText}>iGraph IT</Text>
             </Pressable>
 
-            {/* Navigation Items */}
+            {/* Navigation Items with Blue Underline */}
             <View style={styles.navLinks}>
               {navItems.map((item) => {
-                const isActive = pathname === item.route;
+                const isActive = isRouteActive(pathname, item.route);
                 const Icon = item.icon;
                 return (
                   <Pressable
@@ -180,30 +240,27 @@ export default function Navbar({
                     onPress={() => handleNavigation(item.route)}
                     style={({ pressed }) => [
                       styles.navItem,
-                      isActive && styles.navItemActive,
                       pressed && styles.navItemPressed,
                     ]}
                   >
-                    <Icon active={isActive} />
-                    <Text style={[styles.navLabel, isActive && styles.navLabelActive]}>
-                      {item.label}
-                    </Text>
+                    <View style={styles.navItemInner}>
+                      <Icon active={isActive} />
+                      <Text style={[styles.navLabel, isActive && styles.navLabelActive]}>
+                        {item.label}
+                      </Text>
+                    </View>
+                    {/* ✅ Blue Underline - Full width below the nav item */}
+                    {isActive && <View style={styles.navUnderline} />}
                   </Pressable>
                 );
               })}
             </View>
 
-            {/* Full Name - No "Hi," prefix */}
+            {/* Email-based Avatar */}
             <View style={styles.greetingContainer}>
-              {profilePicture ? (
-                <Image source={{ uri: profilePicture }} style={styles.greetingAvatar} />
-              ) : (
-                <View style={styles.greetingAvatarPlaceholder}>
-                  <Text style={styles.greetingAvatarInitials}>{getInitials()}</Text>
-                </View>
-              )}
+              <Avatar fullName={fullName} email={userEmail} size={32} />
               <Text style={styles.greetingText} numberOfLines={1}>
-                {getDisplayName()}
+                {getDisplayName(fullName, userEmail)}
               </Text>
             </View>
           </View>
@@ -222,7 +279,7 @@ export default function Navbar({
       {/* Top Bar */}
       <View style={styles.mobileContainer}>
         <View style={styles.mobileNav}>
-          {/* Logo only on left side (no greeting here anymore) */}
+          {/* Logo only on left side */}
           <Pressable
             onPress={() => handleNavigation('/(tabs)/home')}
             style={({ pressed }) => [
@@ -317,7 +374,7 @@ export default function Navbar({
               showsVerticalScrollIndicator={false}
             >
               {navItems.map((item) => {
-                const isActive = pathname === item.route;
+                const isActive = isRouteActive(pathname, item.route);
                 const Icon = item.icon;
                 return (
                   <Pressable
@@ -337,18 +394,12 @@ export default function Navbar({
                 );
               })}
               
-              {/* Full Name section below Account nav item */}
+              {/* Email-based Avatar in Mobile Menu */}
               <View style={styles.mobileUserInfoSection}>
                 <View style={styles.mobileUserInfoContainer}>
-                  {profilePicture ? (
-                    <Image source={{ uri: profilePicture }} style={styles.mobileUserAvatar} />
-                  ) : (
-                    <View style={styles.mobileUserAvatarPlaceholder}>
-                      <Text style={styles.mobileUserAvatarInitials}>{getInitials()}</Text>
-                    </View>
-                  )}
+                  <Avatar fullName={fullName} email={userEmail} size={44} />
                   <View style={styles.mobileUserTextContainer}>
-                    <Text style={styles.mobileFullName}>{getDisplayName()}</Text>
+                    <Text style={styles.mobileFullName}>{getDisplayName(fullName, userEmail)}</Text>
                     {userEmail ? (
                       <Text style={styles.mobileUserEmail} numberOfLines={1}>
                         {userEmail}
@@ -364,6 +415,10 @@ export default function Navbar({
     </>
   );
 }
+
+// ============================================================================
+// STYLES
+// ============================================================================
 
 const styles = StyleSheet.create({
   // ── DESKTOP ──────────────────────────────────
@@ -411,28 +466,60 @@ const styles = StyleSheet.create({
     height: '100%',
   },
   navItem: {
+    flexDirection: 'column',
+    alignItems: 'center',
+    justifyContent: 'center',
+    height: '100%',
+    paddingHorizontal: 8,
+    position: 'relative',
+    minHeight: NAVBAR_HEIGHT,
+  },
+  navItemPressed: {
+    opacity: 0.7,
+  },
+  navItemInner: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 7,
-    paddingHorizontal: 14,
+    paddingHorizontal: 12,
     paddingVertical: 8,
     borderRadius: 8,
-    height: 40,
-  },
-  navItemActive: {
-    backgroundColor: '#eff6ff',
-  },
-  navItemPressed: {
-    backgroundColor: '#dbeafe',
   },
   navLabel: {
     fontSize: 14,
     fontWeight: '500',
-    color: '#475569',
+    color: '#64748b',
   },
   navLabelActive: {
     color: '#2563eb',
     fontWeight: '600',
+  },
+  // ✅ Blue Underline Indicator - Full width below the nav item
+  navUnderline: {
+    position: 'absolute',
+    bottom: 0,
+    left: 8,
+    right: 8,
+    height: 3,
+    backgroundColor: '#2563eb',
+    borderRadius: 2,
+  },
+
+  // ── Avatar ──────────────────────────────────
+  avatarContainer: {
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: '#ffffff',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  avatarText: {
+    fontWeight: '600',
+    color: '#ffffff',
   },
 
   // ── Desktop Greeting ──────────────────
@@ -440,24 +527,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-  },
-  greetingAvatar: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-  },
-  greetingAvatarPlaceholder: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: '#2563eb',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  greetingAvatarInitials: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#ffffff',
   },
   greetingText: {
     fontSize: 14,
@@ -559,24 +628,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     backgroundColor: '#f8fafc',
     borderRadius: 12,
-  },
-  mobileUserAvatar: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-  },
-  mobileUserAvatarPlaceholder: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: '#2563eb',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  mobileUserAvatarInitials: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#ffffff',
   },
   mobileUserTextContainer: {
     flex: 1,

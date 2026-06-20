@@ -203,16 +203,6 @@ export default function SavedDiagrams() {
           <View style={styles.emptyState}>
             <EmptyDiagramsIcon />
             <Text style={styles.emptyStateTitle}>No Saved Diagrams Yet</Text>
-            <Text style={styles.emptyStateText}>
-              Diagrams you save will appear here for quick access
-            </Text>
-            <TouchableOpacity
-              style={styles.browseButton}
-              onPress={() => router.push('/(tabs)/home')}
-              activeOpacity={0.8}
-            >
-              <Text style={styles.browseButtonText}>Browse Diagrams</Text>
-            </TouchableOpacity>
           </View>
         ) : (
           // Diagrams Grid

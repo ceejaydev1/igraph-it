@@ -297,18 +297,7 @@ export default function AboutUs() {
         </View>
 
         {/* Footer */}
-        <View style={[
-          styles.footer,
-          isMobile && styles.footerMobile,
-        ]}>
-          <View style={[styles.footerLine, isMobile && styles.footerLineMobile]} />
-          <Text style={[styles.footerText, isMobile && styles.footerTextMobile]}>
-            © 2024 iGraph IT. All rights reserved.
-          </Text>
-          <Text style={[styles.footerSubtext, isMobile && styles.footerSubtextMobile]}>
-            Built with passion by the iGraph team
-          </Text>
-        </View>
+
       </ScrollView>
     </View>
   );

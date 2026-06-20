@@ -47,6 +47,31 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
+// ─── RESPONSIVE LOGO SIZE ─────────────────────────────────────────────────────
+
+const getResponsiveLogoSize = (windowWidth: number, windowHeight: number): number => {
+  // Scale down logo for smaller screens
+  if (windowHeight < 680) {
+    if (Platform.OS === 'web') {
+      if (windowWidth < 480) return 36;
+      if (windowWidth < 768) return 40;
+      return 48;
+    }
+    return 38;
+  }
+  
+  if (Platform.OS === 'web') {
+    if (windowWidth < 480) return 42;
+    if (windowWidth < 768) return 48;
+    if (windowWidth < 1024) return 52;
+    if (windowWidth < 1440) return 56;
+    return 64;
+  }
+  if (Platform.OS === 'ios') return 44;
+  if (Platform.OS === 'android') return 42;
+  return 44;
+};
+
 const AnimatedLogo = ({
   size,
   isInputFocused = false,
@@ -119,36 +144,49 @@ const AnimatedLogo = ({
   }, [isInputFocused, showSuccess]);
 
   const scale = entranceAnim.interpolate({ inputRange: [0, 1], outputRange: [0.8, 1] });
-  const rotate = rotateAnim.interpolate({ inputRange: [0, 1], outputRange: ['-5deg', '0deg'] });
+  const rotate = rotateAnim.interpolate({ inputRange: [0, 1], outputRange: ['-13deg', '-8deg'] });
   const opacity = entranceAnim.interpolate({ inputRange: [0, 0.5, 1], outputRange: [0, 0.5, 1] });
-  const finalSize = size || 56;
+  const finalSize = size || 44;
+  
+  const padding = finalSize * 0.25;
+  const containerSize = finalSize + (padding * 2);
+  const borderRadius = containerSize * 0.22;
 
   return (
     <Animated.View
-      style={[styles.logoWrapper, { opacity, transform: [{ scale }, { scale: pulseAnim }, { rotate }] }]}
+      style={[
+        styles.logoWrapper, 
+        { 
+          opacity, 
+          transform: [{ scale }, { scale: pulseAnim }, { rotate }],
+          width: containerSize,
+          height: containerSize,
+          borderRadius: borderRadius,
+          backgroundColor: '#eef2ff',
+          borderWidth: Platform.OS === 'web' ? 2.5 : 2,
+          borderColor: '#3b5bdb',
+          shadowColor: '#3b5bdb',
+          shadowOffset: { width: 0, height: 4 },
+          shadowOpacity: 0.15,
+          shadowRadius: 8,
+          elevation: 5,
+        }
+      ]}
     >
       <Image
         source={require('../../assets/images/logo.png')}
-        style={[styles.logo, { width: finalSize, height: finalSize, borderRadius: finalSize * 0.25 }]}
+        style={[
+          styles.logo, 
+          { 
+            width: finalSize, 
+            height: finalSize,
+            borderRadius: finalSize * 0.22,
+          }
+        ]}
         resizeMode="contain"
       />
     </Animated.View>
   );
-};
-
-// ─── RESPONSIVE LOGO SIZE ─────────────────────────────────────────────────────
-
-const getResponsiveLogoSize = (windowWidth: number): number => {
-  if (Platform.OS === 'web') {
-    if (windowWidth < 480) return 48;
-    if (windowWidth < 768) return 56;
-    if (windowWidth < 1024) return 64;
-    if (windowWidth < 1440) return 72;
-    return 80;
-  }
-  if (Platform.OS === 'ios') return 56;
-  if (Platform.OS === 'android') return 52;
-  return 56;
 };
 
 const firebaseConfig = {
@@ -512,7 +550,7 @@ const ErrorPopupModal = ({
         <View style={styles.errorModalContainer}>
           <View style={styles.errorModalIconWrapper}>
             <View style={styles.errorModalIconCircle}>
-              <Svg width={32} height={32} viewBox="0 0 24 24" fill="none">
+              <Svg width={28} height={28} viewBox="0 0 24 24" fill="none">
                 <Circle cx="12" cy="12" r="10" stroke="#3b5bdb" strokeWidth="1.5" />
                 <Path d="M12 8v4M12 16h.01" stroke="#3b5bdb" strokeWidth="2" strokeLinecap="round" />
               </Svg>
@@ -556,7 +594,7 @@ const SuccessModal = ({
         <View style={styles.errorModalContainer}>
           <View style={styles.errorModalIconWrapper}>
             <View style={[styles.errorModalIconCircle, { backgroundColor: '#d1fae5' }]}>
-              <Svg width={32} height={32} viewBox="0 0 24 24" fill="none">
+              <Svg width={28} height={28} viewBox="0 0 24 24" fill="none">
                 <Circle cx="12" cy="12" r="10" stroke="#10b981" strokeWidth="1.5" />
                 <Path d="M8 12l3 3 5-6" stroke="#10b981" strokeWidth="2" strokeLinecap="round" />
               </Svg>
@@ -572,6 +610,8 @@ const SuccessModal = ({
     </Modal>
   );
 };
+
+// ─── BACKGROUND (matches Sign Up) ─────────────────────────────────────────────
 
 const DiagramBackground = () => (
   <View style={StyleSheet.absoluteFillObject} pointerEvents="none">
@@ -589,7 +629,7 @@ const DiagramBackground = () => (
 );
 
 const EyeIcon = ({ visible }: { visible: boolean }) => (
-  <Svg width={18} height={18} viewBox="0 0 24 24" fill="none">
+  <Svg width={16} height={16} viewBox="0 0 24 24" fill="none">
     {visible ? (
       <>
         <Path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" stroke="#8896b3" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" />
@@ -606,7 +646,7 @@ const EyeIcon = ({ visible }: { visible: boolean }) => (
 );
 
 const GoogleIcon = () => (
-  <Svg width={18} height={18} viewBox="0 0 24 24">
+  <Svg width={16} height={16} viewBox="0 0 24 24">
     <Path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4" />
     <Path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853" />
     <Path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05" />
@@ -615,7 +655,7 @@ const GoogleIcon = () => (
 );
 
 const EmailIcon = () => (
-  <Svg width={18} height={18} viewBox="0 0 24 24" fill="none">
+  <Svg width={16} height={16} viewBox="0 0 24 24" fill="none">
     <Path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" stroke="#ffffff" strokeWidth={1.5} fill="none"/>
     <Path d="M22 6l-10 7L2 6" stroke="#ffffff" strokeWidth={1.5} fill="none"/>
   </Svg>
@@ -657,7 +697,7 @@ const loadRememberedEmail = async () => {
 export default function SignIn() {
   const router = useRouter();
   const params = useLocalSearchParams();
-  const { width: windowWidth } = useWindowDimensions();
+  const { width: windowWidth, height: windowHeight } = useWindowDimensions();
 
   const [initialLoading, setInitialLoading] = useState(true);
   const [email, setEmail] = useState((params.prefilledEmail as string) || '');
@@ -681,7 +721,8 @@ export default function SignIn() {
   });
 
   const passwordRef = useRef<TextInput>(null);
-  const logoSize = getResponsiveLogoSize(windowWidth);
+  const logoSize = getResponsiveLogoSize(windowWidth, windowHeight);
+  const isSmallScreen = windowHeight < 680;
 
   useEffect(() => {
     const loadEmail = async () => {
@@ -815,7 +856,6 @@ export default function SignIn() {
       } else {
         await auth.signOut();
         const msg = apiResult.message || '';
-        // Check if email already exists with email/password (409 conflict)
         if (msg.toLowerCase().includes('already registered') || 
             msg.toLowerCase().includes('already exists') ||
             msg.toLowerCase().includes('email/password')) {
@@ -837,7 +877,6 @@ export default function SignIn() {
     } catch (error: any) {
       console.error('Google Sign-In error:', error);
       
-      // Handle 409 from backend
       if (error.response?.status === 409) {
         const errorMsg = error.response?.data?.message || '';
         showErrorPopup(
@@ -848,7 +887,6 @@ export default function SignIn() {
           <EmailIcon />
         );
       }
-      // User closed popup - silently handle
       else if (error.code === 'auth/popup-closed-by-user') {
         // Do nothing - user cancelled
       }
@@ -975,7 +1013,7 @@ export default function SignIn() {
   };
 
   if (initialLoading) {
-    return <SplashScreen />;
+    return null;
   }
 
   return (
@@ -996,145 +1034,151 @@ export default function SignIn() {
       <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined} keyboardVerticalOffset={Platform.OS === 'ios' ? 64 : 0}>
         <DiagramBackground />
 
-        <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false} automaticallyAdjustKeyboardInsets={true} keyboardDismissMode="interactive" contentInsetAdjustmentBehavior="always">
-          <View style={styles.card}>
-            <View style={styles.connectorTop} />
-            <View style={styles.connectorBottom} />
-            <View style={styles.connectorLeft} />
-            <View style={styles.connectorRight} />
-
+        <ScrollView 
+          contentContainerStyle={styles.scrollContent} 
+          keyboardShouldPersistTaps="handled" 
+          showsVerticalScrollIndicator={false} 
+          bounces={false}
+          automaticallyAdjustKeyboardInsets={true} 
+          keyboardDismissMode="interactive" 
+          contentInsetAdjustmentBehavior="always"
+        >
+          <View style={styles.cardOuter}>
             <View style={styles.logoWrap}>
               <AnimatedLogo size={logoSize} isInputFocused={isAnyInputFocused} showSuccess={showSuccessAnimation} />
             </View>
 
-            <Text style={styles.heading}>Welcome Back</Text>
-            <Text style={styles.subtitle}>Sign in to continue your learning journey</Text>
+            <View style={styles.card}>
+              <View style={styles.connectorTop} />
+              <View style={styles.connectorBottom} />
+              <View style={styles.connectorLeft} />
+              <View style={styles.connectorRight} />
 
-            <View style={styles.formGroup}>
-              <Text style={styles.label}>Email</Text>
-              <View style={[styles.inputWrap, emailFocused && styles.inputWrapFocused, errors.email && styles.inputError]}>
-                <TextInput
-                  style={[styles.input, Platform.OS === 'web' && { outlineWidth: 1, outlineStyle: 'solid', outlineOffset: 0, borderRadius: 12, outlineColor: getOutlineColor(emailFocused, errors.email) }]}
-                  placeholder="you@example.com"
-                  placeholderTextColor="#b8c0d4"
-                  value={email}
-                  onChangeText={(text) => { setEmail(text); if (errors.email) setErrors((prev) => ({ ...prev, email: '' })); }}
-                  onFocus={() => setEmailFocused(true)}
-                  onBlur={() => setEmailFocused(false)}
-                  keyboardType="email-address"
-                  autoCapitalize="none"
-                  autoCorrect={false}
-                  returnKeyType="next"
-                  blurOnSubmit={false}
-                  onSubmitEditing={() => passwordRef.current?.focus()}
-                  underlineColorAndroid="transparent"
-                  selectionColor="#3b5bdb"
-                  cursorColor="#3b5bdb"
-                  autoComplete="off"
-                  importantForAutofill="no"
-                />
+              <Text style={[styles.heading, isSmallScreen && { fontSize: 22 }]}>Welcome Back</Text>
+              <Text style={[styles.subtitle, isSmallScreen && { fontSize: 12, marginBottom: 12 }]}>Sign in to continue learning</Text>
+
+              <View style={styles.formGroup}>
+                <Text style={styles.label}>Email</Text>
+                <View style={[styles.inputWrap, emailFocused && styles.inputWrapFocused, errors.email && styles.inputError]}>
+                  <TextInput
+                    style={[styles.input, Platform.OS === 'web' && { outlineWidth: 1, outlineStyle: 'solid', outlineOffset: 0, borderRadius: 10, outlineColor: getOutlineColor(emailFocused, errors.email) }]}
+                    placeholder="you@example.com"
+                    placeholderTextColor="#b8c0d4"
+                    value={email}
+                    onChangeText={(text) => { setEmail(text); if (errors.email) setErrors((prev) => ({ ...prev, email: '' })); }}
+                    onFocus={() => setEmailFocused(true)}
+                    onBlur={() => setEmailFocused(false)}
+                    keyboardType="email-address"
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                    returnKeyType="next"
+                    blurOnSubmit={false}
+                    onSubmitEditing={() => passwordRef.current?.focus()}
+                    underlineColorAndroid="transparent"
+                    selectionColor="#3b5bdb"
+                    cursorColor="#3b5bdb"
+                    autoComplete="off"
+                    importantForAutofill="no"
+                  />
+                </View>
+                {errors.email ? <Text style={styles.errorText}>{errors.email}</Text> : null}
               </View>
-              {errors.email ? <Text style={styles.errorText}>{errors.email}</Text> : null}
-            </View>
 
-            <View style={styles.formGroup}>
-              <Text style={styles.label}>Password</Text>
-              <View style={[styles.inputWrap, passwordFocused && styles.inputWrapFocused, errors.password && styles.inputError]}>
-                <TextInput
-                  ref={passwordRef}
-                  style={[styles.input, styles.inputWithIcon, Platform.OS === 'web' && { outlineWidth: 1, outlineStyle: 'solid', outlineOffset: 0, borderRadius: 12, outlineColor: getOutlineColor(passwordFocused, errors.password) }]}
-                  placeholder="Enter your password"
-                  placeholderTextColor="#b8c0d4"
-                  value={password}
-                  onChangeText={(text) => { setPassword(text); if (errors.password) setErrors((prev) => ({ ...prev, password: '' })); }}
-                  onFocus={() => setPasswordFocused(true)}
-                  onBlur={() => setPasswordFocused(false)}
-                  secureTextEntry={!showPassword}
-                  autoCapitalize="none"
-                  returnKeyType="done"
-                  blurOnSubmit={true}
-                  onSubmitEditing={handleSignIn}
-                  underlineColorAndroid="transparent"
-                  selectionColor="#3b5bdb"
-                  cursorColor="#3b5bdb"
-                  autoComplete="off"
-                  importantForAutofill="no"
-                />
-                <TouchableOpacity style={styles.eyeBtn} onPress={() => setShowPassword(!showPassword)}>
-                  <EyeIcon visible={showPassword} />
+              <View style={styles.formGroup}>
+                <Text style={styles.label}>Password</Text>
+                <View style={[styles.inputWrap, passwordFocused && styles.inputWrapFocused, errors.password && styles.inputError]}>
+                  <TextInput
+                    ref={passwordRef}
+                    style={[styles.input, styles.inputWithIcon, Platform.OS === 'web' && { outlineWidth: 1, outlineStyle: 'solid', outlineOffset: 0, borderRadius: 10, outlineColor: getOutlineColor(passwordFocused, errors.password) }]}
+                    placeholder="Enter your password"
+                    placeholderTextColor="#b8c0d4"
+                    value={password}
+                    onChangeText={(text) => { setPassword(text); if (errors.password) setErrors((prev) => ({ ...prev, password: '' })); }}
+                    onFocus={() => setPasswordFocused(true)}
+                    onBlur={() => setPasswordFocused(false)}
+                    secureTextEntry={!showPassword}
+                    autoCapitalize="none"
+                    returnKeyType="done"
+                    blurOnSubmit={true}
+                    onSubmitEditing={handleSignIn}
+                    underlineColorAndroid="transparent"
+                    selectionColor="#3b5bdb"
+                    cursorColor="#3b5bdb"
+                    autoComplete="off"
+                    importantForAutofill="no"
+                  />
+                  <TouchableOpacity style={styles.eyeBtn} onPress={() => setShowPassword(!showPassword)}>
+                    <EyeIcon visible={showPassword} />
+                  </TouchableOpacity>
+                </View>
+                {errors.password ? <Text style={styles.errorText}>{errors.password}</Text> : null}
+                
+                <View style={styles.optionsRow}>
+                  <TouchableOpacity style={styles.rememberMeRow} onPress={() => setRememberMe(!rememberMe)}>
+                    <View style={[styles.checkbox, rememberMe && styles.checkboxChecked]}>
+                      {rememberMe && (
+                        <Svg width={9} height={9} viewBox="0 0 10 10">
+                          <Path d="M2 5l2.5 2.5L8 3" stroke="white" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" fill="none" />
+                        </Svg>
+                      )}
+                    </View>
+                    <Text style={styles.rememberMeText}>Remember me</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.forgotWrap} onPress={() => router.push('/(auth)/forgot-password')}>
+                    <Text style={styles.forgotText}>Forgot Password?</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+
+              <Pressable style={({ pressed }) => [styles.btnSignIn, loading && styles.btnDisabled, { transform: [{ scale: pressed ? 0.97 : 1 }], opacity: pressed ? 0.9 : 1 }]} onPress={handleSignIn} disabled={loading}>
+                {loading ? (
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                    <ActivityIndicator color="#fff" size="small" />
+                    <Text style={styles.btnSignInText}>Signing in...</Text>
+                  </View>
+                ) : (
+                  <Text style={styles.btnSignInText}>Sign In</Text>
+                )}
+              </Pressable>
+
+              <View style={styles.divider}>
+                <View style={styles.line} />
+                <Text style={styles.orText}>OR</Text>
+                <View style={styles.line} />
+              </View>
+
+              {Platform.OS === 'web' ? (
+                <TouchableOpacity style={[styles.btnGoogle, loading && styles.btnDisabled]} onPress={handleFirebaseGoogleSignIn} activeOpacity={0.85} disabled={loading}>
+                  {loading ? <ActivityIndicator color="#3b5bdb" size="small" /> : <GoogleIcon />}
+                  <Text style={styles.btnGoogleText}>Continue with Google</Text>
                 </TouchableOpacity>
-              </View>
-              {errors.password ? <Text style={styles.errorText}>{errors.password}</Text> : <Text style={styles.passwordHint} />}
+              ) : null}
 
-              <View style={styles.optionsRow}>
-                <TouchableOpacity style={styles.rememberMeRow} onPress={() => setRememberMe(!rememberMe)}>
-                  <View style={[styles.checkbox, rememberMe && styles.checkboxChecked]}>
-                    {rememberMe && (
-                      <Svg width={10} height={10} viewBox="0 0 10 10">
+              <View style={[styles.termsWrap, errors.terms && styles.termsError]}>
+                <TouchableOpacity onPress={handleToggleAgreement} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                  <View style={[styles.customCheckbox, agreed && styles.customCheckboxChecked]}>
+                    {agreed && (
+                      <Svg width={9} height={9} viewBox="0 0 10 10">
                         <Path d="M2 5l2.5 2.5L8 3" stroke="white" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" fill="none" />
                       </Svg>
                     )}
                   </View>
-                  <Text style={styles.rememberMeText}>Remember me</Text>
                 </TouchableOpacity>
-                <TouchableOpacity style={styles.forgotWrap} onPress={() => router.push('/(auth)/forgot-password')}>
-                  <Text style={styles.forgotText}>Forgot password?</Text>
+                <Text style={styles.termsText}>
+                  I agree to the{' '}
+                  <Text style={styles.termsLink} onPress={openPolicyModal}>Terms and Condition</Text>
+                  {' & '}
+                  <Text style={styles.termsLink} onPress={openPolicyModal}>Privacy Policy</Text>
+                </Text>
+              </View>
+              {errors.terms ? <Text style={styles.errorText}>{errors.terms}</Text> : null}
+
+              <View style={styles.signupWrap}>
+                <Text style={styles.signupText}>New here? </Text>
+                <TouchableOpacity onPress={() => router.push('/(auth)/signup')}>
+                  <Text style={styles.signupLink}>Create account</Text>
                 </TouchableOpacity>
               </View>
-            </View>
-
-            <Pressable style={({ pressed }) => [styles.btnSignIn, loading && styles.btnDisabled, { transform: [{ scale: pressed ? 0.97 : 1 }], opacity: pressed ? 0.9 : 1 }]} onPress={handleSignIn} disabled={loading}>
-              {loading ? (
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                  <ActivityIndicator color="#fff" size="small" />
-                  <Text style={styles.btnSignInText}>Signing in...</Text>
-                </View>
-              ) : (
-                <Text style={styles.btnSignInText}>Sign In</Text>
-              )}
-            </Pressable>
-
-            <View style={styles.divider}>
-              <View style={styles.line} />
-              <Text style={styles.orText}>OR</Text>
-              <View style={styles.line} />
-            </View>
-
-            {Platform.OS !== 'web' ? (
-              <View style={styles.nativeGoogleFallback}>
-                <Text style={styles.nativeGoogleFallbackText}>Google Sign In is available on web. Please use email/password on mobile.</Text>
-              </View>
-            ) : (
-              <TouchableOpacity style={[styles.btnGoogle, loading && styles.btnDisabled]} onPress={handleFirebaseGoogleSignIn} activeOpacity={0.85} disabled={loading}>
-                {loading ? <ActivityIndicator color="#3b5bdb" size="small" /> : <GoogleIcon />}
-                <Text style={styles.btnGoogleText}>Sign in with Google</Text>
-              </TouchableOpacity>
-            )}
-
-            <View style={[styles.termsWrap, errors.terms && styles.termsError]}>
-              <TouchableOpacity onPress={handleToggleAgreement} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                <View style={[styles.customCheckbox, agreed && styles.customCheckboxChecked]}>
-                  {agreed && (
-                    <Svg width={10} height={10} viewBox="0 0 10 10">
-                      <Path d="M2 5l2.5 2.5L8 3" stroke="white" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" fill="none" />
-                    </Svg>
-                  )}
-                </View>
-              </TouchableOpacity>
-              <Text style={styles.termsText}>
-                {'I agree to the '}
-                <Text style={styles.termsLink} onPress={openPolicyModal}>Terms and Conditions</Text>
-                {' and '}
-                <Text style={styles.termsLink} onPress={openPolicyModal}>Privacy Policy</Text>
-              </Text>
-            </View>
-            {errors.terms ? <Text style={styles.errorText}>{errors.terms}</Text> : null}
-
-            <View style={styles.signupWrap}>
-              <Text style={styles.signupText}>Don't have an account? </Text>
-              <TouchableOpacity onPress={() => router.push('/(auth)/signup')}>
-                <Text style={styles.signupLink}>Sign Up</Text>
-              </TouchableOpacity>
             </View>
           </View>
         </ScrollView>
@@ -1169,73 +1213,82 @@ const styles = StyleSheet.create({
     flexGrow: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    paddingVertical: 40,
-    paddingHorizontal: 16,
+    paddingVertical: 20,
+    paddingHorizontal: 12,
     minHeight: SCREEN_HEIGHT,
+  },
+
+  //CARD OUTER WRAPPER (holds the overlapping logo + card together)
+  cardOuter: {
+    width: '100%',
+    maxWidth: 400,
+    minWidth: 300,
+    alignItems: 'center',
   },
 
   //FORM
   card: {
     backgroundColor: '#ffffff',
-    borderRadius: 24,
-    paddingHorizontal: 28,
-    paddingVertical: 28,
+    borderRadius: 20,
+    paddingHorizontal: 24,
+    paddingVertical: 20,
+    paddingTop: 44,
     width: '100%',
-    maxWidth: 420,
-    minWidth: 320,
     position: 'relative',
     shadowColor: '#1e293b',
-    shadowOffset: { width: 0, height: 20 },
-    shadowOpacity: 0.08,
-    shadowRadius: 40,
-    elevation: 10,
-    marginTop: -25,
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.06,
+    shadowRadius: 20,
+    elevation: 8,
+    marginTop: 0,
     borderColor: '#f1f5ff',
   },
+
+  //RESTORED CONNECTORS - Scaled down to save space
   connectorTop: {
     position: 'absolute',
-    top: -5,
+    top: -4,
     alignSelf: 'center',
-    width: 10,
-    height: 10,
-    borderRadius: 5,
+    width: 8,
+    height: 8,
+    borderRadius: 4,
     backgroundColor: '#ffffff',
-    borderWidth: 2,
+    borderWidth: 1.5,
     borderColor: '#c7d2fe',
   },
   connectorBottom: {
     position: 'absolute',
-    bottom: -5,
+    bottom: -4,
     alignSelf: 'center',
-    width: 10,
-    height: 10,
-    borderRadius: 5,
+    width: 8,
+    height: 8,
+    borderRadius: 4,
     backgroundColor: '#ffffff',
-    borderWidth: 2,
+    borderWidth: 1.5,
     borderColor: '#c7d2fe',
   },
   connectorLeft: {
     position: 'absolute',
-    left: -5,
+    left: -4,
     top: '50%',
-    transform: [{ translateY: -5 }],
-    width: 10,
-    height: 10,
-    borderRadius: 5,
+    transform: [{ translateY: -4 }],
+    width: 8,
+    height: 8,
+    borderRadius: 4,
     backgroundColor: '#ffffff',
-    borderWidth: 2,
+    borderWidth: 1.5,
     borderColor: '#c7d2fe',
   },
   connectorRight: {
     position: 'absolute',
-    right: -5,
+    right: -4,
     top: '50%',
-    transform: [{ translateY: -5 }],
-    width: 10,
-    height: 10,
-    borderRadius: 5,
+    transform: [{ translateY: -4 }],
+    width: 8,
+    height: 8,
+    borderRadius: 4,
     backgroundColor: '#ffffff',
-    borderWidth: 2,
+    borderWidth: 1.5,
     borderColor: '#c7d2fe',
   },
 
@@ -1243,69 +1296,78 @@ const styles = StyleSheet.create({
   logoWrap: {
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: -10,
-    minHeight: 80,
+    marginBottom: -36,
+    zIndex: 10,
   },
   logoWrapper: {
     alignItems: 'center',
     justifyContent: 'center',
+    backgroundColor: '#eef2ff',
+    borderWidth: 2.5,
+    borderColor: '#3b5bdb',
+    shadowColor: '#3b5bdb',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+    elevation: 5,
   },
   logo: {
     backgroundColor: 'transparent',
   },
   heading: {
-    fontSize: 28,
+    fontSize: 24,
     fontWeight: '800',
     color: '#0f172a',
     textAlign: 'center',
+    marginBottom: 2,
   },
   subtitle: {
-    fontSize: 14,
+    fontSize: 13,
     color: '#64748b',
-    marginBottom: 24,
+    marginBottom: 16,
     textAlign: 'center',
   },
   formGroup: {
-    marginBottom: 16,
+    marginBottom: 12,
   },
   label: {
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: '600',
     color: '#334155',
-    marginBottom: 6,
+    marginBottom: 4,
   },
   inputWrap: {
     borderWidth: 1,
     borderColor: '#dde3fa',
-    borderRadius: 12,
+    borderRadius: 10,
     backgroundColor: '#ffffff',
-    minHeight: 40,
+    minHeight: 38,
     justifyContent: 'center',
   },
   inputWrapFocused: {
     backgroundColor: '#ffffff',
     shadowColor: '#3b5bdb',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.15,
-    shadowRadius: 12,
-    elevation: 4,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.12,
+    shadowRadius: 8,
+    elevation: 3,
   },
   input: {
     flex: 1,
-    paddingHorizontal: 14,
-    paddingVertical: Platform.OS === 'ios' ? 13 : 11,
+    paddingHorizontal: 12,
+    paddingVertical: Platform.OS === 'ios' ? 10 : 9,
     fontSize: 14,
     color: '#1a1f36',
     backgroundColor: 'transparent',
-    minHeight: 44,
+    minHeight: 40,
     textAlignVertical: 'center',
   },
   inputWithIcon: {
-    paddingRight: 44,
+    paddingRight: 40,
   },
   eyeBtn: {
     position: 'absolute',
-    right: 12,
+    right: 8,
     padding: 10,
   },
 
@@ -1313,16 +1375,17 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginTop: 8,
+    marginTop: 4,
+    marginBottom: 0,
   },
   rememberMeRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: 6,
   },
   checkbox: {
-    width: 18,
-    height: 18,
+    width: 16,
+    height: 16,
     borderRadius: 4,
     borderWidth: 2,
     borderColor: '#8896b3',
@@ -1334,14 +1397,14 @@ const styles = StyleSheet.create({
     borderColor: '#3b5bdb',
   },
   rememberMeText: {
-    fontSize: 12.5,
+    fontSize: 12,
     color: '#4a5568',
   },
   forgotWrap: {
     alignItems: 'flex-end',
   },
   forgotText: {
-    fontSize: 12.5,
+    fontSize: 12,
     color: '#8896b3',
     fontWeight: '500',
   },
@@ -1354,41 +1417,34 @@ const styles = StyleSheet.create({
     borderColor: '#e11d48',
   },
   errorText: {
-    fontSize: 12,
+    fontSize: 11,
     color: '#e11d48',
-    marginTop: 6,
+    marginTop: 4,
     marginLeft: 4,
     fontWeight: '500',
-  },
-  passwordHint: {
-    fontSize: 11,
-    color: '#8896b3',
-    marginTop: 6,
-    marginLeft: 4,
   },
 
   // Buttons
   btnSignIn: {
     backgroundColor: '#3b5bdb',
-    borderRadius: 12,
+    borderRadius: 10,
     borderWidth: 1,
     borderColor: '#2f49c7',
-    paddingVertical: 12,
+    paddingVertical: 10,
     alignItems: 'center',
-    marginTop: 5,
-    overflow: 'hidden',
+    marginTop: 2,
     shadowColor: '#3b5bdb',
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.25,
-    shadowRadius: 20,
-    elevation: 8,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.2,
+    shadowRadius: 12,
+    elevation: 6,
   },
   btnDisabled: {
     opacity: 0.75,
   },
   btnSignInText: {
     color: '#ffffff',
-    fontSize: 15,
+    fontSize: 14,
     fontWeight: '700',
     letterSpacing: 0.3,
   },
@@ -1397,7 +1453,7 @@ const styles = StyleSheet.create({
   divider: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginVertical: 10,
+    marginVertical: 6,
   },
   line: {
     flex: 1,
@@ -1406,7 +1462,7 @@ const styles = StyleSheet.create({
   },
   orText: {
     marginHorizontal: 10,
-    fontSize: 12,
+    fontSize: 11,
     color: '#8896b3',
     fontWeight: '600',
   },
@@ -1416,49 +1472,37 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 10,
+    gap: 8,
     borderWidth: 1,
     borderColor: '#e5e7eb',
-    borderRadius: 12,
-    paddingVertical: 8,
-    marginTop: 5,
+    borderRadius: 10,
+    paddingVertical: 9,
+    marginTop: 2,
     backgroundColor: '#ffffff',
   },
   btnGoogleText: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '500',
     color: '#1a1f36',
-    marginLeft: 8,
-  },
-  nativeGoogleFallback: {
-    marginTop: 10,
-    padding: 12,
-    backgroundColor: '#fef3c7',
-    borderRadius: 12,
-    alignItems: 'center',
-  },
-  nativeGoogleFallbackText: {
-    fontSize: 12,
-    color: '#92400e',
-    textAlign: 'center',
+    marginLeft: 6,
   },
 
   // Terms
   termsWrap: {
     flexDirection: 'row',
     alignItems: 'flex-start',
-    gap: 10,
-    marginTop: 14,
-    padding: 10,
-    borderWidth: 1.5,
+    gap: 8,
+    marginTop: 8,
+    padding: 8,
+    borderWidth: 1,
     borderColor: '#e2e6f3',
-    borderRadius: 10,
+    borderRadius: 8,
     backgroundColor: '#f8f9ff',
   },
   customCheckbox: {
-    width: 18,
-    height: 18,
-    borderRadius: 9,
+    width: 16,
+    height: 16,
+    borderRadius: 8,
     borderWidth: 2,
     borderColor: '#8896b3',
     alignItems: 'center',
@@ -1471,10 +1515,10 @@ const styles = StyleSheet.create({
     backgroundColor: '#3b5bdb',
   },
   termsText: {
-    fontSize: 12.5,
+    fontSize: 12,
     color: '#4a5568',
     flex: 1,
-    lineHeight: 18,
+    lineHeight: 17,
   },
   termsLink: {
     fontWeight: '700',
@@ -1486,14 +1530,14 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
-    marginTop: 20,
+    marginTop: 12,
   },
   signupText: {
-    fontSize: 13,
+    fontSize: 12,
     color: '#64748b',
   },
   signupLink: {
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: '700',
     color: '#3b5bdb',
   },
@@ -1507,10 +1551,10 @@ const styles = StyleSheet.create({
   },
   errorModalContainer: {
     width: '85%',
-    maxWidth: 340,
+    maxWidth: 320,
     backgroundColor: '#FFFFFF',
     borderRadius: 20,
-    padding: 24,
+    padding: 22,
     alignItems: 'center',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
@@ -1519,33 +1563,33 @@ const styles = StyleSheet.create({
     elevation: 8,
   },
   errorModalIconWrapper: {
-    marginBottom: 16,
+    marginBottom: 14,
   },
   errorModalIconCircle: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
     backgroundColor: '#f0f4ff',
     justifyContent: 'center',
     alignItems: 'center',
   },
   errorModalTitle: {
-    fontSize: 20,
+    fontSize: 18,
     fontWeight: '700',
     color: '#1e293b',
     textAlign: 'center',
     marginBottom: 8,
   },
   errorModalMessage: {
-    fontSize: 14,
+    fontSize: 13,
     color: '#64748b',
     textAlign: 'center',
-    lineHeight: 20,
-    marginBottom: 24,
+    lineHeight: 19,
+    marginBottom: 20,
   },
   errorModalButtonPrimary: {
     width: '100%',
-    paddingVertical: 12,
+    paddingVertical: 11,
     borderRadius: 10,
     alignItems: 'center',
     backgroundColor: '#3b5bdb',
@@ -1554,7 +1598,7 @@ const styles = StyleSheet.create({
   },
   errorModalButtonTextPrimary: {
     color: '#ffffff',
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '600',
   },
 });

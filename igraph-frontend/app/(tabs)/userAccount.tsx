@@ -1,5 +1,3 @@
-// igraph-frontend/app/(tabs)/userAccount.tsx
-
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import {
   View,
@@ -12,7 +10,6 @@ import {
   Alert,
   Modal,
   Platform,
-  Image,
   KeyboardAvoidingView,
   TouchableWithoutFeedback,
   Keyboard,
@@ -23,7 +20,6 @@ import {
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Svg, Path, Circle, Rect } from 'react-native-svg';
-import * as ImagePicker from 'expo-image-picker';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as authService from '../../services/authService';
 
@@ -94,13 +90,8 @@ const SHADOWS = {
   },
 };
 
-const ANIMATION = {
-  spring: { tension: 50, friction: 7 },
-  timing: { duration: 300 },
-};
-
 // ============================================================================
-// DOT GRID PATTERN - Full screen background matching home.tsx
+// DOT GRID PATTERN
 // ============================================================================
 
 const DotGrid = () => {
@@ -139,13 +130,6 @@ const DotGrid = () => {
 // ============================================================================
 // ICONS
 // ============================================================================
-
-const CameraIcon = () => (
-  <Svg width={18} height={18} viewBox="0 0 24 24" fill="none">
-    <Path d="M23 19C23 19.5304 22.7893 20.0391 22.4142 20.4142C22.0391 20.7893 21.5304 21 21 21H3C2.46957 21 1.96086 20.7893 1.58579 20.4142C1.21071 20.0391 1 19.5304 1 19V8C1 7.46957 1.21071 6.96086 1.58579 6.58579C1.96086 6.21071 2.46957 6 3 6H7L9 3H15L17 6H21C21.5304 6 22.0391 6.21071 22.4142 6.58579C22.7893 6.96086 23 7.46957 23 8V19Z" stroke="#000000" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
-    <Circle cx="12" cy="13" r="4" stroke="#000000" strokeWidth={2} />
-  </Svg>
-);
 
 const LockIcon = ({ color = '#000000' }: { color?: string }) => (
   <Svg width={24} height={24} viewBox="0 0 24 24" fill="none">
@@ -193,7 +177,7 @@ const EyeIcon = ({ visible }: { visible: boolean }) => (
 );
 
 const CloseIcon = () => (
-  <Svg width={20} height={20} viewBox="0 0 24 24" fill="none">
+  <Svg width={24} height={24} viewBox="0 0 24 24" fill="none">
     <Path d="M18 6L6 18M6 6L18 18" stroke="#0f172a" strokeWidth={2.5} strokeLinecap="round" />
   </Svg>
 );
@@ -211,12 +195,64 @@ const CheckCircleIcon = () => (
   </Svg>
 );
 
+const ProfileIcon = () => (
+  <Svg width={24} height={24} viewBox="0 0 24 24" fill="none">
+    <Circle cx="12" cy="8" r="4" stroke="#4c6fff" strokeWidth={2} />
+    <Path d="M20 21V19C20 16.8 18.2 15 16 15H8C5.8 15 4 16.8 4 19V21" stroke="#4c6fff" strokeWidth={2} strokeLinecap="round" />
+  </Svg>
+);
+
+const EditIcon = () => (
+  <Svg width={20} height={20} viewBox="0 0 24 24" fill="none">
+    <Path d="M11 4H4C3.46957 4 3.96086 4.21071 3.58579 4.58579C3.21071 4.96086 3 5.46957 3 6V20C3 20.5304 3.21071 21.0391 3.58579 21.4142C3.7893 21.0391 4.46957 22 5 22H18C18.5304 22 19.0391 21.7893 19.4142 21.4142C19.7893 21.0391 20 20.5304 20 20V13" stroke="#4c6fff" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+    <Path d="M18.5 2.5L21.5 5.5L12 15H9V12L18.5 2.5Z" stroke="#4c6fff" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+  </Svg>
+);
+
+// ============================================================================
+// ANIMATED CHEVRON COMPONENT
+// ============================================================================
+
+const AnimatedChevron = ({ expanded, color }: { expanded: boolean; color: string }) => {
+  const spinValue = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    Animated.timing(spinValue, {
+      toValue: expanded ? 1 : 0,
+      duration: 250,
+      useNativeDriver: true,
+    }).start();
+  }, [expanded]);
+
+  const spin = spinValue.interpolate({
+    inputRange: [0, 1],
+    outputRange: ['0deg', '180deg'],
+  });
+
+  return (
+    <Animated.View style={{ transform: [{ rotate: spin }] }}>
+      <Svg width={20} height={20} viewBox="0 0 24 24" fill="none">
+        <Path 
+          d="M9 18l6-6-6-6" 
+          stroke={color} 
+          strokeWidth={2} 
+          strokeLinecap="round" 
+          strokeLinejoin="round" 
+        />
+      </Svg>
+    </Animated.View>
+  );
+};
+
 // ============================================================================
 // SKELETON LOADER
 // ============================================================================
 
 const SkeletonLoader = () => {
   const opacity = useRef(new Animated.Value(0.3)).current;
+  const { width: windowWidth } = useWindowDimensions();
+  const isDesktop = windowWidth >= 1024;
+  const isMobile = windowWidth < 768;
 
   useEffect(() => {
     const animation = Animated.loop(
@@ -229,43 +265,225 @@ const SkeletonLoader = () => {
     return () => animation.stop();
   }, []);
 
-  const SkeletonBlock = ({ width, height, style }: { width: number | string; height: number; style?: any }) => (
-    <Animated.View style={[{ opacity, backgroundColor: COLORS.gray200, borderRadius: RADIUS.sm }, { width, height }, style]} />
+  const SkeletonBlock = ({ width, height, style, borderRadius = RADIUS.sm }: { width: number | string; height: number; style?: any; borderRadius?: number }) => (
+    <Animated.View style={[{ opacity, backgroundColor: COLORS.gray200, borderRadius }, { width, height }, style]} />
   );
 
   return (
     <View style={styles.skeletonContainer}>
-      {/* <DotGrid /> */}
-      <View style={[styles.skeletonContent, { paddingTop: Platform.OS === 'ios' ? 60 : SPACING.xxl }]}>
-        <View style={styles.skeletonCard}>
-          <View style={styles.skeletonRow}>
-            <SkeletonBlock width={80} height={80} style={{ borderRadius: RADIUS.full }} />
-            <View style={{ flex: 1, marginLeft: SPACING.lg }}>
-              <SkeletonBlock width="70%" height={20} />
-              <SkeletonBlock width="50%" height={16} style={{ marginTop: SPACING.sm }} />
-              <SkeletonBlock width="30%" height={14} style={{ marginTop: SPACING.xs }} />
+      <DotGrid />
+      <ScrollView 
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={[
+          styles.scrollContent, 
+          { 
+            paddingTop: Platform.OS === 'ios' ? 60 : SPACING.xxl,
+            paddingHorizontal: isDesktop ? SPACING.xxxl : SPACING.xl,
+            maxWidth: isDesktop ? 800 : '100%',
+            alignSelf: isDesktop ? 'center' : 'stretch',
+            width: '100%',
+          }
+        ]}
+      >
+        {/* Profile Banner Skeleton */}
+        <View style={[styles.profileCard, { marginBottom: SPACING.xxxl }]}>
+          <View style={[styles.profileBanner, { minHeight: 120 }]}>
+            <View style={styles.profileInfo}>
+              <SkeletonBlock width={80} height={80} borderRadius={RADIUS.full} style={{ backgroundColor: 'rgba(255, 255, 255, 0.3)' }} />
+              <View style={styles.userInfo}>
+                <SkeletonBlock width="60%" height={24} borderRadius={RADIUS.sm} style={{ backgroundColor: 'rgba(255, 255, 255, 0.3)' }} />
+                <SkeletonBlock width="80%" height={16} borderRadius={RADIUS.sm} style={{ marginTop: SPACING.sm, backgroundColor: 'rgba(255, 255, 255, 0.3)' }} />
+              </View>
             </View>
           </View>
         </View>
 
-        {[1, 2, 3, 4].map((i) => (
-          <View key={i} style={styles.skeletonActionCard}>
-            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-              <SkeletonBlock width={24} height={24} />
-              <View style={{ flex: 1, marginLeft: SPACING.md }}>
-                <SkeletonBlock width="60%" height={18} />
-                <SkeletonBlock width="40%" height={12} style={{ marginTop: SPACING.xs }} />
+        <View style={styles.profileExpandableCard}>
+          <View style={styles.profileExpandableHeader}>
+            <View style={styles.profileExpandableHeaderLeft}>
+              <SkeletonBlock width={24} height={24} borderRadius={RADIUS.sm} />
+              <View style={styles.actionContent}>
+                <SkeletonBlock width={60} height={18} borderRadius={RADIUS.sm} />
+                <SkeletonBlock width={120} height={12} borderRadius={RADIUS.sm} style={{ marginTop: SPACING.xs }} />
               </View>
             </View>
+            <SkeletonBlock width={20} height={20} borderRadius={RADIUS.sm} />
+          </View>
+        </View>
+
+        {[
+          { icon: 24, titleWidth: 120, subtitle: true },
+          { icon: 24, titleWidth: 70, subtitle: true },
+          { icon: 24, titleWidth: 80, subtitle: true },
+          { icon: 24, titleWidth: 70, subtitle: false },
+        ].map((item, i) => (
+          <View key={i} style={[styles.actionCard, { marginTop: SPACING.md }]}>
+            <SkeletonBlock width={24} height={24} borderRadius={RADIUS.sm} />
+            <View style={styles.actionContent}>
+              <SkeletonBlock width={item.titleWidth} height={18} borderRadius={RADIUS.sm} />
+              {item.subtitle && (
+                <SkeletonBlock width={100} height={12} borderRadius={RADIUS.sm} style={{ marginTop: SPACING.xs }} />
+              )}
+            </View>
+            <SkeletonBlock width={20} height={20} borderRadius={RADIUS.sm} />
           </View>
         ))}
-      </View>
+
+        <View style={{ height: 40 }} />
+      </ScrollView>
     </View>
   );
 };
 
 // ============================================================================
-// PASSWORD CHANGE MODAL (with router passed as parameter)
+// ✅ EDIT PROFILE MODAL - Name only (no profile picture)
+// ============================================================================
+
+const EditProfileModal = ({
+  visible,
+  onClose,
+  userData,
+  onUpdateProfile,
+}: {
+  visible: boolean;
+  onClose: () => void;
+  userData: any;
+  onUpdateProfile: (data: { fullName: string }) => Promise<void>;
+}) => {
+  const { width: windowWidth, height: windowHeight } = useWindowDimensions();
+  const [fullName, setFullName] = useState(userData.fullName || '');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+
+  const isDesktop = windowWidth >= 1024;
+  const isMobile = windowWidth < 768;
+
+  const modalWidth = isDesktop ? 480 : isMobile ? windowWidth - 32 : 440;
+  const maxModalHeight = Math.min(windowHeight * 0.85, 700);
+
+  const handleSave = async () => {
+    if (!fullName.trim()) {
+      setError('Name cannot be empty');
+      return;
+    }
+
+    setLoading(true);
+    setError('');
+    
+    try {
+      await onUpdateProfile({ fullName: fullName.trim() });
+      onClose();
+    } catch (err: any) {
+      setError(err.message || 'Failed to update profile');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <Modal
+      animationType="fade"
+      transparent={true}
+      visible={visible}
+      onRequestClose={onClose}
+    >
+      <Pressable style={styles.modalOverlay} onPress={onClose}>
+        <KeyboardAvoidingView 
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          style={[styles.modalWrapper, { padding: isMobile ? SPACING.md : SPACING.xl }]}
+        >
+          <Pressable 
+            style={[
+              styles.editProfileModalContainer,
+              { 
+                width: modalWidth,
+                maxHeight: maxModalHeight,
+              }
+            ]}
+          >
+            <View style={styles.editProfileHeader}>
+              <Text style={[styles.editProfileTitle, { fontSize: isDesktop ? 20 : 18 }]}>
+                Edit Profile
+              </Text>
+              <TouchableOpacity onPress={onClose} style={styles.editProfileClose}>
+                <CloseIcon />
+              </TouchableOpacity>
+            </View>
+
+            {error ? (
+              <View style={styles.errorBanner}>
+                <Text style={styles.errorBannerText}>{error}</Text>
+              </View>
+            ) : null}
+
+            <ScrollView showsVerticalScrollIndicator={false}>
+              {/* Full Name Field */}
+              <View style={styles.editProfileField}>
+                <Text style={[styles.editProfileLabel, { fontSize: isMobile ? 12 : 14 }]}>Full Name</Text>
+                <TextInput
+                  style={[styles.editProfileInput, { fontSize: isMobile ? 15 : 16 }]}
+                  value={fullName}
+                  onChangeText={(text) => {
+                    setFullName(text);
+                    setError('');
+                  }}
+                  placeholder="Enter your full name"
+                  placeholderTextColor={COLORS.gray400}
+                />
+              </View>
+
+              {/* Email Field - Read Only */}
+              <View style={[styles.editProfileField, { marginBottom: isDesktop ? SPACING.xxl : SPACING.md }]}>
+                <Text style={[styles.editProfileLabel, { fontSize: isMobile ? 12 : 14 }]}>Email Address</Text>
+                <View style={styles.editProfileEmailContainer}>
+                  <Text style={[styles.editProfileEmail, { fontSize: isMobile ? 15 : 16 }]}>{userData.email}</Text>
+                </View>
+              </View>
+
+      
+            </ScrollView>
+
+            <View style={[styles.editProfileFooter, { padding: isDesktop ? SPACING.xl : SPACING.lg }]}>
+              <TouchableOpacity
+                style={[styles.editProfileButton, styles.editProfileCancelButton]}
+                onPress={onClose}
+              >
+                <Text style={[styles.editProfileCancelText, { fontSize: isMobile ? 14 : 16 }]}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.editProfileButton, styles.editProfileSaveButton, loading && styles.modalButtonDisabled]}
+                onPress={handleSave}
+                disabled={loading}
+              >
+                {loading ? (
+                  <ActivityIndicator color={COLORS.white} size="small" />
+                ) : (
+                  <Text style={[styles.editProfileSaveText, { fontSize: isMobile ? 14 : 16 }]}>Save Changes</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </Pressable>
+        </KeyboardAvoidingView>
+      </Pressable>
+    </Modal>
+  );
+};
+
+// Helper function for avatar color
+const getAvatarColor = (email: string) => {
+  const colors = [
+    '#4c6fff', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6',
+    '#ec4899', '#14b8a6', '#f97316', '#6366f1', '#84cc16'
+  ];
+  let hash = 0;
+  for (let i = 0; i < email.length; i++) {
+    hash = email.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  return colors[Math.abs(hash) % colors.length];
+};
+
+// ============================================================================
+// PASSWORD CHANGE MODAL
 // ============================================================================
 
 const ChangePasswordModal = ({ 
@@ -279,6 +497,11 @@ const ChangePasswordModal = ({
   onSuccess: () => void;
   router: any;
 }) => {
+  const { width: windowWidth } = useWindowDimensions();
+  const isDesktop = windowWidth >= 1024;
+  const isMobile = windowWidth < 768;
+  const modalWidth = isDesktop ? 480 : isMobile ? windowWidth - 32 : 440;
+
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -382,20 +605,20 @@ const ChangePasswordModal = ({
       onRequestClose={handleClose}
     >
       <Pressable style={styles.modalOverlay} onPress={handleClose}>
-        <Pressable style={styles.modalContainer}>
+        <Pressable style={[styles.modalContainer, { width: modalWidth }]}>
           <View style={styles.modalHeader}>
-            <Text style={styles.modalTitle}>Change Password</Text>
+            <Text style={[styles.modalTitle, { fontSize: isDesktop ? 20 : 18 }]}>Change Password</Text>
             <TouchableOpacity onPress={handleClose} style={styles.modalClose} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
               <CloseIcon />
             </TouchableOpacity>
           </View>
           
           <View style={styles.passwordInputWrapper}>
-            <Text style={styles.inputLabel}>Current Password</Text>
+            <Text style={[styles.inputLabel, { fontSize: isMobile ? 12 : 14 }]}>Current Password</Text>
             <View style={[styles.passwordInputContainer, error && !currentPassword ? styles.inputError : null]}>
               <LockIcon color={COLORS.gray400} />
               <TextInput
-                style={styles.passwordInput}
+                style={[styles.passwordInput, { fontSize: isMobile ? 15 : 16 }]}
                 placeholder="Enter your current password"
                 placeholderTextColor={COLORS.gray400}
                 value={currentPassword}
@@ -416,11 +639,11 @@ const ChangePasswordModal = ({
           </View>
           
           <View style={styles.passwordInputWrapper}>
-            <Text style={styles.inputLabel}>New Password</Text>
+            <Text style={[styles.inputLabel, { fontSize: isMobile ? 12 : 14 }]}>New Password</Text>
             <View style={styles.passwordInputContainer}>
               <LockIcon color={COLORS.gray400} />
               <TextInput
-                style={styles.passwordInput}
+                style={[styles.passwordInput, { fontSize: isMobile ? 15 : 16 }]}
                 placeholder="Enter new password"
                 placeholderTextColor={COLORS.gray400}
                 value={newPassword}
@@ -456,7 +679,7 @@ const ChangePasswordModal = ({
                 {passwordErrors.map((err, i) => (
                   <View key={i} style={styles.passwordRequirementRow}>
                     <View style={styles.passwordRequirementDot} />
-                    <Text style={styles.passwordRequirementText}>{err}</Text>
+                    <Text style={[styles.passwordRequirementText, { fontSize: isMobile ? 11 : 12 }]}>{err}</Text>
                   </View>
                 ))}
               </View>
@@ -464,11 +687,11 @@ const ChangePasswordModal = ({
           </View>
           
           <View style={styles.passwordInputWrapper}>
-            <Text style={styles.inputLabel}>Confirm New Password</Text>
+            <Text style={[styles.inputLabel, { fontSize: isMobile ? 12 : 14 }]}>Confirm New Password</Text>
             <View style={[styles.passwordInputContainer, confirmPassword && newPassword !== confirmPassword ? styles.inputError : null]}>
               <LockIcon color={COLORS.gray400} />
               <TextInput
-                style={styles.passwordInput}
+                style={[styles.passwordInput, { fontSize: isMobile ? 15 : 16 }]}
                 placeholder="Confirm new password"
                 placeholderTextColor={COLORS.gray400}
                 value={confirmPassword}
@@ -487,14 +710,14 @@ const ChangePasswordModal = ({
               </TouchableOpacity>
             </View>
             {confirmPassword && newPassword !== confirmPassword && (
-              <Text style={styles.passwordMismatchText}>Passwords do not match</Text>
+              <Text style={[styles.passwordMismatchText, { fontSize: isMobile ? 11 : 12 }]}>Passwords do not match</Text>
             )}
             {confirmPassword && newPassword === confirmPassword && newPassword.length > 0 && (
-              <Text style={styles.matchSuccess}>✓ Passwords match</Text>
+              <Text style={[styles.matchSuccess, { fontSize: isMobile ? 11 : 12 }]}>✓ Passwords match</Text>
             )}
           </View>
           
-          {error ? <Text style={styles.modalError}>{error}</Text> : null}
+          {error ? <Text style={[styles.modalError, { fontSize: isMobile ? 12 : 14 }]}>{error}</Text> : null}
           
           <TouchableOpacity
             style={[styles.modalButton, loading && styles.modalButtonDisabled]}
@@ -505,9 +728,76 @@ const ChangePasswordModal = ({
             {loading ? (
               <ActivityIndicator color={COLORS.white} size="small" />
             ) : (
-              <Text style={styles.modalButtonText}>Update Password</Text>
+              <Text style={[styles.modalButtonText, { fontSize: isMobile ? 15 : 16 }]}>Update Password</Text>
             )}
           </TouchableOpacity>
+        </Pressable>
+      </Pressable>
+    </Modal>
+  );
+};
+
+// ============================================================================
+// SIGN OUT CONFIRMATION MODAL
+// ============================================================================
+
+const SignOutModal = ({
+  visible,
+  onClose,
+  onConfirm,
+  loading,
+}: {
+  visible: boolean;
+  onClose: () => void;
+  onConfirm: () => void;
+  loading: boolean;
+}) => {
+  const { width: windowWidth } = useWindowDimensions();
+  const isDesktop = windowWidth >= 1024;
+  const isMobile = windowWidth < 768;
+  const modalWidth = isDesktop ? 400 : isMobile ? windowWidth - 32 : 380;
+
+  return (
+    <Modal
+      animationType="fade"
+      transparent={true}
+      visible={visible}
+      onRequestClose={onClose}
+    >
+      <Pressable style={styles.modalOverlay} onPress={onClose}>
+        <Pressable style={[styles.signOutModalContainer, { width: modalWidth }]}>
+          <View style={styles.signOutIconWrapper}>
+            <View style={[styles.signOutIconCircle, { width: isDesktop ? 72 : 64, height: isDesktop ? 72 : 64 }]}>
+              <SignOutIcon color={COLORS.danger} />
+            </View>
+          </View>
+
+          <Text style={[styles.signOutModalTitle, { fontSize: isDesktop ? 20 : 18 }]}>Sign Out</Text>
+          <Text style={[styles.signOutModalMessage, { fontSize: isMobile ? 14 : 16 }]}>
+            Are you sure you want to sign out?
+          </Text>
+
+          <View style={styles.signOutModalButtons}>
+            <TouchableOpacity
+              style={[styles.signOutModalButton, styles.signOutModalCancelButton]}
+              onPress={onClose}
+              disabled={loading}
+            >
+              <Text style={[styles.signOutModalCancelText, { fontSize: isMobile ? 14 : 16 }]}>Cancel</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.signOutModalButton, styles.signOutModalConfirmButton]}
+              onPress={onConfirm}
+              disabled={loading}
+            >
+              {loading ? (
+                <ActivityIndicator color={COLORS.white} size="small" />
+              ) : (
+                <Text style={[styles.signOutModalConfirmText, { fontSize: isMobile ? 14 : 16 }]}>Sign Out</Text>
+              )}
+            </TouchableOpacity>
+          </View>
         </Pressable>
       </Pressable>
     </Modal>
@@ -527,7 +817,7 @@ const Toast = ({ visible, message, isError, onHide }: { visible: boolean; messag
     if (visible) {
       Animated.parallel([
         Animated.timing(fadeAnim, { toValue: 1, duration: 300, useNativeDriver: true }),
-        Animated.spring(slideAnim, { toValue: 0, ...ANIMATION.spring, useNativeDriver: true }),
+        Animated.spring(slideAnim, { toValue: 0, ...{ tension: 50, friction: 7 }, useNativeDriver: true }),
       ]).start();
       timeoutRef.current = setTimeout(() => hideToast(), 3000);
     }
@@ -561,25 +851,33 @@ const Toast = ({ visible, message, isError, onHide }: { visible: boolean; messag
 };
 
 // ============================================================================
-// MAIN USER ACCOUNT COMPONENT
+// ✅ MAIN USER ACCOUNT COMPONENT - Simplified (no profile picture upload)
 // ============================================================================
 
 export default function UserAccount() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { width: windowWidth } = useWindowDimensions();
   
+  const isDesktop = windowWidth >= 1024;
+  const isMobile = windowWidth < 768;
+
   const [userData, setUserData] = useState({
     fullName: '',
     email: '',
     username: '',
-    profilePicture: null as string | null,
+    authProvider: 'email' as 'email' | 'google' | null,
   });
   const [savedDiagrams, setSavedDiagrams] = useState<any[]>([]);
-  const [showSavedDiagrams, setShowSavedDiagrams] = useState(false);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [uploadingImage, setUploadingImage] = useState(false);
+  
+  const [isProfileExpanded, setIsProfileExpanded] = useState(false);
+  
+  const [showEditProfileModal, setShowEditProfileModal] = useState(false);
   const [showPasswordModal, setShowPasswordModal] = useState(false);
+  const [showSignOutModal, setShowSignOutModal] = useState(false);
+  const [signOutLoading, setSignOutLoading] = useState(false);
   const [toast, setToast] = useState({ visible: false, message: '', isError: false });
 
   const showToast = useCallback((message: string, isError: boolean = false) => {
@@ -601,6 +899,10 @@ export default function UserAccount() {
     setRefreshing(false);
   }, []);
 
+  // ============================================================================
+  // LOAD USER DATA
+  // ============================================================================
+
   const loadUserData = async () => {
     try {
       const token = await authService.getAccessToken();
@@ -615,13 +917,15 @@ export default function UserAccount() {
       });
       
       const result = await response.json();
+      console.log('📥 Loaded user data:', result);
+      
       if (result.success && result.data?.user) {
-        const { fullName, email, username, profilePicture } = result.data.user;
+        const { fullName, email, username, authProvider } = result.data.user;
         setUserData({
           fullName: fullName || '',
           email: email || '',
           username: username || '',
-          profilePicture: profilePicture || null,
+          authProvider: authProvider || 'email',
         });
       } else if (result.success === false && result.message === 'User not found') {
         await authService.clearTokens();
@@ -654,102 +958,126 @@ export default function UserAccount() {
     }
   };
 
-  const handleProfilePictureUpload = async () => {
+  // ============================================================================
+  // ✅ UPDATE PROFILE - Name only
+  // ============================================================================
+
+  const handleUpdateProfile = async (data: { fullName: string }) => {
     try {
-      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      if (status !== 'granted') {
-        showToast('Permission to access gallery is required', true);
+      console.log('📤 Starting profile update...');
+      console.log('📤 Data:', { fullName: data.fullName });
+      
+      const token = await authService.getAccessToken();
+      if (!token) {
+        console.error('❌ No access token found');
+        showToast('Session expired. Please sign in again.', true);
+        router.replace('/(auth)/signin');
         return;
       }
 
-      const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
-        allowsEditing: true,
-        aspect: [1, 1],
-        quality: 0.8,
-        base64: true,
-      });
-
-      if (!result.canceled && result.assets[0]) {
-        const asset = result.assets[0];
-        
-        if (asset.fileSize && asset.fileSize > 5 * 1024 * 1024) {
-          showToast('Image size must be less than 5MB', true);
-          return;
-        }
-        
-        setUploadingImage(true);
-        
-        const token = await authService.getAccessToken();
-        const API_URL = process.env.EXPO_PUBLIC_API_URL || 'https://igraph-backend.onrender.com';
-        
-        const response = await fetch(`${API_URL}/api/auth/upload-profile-picture`, {
-          method: 'POST',
-          headers: { 
+      const API_URL = process.env.EXPO_PUBLIC_API_URL || 'https://igraph-backend.onrender.com';
+      const url = `${API_URL}/api/auth/update-profile`;
+      
+      console.log('📡 Sending request to:', url);
+      
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 30000);
+      
+      try {
+        const response = await fetch(url, {
+          method: 'PUT',
+          headers: {
             'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json'
+            'Content-Type': 'application/json',
           },
-          body: JSON.stringify({ 
-            profilePictureUrl: asset.uri
-          }),
+          body: JSON.stringify(data),
+          signal: controller.signal,
         });
         
-        const responseData = await response.json();
+        clearTimeout(timeoutId);
         
-        if (responseData.success && responseData.data?.profilePictureUrl) {
-          setUserData(prev => ({ ...prev, profilePicture: responseData.data.profilePictureUrl }));
-          showToast('Profile picture updated successfully');
+        console.log('📥 Response status:', response.status);
+        
+        const result = await response.json();
+        console.log('📥 Response data:', result);
+        
+        if (result.success) {
+          setUserData(prev => ({
+            ...prev,
+            fullName: result.data.user.fullName,
+          }));
+          
+          if (Platform.OS === 'web') {
+            try {
+              const storedUser = JSON.parse(localStorage.getItem('user') || '{}');
+              storedUser.fullName = result.data.user.fullName;
+              localStorage.setItem('user', JSON.stringify(storedUser));
+              console.log('💾 Updated localStorage user data');
+            } catch (e) {
+              console.warn('Could not update localStorage:', e);
+            }
+          }
+          
+          showToast('Profile updated successfully');
+          setShowEditProfileModal(false);
         } else {
-          showToast(responseData.message || 'Failed to update profile picture', true);
+          console.error('❌ Update failed:', result.message);
+          showToast(result.message || 'Failed to update profile', true);
+        }
+      } catch (fetchError: any) {
+        clearTimeout(timeoutId);
+        if (fetchError.name === 'AbortError') {
+          showToast('Request timed out. Please try again.', true);
+        } else {
+          throw fetchError;
         }
       }
-    } catch (error) {
-      console.error('Image upload error:', error);
-      showToast('Failed to upload image. Please try again.', true);
-    } finally {
-      setUploadingImage(false);
+    } catch (error: any) {
+      console.error('❌ Update profile error:', error);
+      
+      if (error.message?.includes('Failed to fetch') || error.message?.includes('Network')) {
+        showToast('Cannot connect to server. Please check your connection.', true);
+      } else {
+        showToast(error.message || 'Failed to update profile. Please try again.', true);
+      }
     }
   };
 
   const handlePasswordSuccess = () => {
     showToast('Password changed successfully');
+    setShowPasswordModal(false);
   };
 
-const handleSignOut = async () => {
-  Alert.alert(
-    'Sign Out',
-    'Are you sure you want to sign out?',
-    [
-      { text: 'Cancel', style: 'cancel' },
-      { 
-        text: 'Sign Out', 
-        style: 'destructive',
-        onPress: async () => {
-          try {
-            setLoading(true); // Optional: Add loading state
-            await authService.logout();
-            // Clear any local user data
-            setUserData({ fullName: '', email: '', username: '', profilePicture: null });
-            // Use replace to prevent going back to userAccount
-            router.replace('/(auth)/signin');
-          } catch (error) {
-            console.error('Sign out error:', error);
-            // Still redirect even if API fails
-            router.replace('/(auth)/signin');
-          } finally {
-            setLoading(false);
-          }
-        }
-      },
-    ]
-  );
-};
+  const handleSignOutConfirm = async () => {
+    setSignOutLoading(true);
+    
+    try {
+      await authService.logout();
+      setUserData({ fullName: '', email: '', username: '', authProvider: null });
+      setShowSignOutModal(false);
+      router.replace('/(auth)/signin');
+    } catch (error) {
+      console.error('Sign out error:', error);
+      setShowSignOutModal(false);
+      router.replace('/(auth)/signin');
+    } finally {
+      setSignOutLoading(false);
+    }
+  };
+
+  const handleSignOutPress = () => {
+    setShowSignOutModal(true);
+  };
+
+  // ============================================================================
+  // ✅ Email-based avatar functions
+  // ============================================================================
 
   const getInitials = useCallback(() => {
     if (!userData.fullName) return 'U';
     return userData.fullName
       .split(' ')
-      .map(n => n[0])
+      .map((n: string) => n[0])
       .join('')
       .toUpperCase()
       .slice(0, 2);
@@ -761,9 +1089,26 @@ const handleSignOut = async () => {
     return 'User';
   }, [userData.fullName, userData.email]);
 
+  // Generate avatar color from email
+  const getAvatarColor = useCallback((email: string) => {
+    const colors = [
+      '#4c6fff', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6',
+      '#ec4899', '#14b8a6', '#f97316', '#6366f1', '#84cc16'
+    ];
+    let hash = 0;
+    for (let i = 0; i < email.length; i++) {
+      hash = email.charCodeAt(i) + ((hash << 5) - hash);
+    }
+    return colors[Math.abs(hash) % colors.length];
+  }, []);
+
+  const avatarColor = getAvatarColor(userData.email);
+
   if (loading) {
     return <SkeletonLoader />;
   }
+
+  const isGoogleUser = userData.authProvider === 'google';
 
   return (
     <KeyboardAvoidingView 
@@ -775,7 +1120,16 @@ const handleSignOut = async () => {
       <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
         <ScrollView 
           showsVerticalScrollIndicator={false}
-          contentContainerStyle={[styles.scrollContent, { paddingTop: insets.top + SPACING.xxl }]}
+          contentContainerStyle={[
+            styles.scrollContent, 
+            { 
+              paddingTop: insets.top + SPACING.xxl,
+              paddingHorizontal: isDesktop ? SPACING.xxxl : SPACING.xl,
+              maxWidth: isDesktop ? 800 : '100%',
+              alignSelf: isDesktop ? 'center' : 'stretch',
+              width: '100%',
+            }
+          ]}
           refreshControl={
             <RefreshControl
               refreshing={refreshing}
@@ -785,53 +1139,90 @@ const handleSignOut = async () => {
             />
           }
         >
-          {/* Profile Card */}
-          <View style={styles.profileCard}>
+          {/* Profile Card - Email-based avatar */}
+          <View style={[styles.profileCard, { marginBottom: isDesktop ? SPACING.xxxl : SPACING.xxxl }]}>
             <View style={styles.profileBanner}>
               <View style={styles.profileInfo}>
-                <TouchableOpacity 
-                  style={styles.avatarContainer}
-                  onPress={handleProfilePictureUpload}
-                  disabled={uploadingImage}
-                  activeOpacity={0.8}
-                >
-                  {uploadingImage ? (
-                    <View style={[styles.avatar, styles.avatarLoading]}>
-                      <ActivityIndicator color={COLORS.primary} size="large" />
-                    </View>
-                  ) : userData.profilePicture ? (
-                    <Image source={{ uri: userData.profilePicture }} style={styles.avatar} />
-                  ) : (
-                    <View style={[styles.avatar, styles.avatarPlaceholder]}>
-                      <Text style={styles.avatarInitials}>{getInitials()}</Text>
-                    </View>
-                  )}
-                  <View style={styles.avatarEditBadge}>
-                    <CameraIcon />
+                <View style={styles.avatarContainer}>
+                  <View style={[styles.avatar, styles.avatarPlaceholder, { backgroundColor: avatarColor }]}>
+                    <Text style={styles.avatarInitials}>{getInitials()}</Text>
                   </View>
-                </TouchableOpacity>
+                </View>
                 
                 <View style={styles.userInfo}>
-                  <Text style={styles.userName}>{getDisplayName()}</Text>
-                  <Text style={styles.userEmail}>{userData.email}</Text>
+                  <Text style={[styles.userName, { fontSize: isDesktop ? 20 : 18 }]}>{getDisplayName()}</Text>
+                  <Text style={[styles.userEmail, { fontSize: isDesktop ? 15 : 14 }]}>{userData.email}</Text>
                 </View>
               </View>
             </View>
           </View>
 
           {/* Action Cards */}
-          <View style={styles.actionsGrid}>
-            <Pressable 
-              style={({ pressed }) => [styles.actionCard, pressed && styles.actionCardPressed]}
-              onPress={() => setShowPasswordModal(true)}
-            >
-              <LockIcon />
-              <View style={styles.actionContent}>
-                <Text style={styles.actionTitle}>Password</Text>
-                <Text style={styles.actionDescription}>Change password</Text>
-              </View>
-              <ChevronRight />
-            </Pressable>
+          <View style={[styles.actionsGrid, { gap: isDesktop ? SPACING.lg : SPACING.md }]}>
+            {/* Profile Expandable Card */}
+            <View style={styles.profileExpandableCard}>
+              <Pressable 
+                style={({ pressed }) => [
+                  styles.profileExpandableHeader,
+                  pressed && styles.actionCardPressed,
+                ]}
+                onPress={() => setIsProfileExpanded(!isProfileExpanded)}
+              >
+                <View style={styles.profileExpandableHeaderLeft}>
+                  <ProfileIcon />
+                  <View style={styles.actionContent}>
+                    <Text style={[styles.actionTitle, { fontSize: isMobile ? 15 : 16 }]}>Profile</Text>
+                    <Text style={[styles.actionDescription, { fontSize: isMobile ? 11 : 12 }]}>
+                      {isProfileExpanded ? 'Tap to collapse' : 'Manage your account details'}
+                    </Text>
+                  </View>
+                </View>
+                <AnimatedChevron 
+                  expanded={isProfileExpanded} 
+                  color={isProfileExpanded ? COLORS.primary : '#94a3b8'} 
+                />
+              </Pressable>
+
+              {isProfileExpanded && (
+                <View style={styles.profileExpandableContent}>
+                  <Pressable 
+                    style={({ pressed }) => [
+                      styles.profileOption,
+                      pressed && styles.profileOptionPressed,
+                    ]}
+                    onPress={() => {
+                      setIsProfileExpanded(false);
+                      setTimeout(() => setShowEditProfileModal(true), 150);
+                    }}
+                  >
+                    <View style={styles.profileOptionLeft}>
+                      <EditIcon />
+                      <Text style={[styles.profileOptionText, { fontSize: isMobile ? 15 : 16 }]}>Edit Profile</Text>
+                    </View>
+                    <ChevronRight color="#94a3b8" />
+                  </Pressable>
+
+                  {!isGoogleUser && (
+                    <Pressable 
+                      style={({ pressed }) => [
+                        styles.profileOption,
+                        pressed && styles.profileOptionPressed,
+                      ]}
+                      onPress={() => {
+                        setIsProfileExpanded(false);
+                        setTimeout(() => setShowPasswordModal(true), 150);
+                      }}
+                    >
+                      <View style={styles.profileOptionLeft}>
+                        <LockIcon color={COLORS.primary} />
+                        <Text style={[styles.profileOptionText, { fontSize: isMobile ? 15 : 16 }]}>Change Password</Text>
+                      </View>
+                      <ChevronRight color="#94a3b8" />
+                    </Pressable>
+                  )}
+                </View>
+              )}
+            </View>
 
             <Pressable 
               style={({ pressed }) => [styles.actionCard, pressed && styles.actionCardPressed]}
@@ -839,8 +1230,8 @@ const handleSignOut = async () => {
             >
               <DiagramIcon />
               <View style={styles.actionContent}>
-                <Text style={styles.actionTitle}>Saved Diagrams</Text>
-                <Text style={styles.actionDescription}>
+                <Text style={[styles.actionTitle, { fontSize: isMobile ? 15 : 16 }]}>Saved Diagrams</Text>
+                <Text style={[styles.actionDescription, { fontSize: isMobile ? 11 : 12 }]}>
                   {savedDiagrams.length} saved
                 </Text>
               </View>
@@ -853,8 +1244,8 @@ const handleSignOut = async () => {
             >
               <ShieldIcon />
               <View style={styles.actionContent}>
-                <Text style={styles.actionTitle}>Privacy</Text>
-                <Text style={styles.actionDescription}>Terms & policies</Text>
+                <Text style={[styles.actionTitle, { fontSize: isMobile ? 15 : 16 }]}>Privacy</Text>
+                <Text style={[styles.actionDescription, { fontSize: isMobile ? 11 : 12 }]}>Terms & policies</Text>
               </View>
               <ChevronRight />
             </Pressable>
@@ -865,57 +1256,46 @@ const handleSignOut = async () => {
             >
               <ShieldIcon />
               <View style={styles.actionContent}>
-                <Text style={styles.actionTitle}>About Us</Text>
-                <Text style={styles.actionDescription}>Team & system info</Text>
+                <Text style={[styles.actionTitle, { fontSize: isMobile ? 15 : 16 }]}>About Us</Text>
+                <Text style={[styles.actionDescription, { fontSize: isMobile ? 11 : 12 }]}>Team & system info</Text>
               </View>
               <ChevronRight />
             </Pressable>
 
             <Pressable 
               style={({ pressed }) => [styles.actionCard, styles.signOutCard, pressed && styles.actionCardPressed]}
-              onPress={async () => {
-                try {
-                  await authService.logout();
-                  router.replace('/(auth)/signin');
-                } catch (error) {
-                  console.error('Sign out error:', error);
-                  router.replace('/(auth)/signin');
-                }
-              }}
+              onPress={handleSignOutPress}
             >
               <SignOutIcon color={COLORS.danger} />
               <View style={styles.actionContent}>
-                <Text style={[styles.actionTitle, styles.signOutText]}>Sign Out</Text>
+                <Text style={[styles.actionTitle, styles.signOutText, { fontSize: isMobile ? 15 : 16 }]}>Sign Out</Text>
               </View>
               <ChevronRight color={COLORS.danger} />
             </Pressable>
           </View>
-
-          {/* Saved Diagrams Section */}
-          {showSavedDiagrams && (
-            <View style={styles.savedDiagramsSection}>
-              {savedDiagrams.length === 0 ? (
-                <View style={styles.emptyDiagrams}>
-                  <Text style={styles.emptyDiagramsText}>No saved diagrams yet</Text>
-                  <Text style={styles.emptyDiagramsSubtext}>Diagrams you save will appear here</Text>
-                </View>
-              ) : (
-                savedDiagrams.map((diagram, index) => (
-                  <View key={diagram.id || index} style={styles.savedDiagramItem}>
-                    <Text style={styles.savedDiagramTitle}>{diagram.title}</Text>
-                  </View>
-                ))
-              )}
-            </View>
-          )}
         </ScrollView>
       </TouchableWithoutFeedback>
+
+      {/* Modals */}
+      <EditProfileModal
+        visible={showEditProfileModal}
+        onClose={() => setShowEditProfileModal(false)}
+        userData={userData}
+        onUpdateProfile={handleUpdateProfile}
+      />
 
       <ChangePasswordModal
         visible={showPasswordModal}
         onClose={() => setShowPasswordModal(false)}
         onSuccess={handlePasswordSuccess}
         router={router}
+      />
+
+      <SignOutModal
+        visible={showSignOutModal}
+        onClose={() => setShowSignOutModal(false)}
+        onConfirm={handleSignOutConfirm}
+        loading={signOutLoading}
       />
 
       <Toast
@@ -954,7 +1334,7 @@ const styles = StyleSheet.create({
   },
   
   scrollContent: {
-    paddingHorizontal: SPACING.xl,
+    flexGrow: 1,
     paddingBottom: 40,
   },
   
@@ -962,32 +1342,10 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#f8fafc',
   },
-  skeletonContent: {
-    paddingHorizontal: SPACING.xl,
-  },
-  skeletonCard: {
-    backgroundColor: COLORS.white,
-    borderRadius: RADIUS.xxl,
-    padding: SPACING.xl,
-    marginBottom: SPACING.lg,
-    ...SHADOWS.md,
-  },
-  skeletonRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  skeletonActionCard: {
-    backgroundColor: COLORS.white,
-    borderRadius: RADIUS.lg,
-    padding: SPACING.lg,
-    marginBottom: SPACING.md,
-    ...SHADOWS.sm,
-  },
   
   profileCard: {
     borderRadius: RADIUS.xxl,
     overflow: 'hidden',
-    marginBottom: SPACING.xxxl,
     ...SHADOWS.md,
   },
   profileBanner: {
@@ -1011,12 +1369,6 @@ const styles = StyleSheet.create({
     borderColor: COLORS.white,
   },
   avatarPlaceholder: {
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  avatarLoading: {
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -1024,18 +1376,6 @@ const styles = StyleSheet.create({
     fontSize: 28,
     fontWeight: '700',
     color: COLORS.white,
-  },
-  avatarEditBadge: {
-    position: 'absolute',
-    bottom: -2,
-    right: -2,
-    backgroundColor: COLORS.white,
-    width: 32,
-    height: 32,
-    borderRadius: RADIUS.full,
-    justifyContent: 'center',
-    alignItems: 'center',
-    ...SHADOWS.sm,
   },
   userInfo: {
     flex: 1,
@@ -1086,35 +1426,175 @@ const styles = StyleSheet.create({
     color: COLORS.danger,
   },
   
-  savedDiagramsSection: {
-    marginTop: SPACING.xxl,
-  },
-  savedDiagramItem: {
+  profileExpandableCard: {
     backgroundColor: COLORS.white,
     borderRadius: RADIUS.lg,
-    padding: SPACING.lg,
-    marginBottom: SPACING.md,
+    overflow: 'hidden',
     ...SHADOWS.sm,
   },
-  savedDiagramTitle: {
-    ...TYPOGRAPHY.bodyBold,
+  profileExpandableHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: SPACING.lg,
+  },
+  profileExpandableHeaderLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+    gap: SPACING.md,
+  },
+  profileExpandableContent: {
+    borderTopWidth: 1,
+    borderTopColor: COLORS.gray100,
+    paddingVertical: SPACING.sm,
+  },
+  profileOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: SPACING.lg,
+    paddingVertical: SPACING.md,
+  },
+  profileOptionPressed: {
+    backgroundColor: COLORS.gray50,
+  },
+  profileOptionLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.md,
+  },
+  profileOptionText: {
+    ...TYPOGRAPHY.body,
+    color: COLORS.gray800,
+  },
+  
+  editProfileModalContainer: {
+    backgroundColor: COLORS.white,
+    borderRadius: RADIUS.xxl,
+    overflow: 'hidden',
+    ...SHADOWS.lg,
+  },
+  editProfileHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: SPACING.xl,
+    paddingVertical: SPACING.lg,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.gray100,
+  },
+  editProfileTitle: {
+    ...TYPOGRAPHY.h3,
     color: COLORS.gray900,
   },
-  emptyDiagrams: {
-    backgroundColor: COLORS.white,
-    borderRadius: RADIUS.lg,
-    padding: SPACING.xxxl,
-    alignItems: 'center',
-    ...SHADOWS.sm,
+  editProfileClose: {
+    padding: SPACING.xs,
   },
-  emptyDiagramsText: {
-    ...TYPOGRAPHY.bodyBold,
-    color: COLORS.gray600,
-    marginBottom: SPACING.sm,
+  editProfileField: {
+    paddingHorizontal: SPACING.xl,
+    marginBottom: SPACING.md,
   },
-  emptyDiagramsSubtext: {
+  editProfileLabel: {
     ...TYPOGRAPHY.small,
-    color: COLORS.gray400,
+    color: COLORS.gray500,
+    marginBottom: SPACING.xs,
+  },
+  editProfileInput: {
+    ...TYPOGRAPHY.body,
+    color: COLORS.gray900,
+    borderWidth: 1,
+    borderColor: COLORS.gray200,
+    borderRadius: RADIUS.sm,
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.sm,
+  },
+  editProfileEmailContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: SPACING.sm,
+  },
+  editProfileEmail: {
+    ...TYPOGRAPHY.body,
+    color: COLORS.gray600,
+  },
+  editProfileEmailBadge: {
+    backgroundColor: COLORS.successLight,
+    paddingHorizontal: SPACING.sm,
+    paddingVertical: 2,
+    borderRadius: RADIUS.sm,
+  },
+  editProfileEmailBadgeText: {
+    ...TYPOGRAPHY.tiny,
+    color: COLORS.success,
+  },
+  editProfileAvatarRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.md,
+    paddingVertical: SPACING.sm,
+  },
+  editProfileAvatar: {
+    width: 48,
+    height: 48,
+    borderRadius: RADIUS.full,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  editProfileAvatarText: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: COLORS.white,
+  },
+  editProfileAvatarInfo: {
+    color: COLORS.gray500,
+    flex: 1,
+  },
+  editProfileFooter: {
+    flexDirection: 'row',
+    gap: SPACING.md,
+    borderTopWidth: 1,
+    borderTopColor: COLORS.gray100,
+  },
+  editProfileButton: {
+    flex: 1,
+    paddingVertical: SPACING.md,
+    borderRadius: RADIUS.lg,
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 48,
+  },
+  editProfileCancelButton: {
+    backgroundColor: COLORS.gray100,
+  },
+  editProfileSaveButton: {
+    backgroundColor: COLORS.primary,
+  },
+  editProfileCancelText: {
+    ...TYPOGRAPHY.bodyBold,
+    color: COLORS.gray700,
+  },
+  editProfileSaveText: {
+    ...TYPOGRAPHY.bodyBold,
+    color: COLORS.white,
+  },
+  modalButtonDisabled: {
+    opacity: 0.6,
+  },
+  
+  errorBanner: {
+    backgroundColor: COLORS.dangerLight,
+    paddingHorizontal: SPACING.xl,
+    paddingVertical: SPACING.md,
+    marginBottom: SPACING.sm,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.danger,
+  },
+  errorBannerText: {
+    color: COLORS.danger,
+    fontSize: 14,
+    fontWeight: '500',
     textAlign: 'center',
   },
   
@@ -1125,9 +1605,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: SPACING.xl,
   },
+  modalWrapper: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
   modalContainer: {
-    width: '100%',
-    maxWidth: 400,
     backgroundColor: COLORS.white,
     borderRadius: RADIUS.xxl,
     overflow: 'hidden',
@@ -1161,10 +1644,63 @@ const styles = StyleSheet.create({
     borderRadius: RADIUS.lg,
     alignItems: 'center',
   },
-  modalButtonDisabled: {
-    opacity: 0.6,
-  },
   modalButtonText: {
+    ...TYPOGRAPHY.bodyBold,
+    color: COLORS.white,
+  },
+  
+  signOutModalContainer: {
+    backgroundColor: COLORS.white,
+    borderRadius: RADIUS.xxl,
+    padding: SPACING.xxl,
+    alignItems: 'center',
+    ...SHADOWS.lg,
+  },
+  signOutIconWrapper: {
+    marginBottom: SPACING.lg,
+  },
+  signOutIconCircle: {
+    borderRadius: RADIUS.full,
+    backgroundColor: COLORS.dangerLight,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  signOutModalTitle: {
+    ...TYPOGRAPHY.h3,
+    color: COLORS.gray900,
+    marginBottom: SPACING.sm,
+  },
+  signOutModalMessage: {
+    ...TYPOGRAPHY.body,
+    color: COLORS.gray500,
+    textAlign: 'center',
+    marginBottom: SPACING.xl,
+    lineHeight: 22,
+  },
+  signOutModalButtons: {
+    flexDirection: 'row',
+    gap: SPACING.md,
+    width: '100%',
+  },
+  signOutModalButton: {
+    flex: 1,
+    paddingVertical: SPACING.md,
+    borderRadius: RADIUS.lg,
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 48,
+  },
+  signOutModalCancelButton: {
+    backgroundColor: COLORS.gray100,
+  },
+  signOutModalConfirmButton: {
+    backgroundColor: COLORS.danger,
+  },
+  signOutModalCancelText: {
+    ...TYPOGRAPHY.bodyBold,
+    color: COLORS.gray700,
+  },
+  signOutModalConfirmText: {
     ...TYPOGRAPHY.bodyBold,
     color: COLORS.white,
   },
@@ -1243,7 +1779,6 @@ const styles = StyleSheet.create({
   },
   matchSuccess: {
     color: COLORS.success,
-    fontSize: 12,
     marginTop: SPACING.sm,
   },
   

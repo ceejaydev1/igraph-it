@@ -16,7 +16,7 @@ import {
   Animated,
 } from 'react-native';
 import { useRouter } from 'expo-router';
-import { Svg, Path, Circle } from 'react-native-svg';
+import { Svg, Path, Circle, Rect } from 'react-native-svg';
 
 // Enable LayoutAnimation on Android (safe check)
 if (Platform.OS === 'android') {
@@ -63,10 +63,6 @@ const TYPE_COLORS = {
 
 const TABS: TabType[] = ['All', 'SDLC', 'UML'];
 
-// ─────────────────────────────────────────────────────────────────────────────
-// DOT GRID PATTERN - Cross-platform compatible
-// ─────────────────────────────────────────────────────────────────────────────
-
 const DotGrid = () => {
   const { width: screenWidth, height: screenHeight } = useWindowDimensions();
   const DOT_SPACING = 32;
@@ -99,10 +95,6 @@ const DotGrid = () => {
     </View>
   );
 };
-
-// ─────────────────────────────────────────────────────────────────────────────
-// SKELETON LOADER COMPONENTS
-// ─────────────────────────────────────────────────────────────────────────────
 
 const Shimmer = ({ width, height, borderRadius = 8, style = {} }: { 
   width: number | string; 
@@ -156,7 +148,7 @@ const Shimmer = ({ width, height, borderRadius = 8, style = {} }: {
 const CardSkeleton = ({ cardWidth }: { cardWidth: number }) => {
   return (
     <View style={[styles.skeletonCard, { width: cardWidth }]}>
-      <Shimmer width="100%" height={120} borderRadius={12} />
+      <Shimmer width="100%" height={130} borderRadius={18} style={{ margin: 8, width: undefined }} />
       <View style={styles.skeletonCardContent}>
         <Shimmer width="80%" height={20} borderRadius={4} style={{ marginBottom: 12 }} />
         <Shimmer width="40%" height={16} borderRadius={4} />
@@ -191,10 +183,6 @@ const HomeGridSkeleton = () => {
   );
 };
 
-// ─────────────────────────────────────────────────────────────────────────────
-// ICONS
-// ─────────────────────────────────────────────────────────────────────────────
-
 const SearchIcon = () => (
   <Svg width={16} height={16} viewBox="0 0 24 24" fill="none">
     <Path
@@ -223,9 +211,26 @@ const EmptySearchIcon = () => (
   </Svg>
 );
 
-// ─────────────────────────────────────────────────────────────────────────────
-// TAB BUTTON
-// ─────────────────────────────────────────────────────────────────────────────
+const PinIcon = ({ color = '#94a3b8' }: { color?: string }) => (
+  <Svg width={12} height={12} viewBox="0 0 24 24" fill="none">
+    <Path
+      d="M12 21C12 21 19 15.5 19 10C19 6.13401 15.866 3 12 3C8.13401 3 5 6.13401 5 10C5 15.5 12 21 12 21Z"
+      stroke={color}
+      strokeWidth={1.8}
+      strokeLinejoin="round"
+    />
+    <Circle cx="12" cy="10" r="2.4" stroke={color} strokeWidth={1.8} />
+  </Svg>
+);
+
+const PreviewGlyph = ({ color }: { color: string }) => (
+  <Svg width={38} height={38} viewBox="0 0 24 24" fill="none">
+    <Rect x="3" y="3" width="8" height="8" rx="2" stroke={color} strokeWidth={1.6} />
+    <Rect x="13" y="3" width="8" height="8" rx="2" stroke={color} strokeWidth={1.6} />
+    <Rect x="8" y="13" width="8" height="8" rx="2" stroke={color} strokeWidth={1.6} />
+    <Path d="M7 11V13M17 11V13M11 7H13" stroke={color} strokeWidth={1.6} strokeLinecap="round" />
+  </Svg>
+);
 
 const TabButton = ({ 
   label, 
@@ -257,10 +262,6 @@ const TabButton = ({
   </Pressable>
 );
 
-// ─────────────────────────────────────────────────────────────────────────────
-// DIAGRAM CARD
-// ─────────────────────────────────────────────────────────────────────────────
-
 const DiagramCard = ({ 
   title, 
   type, 
@@ -280,7 +281,7 @@ const DiagramCard = ({
   useEffect(() => {
     Animated.parallel([
       Animated.spring(scaleAnim, {
-        toValue: isHovered ? 1.02 : 1,
+        toValue: isHovered ? 1.015 : 1,
         friction: 8,
         tension: 40,
         useNativeDriver: true,
@@ -295,12 +296,12 @@ const DiagramCard = ({
 
   const shadowOpacity = shadowAnim.interpolate({
     inputRange: [0, 1],
-    outputRange: [0.04, 0.12],
+    outputRange: [0.06, 0.16],
   });
 
   const elevation = shadowAnim.interpolate({
     inputRange: [0, 1],
-    outputRange: [2, 6],
+    outputRange: [3, 8],
   });
 
   return (
@@ -314,10 +315,11 @@ const DiagramCard = ({
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
     >
+      <View style={[styles.stackedCard, { backgroundColor: colors.light }]} />
+
       <Animated.View 
         style={[
           styles.diagramCard,
-          isHovered && styles.diagramCardHovered,
           {
             transform: [{ scale: scaleAnim }],
             shadowOpacity,
@@ -330,8 +332,9 @@ const DiagramCard = ({
           isDesktop && styles.cardPreviewDesktop,
           { backgroundColor: colors.light }
         ]}>
+          <PreviewGlyph color={colors.primary} />
           {isHovered && (
-            <View style={[styles.hoverOverlay, { backgroundColor: colors.primary + '08' }]} />
+            <View style={[styles.hoverOverlay, { backgroundColor: colors.primary + '0F' }]} />
           )}
         </View>
         
@@ -342,7 +345,8 @@ const DiagramCard = ({
           >
             {title}
           </Text>
-          <View style={styles.cardMeta}>
+
+          <View style={styles.cardFooterRow}>
             <View style={[
               styles.cardTypeBadge, 
               { backgroundColor: isHovered ? colors.primary + '25' : `${colors.primary}15` }
@@ -357,10 +361,6 @@ const DiagramCard = ({
     </Pressable>
   );
 };
-
-// ─────────────────────────────────────────────────────────────────────────────
-// CUSTOM HOOKS
-// ─────────────────────────────────────────────────────────────────────────────
 
 const useFilteredDiagrams = (activeTab: TabType, searchQuery: string) => {
   return useMemo(() => {
@@ -392,10 +392,6 @@ const useResponsiveLayout = () => {
     containerPadding: width < 768 ? 16 : width < 1024 ? 24 : 32,
   }), [width]);
 };
-
-// ─────────────────────────────────────────────────────────────────────────────
-// MAIN HOME COMPONENT
-// ─────────────────────────────────────────────────────────────────────────────
 
 export default function Home() {
   const [searchQuery, setSearchQuery] = useState('');
@@ -560,17 +556,12 @@ export default function Home() {
   );
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// STYLES
-// ─────────────────────────────────────────────────────────────────────────────
-
 const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#f8fafc',
   },
   
-  // Dot Grid Pattern - Cross platform
   dotGridContainer: {
     position: 'absolute',
     top: 0,
@@ -586,7 +577,6 @@ const styles = StyleSheet.create({
     opacity: 0.12,
   },
   
-  // Skeleton styles
   skeletonContainer: {
     flex: 1,
     backgroundColor: '#f8fafc',
@@ -611,7 +601,7 @@ const styles = StyleSheet.create({
   },
   skeletonCard: {
     backgroundColor: '#ffffff',
-    borderRadius: 16,
+    borderRadius: 22,
     overflow: 'hidden',
     marginBottom: 4,
     elevation: 2,
@@ -642,7 +632,6 @@ const styles = StyleSheet.create({
     }),
   },
   
-  // Header
   headerSection: {
     paddingTop: Platform.OS === 'ios' ? 60 : 20,
     paddingHorizontal: 16,
@@ -715,7 +704,6 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
   
-  // Tabs
   tabsRow: {
     flexDirection: 'row',
     gap: 8,
@@ -770,7 +758,6 @@ const styles = StyleSheet.create({
     color: '#ffffff',
   },
   
-  // Scroll and grid
   scrollContent: {
     flexGrow: 1,
     paddingBottom: 32,
@@ -785,35 +772,42 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   
-  // Diagram card
   cardTouchable: {
     flex: 1,
-    borderRadius: 16,
+    paddingRight: 8,
+    paddingBottom: 8,
   },
   cardPressed: {
-    opacity: 0.9,
+    opacity: 0.92,
+  },
+  stackedCard: {
+    position: 'absolute',
+    top: 8,
+    left: 8,
+    right: 0,
+    bottom: 0,
+    borderRadius: 26,
   },
   diagramCard: {
     backgroundColor: '#ffffff',
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: '#e2e8f0',
-    overflow: 'hidden',
-    elevation: 2,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.04,
-    shadowRadius: 8,
-  },
-  diagramCardHovered: {
-    borderColor: '#cbd5e1',
+    borderRadius: 24,
+    padding: 8,
+    shadowColor: '#0f172a',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.06,
+    shadowRadius: 16,
+    elevation: 3,
   },
   cardPreview: {
-    height: 120,
+    height: 130,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
     position: 'relative',
+    overflow: 'hidden',
   },
   cardPreviewDesktop: {
-    height: 140,
+    height: 150,
   },
   hoverOverlay: {
     position: 'absolute',
@@ -823,36 +817,57 @@ const styles = StyleSheet.create({
     bottom: 0,
   },
   cardContent: {
-    padding: 14,
-    backgroundColor: '#ffffff',
+    paddingHorizontal: 6,
+    paddingTop: 12,
+    paddingBottom: 4,
   },
   cardTitle: {
-    fontSize: 14,
-    fontWeight: '600',
+    fontSize: 15,
+    fontWeight: '700',
     color: '#0f172a',
-    marginBottom: 10,
+    marginBottom: 6,
     lineHeight: 20,
+    letterSpacing: -0.2,
   },
   cardTitleDesktop: {
-    fontSize: 15,
+    fontSize: 16,
     lineHeight: 22,
   },
-  cardMeta: {
+  cardMetaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    marginBottom: 12,
+  },
+  cardMetaText: {
+    fontSize: 12,
+    color: '#94a3b8',
+    fontWeight: '500',
+    flexShrink: 1,
+  },
+  cardFooterRow: {
     flexDirection: 'row',
     alignItems: 'center',
   },
   cardTypeBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 6,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 8,
+  },
+  cardTypeDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
   },
   cardTypeText: {
-    fontSize: 11,
-    fontWeight: '600',
-    letterSpacing: 0.3,
+    fontSize: 12,
+    fontWeight: '700',
+    letterSpacing: 0.2,
   },
   
-  // Empty state
   emptyState: {
     alignItems: 'center',
     justifyContent: 'center',

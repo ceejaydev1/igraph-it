@@ -1,11 +1,15 @@
-// services/authService.js
 // Handles all authentication API calls to backend
 
 import axios from 'axios';
 import { Platform } from 'react-native';
 import API_BASE_URL from '../constants/api';
 
-// Conditional storage - works on both Web and Native
+console.log('🔗 AuthService initialized with URL:', API_BASE_URL);
+
+// ============================================================================
+// STORAGE
+// ============================================================================
+
 const storage = {
   setItem: async (key, value) => {
     if (Platform.OS === 'web') {
@@ -51,29 +55,65 @@ const storage = {
   },
 };
 
+// ============================================================================
+// AXIOS CLIENT WITH PROFESSIONAL CONFIG
+// ============================================================================
+
+// Create axios instance with proper base URL
 const api = axios.create({
   baseURL: `${API_BASE_URL}/api`,
   headers: {
     'Content-Type': 'application/json',
+    'Accept': 'application/json',
   },
+  timeout: 30000,
+  withCredentials: true,
 });
 
-// Add token interceptor
-api.interceptors.request.use(async (config) => {
-  const token = await storage.getItem('accessToken');
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`;
+// Request interceptor - Add token and log
+api.interceptors.request.use(
+  async (config) => {
+    const token = await storage.getItem('accessToken');
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`;
+    }
+    
+    console.log(`📤 ${config.method.toUpperCase()} ${config.baseURL}${config.url}`);
+    console.log(`   📡 Headers:`, { ...config.headers, Authorization: 'Bearer ***' });
+    
+    return config;
+  },
+  (error) => {
+    console.error('❌ Request error:', error);
+    return Promise.reject(error);
   }
-  return config;
-});
+);
 
-// Add response interceptor for token refresh
+// Response interceptor - Log and handle errors
 api.interceptors.response.use(
-  (response) => response,
+  (response) => {
+    console.log(`📥 ${response.status} ${response.config.url}`);
+    return response;
+  },
   async (error) => {
     const originalRequest = error.config;
 
-    // ✅ FIXED: skip retry for auth endpoints — they're not protected routes
+    // Network error handling
+    if (error.code === 'ERR_NETWORK' || error.message === 'Network Error') {
+      console.error('❌ NETWORK ERROR - Cannot reach backend at:', API_BASE_URL);
+      console.error('   💡 Possible solutions:');
+      console.error('   - Start backend: cd igraph-backend && npm run dev');
+      console.error('   - Check firewall settings');
+      console.error('   - Verify the API URL is correct');
+      console.error(`   - Current URL: ${API_BASE_URL}`);
+      
+      const networkError = new Error('Cannot connect to server. Please ensure the backend is running.');
+      networkError.code = 'NETWORK_ERROR';
+      networkError.details = { url: API_BASE_URL };
+      return Promise.reject(networkError);
+    }
+
+    // Handle unauthorized (401) - token refresh
     const isAuthRoute = originalRequest.url?.includes('/auth/signin') ||
                         originalRequest.url?.includes('/auth/signup') ||
                         originalRequest.url?.includes('/auth/google') ||
@@ -98,17 +138,24 @@ api.interceptors.response.use(
       }
     }
 
+    // Log other errors
+    if (error.response) {
+      console.error(`❌ API Error ${error.response.status}:`, error.response.data?.message || error.message);
+    } else {
+      console.error('❌ Unknown error:', error.message);
+    }
+
     return Promise.reject(error);
   }
 );
 
-// Token management
+// ============================================================================
+// TOKEN MANAGEMENT
+// ============================================================================
+
 export const storeTokens = async (accessToken, refreshToken) => {
   if (!accessToken || !refreshToken) {
-    console.error('❌ Cannot store tokens: missing token', { 
-      hasAccess: !!accessToken, 
-      hasRefresh: !!refreshToken 
-    });
+    console.error('❌ Cannot store tokens: missing token');
     return;
   }
   
@@ -134,7 +181,10 @@ export const getRefreshToken = async () => {
   return await storage.getItem('refreshToken');
 };
 
-// Auth API calls
+// ============================================================================
+// AUTH API CALLS
+// ============================================================================
+
 export const signUp = async (userData, consentTimestamp = null) => {
   const payload = consentTimestamp 
     ? { ...userData, consentTimestamp }
@@ -153,11 +203,9 @@ export const resendOTP = async (email) => {
   return response.data;
 };
 
-// Add AbortController for timeout
 let pendingRequest = null;
 
 export const signIn = async (email, password, consentTimestamp = null) => {
-  // Cancel previous pending request
   if (pendingRequest) {
     pendingRequest.abort();
   }
@@ -174,42 +222,18 @@ export const signIn = async (email, password, consentTimestamp = null) => {
       payload,
       { 
         signal: controller.signal,
-        timeout: 10000 // 10 second timeout
+        timeout: 10000
       }
     );
     pendingRequest = null;
     
-    // Add debugging logs
-    console.log('🔐 Sign in response:', {
-      success: response.data.success,
-      hasTokens: !!response.data.data?.tokens,
-      hasAccessToken: !!response.data.data?.tokens?.accessToken,
-      hasRefreshToken: !!response.data.data?.tokens?.refreshToken
-    });
-    
     if (response.data.success && response.data.data?.tokens) {
       const { accessToken, refreshToken } = response.data.data.tokens;
-      
-      // Verify tokens are not undefined
-      if (!accessToken || !refreshToken) {
-        console.error('❌ Missing tokens in response:', { accessToken: !!accessToken, refreshToken: !!refreshToken });
-      }
-      
       await storeTokens(accessToken, refreshToken);
-      
-      // Verify tokens were stored
-      const storedAccess = await getAccessToken();
-      const storedRefresh = await getRefreshToken();
-      console.log('✅ Tokens stored:', { 
-        accessStored: !!storedAccess, 
-        refreshStored: !!storedRefresh 
-      });
       
       if (Platform.OS === 'web' && response.data.data.user) {
         localStorage.setItem('user', JSON.stringify(response.data.data.user));
       }
-    } else {
-      console.warn('⚠️ No tokens in response:', response.data);
     }
     
     return response.data;
@@ -251,7 +275,6 @@ export const forgotPassword = async (email) => {
 export const verifyResetOTP = async (email, otp) => {
   try {
     const response = await api.post('/auth/verify-reset-otp', { email, otp });
-    console.log('Verify reset OTP response:', response.data);
     return response.data;
   } catch (error) {
     console.error('Verify reset OTP error:', error.response?.data || error.message);
@@ -266,7 +289,6 @@ export const resetPassword = async (email, otp, newPassword) => {
       otp, 
       newPassword 
     });
-    console.log('Reset password response:', response.data);
     return response.data;
   } catch (error) {
     console.error('Reset password error:', error.response?.data || error.message);
@@ -287,29 +309,20 @@ export const refreshToken = async () => {
     return null;
   } catch (error) {
     console.error('Refresh token error:', error);
-    // Clear tokens if refresh fails
     await clearTokens();
     throw error;
   }
 };
 
-// ✅ FIXED: Properly handle /me endpoint response
 export const verifyToken = async () => {
   try {
     const token = await getAccessToken();
     if (!token) {
-      console.log('🔐 verifyToken: No token found');
       return { success: false };
     }
     
-    console.log('🔐 verifyToken: Verifying token with /auth/me');
     const response = await api.get('/auth/me');
     
-    console.log('🔐 verifyToken: Response status:', response.status);
-    console.log('🔐 verifyToken: Response data:', response.data);
-    
-    // ✅ Check the correct response structure
-    // Backend returns: { success: true, data: { user: {...} } }
     if (response.data && response.data.success === true) {
       return {
         success: true,
@@ -319,14 +332,9 @@ export const verifyToken = async () => {
     
     return { success: false };
   } catch (error) {
-    console.error('🔐 verifyToken error:', error.response?.status, error.response?.data?.message || error.message);
-    
-    // If token is expired or invalid, clear it
     if (error.response?.status === 401) {
-      console.log('🔐 verifyToken: Token invalid/expired, clearing');
       await clearTokens();
     }
-    
     return { success: false };
   }
 };
@@ -362,6 +370,91 @@ export const recordConsent = async (consentTimestamp) => {
   } catch (error) {
     console.error('Failed to record consent:', error);
     return { success: false };
+  }
+};
+
+// ============================================================================
+// USER ACCOUNT METHODS - Simplified (no profile picture)
+// ============================================================================
+
+export const changePassword = async (currentPassword, newPassword) => {
+  try {
+    const response = await api.post('/auth/change-password', {
+      currentPassword,
+      newPassword
+    });
+    return response.data;
+  } catch (error) {
+    console.error('Change password error:', error.response?.data || error.message);
+    
+    if (error.response?.status === 400) {
+      throw new Error(error.response.data.message || 'Invalid password format');
+    }
+    if (error.response?.status === 401) {
+      throw new Error('Current password is incorrect');
+    }
+    if (error.response?.status === 404) {
+      throw new Error('User not found');
+    }
+    throw new Error(error.response?.data?.message || 'Failed to change password');
+  }
+};
+
+// ============================================================================
+// ✅ SIMPLIFIED UPDATE PROFILE - Name only (no profile picture)
+// ============================================================================
+
+export const updateProfile = async (data) => {
+  try {
+    console.log('📤 Updating profile...');
+    
+    const token = await getAccessToken();
+    if (!token) {
+      throw new Error('No access token found');
+    }
+
+    // ✅ Only update name - no image handling
+    const response = await api.put('/auth/update-profile', {
+      fullName: data.fullName
+    });
+    
+    console.log('📥 Update profile response:', response.data);
+    
+    // Update stored user data
+    if (response.data.success && response.data.data?.user) {
+      const storedUser = await storage.getItem('user');
+      if (storedUser) {
+        const userData = JSON.parse(storedUser);
+        const updatedUser = {
+          ...userData,
+          ...response.data.data.user,
+        };
+        await storage.setItem('user', JSON.stringify(updatedUser));
+        if (Platform.OS === 'web') {
+          localStorage.setItem('user', JSON.stringify(updatedUser));
+        }
+      }
+    }
+    
+    return response.data;
+  } catch (error) {
+    console.error('❌ Update profile error:', error);
+    
+    if (error.code === 'NETWORK_ERROR' || error.message === 'Network Error') {
+      throw new Error('Cannot connect to server. Please check your network connection.');
+    }
+    
+    if (error.response?.status === 400) {
+      throw new Error(error.response.data.message || 'Invalid request');
+    }
+    if (error.response?.status === 401) {
+      throw new Error('Session expired. Please sign in again.');
+    }
+    if (error.response?.status === 500) {
+      throw new Error('Server error. Please try again later.');
+    }
+    
+    throw new Error(error.response?.data?.message || 'Failed to update profile');
   }
 };
 

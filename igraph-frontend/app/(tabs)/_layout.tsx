@@ -1,6 +1,8 @@
+// app/(tabs)/_layout.tsx
+
 import { Stack, useRouter, useSegments } from 'expo-router';
 import React, { useEffect, useState } from 'react';
-import { View, StyleSheet, ActivityIndicator } from 'react-native';
+import { View, StyleSheet } from 'react-native';
 import * as authService from '../../services/authService';
 import Navbar from '../../components/Navbar';
 
@@ -42,7 +44,6 @@ export default function TabLayout() {
         });
         setIsReady(true);
       } else {
-        // Token invalid
         await authService.clearTokens();
         router.replace('/(auth)/signin');
       }
@@ -52,12 +53,9 @@ export default function TabLayout() {
     }
   };
 
+  // Return null while loading - splash screen handles the loading state
   if (!isReady) {
-    return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#4c6fff" />
-      </View>
-    );
+    return null;
   }
 
   return (
@@ -85,12 +83,6 @@ export default function TabLayout() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f8faff',
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
     backgroundColor: '#f8faff',
   },
 });

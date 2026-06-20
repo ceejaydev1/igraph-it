@@ -85,7 +85,7 @@ const showToastMessage = (message: string, isError: boolean = false) => {
 // ─── ICONS ────────────────────────────────────────────────────────────────────
 
 const GoogleIcon = () => (
-  <Svg width={20} height={20} viewBox="0 0 24 24">
+  <Svg width={18} height={18} viewBox="0 0 24 24">
     <Path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4" />
     <Path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853" />
     <Path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05" />
@@ -94,7 +94,7 @@ const GoogleIcon = () => (
 );
 
 const EyeIcon = ({ visible }: { visible: boolean }) => (
-  <Svg width={18} height={18} viewBox="0 0 24 24" fill="none">
+  <Svg width={16} height={16} viewBox="0 0 24 24" fill="none">
     {visible ? (
       <>
         <Path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" stroke="#8896b3" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" />
@@ -111,7 +111,7 @@ const EyeIcon = ({ visible }: { visible: boolean }) => (
 );
 
 const EmailIcon = () => (
-  <Svg width={18} height={18} viewBox="0 0 24 24" fill="none">
+  <Svg width={16} height={16} viewBox="0 0 24 24" fill="none">
     <Path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" stroke="#ffffff" strokeWidth={1.5} fill="none"/>
     <Path d="M22 6l-10 7L2 6" stroke="#ffffff" strokeWidth={1.5} fill="none"/>
   </Svg>
@@ -429,7 +429,7 @@ const ErrorPopupModal = ({
         <View style={styles.errorModalContainer}>
           <View style={styles.errorModalIconWrapper}>
             <View style={styles.errorModalIconCircle}>
-              <Svg width={32} height={32} viewBox="0 0 24 24" fill="none">
+              <Svg width={28} height={28} viewBox="0 0 24 24" fill="none">
                 <Circle cx="12" cy="12" r="10" stroke="#3b5bdb" strokeWidth="1.5" />
                 <Path d="M12 8v4M12 16h.01" stroke="#3b5bdb" strokeWidth="2" strokeLinecap="round" />
               </Svg>
@@ -453,7 +453,7 @@ const ErrorPopupModal = ({
   );
 };
 
-// ─── SUCCESS MODAL (FIXED) ────────────────────────────────────────────────────
+// ─── SUCCESS MODAL ────────────────────────────────────────────────────
 
 const SuccessModal = ({
   visible,
@@ -492,7 +492,7 @@ const SuccessModal = ({
         <View style={styles.errorModalContainer}>
           <View style={styles.errorModalIconWrapper}>
             <View style={[styles.errorModalIconCircle, { backgroundColor: '#d1fae5' }]}>
-              <Svg width={32} height={32} viewBox="0 0 24 24" fill="none">
+              <Svg width={28} height={28} viewBox="0 0 24 24" fill="none">
                 <Circle cx="12" cy="12" r="10" stroke="#10b981" strokeWidth="1.5" />
                 <Path d="M8 12l3 3 5-6" stroke="#10b981" strokeWidth="2" strokeLinecap="round" />
               </Svg>
@@ -526,57 +526,51 @@ const DiagramBackground = () => (
   </View>
 );
 
-// ─── PASSWORD PROGRESSIVE VALIDATION WITH SPECIAL CHARACTER ────────────────────
+// ─── PASSWORD STRENGTH HELPERS ────────────────────────────────────
 
-interface PasswordValidation {
-  minLength: boolean;
-  hasUpper: boolean;
-  hasLower: boolean;
-  hasNumber: boolean;
-  hasSpecial: boolean;
-}
-
-// Special characters regex
 const SPECIAL_CHARS_REGEX = /[!@#$%^&*(),.?":{}|<>]/;
 
-const PasswordStrengthIndicator = ({ password }: { password: string }) => {
-  const [validation, setValidation] = useState<PasswordValidation>({
-    minLength: false,
-    hasUpper: false,
-    hasLower: false,
-    hasNumber: false,
-    hasSpecial: false,
-  });
+const getStrengthPercentage = (pwd: string): number => {
+  let score = 0;
+  if (pwd.length >= 8) score++;
+  if (/[A-Z]/.test(pwd)) score++;
+  if (/[a-z]/.test(pwd)) score++;
+  if (/[0-9]/.test(pwd)) score++;
+  if (SPECIAL_CHARS_REGEX.test(pwd)) score++;
+  return (score / 5) * 100;
+};
 
-  useEffect(() => {
-    setValidation({
-      minLength: password.length >= 8,
-      hasUpper: /[A-Z]/.test(password),
-      hasLower: /[a-z]/.test(password),
-      hasNumber: /[0-9]/.test(password),
-      hasSpecial: SPECIAL_CHARS_REGEX.test(password),
-    });
-  }, [password]);
+const getStrengthColor = (pwd: string): string => {
+  const percentage = getStrengthPercentage(pwd);
+  if (percentage === 100) return '#10b981';
+  if (percentage >= 80) return '#f59e0b';
+  if (percentage >= 60) return '#f97316';
+  return '#ef4444';
+};
 
-  const getStrength = () => {
-    const passed = Object.values(validation).filter(Boolean).length;
-    if (passed === 5) return { text: 'Strong password!', color: '#10b981', percentage: 100 };
-    if (passed >= 4) return { text: 'Good password', color: '#f59e0b', percentage: 75 };
-    if (passed >= 3) return { text: 'Weak password', color: '#ef4444', percentage: 50 };
-    if (passed > 0) return { text: 'Very weak password', color: '#ef4444', percentage: 25 };
-    return { text: 'Enter a password', color: '#8896b3', percentage: 0 };
-  };
+const getStrengthLabel = (pwd: string): string => {
+  const percentage = getStrengthPercentage(pwd);
+  if (percentage === 100) return 'Strong';
+  if (percentage >= 80) return 'Good';
+  if (percentage >= 60) return 'Weak';
+  return 'Very weak';
+};
 
-  const strength = getStrength();
+// ─── COMPACT PASSWORD STRENGTH INDICATOR ────────────────────────────────────
 
+const CompactPasswordStrength = ({ password }: { password: string }) => {
   if (!password) return null;
 
   return (
     <View style={styles.strengthContainer}>
-      <View style={styles.strengthBar}>
-        <View style={[styles.strengthFill, { width: `${strength.percentage}%`, backgroundColor: strength.color }]} />
+      <View style={styles.strengthRow}>
+        <View style={styles.strengthBar}>
+          <View style={[styles.strengthFill, { width: `${getStrengthPercentage(password)}%`, backgroundColor: getStrengthColor(password) }]} />
+        </View>
+        <Text style={[styles.strengthText, { color: getStrengthColor(password) }]}>
+          {getStrengthLabel(password)}
+        </Text>
       </View>
-      <Text style={[styles.strengthText, { color: strength.color }]}>{strength.text}</Text>
     </View>
   );
 };
@@ -585,6 +579,8 @@ const PasswordStrengthIndicator = ({ password }: { password: string }) => {
 
 export default function SignUp() {
   const router = useRouter();
+  const { height: windowHeight } = useWindowDimensions();
+  const isSmallScreen = windowHeight < 680;
 
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
@@ -618,7 +614,6 @@ export default function SignUp() {
     agreed: '',
   });
 
-  // Inline password error state
   const [inlinePasswordError, setInlinePasswordError] = useState('');
 
   const [fullNameFocused, setFullNameFocused] = useState(false);
@@ -630,7 +625,6 @@ export default function SignUp() {
   const passwordRef = useRef<TextInput>(null);
   const confirmPasswordRef = useRef<TextInput>(null);
 
-  // Handle Google Sign-In redirect result for mobile
   useEffect(() => {
     const handleRedirectResult = async () => {
       if (!auth || Platform.OS === 'web') return;
@@ -700,7 +694,7 @@ export default function SignUp() {
     if (!/[A-Z]/.test(pwd)) missing.push('uppercase letter');
     if (!/[a-z]/.test(pwd)) missing.push('lowercase letter');
     if (!/[0-9]/.test(pwd)) missing.push('number');
-    if (!SPECIAL_CHARS_REGEX.test(pwd)) missing.push('special character (!@#$%^&* etc.)');
+    if (!SPECIAL_CHARS_REGEX.test(pwd)) missing.push('special character');
     return missing;
   };
 
@@ -757,7 +751,7 @@ export default function SignUp() {
     return isValid;
   };
 
-  // ─── GOOGLE SIGN-IN (shared function, used for both sign-up flow and error popup callbacks) ───
+  // ─── GOOGLE SIGN-IN ───
 
   const handleGoogleSignIn = async () => {
     if (!agreed) {
@@ -794,7 +788,7 @@ export default function SignUp() {
       setLoading(false);
       
       if (error.code === 'auth/popup-closed-by-user') {
-        // Do nothing - user cancelled
+        // Do nothing
       } else if (error.code === 'auth/popup-blocked') {
         showErrorPopup('Popup Blocked', 'Please allow popups for this website to sign in with Google.', undefined, 'OK');
       } else if (error.code === 'auth/network-request-failed') {
@@ -842,7 +836,7 @@ export default function SignUp() {
       if (error.response?.status === 409) {
         showErrorPopup(
           'Account Already Exists',
-          error.response?.data?.message || 'This email is already registered with email/password. Please sign in using your email and password instead.',
+          error.response?.data?.message || 'This email is already registered with email/password.',
           () => router.push('/(auth)/signin'),
           'Sign In with Email/Password',
           <EmailIcon />
@@ -855,12 +849,11 @@ export default function SignUp() {
     }
   };
 
-  // Google Sign-Up button click
   const handleGoogleSignUp = async () => {
     await handleGoogleSignIn();
   };
 
-  // ── Email/Password Sign Up (FIXED) ─────────────────────────────────────────
+  // ── Email/Password Sign Up ─────────────────────────────────────────
 
   const handleSignUp = async () => {
     if (!validate()) return;
@@ -963,21 +956,30 @@ export default function SignUp() {
       <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined} keyboardVerticalOffset={Platform.OS === 'ios' ? 64 : 0}>
         <DiagramBackground />
 
-        <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false} automaticallyAdjustKeyboardInsets={true} keyboardDismissMode="interactive" contentInsetAdjustmentBehavior="always">
+        <ScrollView 
+          contentContainerStyle={styles.scrollContent} 
+          keyboardShouldPersistTaps="handled" 
+          showsVerticalScrollIndicator={false} 
+          bounces={false}
+          automaticallyAdjustKeyboardInsets={true} 
+          keyboardDismissMode="interactive" 
+          contentInsetAdjustmentBehavior="always"
+        >
           <View style={styles.card}>
+            {/* Scaled-down connectors */}
             <View style={styles.connectorTop} />
             <View style={styles.connectorBottom} />
             <View style={styles.connectorLeft} />
             <View style={styles.connectorRight} />
 
-            <Text style={styles.heading}>Sign Up</Text>
+            <Text style={[styles.heading, isSmallScreen && { fontSize: 20 }]}>Sign Up</Text>
 
             {/* Full Name */}
             <View style={styles.formGroup}>
-              <Text style={styles.label}>Name</Text>
+              <Text style={styles.label}>Full Name</Text>
               <View style={[styles.inputWrap, fullNameFocused && styles.inputWrapFocused, errors.fullName ? styles.inputError : null]}>
                 <TextInput
-                  style={[styles.input, Platform.OS === 'web' && { outlineWidth: 1, outlineStyle: 'solid', outlineOffset: 0, borderRadius: 12, outlineColor: getOutlineColor(fullNameFocused, errors.fullName) }]}
+                  style={[styles.input, Platform.OS === 'web' && { outlineWidth: 1, outlineStyle: 'solid', outlineOffset: 0, borderRadius: 10, outlineColor: getOutlineColor(fullNameFocused, errors.fullName) }]}
                   placeholder="Juan dela Cruz"
                   placeholderTextColor="#b8c0d4"
                   value={fullName}
@@ -998,11 +1000,11 @@ export default function SignUp() {
 
             {/* Email */}
             <View style={styles.formGroup}>
-              <Text style={styles.label}>Email Address</Text>
+              <Text style={styles.label}>Email</Text>
               <View style={[styles.inputWrap, emailFocused && styles.inputWrapFocused, errors.email ? styles.inputError : null]}>
                 <TextInput
                   ref={emailRef}
-                  style={[styles.input, Platform.OS === 'web' && { outlineWidth: 1, outlineStyle: 'solid', outlineOffset: 0, borderRadius: 12, outlineColor: getOutlineColor(emailFocused, errors.email) }]}
+                  style={[styles.input, Platform.OS === 'web' && { outlineWidth: 1, outlineStyle: 'solid', outlineOffset: 0, borderRadius: 10, outlineColor: getOutlineColor(emailFocused, errors.email) }]}
                   placeholder="you@example.com"
                   placeholderTextColor="#b8c0d4"
                   value={email}
@@ -1025,13 +1027,13 @@ export default function SignUp() {
               {errors.email ? <Text style={styles.fieldError}>{errors.email}</Text> : null}
             </View>
 
-            {/* Password with Inline Error */}
+            {/* Password */}
             <View style={styles.formGroup}>
               <Text style={styles.label}>Password</Text>
               <View style={[styles.inputWrap, passwordFocused && styles.inputWrapFocused, errors.password ? styles.inputError : null]}>
                 <TextInput
                   ref={passwordRef}
-                  style={[styles.input, styles.inputWithIcon, Platform.OS === 'web' && { outlineWidth: 1, outlineStyle: 'solid', outlineOffset: 0, borderRadius: 12, outlineColor: getOutlineColor(passwordFocused, errors.password) }]}
+                  style={[styles.input, styles.inputWithIcon, Platform.OS === 'web' && { outlineWidth: 1, outlineStyle: 'solid', outlineOffset: 0, borderRadius: 10, outlineColor: getOutlineColor(passwordFocused, errors.password) }]}
                   placeholder="Create a strong password"
                   placeholderTextColor="#b8c0d4"
                   value={password}
@@ -1045,7 +1047,7 @@ export default function SignUp() {
                     setPasswordFocused(false);
                     if (password && !isPasswordValid(password)) {
                       const missing = getPasswordMissingRequirements(password);
-                      setInlinePasswordError(`Password must have ${missing.join(', ')}`);
+                      setInlinePasswordError(`Missing: ${missing.join(', ')}`);
                     } else {
                       setInlinePasswordError('');
                     }
@@ -1065,15 +1067,13 @@ export default function SignUp() {
                   <EyeIcon visible={showPassword} />
                 </TouchableOpacity>
               </View>
-              <PasswordStrengthIndicator password={password} />
-              {/* Inline error message */}
+              
+              <CompactPasswordStrength password={password} />
+              
               {inlinePasswordError ? (
                 <Text style={styles.inlineErrorText}>{inlinePasswordError}</Text>
               ) : null}
               {errors.password ? <Text style={styles.fieldError}>{errors.password}</Text> : null}
-              
-              {/* Password requirements hint */}
-              
             </View>
 
             {/* Confirm Password */}
@@ -1082,7 +1082,7 @@ export default function SignUp() {
               <View style={[styles.inputWrap, confirmPasswordFocused && styles.inputWrapFocused, errors.confirmPassword ? styles.inputError : null]}>
                 <TextInput
                   ref={confirmPasswordRef}
-                  style={[styles.input, styles.inputWithIcon, Platform.OS === 'web' && { outlineWidth: 1, outlineStyle: 'solid', outlineOffset: 0, borderRadius: 12, outlineColor: getOutlineColor(confirmPasswordFocused, errors.confirmPassword) }]}
+                  style={[styles.input, styles.inputWithIcon, Platform.OS === 'web' && { outlineWidth: 1, outlineStyle: 'solid', outlineOffset: 0, borderRadius: 10, outlineColor: getOutlineColor(confirmPasswordFocused, errors.confirmPassword) }]}
                   placeholder="Re-enter your password"
                   placeholderTextColor="#b8c0d4"
                   value={confirmPassword}
@@ -1104,15 +1104,17 @@ export default function SignUp() {
                   <EyeIcon visible={showConfirmPassword} />
                 </TouchableOpacity>
               </View>
-              {doPasswordsMatch() === false && !errors.confirmPassword ? (
-                <Text style={styles.fieldError}>Passwords do not match</Text>
-              ) : doPasswordsMatch() && password ? (
-                <Text style={styles.matchSuccess}>✓ Passwords match</Text>
+              {confirmPassword ? (
+                doPasswordsMatch() ? (
+                  <Text style={styles.matchSuccess}>✓ Match</Text>
+                ) : !errors.confirmPassword ? (
+                  <Text style={styles.fieldError}>✗ Doesn't match</Text>
+                ) : null
               ) : null}
               {errors.confirmPassword ? <Text style={styles.fieldError}>{errors.confirmPassword}</Text> : null}
             </View>
 
-            {/* Create Account Button */}
+            {/* Sign Up Button */}
             <TouchableOpacity style={[styles.btnCreate, loading && styles.btnDisabled]} onPress={handleSignUp} activeOpacity={0.85} disabled={loading}>
               {loading ? (
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
@@ -1120,38 +1122,42 @@ export default function SignUp() {
                   <Text style={styles.btnCreateText}>Creating Account...</Text>
                 </View>
               ) : (
-                <Text style={styles.btnCreateText}>Sign up</Text>
+                <Text style={styles.btnCreateText}>Sign Up</Text>
               )}
             </TouchableOpacity>
 
-            {/* Divider */}
-            <View style={styles.divider}>
-              <View style={styles.line} />
-              <Text style={styles.orText}>OR</Text>
-              <View style={styles.line} />
-            </View>
+            {/* Divider - web only for Google button */}
+            {Platform.OS === 'web' && (
+              <>
+                <View style={styles.divider}>
+                  <View style={styles.line} />
+                  <Text style={styles.orText}>or</Text>
+                  <View style={styles.line} />
+                </View>
 
-            {/* Google Sign Up Button */}
-            <TouchableOpacity style={[styles.btnGoogle, loading && styles.btnDisabled]} onPress={handleGoogleSignUp} activeOpacity={0.85} disabled={loading}>
-              {loading ? <ActivityIndicator color="#3b5bdb" size="small" /> : <GoogleIcon />}
-              <Text style={styles.btnGoogleText}>Sign up with Google</Text>
-            </TouchableOpacity>
+                {/* Google Sign Up */}
+                <TouchableOpacity style={[styles.btnGoogle, loading && styles.btnDisabled]} onPress={handleGoogleSignUp} activeOpacity={0.85} disabled={loading}>
+                  {loading ? <ActivityIndicator color="#3b5bdb" size="small" /> : <GoogleIcon />}
+                  <Text style={styles.btnGoogleText}>Continue with Google</Text>
+                </TouchableOpacity>
+              </>
+            )}
 
-            {/* Terms checkbox row */}
+            {/* Terms */}
             <View style={[styles.termsWrap, errors.agreed ? styles.termsError : null]}>
               <TouchableOpacity onPress={handleToggleAgreement} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
                 <View style={[styles.customCheckbox, agreed && styles.customCheckboxChecked]}>
                   {agreed && (
-                    <Svg width={10} height={10} viewBox="0 0 10 10">
+                    <Svg width={9} height={9} viewBox="0 0 10 10">
                       <Path d="M2 5l2.5 2.5L8 3" stroke="white" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" fill="none" />
                     </Svg>
                   )}
                 </View>
               </TouchableOpacity>
               <Text style={styles.termsText}>
-                {'I agree to the '}
-                <Text style={styles.termsLink} onPress={openPolicyModal}>Terms and Conditions</Text>
-                {' and '}
+                I agree to the{' '}
+                <Text style={styles.termsLink} onPress={openPolicyModal}>Terms and Condition</Text>
+                {' & '}
                 <Text style={styles.termsLink} onPress={openPolicyModal}>Privacy Policy</Text>
               </Text>
             </View>
@@ -1159,7 +1165,7 @@ export default function SignUp() {
 
             {/* Sign In link */}
             <View style={styles.signinWrap}>
-              <Text style={styles.signinText}>Already have an account? </Text>
+              <Text style={styles.signinText}>Have an account? </Text>
               <TouchableOpacity onPress={() => router.push('/(auth)/signin')}>
                 <Text style={styles.signinLink}>Sign In</Text>
               </TouchableOpacity>
@@ -1175,56 +1181,355 @@ export default function SignUp() {
 
 const styles = StyleSheet.create({
   flex: { flex: 1, backgroundColor: '#eef2ff' },
-  scrollContent: { flexGrow: 1, justifyContent: 'center', alignItems: 'center', paddingVertical: 40, paddingHorizontal: 16, minHeight: SCREEN_HEIGHT },
-  card: { backgroundColor: '#ffffff', borderRadius: 24, paddingHorizontal: 28, paddingVertical: 28, width: '100%', maxWidth: 420, minWidth: 320, position: 'relative', shadowColor: '#1e293b', shadowOffset: { width: 0, height: 20 }, shadowOpacity: 0.08, shadowRadius: 40, elevation: 10, marginTop: -25, borderColor: '#f1f5ff' },
-  connectorTop: { position: 'absolute', top: -5, alignSelf: 'center', width: 10, height: 10, borderRadius: 5, backgroundColor: '#ffffff', borderWidth: 2, borderColor: '#c7d2fe' },
-  connectorBottom: { position: 'absolute', bottom: -5, alignSelf: 'center', width: 10, height: 10, borderRadius: 5, backgroundColor: '#ffffff', borderWidth: 2, borderColor: '#c7d2fe' },
-  connectorLeft: { position: 'absolute', left: -5, top: '50%', transform: [{ translateY: -5 }], width: 10, height: 10, borderRadius: 5, backgroundColor: '#ffffff', borderWidth: 2, borderColor: '#c7d2fe' },
-  connectorRight: { position: 'absolute', right: -5, top: '50%', transform: [{ translateY: -5 }], width: 10, height: 10, borderRadius: 5, backgroundColor: '#ffffff', borderWidth: 2, borderColor: '#c7d2fe' },
-  heading: { fontSize: 28, fontWeight: '800', color: '#0f172a', textAlign: 'center', marginBottom: 24 },
-  formGroup: { marginBottom: 16 },
-  label: { fontSize: 13, fontWeight: '600', color: '#334155', marginBottom: 6 },
-  inputWrap: { borderWidth: 1, borderColor: '#dde3fa', borderRadius: 12, backgroundColor: '#ffffff', minHeight: 40, justifyContent: 'center' },
-  inputWrapFocused: { backgroundColor: '#ffffff', shadowColor: '#3b5bdb', shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.15, shadowRadius: 12, elevation: 4 },
-  input: { flex: 1, paddingHorizontal: 14, paddingVertical: Platform.OS === 'ios' ? 13 : 11, fontSize: 14, color: '#1a1f36', backgroundColor: 'transparent', minHeight: 44, textAlignVertical: 'center' },
-  inputWithIcon: { paddingRight: 44 },
-  eyeBtn: { position: 'absolute', right: 12, padding: 10 },
-  inputError: { borderColor: '#ef4444' },
-  fieldError: { fontSize: 12, color: '#ef4444', marginTop: 6, marginLeft: 4, fontWeight: '500' },
-  inlineErrorText: { fontSize: 12, color: '#f59e0b', marginTop: 4, marginLeft: 4, fontWeight: '500' },
-  passwordHint: { fontSize: 11, color: '#8896b3', marginTop: 6, marginLeft: 4 },
-  strengthContainer: { marginTop: 8 },
-  strengthBar: { height: 4, backgroundColor: '#e2e6f3', borderRadius: 2, overflow: 'hidden', marginBottom: 6 },
-  strengthFill: { height: '100%', borderRadius: 2 },
-  strengthText: { fontSize: 11, marginBottom: 6 },
-  matchSuccess: { color: '#10b981', fontSize: 11, marginTop: 6, marginLeft: 4 },
-  btnCreate: { backgroundColor: '#3b5bdb', borderRadius: 12, borderWidth: 1, borderColor: '#2f49c7', paddingVertical: 12, alignItems: 'center', marginTop: 5, overflow: 'hidden', shadowColor: '#3b5bdb', shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.25, shadowRadius: 20, elevation: 8 },
-  btnDisabled: { opacity: 0.75 },
-  btnCreateText: { color: '#ffffff', fontSize: 15, fontWeight: '700', letterSpacing: 0.3 },
-  divider: { flexDirection: 'row', alignItems: 'center', marginVertical: 10 },
-  line: { flex: 1, height: 1, backgroundColor: '#e5e9f5' },
-  orText: { marginHorizontal: 10, fontSize: 12, color: '#8896b3', fontWeight: '600' },
-  btnGoogle: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, borderWidth: 1, borderColor: '#e5e7eb', borderRadius: 12, paddingVertical: 12, marginTop: 5, backgroundColor: '#ffffff' },
-  btnGoogleText: { fontSize: 14, fontWeight: '500', color: '#1a1f36' },
-  termsWrap: { flexDirection: 'row', alignItems: 'flex-start', gap: 10, marginTop: 14, padding: 10, borderWidth: 1.5, borderColor: '#e2e6f3', borderRadius: 10, backgroundColor: '#f8f9ff' },
-  termsError: { borderColor: '#ef4444' },
-  customCheckbox: { width: 18, height: 18, borderRadius: 9, borderWidth: 2, borderColor: '#8896b3', alignItems: 'center', justifyContent: 'center', marginTop: 1, flexShrink: 0 },
-  customCheckboxChecked: { borderColor: '#3b5bdb', backgroundColor: '#3b5bdb' },
-  termsText: { fontSize: 12.5, color: '#4a5568', flex: 1, lineHeight: 18 },
-  termsLink: { fontWeight: '700', color: '#3b5bdb' },
-  signinWrap: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', marginTop: 20 },
-  signinText: { fontSize: 13, color: '#64748b' },
-  signinLink: { fontSize: 13, fontWeight: '700', color: '#3b5bdb' },
-  gridBackground: { ...StyleSheet.absoluteFillObject, width: '100%', height: '100%' },
-  gridOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(255,255,255,0.10)' },
-  errorModalOverlay: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.5)', justifyContent: 'center', alignItems: 'center' },
-  errorModalContainer: { width: '85%', maxWidth: 340, backgroundColor: '#FFFFFF', borderRadius: 20, padding: 24, alignItems: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.15, shadowRadius: 12, elevation: 8 },
-  errorModalIconWrapper: { marginBottom: 16 },
-  errorModalIconCircle: { width: 64, height: 64, borderRadius: 32, backgroundColor: '#f0f4ff', justifyContent: 'center', alignItems: 'center' },
-  errorModalTitle: { fontSize: 20, fontWeight: '700', color: '#1e293b', textAlign: 'center', marginBottom: 8 },
-  errorModalMessage: { fontSize: 14, color: '#64748b', textAlign: 'center', lineHeight: 20, marginBottom: 24 },
-  errorModalButtonPrimary: { width: '100%', paddingVertical: 12, borderRadius: 10, alignItems: 'center', backgroundColor: '#3b5bdb', flexDirection: 'row', justifyContent: 'center' },
-  errorModalButtonTextPrimary: { color: '#ffffff', fontSize: 16, fontWeight: '600' },
+  scrollContent: { 
+    flexGrow: 1, 
+    justifyContent: 'center', 
+    alignItems: 'center', 
+    paddingVertical: 16, 
+    paddingHorizontal: 12, 
+    minHeight: SCREEN_HEIGHT 
+  },
+  card: { 
+    backgroundColor: '#ffffff', 
+    borderRadius: 20, 
+    paddingHorizontal: 22, 
+    paddingVertical: 22, 
+    width: '100%', 
+    maxWidth: 400, 
+    minWidth: 300, 
+    position: 'relative', 
+    shadowColor: '#1e293b', 
+    shadowOffset: { width: 0, height: 10 }, 
+    shadowOpacity: 0.06, 
+    shadowRadius: 20, 
+    elevation: 8, 
+    marginTop: 0, 
+    borderColor: '#f1f5ff' 
+  },
+  connectorTop: { 
+    position: 'absolute', 
+    top: -4, 
+    alignSelf: 'center', 
+    width: 8, 
+    height: 8, 
+    borderRadius: 4, 
+    backgroundColor: '#ffffff', 
+    borderWidth: 1.5, 
+    borderColor: '#c7d2fe' 
+  },
+  connectorBottom: { 
+    position: 'absolute', 
+    bottom: -4, 
+    alignSelf: 'center', 
+    width: 8, 
+    height: 8, 
+    borderRadius: 4, 
+    backgroundColor: '#ffffff', 
+    borderWidth: 1.5, 
+    borderColor: '#c7d2fe' 
+  },
+  connectorLeft: { 
+    position: 'absolute', 
+    left: -4, 
+    top: '50%', 
+    transform: [{ translateY: -4 }], 
+    width: 8, 
+    height: 8, 
+    borderRadius: 4, 
+    backgroundColor: '#ffffff', 
+    borderWidth: 1.5, 
+    borderColor: '#c7d2fe' 
+  },
+  connectorRight: { 
+    position: 'absolute', 
+    right: -4, 
+    top: '50%', 
+    transform: [{ translateY: -4 }], 
+    width: 8, 
+    height: 8, 
+    borderRadius: 4, 
+    backgroundColor: '#ffffff', 
+    borderWidth: 1.5, 
+    borderColor: '#c7d2fe' 
+  },
+  heading: { 
+    fontSize: 22, 
+    fontWeight: '800', 
+    color: '#0f172a', 
+    textAlign: 'center', 
+    marginBottom: 14 
+  },
+  formGroup: { 
+    marginBottom: 10 
+  },
+  label: { 
+    fontSize: 12, 
+    fontWeight: '600', 
+    color: '#334155', 
+    marginBottom: 3 
+  },
+  inputWrap: { 
+    borderWidth: 1, 
+    borderColor: '#dde3fa', 
+    borderRadius: 10, 
+    backgroundColor: '#ffffff', 
+    minHeight: 36, 
+    justifyContent: 'center' 
+  },
+  inputWrapFocused: { 
+    backgroundColor: '#ffffff', 
+    shadowColor: '#3b5bdb', 
+    shadowOffset: { width: 0, height: 4 }, 
+    shadowOpacity: 0.1, 
+    shadowRadius: 8, 
+    elevation: 3 
+  },
+  input: { 
+    flex: 1, 
+    paddingHorizontal: 12, 
+    paddingVertical: Platform.OS === 'ios' ? 9 : 8, 
+    fontSize: 13, 
+    color: '#1a1f36', 
+    backgroundColor: 'transparent', 
+    minHeight: 40, 
+    textAlignVertical: 'center' 
+  },
+  inputWithIcon: { 
+    paddingRight: 40 
+  },
+  eyeBtn: { 
+    position: 'absolute', 
+    right: 8, 
+    padding: 8 
+  },
+  inputError: { 
+    borderColor: '#ef4444' 
+  },
+  fieldError: { 
+    fontSize: 11, 
+    color: '#ef4444', 
+    marginTop: 3, 
+    marginLeft: 2, 
+    fontWeight: '500' 
+  },
+  inlineErrorText: { 
+    fontSize: 11, 
+    color: '#f59e0b', 
+    marginTop: 2, 
+    marginLeft: 2, 
+    fontWeight: '500' 
+  },
+  strengthContainer: { 
+    marginTop: 4 
+  },
+  strengthRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  strengthBar: { 
+    flex: 1,
+    height: 3, 
+    backgroundColor: '#e2e6f3', 
+    borderRadius: 1.5, 
+    overflow: 'hidden' 
+  },
+  strengthFill: { 
+    height: '100%', 
+    borderRadius: 1.5 
+  },
+  strengthText: { 
+    fontSize: 10, 
+    fontWeight: '600',
+    minWidth: 48,
+    textAlign: 'right',
+  },
+  matchSuccess: { 
+    color: '#10b981', 
+    fontSize: 11, 
+    marginTop: 3, 
+    marginLeft: 2, 
+    fontWeight: '500'
+  },
+  btnCreate: { 
+    backgroundColor: '#3b5bdb', 
+    borderRadius: 10, 
+    borderWidth: 1, 
+    borderColor: '#2f49c7', 
+    paddingVertical: 10, 
+    alignItems: 'center', 
+    marginTop: 4, 
+    overflow: 'hidden', 
+    shadowColor: '#3b5bdb', 
+    shadowOffset: { width: 0, height: 6 }, 
+    shadowOpacity: 0.2, 
+    shadowRadius: 12, 
+    elevation: 6 
+  },
+  btnDisabled: { 
+    opacity: 0.75 
+  },
+  btnCreateText: { 
+    color: '#ffffff', 
+    fontSize: 14, 
+    fontWeight: '700', 
+    letterSpacing: 0.3 
+  },
+  divider: { 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    marginVertical: 8 
+  },
+  line: { 
+    flex: 1, 
+    height: 1, 
+    backgroundColor: '#e5e9f5' 
+  },
+  orText: { 
+    marginHorizontal: 8, 
+    fontSize: 11, 
+    color: '#8896b3', 
+    fontWeight: '600' 
+  },
+  btnGoogle: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    borderRadius: 10,
+    paddingVertical: 9,
+    marginTop: 4,
+    backgroundColor: '#ffffff',
+  },
+  btnGoogleText: {
+    fontSize: 13,
+    fontWeight: '500',
+    color: '#1a1f36',
+    marginLeft: 6,
+  },
+  termsWrap: { 
+    flexDirection: 'row', 
+    alignItems: 'flex-start', 
+    gap: 8, 
+    marginTop: 10, 
+    padding: 8, 
+    borderWidth: 1, 
+    borderColor: '#e2e6f3', 
+    borderRadius: 8, 
+    backgroundColor: '#f8f9ff' 
+  },
+  termsError: { 
+    borderColor: '#ef4444' 
+  },
+  customCheckbox: { 
+    width: 16, 
+    height: 16, 
+    borderRadius: 8, 
+    borderWidth: 2, 
+    borderColor: '#8896b3', 
+    alignItems: 'center', 
+    justifyContent: 'center', 
+    marginTop: 1, 
+    flexShrink: 0 
+  },
+  customCheckboxChecked: { 
+    borderColor: '#3b5bdb', 
+    backgroundColor: '#3b5bdb' 
+  },
+  termsText: { 
+    fontSize: 11.5, 
+    color: '#4a5568', 
+    flex: 1, 
+    lineHeight: 16 
+  },
+  termsLink: { 
+    fontWeight: '700', 
+    color: '#3b5bdb' 
+  },
+  signinWrap: { 
+    flexDirection: 'row', 
+    justifyContent: 'center', 
+    alignItems: 'center', 
+    marginTop: 12 
+  },
+  signinText: { 
+    fontSize: 12, 
+    color: '#64748b' 
+  },
+  signinLink: { 
+    fontSize: 12, 
+    fontWeight: '700', 
+    color: '#3b5bdb' 
+  },
+  gridBackground: { 
+    ...StyleSheet.absoluteFillObject, 
+    width: '100%', 
+    height: '100%' 
+  },
+  gridOverlay: { 
+    ...StyleSheet.absoluteFillObject, 
+    backgroundColor: 'rgba(255,255,255,0.10)' 
+  },
+  errorModalOverlay: { 
+    flex: 1, 
+    backgroundColor: 'rgba(0, 0, 0, 0.5)', 
+    justifyContent: 'center', 
+    alignItems: 'center' 
+  },
+  errorModalContainer: { 
+    width: '85%', 
+    maxWidth: 320, 
+    backgroundColor: '#FFFFFF', 
+    borderRadius: 20, 
+    padding: 20, 
+    alignItems: 'center', 
+    shadowColor: '#000', 
+    shadowOffset: { width: 0, height: 4 }, 
+    shadowOpacity: 0.15, 
+    shadowRadius: 12, 
+    elevation: 8 
+  },
+  errorModalIconWrapper: { 
+    marginBottom: 12 
+  },
+  errorModalIconCircle: { 
+    width: 56, 
+    height: 56, 
+    borderRadius: 28, 
+    backgroundColor: '#f0f4ff', 
+    justifyContent: 'center', 
+    alignItems: 'center' 
+  },
+  errorModalTitle: { 
+    fontSize: 18, 
+    fontWeight: '700', 
+    color: '#1e293b', 
+    textAlign: 'center', 
+    marginBottom: 6 
+  },
+  errorModalMessage: { 
+    fontSize: 13, 
+    color: '#64748b', 
+    textAlign: 'center', 
+    lineHeight: 18, 
+    marginBottom: 20 
+  },
+  errorModalButtonPrimary: { 
+    width: '100%', 
+    paddingVertical: 10, 
+    borderRadius: 10, 
+    alignItems: 'center', 
+    backgroundColor: '#3b5bdb', 
+    flexDirection: 'row', 
+    justifyContent: 'center' 
+  },
+  errorModalButtonTextPrimary: { 
+    color: '#ffffff', 
+    fontSize: 14, 
+    fontWeight: '600' 
+  },
 });
 
 const modalStyles = StyleSheet.create({

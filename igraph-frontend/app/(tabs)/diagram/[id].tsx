@@ -660,7 +660,7 @@ const DiagramDetail: React.FC = () => {
   });
 
   const handleGoToHome = () => {
-    router.replace('/(tabs)');
+    router.replace('/(tabs)/home');
   };
 
   const handleScroll = Animated.event(
