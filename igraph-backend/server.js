@@ -16,7 +16,10 @@ const app = express();
 
 // ALLOWED ORIGINS - Add ALL your domains here
 const allowedOrigins = [
-  // Production
+  // Production - YOUR NEW DOMAIN
+  'https://igraphitv1.netlify.app',  // ⭐ ADDED THIS
+  
+  // Production - Other domains
   'https://igraph-frontend.vercel.app',
   'https://igraph-it.vercel.app',
   'https://igraph-it.netlify.app',
@@ -74,7 +77,10 @@ const corsOptions = {
     // Allow any localhost for development
     const isLocal = /^https?:\/\/(localhost|127\.0\.0\.1|192\.168\.|10\.0\.0\.)/.test(origin);
     
-    if (isAllowed || isLocal) {
+    // ⭐ Allow any Netlify subdomain for production flexibility
+    const isNetlify = /^https?:\/\/.*\.netlify\.app/.test(origin);
+    
+    if (isAllowed || isLocal || isNetlify) {
       console.log(`✅ CORS allowed: ${origin}`);
       callback(null, true);
     } else {
@@ -116,8 +122,9 @@ app.use((req, res, next) => {
     });
     
     const isLocal = /^https?:\/\/(localhost|127\.0\.0\.1|192\.168\.|10\.0\.0\.)/.test(origin);
+    const isNetlify = /^https?:\/\/.*\.netlify\.app/.test(origin);
     
-    if (isAllowed || isLocal) {
+    if (isAllowed || isLocal || isNetlify) {
       res.header('Access-Control-Allow-Origin', origin);
       res.header('Access-Control-Allow-Credentials', 'true');
       res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS, PATCH');
