@@ -9,7 +9,7 @@ import {
   Platform, 
   Pressable, 
   Keyboard, 
-  ScrollView,
+  FlatList,
   useWindowDimensions,
   LayoutAnimation,
   UIManager,
@@ -232,7 +232,7 @@ const PreviewGlyph = ({ color }: { color: string }) => (
   </Svg>
 );
 
-const TabButton = ({ 
+const TabButton = React.memo(({ 
   label, 
   count, 
   isActive, 
@@ -260,9 +260,9 @@ const TabButton = ({
       </Text>
     </View>
   </Pressable>
-);
+));
 
-const DiagramCard = ({ 
+const DiagramCard = React.memo(({ 
   title, 
   type, 
   onPress,
@@ -360,7 +360,7 @@ const DiagramCard = ({
       </Animated.View>
     </Pressable>
   );
-};
+});
 
 const useFilteredDiagrams = (activeTab: TabType, searchQuery: string) => {
   return useMemo(() => {
@@ -390,6 +390,7 @@ const useResponsiveLayout = () => {
         ? (width - 44) / 2 
         : 300,
     containerPadding: width < 768 ? 16 : width < 1024 ? 24 : 32,
+    numColumns: width < 768 ? 1 : width < 1024 ? 2 : 3,
   }), [width]);
 };
 
@@ -451,6 +452,31 @@ export default function Home() {
       pathname: `/(tabs)/diagram/${id}` as any,
     });
   }, [router]);
+
+  // Memoized render item for FlatList
+  const renderItem = useCallback(({ item }: { item: Diagram }) => (
+    <View style={[styles.gridItem, { width: layout.cardWidth }]}>
+      <DiagramCard
+        title={item.title}
+        type={item.type}
+        onPress={() => handleDiagramPress(item.id)}
+      />
+    </View>
+  ), [layout.cardWidth, handleDiagramPress]);
+
+  // Memoized key extractor
+  const keyExtractor = useCallback((item: Diagram) => item.id.toString(), []);
+
+  // Empty list component
+  const ListEmptyComponent = useCallback(() => (
+    <View style={styles.emptyState}>
+      <EmptySearchIcon />
+      <Text style={styles.emptyStateTitle}>No diagrams found</Text>
+      <Text style={styles.emptyStateText}>
+        Try adjusting your search or switching tabs
+      </Text>
+    </View>
+  ), []);
 
   if (!showContent) {
     return <HomeGridSkeleton />;
@@ -519,39 +545,38 @@ export default function Home() {
         )}
       </View>
 
-      <ScrollView 
+      <FlatList
+        data={filteredDiagrams}
+        keyExtractor={keyExtractor}
+        renderItem={renderItem}
+        ListEmptyComponent={ListEmptyComponent}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={[
           styles.scrollContent,
           { paddingHorizontal: layout.containerPadding }
         ]}
         keyboardShouldPersistTaps="handled"
-      >
-        {filteredDiagrams.length === 0 ? (
-          <View style={styles.emptyState}>
-            <EmptySearchIcon />
-            <Text style={styles.emptyStateTitle}>No diagrams found</Text>
-            <Text style={styles.emptyStateText}>
-              Try adjusting your search or switching tabs
-            </Text>
-          </View>
-        ) : (
-          <View style={styles.grid}>
-            {filteredDiagrams.map((diagram) => (
-              <View
-                key={diagram.id}
-                style={[styles.gridItem, { width: layout.cardWidth }]}
-              >
-                <DiagramCard
-                  title={diagram.title}
-                  type={diagram.type}
-                  onPress={() => handleDiagramPress(diagram.id)}
-                />
-              </View>
-            ))}
-          </View>
-        )}
-      </ScrollView>
+        numColumns={layout.numColumns}
+        key={layout.numColumns} // Force re-render when columns change
+        columnWrapperStyle={layout.numColumns > 1 ? {
+          gap: 12,
+          justifyContent: 'center',
+          marginBottom: 4,
+        } : undefined}
+        initialNumToRender={6}
+        maxToRenderPerBatch={6}
+        windowSize={5}
+        removeClippedSubviews={Platform.OS !== 'web'}
+        getItemLayout={layout.numColumns > 1 ? (data, index) => {
+          const row = Math.floor(index / layout.numColumns);
+          const itemHeight = 250; // Estimated height per item
+          return {
+            length: itemHeight,
+            offset: itemHeight * row,
+            index,
+          };
+        } : undefined}
+      />
     </View>
   );
 }
@@ -762,14 +787,9 @@ const styles = StyleSheet.create({
     flexGrow: 1,
     paddingBottom: 32,
   },
-  grid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'center',
-    gap: 12,
-  },
   gridItem: {
     marginBottom: 4,
+    alignSelf: 'center',
   },
   
   cardTouchable: {
@@ -874,17 +894,17 @@ const styles = StyleSheet.create({
     paddingTop: 80,
     paddingHorizontal: 32,
   },
+  emptyStateText: {
+    fontSize: 14,
+    color: '#64748b',
+    textAlign: 'center',
+    lineHeight: 20,
+  },
   emptyStateTitle: {
     fontSize: 18,
     fontWeight: '600',
     color: '#0f172a',
     marginTop: 16,
     marginBottom: 8,
-  },
-  emptyStateText: {
-    fontSize: 14,
-    color: '#64748b',
-    textAlign: 'center',
-    lineHeight: 20,
   },
 });

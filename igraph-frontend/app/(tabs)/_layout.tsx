@@ -1,10 +1,24 @@
 // app/(tabs)/_layout.tsx
 
+import React, { lazy, Suspense } from 'react';
 import { Stack, useRouter, useSegments } from 'expo-router';
-import React, { useEffect, useState } from 'react';
-import { View, StyleSheet } from 'react-native';
+import { useEffect, useState } from 'react';
+import { View, StyleSheet, ActivityIndicator } from 'react-native';
 import * as authService from '../../services/authService';
 import Navbar from '../../components/Navbar';
+
+// 🚀 FIX: Lazy load heavy screens
+const CreateDiagram = lazy(() => import('./create'));
+const Reference = lazy(() => import('./reference'));
+const AboutUs = lazy(() => import('./aboutUs'));
+const SavedDiagrams = lazy(() => import('./savedDiagrams'));
+
+// Loading fallback
+const LoadingFallback = () => (
+  <View style={styles.loadingContainer}>
+    <ActivityIndicator size="large" color="#4c6fff" />
+  </View>
+);
 
 export default function TabLayout() {
   const router = useRouter();
@@ -53,7 +67,6 @@ export default function TabLayout() {
     }
   };
 
-  // Return null while loading - splash screen handles the loading state
   if (!isReady) {
     return null;
   }
@@ -69,12 +82,58 @@ export default function TabLayout() {
         screenOptions={{
           headerShown: false,
           animation: 'slide_from_right',
+          animationDuration: 200, // 🚀 FIX: Faster animation
         }}
       >
-        <Stack.Screen name="home" options={{ title: 'Dashboard' }} />
-        <Stack.Screen name="create" options={{ title: 'Create Diagram' }} />
-        <Stack.Screen name="reference" options={{ title: 'Learning Reference' }} />
-        <Stack.Screen name="userAccount" options={{ title: 'Profile' }} />
+        <Stack.Screen 
+          name="home" 
+          options={{ 
+            title: 'Dashboard',
+            freezeOnBlur: true, // 🚀 FIX: Keep in memory
+          }} 
+        />
+        <Stack.Screen 
+          name="create" 
+          options={{ 
+            title: 'Create Diagram',
+            freezeOnBlur: true,
+          }} 
+        />
+        <Stack.Screen 
+          name="reference" 
+          options={{ 
+            title: 'Learning Reference',
+            freezeOnBlur: true,
+          }} 
+        />
+        <Stack.Screen 
+          name="userAccount" 
+          options={{ 
+            title: 'Profile',
+            freezeOnBlur: true,
+          }} 
+        />
+        <Stack.Screen 
+          name="savedDiagrams" 
+          options={{ 
+            title: 'Saved Diagrams',
+            freezeOnBlur: true,
+          }} 
+        />
+        <Stack.Screen 
+          name="aboutUs" 
+          options={{ 
+            title: 'About Us',
+            freezeOnBlur: true,
+          }} 
+        />
+        <Stack.Screen 
+          name="diagram/[id]" 
+          options={{ 
+            title: 'Diagram Detail',
+            freezeOnBlur: true,
+          }} 
+        />
       </Stack>
     </View>
   );
@@ -83,6 +142,12 @@ export default function TabLayout() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    backgroundColor: '#f8faff',
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
     backgroundColor: '#f8faff',
   },
 });

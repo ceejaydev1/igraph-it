@@ -56,31 +56,25 @@ const storage = {
 };
 
 // ============================================================================
-// AXIOS CLIENT WITH PROFESSIONAL CONFIG
+// AXIOS CLIENT
 // ============================================================================
 
-// Create axios instance with proper base URL
 const api = axios.create({
   baseURL: `${API_BASE_URL}/api`,
   headers: {
     'Content-Type': 'application/json',
     'Accept': 'application/json',
   },
-  timeout: 30000,
+  timeout: 15000,
   withCredentials: true,
 });
 
-// Request interceptor - Add token and log
 api.interceptors.request.use(
   async (config) => {
     const token = await storage.getItem('accessToken');
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
-    
-    console.log(`📤 ${config.method.toUpperCase()} ${config.baseURL}${config.url}`);
-    console.log(`   📡 Headers:`, { ...config.headers, Authorization: 'Bearer ***' });
-    
     return config;
   },
   (error) => {
@@ -89,31 +83,20 @@ api.interceptors.request.use(
   }
 );
 
-// Response interceptor - Log and handle errors
 api.interceptors.response.use(
   (response) => {
-    console.log(`📥 ${response.status} ${response.config.url}`);
     return response;
   },
   async (error) => {
     const originalRequest = error.config;
 
-    // Network error handling
     if (error.code === 'ERR_NETWORK' || error.message === 'Network Error') {
-      console.error('❌ NETWORK ERROR - Cannot reach backend at:', API_BASE_URL);
-      console.error('   💡 Possible solutions:');
-      console.error('   - Start backend: cd igraph-backend && npm run dev');
-      console.error('   - Check firewall settings');
-      console.error('   - Verify the API URL is correct');
-      console.error(`   - Current URL: ${API_BASE_URL}`);
-      
+      console.error('❌ NETWORK ERROR');
       const networkError = new Error('Cannot connect to server. Please ensure the backend is running.');
       networkError.code = 'NETWORK_ERROR';
-      networkError.details = { url: API_BASE_URL };
       return Promise.reject(networkError);
     }
 
-    // Handle unauthorized (401) - token refresh
     const isAuthRoute = originalRequest.url?.includes('/auth/signin') ||
                         originalRequest.url?.includes('/auth/signup') ||
                         originalRequest.url?.includes('/auth/google') ||
@@ -138,11 +121,8 @@ api.interceptors.response.use(
       }
     }
 
-    // Log other errors
     if (error.response) {
       console.error(`❌ API Error ${error.response.status}:`, error.response.data?.message || error.message);
-    } else {
-      console.error('❌ Unknown error:', error.message);
     }
 
     return Promise.reject(error);
@@ -179,6 +159,29 @@ export const getAccessToken = async () => {
 
 export const getRefreshToken = async () => {
   return await storage.getItem('refreshToken');
+};
+
+// ============================================================================
+// 🚀 FIX: CACHING LAYER
+// ============================================================================
+
+let cachedUserData = null;
+let cacheTimestamp = null;
+const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
+
+export const getCachedUser = async () => {
+  if (cachedUserData && cacheTimestamp) {
+    const elapsed = Date.now() - cacheTimestamp;
+    if (elapsed < CACHE_DURATION) {
+      return cachedUserData;
+    }
+  }
+  return null;
+};
+
+export const setCachedUser = (data) => {
+  cachedUserData = data;
+  cacheTimestamp = Date.now();
 };
 
 // ============================================================================
@@ -234,6 +237,11 @@ export const signIn = async (email, password, consentTimestamp = null) => {
       if (Platform.OS === 'web' && response.data.data.user) {
         localStorage.setItem('user', JSON.stringify(response.data.data.user));
       }
+      
+      // Cache user data
+      if (response.data.data.user) {
+        setCachedUser(response.data.data.user);
+      }
     }
     
     return response.data;
@@ -258,6 +266,9 @@ export const googleAuth = async (idToken, consentTimestamp = null) => {
       );
       if (Platform.OS === 'web' && response.data.data.user) {
         localStorage.setItem('user', JSON.stringify(response.data.data.user));
+      }
+      if (response.data.data.user) {
+        setCachedUser(response.data.data.user);
       }
     }
     return response.data;
@@ -324,6 +335,10 @@ export const verifyToken = async () => {
     const response = await api.get('/auth/me');
     
     if (response.data && response.data.success === true) {
+      // Cache user data
+      if (response.data.data?.user) {
+        setCachedUser(response.data.data.user);
+      }
       return {
         success: true,
         data: response.data.data || null
@@ -349,6 +364,8 @@ export const logout = async () => {
     }
   }
   await clearTokens();
+  cachedUserData = null;
+  cacheTimestamp = null;
 };
 
 export const checkAuthStatus = async () => {
@@ -374,7 +391,7 @@ export const recordConsent = async (consentTimestamp) => {
 };
 
 // ============================================================================
-// USER ACCOUNT METHODS - Simplified (no profile picture)
+// USER ACCOUNT METHODS
 // ============================================================================
 
 export const changePassword = async (currentPassword, newPassword) => {
@@ -400,10 +417,6 @@ export const changePassword = async (currentPassword, newPassword) => {
   }
 };
 
-// ============================================================================
-// ✅ SIMPLIFIED UPDATE PROFILE - Name only (no profile picture)
-// ============================================================================
-
 export const updateProfile = async (data) => {
   try {
     console.log('📤 Updating profile...');
@@ -413,14 +426,12 @@ export const updateProfile = async (data) => {
       throw new Error('No access token found');
     }
 
-    // ✅ Only update name - no image handling
     const response = await api.put('/auth/update-profile', {
       fullName: data.fullName
     });
     
     console.log('📥 Update profile response:', response.data);
     
-    // Update stored user data
     if (response.data.success && response.data.data?.user) {
       const storedUser = await storage.getItem('user');
       if (storedUser) {
@@ -433,6 +444,8 @@ export const updateProfile = async (data) => {
         if (Platform.OS === 'web') {
           localStorage.setItem('user', JSON.stringify(updatedUser));
         }
+        // Update cache
+        setCachedUser(updatedUser);
       }
     }
     

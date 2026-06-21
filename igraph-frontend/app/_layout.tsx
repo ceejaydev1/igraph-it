@@ -23,42 +23,9 @@ const isMobileDevice = () => {
   return isMobile || isTablet;
 };
 
-// Measure actual network speed
-const measureNetworkSpeed = async (): Promise<number> => {
-  try {
-    const startTime = Date.now();
-    const API_URL = process.env.EXPO_PUBLIC_API_URL || 'https://igraph-backend.onrender.com';
-    
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 10000);
-    
-    await fetch(`${API_URL}/`, {
-      method: 'HEAD',
-      signal: controller.signal,
-    });
-    
-    clearTimeout(timeoutId);
-    const elapsed = Date.now() - startTime;
-    return elapsed;
-  } catch (error) {
-    return 3000;
-  }
-};
-
-// Calculate loading speed based on network performance
-const calculateLoadingSpeed = (networkLatency: number): number => {
-  const DEFAULT_SPEED = 3500;
-  const MAX_SPEED = 5000;
-  
-  if (networkLatency < 500) {
-    return DEFAULT_SPEED;
-  } else if (networkLatency < 1000) {
-    return Math.min(DEFAULT_SPEED + 200, MAX_SPEED);
-  } else if (networkLatency < 2000) {
-    return Math.min(DEFAULT_SPEED + 500, MAX_SPEED);
-  } else {
-    return MAX_SPEED;
-  }
+// 🚀 FIX: FAST SPLASH - Always 1.2 seconds
+const calculateLoadingSpeed = (): number => {
+  return 1200; // Fast and consistent
 };
 
 export default function RootLayout() {
@@ -69,7 +36,7 @@ export default function RootLayout() {
   const [loadingProgress, setLoadingProgress] = useState(0);
   const progressInterval = useRef<any>(null);
   const startTime = useRef(Date.now());
-  const targetDuration = useRef(3500);
+  const targetDuration = useRef(1200);
   const isCompleted = useRef(false);
   const [showSplash, setShowSplash] = useState(true);
 
@@ -115,7 +82,6 @@ export default function RootLayout() {
 
   useEffect(() => {
     const initializeApp = async () => {
-      // CHECK: Has splash already been shown in this session?
       let splashShown = false;
       
       if (Platform.OS === 'web' && typeof sessionStorage !== 'undefined') {
@@ -125,65 +91,61 @@ export default function RootLayout() {
           const AsyncStorage = require('@react-native-async-storage/async-storage').default;
           splashShown = await AsyncStorage.getItem('splashShown') === 'true';
         } catch (e) {
-          // Fallback - if we can't check, we'll show splash
           splashShown = false;
         }
       }
       
-      // If splash already shown, skip it completely
       if (splashShown) {
-        console.log('[Splash] Already shown in this session, skipping');
+        console.log('[Splash] Already shown, skipping');
         setIsLoading(false);
         setShowSplash(false);
         return;
       }
 
-      console.log('[Splash] First load - showing splash screen');
+      console.log('[Splash] First load - showing');
       
       startTime.current = Date.now();
       isCompleted.current = false;
       setLoadingProgress(0);
       setShowSplash(true);
       
-      // Step 1: Measure network speed
-      const networkLatency = await measureNetworkSpeed();
-      targetDuration.current = calculateLoadingSpeed(networkLatency);
+      // 🚀 FIX: Use fixed duration
+      targetDuration.current = calculateLoadingSpeed();
       
-      console.log(`[Splash] Network latency: ${networkLatency}ms`);
       console.log(`[Splash] Target duration: ${targetDuration.current}ms`);
       
-      // Step 2: Start progress animation from 0%
       startProgressAnimation();
       
-      // Step 3: Wait a bit before starting actual work
       await new Promise((resolve) => setTimeout(resolve, 100));
       
-      // Step 4: Check authentication
-      const token = await authService.getAccessToken();
+      // 🚀 FIX: LOAD EVERYTHING IN PARALLEL
+      const [tokenResult, authResult] = await Promise.all([
+        authService.getAccessToken(),
+        authService.verifyToken(),
+      ]);
       
-      // Step 5: Validate token if exists
       let isValidToken = false;
-      if (token) {
-        const result = await authService.verifyToken();
-        isValidToken = result.success;
+      if (tokenResult) {
+        isValidToken = authResult.success;
         if (!isValidToken) {
           await authService.clearTokens();
         }
       }
       
-      // Step 6: Load user data if authenticated
-      if (token && isValidToken) {
+      // Load user data in background if authenticated
+      if (tokenResult && isValidToken) {
         const API_URL = process.env.EXPO_PUBLIC_API_URL || 'https://igraph-backend.onrender.com';
         try {
-          await fetch(`${API_URL}/api/auth/me`, {
-            headers: { Authorization: `Bearer ${token}` },
-          });
+          // Non-blocking - don't wait for this to complete
+          fetch(`${API_URL}/api/auth/me`, {
+            headers: { Authorization: `Bearer ${tokenResult}` },
+          }).catch(() => {});
         } catch (error) {
           console.error('Failed to load user data:', error);
         }
       }
       
-      // Step 7: Mark splash as shown for this session
+      // Mark splash as shown
       if (Platform.OS === 'web' && typeof sessionStorage !== 'undefined') {
         sessionStorage.setItem('splashShown', 'true');
       } else if (Platform.OS !== 'web') {
@@ -195,18 +157,9 @@ export default function RootLayout() {
         }
       }
       
-      // Step 8: Wait for minimum duration if needed
-      const elapsed = Date.now() - startTime.current;
-      const remainingTime = targetDuration.current - elapsed;
-      
-      if (remainingTime > 0) {
-        await new Promise((resolve) => setTimeout(resolve, remainingTime));
-      }
-      
-      // Step 9: Complete progress to 100%
+      // 🚀 FIX: Complete immediately after parallel loading
       completeProgress();
       
-      // Step 10: Hide splash after a brief delay
       setTimeout(() => {
         setIsLoading(false);
         setShowSplash(false);
@@ -304,7 +257,6 @@ export default function RootLayout() {
     }
   }, []);
 
-  // Show splash screen only on first load
   if (isLoading && showSplash) {
     return (
       <CreativeSplashScreen 

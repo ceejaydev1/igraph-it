@@ -1,6 +1,6 @@
 // igraph-frontend/app/(tabs)/diagram/[id].tsx
 
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   View,
   Text,
@@ -155,11 +155,11 @@ interface IconProps {
   color: string;
 }
 
-const BackIcon: React.FC<IconProps> = ({ color }) => (
+const BackIcon: React.FC = () => (
   <Svg width={20} height={20} viewBox="0 0 24 24" fill="none">
     <Path
-      d="M19 12H5M5 12L12 19M5 12L12 5"
-      stroke={color}
+      d="M15 18l-6-6 6-6"
+      stroke="#1E293B"
       strokeWidth={2}
       strokeLinecap="round"
       strokeLinejoin="round"
@@ -659,7 +659,24 @@ const DiagramDetail: React.FC = () => {
     extrapolate: 'clamp',
   });
 
-  const handleGoToHome = () => {
+  // The floating header fades in via opacity, but opacity alone doesn't stop
+  // touches in React Native — while invisible (scrollY < 80) it still sits on
+  // top of the hero back button and swallows taps. Track visibility in state
+  // so we can set pointerEvents="none" until it's actually shown.
+  const [isHeaderVisible, setIsHeaderVisible] = useState(false);
+
+  useEffect(() => {
+    const listenerId = scrollY.addListener(({ value }) => {
+      setIsHeaderVisible((prev) => {
+        const next = value >= 80;
+        return prev === next ? prev : next;
+      });
+    });
+    return () => scrollY.removeListener(listenerId);
+  }, [scrollY]);
+
+  // Always navigate back to the home screen
+  const handleGoHome = () => {
     router.replace('/(tabs)/home');
   };
 
@@ -672,7 +689,7 @@ const DiagramDetail: React.FC = () => {
     return (
       <View style={styles.errorContainer}>
         <Text style={styles.errorText}>Diagram not found.</Text>
-        <TouchableOpacity onPress={handleGoToHome} style={styles.backBtn}>
+        <TouchableOpacity onPress={handleGoHome} style={styles.backBtn}>
           <Text style={[styles.backBtnText, { color: colors.primary }]}>Go Back</Text>
         </TouchableOpacity>
       </View>
@@ -742,12 +759,12 @@ const DiagramDetail: React.FC = () => {
           <StepsList steps={content.steps} color={colors.primary} />
         )}
         
-        {content.type === 'SDLC' && (
-          <SDLCFeedbackForm color={colors.primary} />
-        )}
-        
         {content.keyPoints && (
           <KeyPoints points={content.keyPoints} color={colors.primary} />
+        )}
+        
+        {content.type === 'SDLC' && (
+          <SDLCFeedbackForm color={colors.primary} />
         )}
       </View>
     );
@@ -757,21 +774,23 @@ const DiagramDetail: React.FC = () => {
     <View style={styles.root}>
       <StatusBar barStyle="dark-content" />
 
-      <Animated.View style={[
-        styles.floatingBar,
-        {
-          opacity: headerOpacity,
-          borderBottomColor: `${colors.primary}20`,
-        },
-      ]}>
+      <Animated.View
+        pointerEvents={isHeaderVisible ? 'auto' : 'none'}
+        style={[
+          styles.floatingBar,
+          {
+            opacity: headerOpacity,
+            borderBottomColor: `${colors.primary}20`,
+          },
+        ]}>
         <TouchableOpacity
-          onPress={handleGoToHome}
+          onPress={handleGoHome}
           style={styles.floatingBackBtn}
-          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          activeOpacity={0.6}
           accessibilityLabel="Go back to home"
           accessibilityRole="button"
         >
-          <BackIcon color={colors.primary} />
+          <BackIcon />
         </TouchableOpacity>
         <Text
           style={[styles.floatingTitle, { color: '#1a1f36' }]}
@@ -793,14 +812,13 @@ const DiagramDetail: React.FC = () => {
         {/* Hero Section with Title, Tagline, Diagram, and Video */}
         <View style={[styles.hero, { backgroundColor: colors.light }]}>
           <TouchableOpacity
-            onPress={handleGoToHome}
+            onPress={handleGoHome}
             style={styles.heroBackBtn}
-            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            activeOpacity={0.6}
             accessibilityLabel="Go back to home"
             accessibilityRole="button"
           >
-            <BackIcon color={colors.primary} />
-            <Text style={[styles.heroBackText, { color: colors.primary }]}>Back</Text>
+            <BackIcon />
           </TouchableOpacity>
 
           <View style={styles.heroContent}>
@@ -880,7 +898,25 @@ const styles = StyleSheet.create({
     }),
   },
   floatingBackBtn: {
-    padding: 4,
+    width: 36,
+    height: 36,
+    borderRadius: 8,
+    backgroundColor: '#FFFFFF',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#F1F5F9',
+    ...Platform.select({
+      ios: {
+        shadowColor: '#0F172A',
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.05,
+        shadowRadius: 2,
+      },
+      android: {
+        elevation: 1,
+      },
+    }),
   },
   floatingTitle: {
     flex: 1,
@@ -894,15 +930,27 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
   },
   heroBackBtn: {
-    flexDirection: 'row',
+    width: 36,
+    height: 36,
+    borderRadius: 8,
+    backgroundColor: '#FFFFFF',
+    justifyContent: 'center',
     alignItems: 'center',
-    gap: 6,
+    borderWidth: 1,
+    borderColor: '#F1F5F9',
     marginBottom: 24,
     alignSelf: 'flex-start',
-  },
-  heroBackText: {
-    fontSize: 15,
-    fontWeight: '600',
+    ...Platform.select({
+      ios: {
+        shadowColor: '#0F172A',
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.05,
+        shadowRadius: 2,
+      },
+      android: {
+        elevation: 1,
+      },
+    }),
   },
   heroContent: {
     gap: 24,

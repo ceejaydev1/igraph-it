@@ -211,6 +211,9 @@ const EditIcon = () => (
 
 // ============================================================================
 // ANIMATED CHEVRON COMPONENT
+// ✅ FIX: rotates 0deg -> 90deg so the right-pointing ">" becomes a
+// down-pointing "v" when expanded (previously rotated to 180deg, which
+// turned it into a left-pointing "<").
 // ============================================================================
 
 const AnimatedChevron = ({ expanded, color }: { expanded: boolean; color: string }) => {
@@ -226,7 +229,7 @@ const AnimatedChevron = ({ expanded, color }: { expanded: boolean; color: string
 
   const spin = spinValue.interpolate({
     inputRange: [0, 1],
-    outputRange: ['0deg', '180deg'],
+    outputRange: ['0deg', '90deg'],
   });
 
   return (
