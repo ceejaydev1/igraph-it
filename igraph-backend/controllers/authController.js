@@ -1,3 +1,5 @@
+// igraph-backend/controllers/authController.js
+
 const bcrypt = require('bcryptjs');
 const { v4: uuidv4 } = require('uuid');
 const { db, auth } = require('../config/firebase');
@@ -392,10 +394,10 @@ const googleAuth = async (req, res) => {
 };
 
 // ============================================================================
-// FORGOT PASSWORD
+// ⭐ FORGOT PASSWORD - FIXED (removed duplicate declaration)
 // ============================================================================
 
-// In the forgotPassword function, update the Google account detection:
+// igraph-backend/controllers/authController.js - FORGOT PASSWORD (COMPLETE FIX)
 
 const forgotPassword = async (req, res) => {
   try {
@@ -408,17 +410,20 @@ const forgotPassword = async (req, res) => {
       });
     }
 
+    // ⭐ Get user
     const user = await userModel.getUserByEmail(email);
 
+    // ⭐ Email doesn't exist - Return ERROR with proper status
     if (!user) {
-      // Return success to prevent email enumeration
-      return res.status(200).json({
-        success: true,
-        message: 'If an account exists with this email, you will receive a password reset code.'
+      console.log(`🔴 Password reset attempted for non-existent email: ${email}`);
+      return res.status(404).json({
+        success: false,
+        message: 'No account found with this email address.',
+        code: 'EMAIL_NOT_FOUND'
       });
     }
 
-    // ⭐ CRITICAL: Check if user is a Google account FIRST
+    // ⭐ Check Google account
     if (user.auth_provider === 'google') {
       console.log(`🔴 Google account detected for ${email} - blocking password reset`);
       return res.status(400).json({
@@ -428,6 +433,7 @@ const forgotPassword = async (req, res) => {
       });
     }
 
+    // ⭐ Check verification
     if (!user.is_verified) {
       return res.status(400).json({
         success: false,
@@ -436,36 +442,34 @@ const forgotPassword = async (req, res) => {
       });
     }
 
+    // ✅ User is valid - send OTP
     await otpModel.invalidateAllOTPs(user.user_id, 'reset');
     const otp = generateOTP();
     const otpExpiry = getOTPExpiry(5);
     await otpModel.createOTP(user.user_id, otp, 'reset', otpExpiry);
     
-    // ⭐ Send email and handle failures properly
     try {
       await sendPasswordResetEmail(email, user.full_name, otp);
       console.log(`✅ Password reset email sent to ${email}`);
     } catch (emailError) {
       console.error('❌ Password reset email failed:', emailError.message);
-      // Return error to user so they know email failed
       return res.status(500).json({
         success: false,
         message: 'Failed to send reset code. Please try again later.'
       });
     }
 
+    // ✅ OTP sent successfully
+    const response = {
+      success: true,
+      message: 'A password reset code has been sent to your email.'
+    };
+
     if (process.env.NODE_ENV === 'development') {
-      return res.status(200).json({
-        success: true,
-        message: 'A password reset code has been sent to your email.',
-        debug_otp: otp
-      });
+      response.debug_otp = otp;
     }
 
-    res.status(200).json({
-      success: true,
-      message: 'If an account exists with this email, you will receive a password reset code.'
-    });
+    res.status(200).json(response);
 
   } catch (error) {
     console.error('Forgot password error:', error);
@@ -493,9 +497,19 @@ const verifyResetOTP = async (req, res) => {
 
     const user = await userModel.getUserByEmail(email);
     if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'No account found with this email address.',
+        code: 'EMAIL_NOT_FOUND'
+      });
+    }
+
+    // ⭐ Check if Google account
+    if (user.auth_provider === 'google') {
       return res.status(400).json({
         success: false,
-        message: 'No account found with this email address.'
+        message: 'This account uses Google Sign-In. Password reset is not available.',
+        code: 'GOOGLE_ACCOUNT'
       });
     }
 
@@ -539,9 +553,10 @@ const resetPassword = async (req, res) => {
 
     const user = await userModel.getUserByEmail(email);
     if (!user) {
-      return res.status(400).json({
+      return res.status(404).json({
         success: false,
-        message: 'Invalid request. User not found.'
+        message: 'No account found with this email address.',
+        code: 'EMAIL_NOT_FOUND'
       });
     }
 
@@ -755,7 +770,6 @@ const updateProfile = async (req, res) => {
     console.log('📝 Updating profile for user:', userId);
     console.log('📝 Full name:', fullName);
 
-    // Validate full name
     if (!fullName || fullName.trim().length < 2) {
       return res.status(400).json({
         success: false,
@@ -768,11 +782,8 @@ const updateProfile = async (req, res) => {
       updated_at: new Date().toISOString()
     };
 
-    // Update Firestore
-    console.log('💾 Updating Firestore with data:', updateData);
     await db.collection('students').doc(userId).update(updateData);
 
-    // Get updated user data
     const updatedUser = await userModel.getUserById(userId);
     console.log('✅ Profile updated successfully');
 
@@ -824,7 +835,6 @@ const changePassword = async (req, res) => {
       });
     }
 
-    // Check password strength
     const hasUpperCase = /[A-Z]/.test(newPassword);
     const hasLowerCase = /[a-z]/.test(newPassword);
     const hasNumber = /[0-9]/.test(newPassword);
@@ -878,7 +888,6 @@ const changePassword = async (req, res) => {
       console.log('✅ Firebase Auth password updated');
     } catch (firebaseError) {
       console.error('❌ Firebase Auth password update error:', firebaseError);
-      // Continue anyway - Firestore has the update
     }
 
     console.log('🔄 Invalidating all sessions...');
