@@ -1,4 +1,4 @@
-// app/(auth)/forgot-password.tsx
+// app/(auth)/forgot-password.tsx - COMPLETE FIXED VERSION
 
 import React, { useState, useRef, useEffect } from 'react';
 import {
@@ -56,7 +56,6 @@ const CustomToast = ({ visible, message, isError, onHide }: {
 
   useEffect(() => {
     if (visible) {
-      // Animate in
       Animated.parallel([
         Animated.timing(fadeAnim, {
           toValue: 1,
@@ -71,7 +70,6 @@ const CustomToast = ({ visible, message, isError, onHide }: {
         }),
       ]).start();
 
-      // Auto hide after 3 seconds
       timeoutRef.current = setTimeout(() => {
         hideToast();
       }, 3000);
@@ -155,7 +153,6 @@ const DiagramBackground = () => (
     />
     <View style={styles.gridOverlay} />
     <Svg width={SCREEN_WIDTH} height={SCREEN_HEIGHT} style={StyleSheet.absoluteFillObject}>
-      {/* Diagram lines overlay */}
       <Path
         d={`M ${SCREEN_WIDTH * 0.08} ${SCREEN_HEIGHT * 0.25} C ${SCREEN_WIDTH * 0.22} ${SCREEN_HEIGHT * 0.10}, ${SCREEN_WIDTH * 0.36} ${SCREEN_HEIGHT * 0.42}, ${SCREEN_WIDTH * 0.52} ${SCREEN_HEIGHT * 0.32}`}
         stroke="#bfd0ff" strokeWidth="2" strokeDasharray="8 10" fill="none" opacity="0.32"
@@ -186,7 +183,7 @@ const GoogleIcon = () => (
   </Svg>
 );
 
-// Custom Error Popup Modal (kept for complex errors with actions)
+// Custom Error Popup Modal
 const ErrorPopupModal = ({ visible, title, message, onClose, onAction, actionButtonText, actionIcon }: { 
   visible: boolean; 
   title: string; 
@@ -309,66 +306,43 @@ export default function ForgotPassword() {
     }
   };
 
-  const handleSendOTP = async () => {
-    setError('');
+  // ⭐ FIXED: handleSendOTP - Only navigates when OTP is actually sent
+  // app/(auth)/forgot-password.tsx - COMPLETE FIXED handleSendOTP
 
-    if (!email.trim()) {
-      setError('Please enter your email address.');
-      return;
-    }
+const handleSendOTP = async () => {
+  console.log('🔍 handleSendOTP called with email:', email);
+  
+  setError('');
 
-    if (!/\S+@\S+\.\S+/.test(email)) {
-      setError('Please enter a valid email address.');
-      return;
-    }
+  if (!email.trim()) {
+    setError('Please enter your email address.');
+    return;
+  }
 
-    setLoading(true);
-    try {
-      const result = await authService.forgotPassword(email);
+  if (!/\S+@\S+\.\S+/.test(email)) {
+    setError('Please enter a valid email address.');
+    return;
+  }
+
+  setLoading(true);
+  
+  try {
+    console.log('📤 Sending forgot password request for:', email);
+    const result = await authService.forgotPassword(email);
+    console.log('📥 Forgot password response:', result);
+    
+    // ⭐ Check for errors from the backend
+    if (!result.success) {
+      console.log('❌ Forgot password failed:', result.message, result.code);
       
-      if (!result.success) {
-        if (result.message?.includes('Google') || result.code === 'GOOGLE_ACCOUNT') {
-          showErrorPopup(
-            'Google Account Detected', 
-            'This email is linked to a Google account. Please sign in with Google instead.',
-            handleGoogleSignIn,
-            'Sign In with Google',
-            <GoogleIcon />
-          );
-        } else {
-          showToast(result.message || 'Failed to send OTP', true);
-        }
+      // ⭐ Handle different error codes
+      if (result.code === 'EMAIL_NOT_FOUND') {
+        setError('No account found with this email address.');
         setLoading(false);
-        return;
+        return; // ⭐ STOP - do NOT navigate
       }
       
-      // Show success toast instead of modal
-      const maskedEmail = email.replace(/(.{2})(.*)(@.*)/, '$1•••$3');
-      showToast(`OTP code sent to ${maskedEmail}`, false);
-      
-      setTimeout(() => {
-        router.push({
-          pathname: '/(auth)/verify-otp',
-          params: { email, purpose: 'reset' },
-        });
-      }, 400);
-    } catch (error: any) {
-      console.error('Forgot password error:', error);
-      
-      let errorMessage = '';
-      let statusCode = 0;
-      
-      if (error.response) {
-        statusCode = error.response.status;
-        errorMessage = error.response.data?.message || error.response.data?.error || error.message;
-      } else {
-        errorMessage = error.message || 'Something went wrong';
-      }
-      
-      // Handle case where email is from Google account
-      if (errorMessage?.toLowerCase().includes('google') || 
-          errorMessage?.toLowerCase().includes('provider') ||
-          errorMessage?.includes('Google Sign-In')) {
+      if (result.code === 'GOOGLE_ACCOUNT') {
         showErrorPopup(
           'Google Account Detected', 
           'This email is linked to a Google account. Please sign in with Google instead.',
@@ -376,22 +350,87 @@ export default function ForgotPassword() {
           'Sign In with Google',
           <GoogleIcon />
         );
-      } else if (statusCode === 400 && errorMessage?.includes('verify')) {
-        showToast('Please verify your email address first. Check your inbox for the OTP code.', true);
-      } else {
-        // Show toast instead of modal for security best practice
-        showToast(`If an account exists with ${email}, you will receive a OTP Code.`, false);
-        setTimeout(() => {
-          router.push({
-            pathname: '/(auth)/verify-otp',
-            params: { email, purpose: 'reset' },
-          });
-        }, 400);
+        setLoading(false);
+        return; // ⭐ STOP - do NOT navigate
       }
-    } finally {
+      
+      if (result.code === 'EMAIL_NOT_VERIFIED' || result.message?.toLowerCase().includes('verify')) {
+        showToast('Please verify your email address first. Check your inbox for the OTP code.', true);
+        setLoading(false);
+        return; // ⭐ STOP - do NOT navigate
+      }
+      
+      // ⭐ Any other error
+      showToast(result.message || 'Something went wrong. Please try again.', true);
       setLoading(false);
+      return; // ⭐ STOP - do NOT navigate
     }
-  };
+    
+    // ✅ SUCCESS: OTP was sent - navigate
+    console.log('✅ OTP sent successfully, navigating to verify-otp');
+    const maskedEmail = email.replace(/(.{2})(.*)(@.*)/, '$1•••$3');
+    showToast(`OTP code sent to ${maskedEmail}`, false);
+    
+    setTimeout(() => {
+      router.push({
+        pathname: '/(auth)/verify-otp',
+        params: { email, purpose: 'reset' },
+      });
+    }, 400);
+    
+  } catch (error: any) {
+    console.error('❌ Forgot password error:', error);
+    
+    // ⭐ Check if it's a network error
+    if (error.code === 'NETWORK_ERROR' || error.message === 'Network Error') {
+      showToast('Cannot connect to server. Please check your internet connection.', true);
+      setLoading(false);
+      return; // ⭐ STOP - do NOT navigate
+    }
+    
+    // ⭐ Check if it's a 404 (email not found)
+    if (error.response?.status === 404) {
+      const data = error.response?.data;
+      if (data?.code === 'EMAIL_NOT_FOUND') {
+        setError('No account found with this email address.');
+        setLoading(false);
+        return; // ⭐ STOP - do NOT navigate
+      }
+    }
+    
+    // ⭐ Check for Google account
+    if (error.response?.status === 400) {
+      const data = error.response?.data;
+      if (data?.code === 'GOOGLE_ACCOUNT') {
+        showErrorPopup(
+          'Google Account Detected', 
+          'This email is linked to a Google account. Please sign in with Google instead.',
+          handleGoogleSignIn,
+          'Sign In with Google',
+          <GoogleIcon />
+        );
+        setLoading(false);
+        return; // ⭐ STOP - do NOT navigate
+      }
+      
+      if (data?.code === 'EMAIL_NOT_VERIFIED') {
+        showToast('Please verify your email address first.', true);
+        setLoading(false);
+        return; // ⭐ STOP - do NOT navigate
+      }
+    }
+    
+    // ⭐ Any other error - show message and DON'T navigate
+    const errorMessage = error.response?.data?.message || error.message || 'Something went wrong. Please try again.';
+    showToast(errorMessage, true);
+    setLoading(false);
+    // ⭐ NO navigation here - CRITICAL!
+    
+  } finally {
+    // ⭐ This will run even after returns, but we already set loading to false
+    console.log('🔚 handleSendOTP finished');
+  }
+};
 
   // Handle Enter key press on keyboard
   const handleSubmitEditing = () => {

@@ -28,57 +28,57 @@ export default function CreativeSplashScreen({
   const logoTranslateY = useRef(new Animated.Value(30)).current;
   const titleOpacity = useRef(new Animated.Value(0)).current;
   const titleTranslateY = useRef(new Animated.Value(20)).current;
-  const loadingOpacity = useRef(new Animated.Value(0)).current;
   const fadeIn = useRef(new Animated.Value(0)).current;
   const animatedProgress = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
+    // ✅ FIX: previously the loading bar had its OWN opacity animation
+    // (loadingOpacity) on a separate delay timer. Any fixed delay is a
+    // guess that can still desync from when progress actually starts
+    // counting. Now loadingContainer just reuses `fadeIn` directly (see
+    // JSX below) — it appears on the exact same frame as the rest of the
+    // splash, which is also the exact same frame progress starts at 0%.
+    // There's no longer a separate timer that can drift out of sync.
     const entranceAnimation = Animated.sequence([
       Animated.timing(fadeIn, {
         toValue: 1,
-        duration: 600,
+        duration: 400,
         useNativeDriver: true,
       }),
       Animated.parallel([
         Animated.spring(logoScale, {
           toValue: 1,
-          friction: 6,
-          tension: 40,
+          friction: 7,
+          tension: 60,
           useNativeDriver: true,
         }),
         Animated.timing(logoOpacity, {
           toValue: 1,
-          duration: 800,
+          duration: 500,
           easing: Easing.out(Easing.ease),
           useNativeDriver: true,
         }),
         Animated.timing(logoTranslateY, {
           toValue: 0,
-          duration: 700,
+          duration: 450,
           easing: Easing.out(Easing.back(1.2)),
           useNativeDriver: true,
         }),
       ]),
-      Animated.delay(200),
+      Animated.delay(100),
       Animated.parallel([
         Animated.timing(titleOpacity, {
           toValue: 1,
-          duration: 600,
+          duration: 400,
           useNativeDriver: true,
         }),
         Animated.timing(titleTranslateY, {
           toValue: 0,
-          duration: 600,
+          duration: 400,
           easing: Easing.out(Easing.ease),
           useNativeDriver: true,
         }),
       ]),
-      Animated.delay(300),
-      Animated.timing(loadingOpacity, {
-        toValue: 1,
-        duration: 500,
-        useNativeDriver: true,
-      }),
     ]);
 
     entranceAnimation.start();
@@ -99,9 +99,11 @@ export default function CreativeSplashScreen({
 
   useEffect(() => {
     if (progress >= 1 && onFinish) {
+      // Small buffer so the bar visibly reaches 100% before the splash
+      // unmounts, instead of disappearing the instant it hits full.
       const timer = setTimeout(() => {
         onFinish();
-      }, 500);
+      }, 400);
       return () => clearTimeout(timer);
     }
   }, [progress, onFinish]);
@@ -185,7 +187,7 @@ export default function CreativeSplashScreen({
         <Animated.View
           style={[
             styles.loadingContainer,
-            { opacity: loadingOpacity },
+            { opacity: fadeIn },
           ]}
         >
           <View style={styles.progressBarWrapper}>

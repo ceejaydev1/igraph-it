@@ -6,7 +6,7 @@ import { StatusBar } from 'expo-status-bar';
 import 'react-native-reanimated';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useEffect, useState, useRef } from 'react';
-import { Platform, View, StyleSheet } from 'react-native';
+import { Platform, View, StyleSheet, Animated } from 'react-native';
 import InstallBanner from '@/components/InstallBanner';
 import * as authService from '../services/authService';
 import CreativeSplashScreen from './(auth)/splash';
@@ -23,48 +23,48 @@ const isMobileDevice = () => {
   return isMobile || isTablet;
 };
 
-// 🚀 FIX: FAST SPLASH - Always 1.2 seconds
 const calculateLoadingSpeed = (): number => {
-  return 1200; // Fast and consistent
+  return 1800;
 };
 
 export default function RootLayout() {
   const colorScheme = useColorScheme();
   const [showBanner, setShowBanner] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
-  const [loadingProgress, setLoadingProgress] = useState(0);
-  const progressInterval = useRef<any>(null);
-  const startTime = useRef(Date.now());
-  const targetDuration = useRef(1200);
-  const isCompleted = useRef(false);
   const [showSplash, setShowSplash] = useState(true);
+  const [loadingProgress, setLoadingProgress] = useState(0);
+  const [targetRoute, setTargetRoute] = useState<string | null>(null);
+  const progressInterval = useRef<any>(null);
+  const isCompleted = useRef(false);
+  const fadeAnim = useRef(new Animated.Value(1)).current;
+  const [authChecked, setAuthChecked] = useState(false);
 
-  const startProgressAnimation = () => {
+  const startProgressAnimation = (targetDuration: number) => {
     if (progressInterval.current) {
       clearInterval(progressInterval.current);
       progressInterval.current = null;
     }
-    
+
     const startTimestamp = Date.now();
-    
+
     progressInterval.current = setInterval(() => {
       if (isCompleted.current) return;
-      
+
       const elapsed = Date.now() - startTimestamp;
-      let newProgress = Math.min(elapsed / targetDuration.current, 0.95);
-      
+      let newProgress = Math.min(elapsed / targetDuration, 0.95);
+
       if (newProgress < 0 && elapsed > 0) {
         newProgress = 0;
       }
-      
+
       setLoadingProgress(newProgress);
-      
-      if (elapsed >= targetDuration.current) {
+
+      if (elapsed >= targetDuration) {
         if (progressInterval.current) {
           clearInterval(progressInterval.current);
           progressInterval.current = null;
         }
+        setLoadingProgress(1);
       }
     }, 16);
   };
@@ -72,7 +72,7 @@ export default function RootLayout() {
   const completeProgress = () => {
     if (isCompleted.current) return;
     isCompleted.current = true;
-    
+
     if (progressInterval.current) {
       clearInterval(progressInterval.current);
       progressInterval.current = null;
@@ -80,10 +80,51 @@ export default function RootLayout() {
     setLoadingProgress(1);
   };
 
+  // Check auth AND pre-load user data during splash
+  useEffect(() => {
+    const checkAuth = async () => {
+      try {
+        const token = await authService.getAccessToken();
+        if (token) {
+          const result = await authService.verifyToken();
+          if (result.success) {
+            // Pre-load user data during splash
+            const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'https://igraph-backend.onrender.com';
+            try {
+              const response = await fetch(`${API_BASE_URL}/api/auth/me`, {
+                headers: { Authorization: `Bearer ${token}` },
+              });
+              if (response.ok) {
+                const data = await response.json();
+                if (data.success && data.data.user) {
+                  authService.setCachedUser(data.data.user);
+                }
+              }
+            } catch (e) {
+              console.log('Background user load failed:', e);
+            }
+            
+            setTargetRoute('/(tabs)/home');
+          } else {
+            setTargetRoute('/(auth)/signin');
+          }
+        } else {
+          setTargetRoute('/(auth)/signin');
+        }
+      } catch (error) {
+        setTargetRoute('/(auth)/signin');
+      } finally {
+        setAuthChecked(true);
+      }
+    };
+
+    checkAuth();
+  }, []);
+
   useEffect(() => {
     const initializeApp = async () => {
       let splashShown = false;
-      
+
       if (Platform.OS === 'web' && typeof sessionStorage !== 'undefined') {
         splashShown = sessionStorage.getItem('splashShown') === 'true';
       } else if (Platform.OS !== 'web') {
@@ -94,57 +135,43 @@ export default function RootLayout() {
           splashShown = false;
         }
       }
-      
-      if (splashShown) {
+
+      if (splashShown && authChecked && targetRoute) {
         console.log('[Splash] Already shown, skipping');
-        setIsLoading(false);
         setShowSplash(false);
         return;
       }
 
       console.log('[Splash] First load - showing');
-      
-      startTime.current = Date.now();
+
       isCompleted.current = false;
       setLoadingProgress(0);
       setShowSplash(true);
-      
-      // 🚀 FIX: Use fixed duration
-      targetDuration.current = calculateLoadingSpeed();
-      
-      console.log(`[Splash] Target duration: ${targetDuration.current}ms`);
-      
-      startProgressAnimation();
-      
-      await new Promise((resolve) => setTimeout(resolve, 100));
-      
-      // 🚀 FIX: LOAD EVERYTHING IN PARALLEL
-      const [tokenResult, authResult] = await Promise.all([
-        authService.getAccessToken(),
-        authService.verifyToken(),
+
+      const targetDuration = calculateLoadingSpeed();
+      startProgressAnimation(targetDuration);
+
+      // Wait for auth check AND minimum display time
+      const minDisplayTime = new Promise((resolve) =>
+        setTimeout(resolve, targetDuration)
+      );
+
+      await Promise.all([
+        new Promise((resolve) => {
+          if (authChecked && targetRoute) {
+            resolve(true);
+          } else {
+            const checkInterval = setInterval(() => {
+              if (authChecked && targetRoute) {
+                clearInterval(checkInterval);
+                resolve(true);
+              }
+            }, 50);
+          }
+        }),
+        minDisplayTime
       ]);
-      
-      let isValidToken = false;
-      if (tokenResult) {
-        isValidToken = authResult.success;
-        if (!isValidToken) {
-          await authService.clearTokens();
-        }
-      }
-      
-      // Load user data in background if authenticated
-      if (tokenResult && isValidToken) {
-        const API_URL = process.env.EXPO_PUBLIC_API_URL || 'https://igraph-backend.onrender.com';
-        try {
-          // Non-blocking - don't wait for this to complete
-          fetch(`${API_URL}/api/auth/me`, {
-            headers: { Authorization: `Bearer ${tokenResult}` },
-          }).catch(() => {});
-        } catch (error) {
-          console.error('Failed to load user data:', error);
-        }
-      }
-      
+
       // Mark splash as shown
       if (Platform.OS === 'web' && typeof sessionStorage !== 'undefined') {
         sessionStorage.setItem('splashShown', 'true');
@@ -156,23 +183,25 @@ export default function RootLayout() {
           console.log('Failed to save splash state:', e);
         }
       }
-      
-      // 🚀 FIX: Complete immediately after parallel loading
+
       completeProgress();
       
+      // Fade out and navigate instantly
       setTimeout(() => {
-        setIsLoading(false);
-        setShowSplash(false);
-      }, 500);
+        Animated.timing(fadeAnim, {
+          toValue: 0,
+          duration: 300,
+          useNativeDriver: true,
+        }).start(() => {
+          setShowSplash(false);
+        });
+      }, 400);
     };
-    
-    initializeApp();
-  }, []);
 
-  const handleSplashFinish = () => {
-    setIsLoading(false);
-    setShowSplash(false);
-  };
+    if (authChecked && targetRoute) {
+      initializeApp();
+    }
+  }, [authChecked, targetRoute]);
 
   // PWA Setup
   useEffect(() => {
@@ -181,13 +210,13 @@ export default function RootLayout() {
         if ('serviceWorker' in navigator) {
           const registrations = await navigator.serviceWorker.getRegistrations();
           for (const registration of registrations) {
-            const isOldVersion = registration.active && 
+            const isOldVersion = registration.active &&
               !registration.active.scriptURL.includes('v5');
             if (isOldVersion) {
               await registration.unregister();
             }
           }
-          
+
           try {
             const registration = await navigator.serviceWorker.register('/service-worker.js', {
               scope: '/',
@@ -257,15 +286,18 @@ export default function RootLayout() {
     }
   }, []);
 
-  if (isLoading && showSplash) {
+  if (showSplash) {
     return (
-      <CreativeSplashScreen 
-        onFinish={handleSplashFinish}
-        progress={loadingProgress}
-      />
+      <Animated.View style={{ flex: 1, opacity: fadeAnim }}>
+        <CreativeSplashScreen
+          onFinish={() => {}}
+          progress={loadingProgress}
+        />
+      </Animated.View>
     );
   }
 
+  // When splash ends, navigate directly - NO LOADING SPINNER
   return (
     <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
       <View style={styles.flex}>
@@ -277,7 +309,7 @@ export default function RootLayout() {
         )}
 
         <Stack screenOptions={{ headerShown: false }}>
-          <Stack.Screen name="landing" />
+          <Stack.Screen name="index" />
           <Stack.Screen name="(auth)" />
           <Stack.Screen name="(tabs)" />
           <Stack.Screen

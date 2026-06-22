@@ -111,7 +111,7 @@ const DIAGRAM_CONTENT: Record<number, DiagramContent> = {
   5: createUMLDiagram(5, 'Fishbone Diagram', 'Fishbone Diagram example'),
   6: createUMLDiagram(6, 'Schematic Diagram', 'Schematic Diagram example'),
   7: createUMLDiagram(7, 'Use Case Diagram', 'Use Case Diagram example'),
-  8: createUMLDiagram(8, 'Activity Diagram - Library', 'Activity Diagram example'),
+  8: createUMLDiagram(8, 'Activity Diagram', 'Activity Diagram example'),
   9: createUMLDiagram(9, 'Sequence Diagram', 'Sequence Diagram example'),
   10: createUMLDiagram(10, 'Class Diagram', 'Class Diagram example'),
   11: createSDLCDiagram(11, 'Waterfall Model', 'Waterfall Model diagram'),

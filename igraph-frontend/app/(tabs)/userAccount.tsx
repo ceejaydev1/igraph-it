@@ -1051,22 +1051,22 @@ export default function UserAccount() {
     setShowPasswordModal(false);
   };
 
-  const handleSignOutConfirm = async () => {
-    setSignOutLoading(true);
-    
-    try {
-      await authService.logout();
-      setUserData({ fullName: '', email: '', username: '', authProvider: null });
-      setShowSignOutModal(false);
-      router.replace('/(auth)/signin');
-    } catch (error) {
-      console.error('Sign out error:', error);
-      setShowSignOutModal(false);
-      router.replace('/(auth)/signin');
-    } finally {
-      setSignOutLoading(false);
-    }
-  };
+// In userAccount.tsx - Update sign out
+
+const handleSignOutConfirm = async () => {
+  setShowSignOutModal(false);
+  
+  try {
+    await authService.logout();
+    setUserData({ fullName: '', email: '', username: '', authProvider: null });
+    // ✅ Navigate immediately - NO SPINNER, NO BLACK SCREEN
+    // The sign-in screen is already pre-loaded in memory
+    router.replace('/(auth)/signin');
+  } catch (error) {
+    console.error('Sign out error:', error);
+    router.replace('/(auth)/signin');
+  }
+};
 
   const handleSignOutPress = () => {
     setShowSignOutModal(true);
@@ -1243,7 +1243,7 @@ export default function UserAccount() {
 
             <Pressable 
               style={({ pressed }) => [styles.actionCard, pressed && styles.actionCardPressed]}
-              onPress={() => router.push('/modal')}
+              onPress={() => router.push('/(tabs)/privacy')}  // ✅ Changed from '/modal' to '/(tabs)/privacy'
             >
               <ShieldIcon />
               <View style={styles.actionContent}>

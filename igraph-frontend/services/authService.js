@@ -238,7 +238,6 @@ export const signIn = async (email, password, consentTimestamp = null) => {
         localStorage.setItem('user', JSON.stringify(response.data.data.user));
       }
       
-      // Cache user data
       if (response.data.data.user) {
         setCachedUser(response.data.data.user);
       }
@@ -278,14 +277,51 @@ export const googleAuth = async (idToken, consentTimestamp = null) => {
   }
 };
 
+// ============================================================================
+// ⭐ FIXED: FORGOT PASSWORD - Returns error data instead of throwing
+// ============================================================================
+
 export const forgotPassword = async (email) => {
-  const response = await api.post('/auth/forgot-password', { email });
-  return response.data;
+  try {
+    const response = await api.post('/auth/forgot-password', { email });
+    return response.data;
+  } catch (error) {
+    console.error('Forgot password API error:', error);
+    
+    if (error.response) {
+      const err = new Error(error.response.data?.message || 'Request failed');
+      err.response = error.response;
+      err.code = error.response.data?.code;
+      throw err;
+    }
+    
+    throw error;
+  }
 };
+
+// ============================================================================
+// 🏓 PING: Wake up free-tier backend before OTP verify
+// ============================================================================
+
+export const pingBackend = async () => {
+  try {
+    await api.get('/health', { timeout: 30000 });
+    console.log('🏓 Backend ping successful');
+  } catch (error) {
+    console.log('🏓 Backend ping failed (ok):', error.message);
+    // Silent fail — just warming up the server
+  }
+};
+
+// ============================================================================
+// OTP VERIFICATION
+// ============================================================================
 
 export const verifyResetOTP = async (email, otp) => {
   try {
-    const response = await api.post('/auth/verify-reset-otp', { email, otp });
+    const response = await api.post('/auth/verify-reset-otp', { email, otp }, {
+      timeout: 45000, // ⬆️ Increased from 15s — handles free-tier cold start
+    });
     return response.data;
   } catch (error) {
     console.error('Verify reset OTP error:', error.response?.data || error.message);
@@ -335,7 +371,6 @@ export const verifyToken = async () => {
     const response = await api.get('/auth/me');
     
     if (response.data && response.data.success === true) {
-      // Cache user data
       if (response.data.data?.user) {
         setCachedUser(response.data.data.user);
       }
@@ -444,7 +479,6 @@ export const updateProfile = async (data) => {
         if (Platform.OS === 'web') {
           localStorage.setItem('user', JSON.stringify(updatedUser));
         }
-        // Update cache
         setCachedUser(updatedUser);
       }
     }

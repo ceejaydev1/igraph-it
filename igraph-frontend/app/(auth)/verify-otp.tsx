@@ -1,4 +1,4 @@
-// app/(auth)/verify-otp.tsx - Full updated file with optimizations
+// app/(auth)/verify-otp.tsx - Full updated file with cold-start fix + toast success
 
 import React, { useState, useRef, useEffect } from 'react';
 import {
@@ -68,6 +68,90 @@ const CheckIcon = () => (
     <Path d="M8 12l3 3 5-6" stroke="#10b981" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
   </Svg>
 );
+
+// Custom Toast Component
+const CustomToast = ({ visible, message, isError, onHide }: {
+  visible: boolean;
+  message: string;
+  isError: boolean;
+  onHide: () => void;
+}) => {
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const slideAnim = useRef(new Animated.Value(-50)).current;
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    if (visible) {
+      Animated.parallel([
+        Animated.timing(fadeAnim, {
+          toValue: 1,
+          duration: 300,
+          useNativeDriver: true,
+        }),
+        Animated.spring(slideAnim, {
+          toValue: 0,
+          tension: 50,
+          friction: 7,
+          useNativeDriver: true,
+        }),
+      ]).start();
+
+      timeoutRef.current = setTimeout(() => {
+        hideToast();
+      }, 3000);
+    }
+
+    return () => {
+      if (timeoutRef.current) clearTimeout(timeoutRef.current);
+    };
+  }, [visible]);
+
+  const hideToast = () => {
+    Animated.parallel([
+      Animated.timing(fadeAnim, {
+        toValue: 0,
+        duration: 300,
+        useNativeDriver: true,
+      }),
+      Animated.timing(slideAnim, {
+        toValue: -50,
+        duration: 300,
+        useNativeDriver: true,
+      }),
+    ]).start(() => {
+      onHide();
+    });
+  };
+
+  if (!visible) return null;
+
+  return (
+    <Animated.View
+      style={[
+        styles.toastContainer,
+        {
+          opacity: fadeAnim,
+          transform: [{ translateY: slideAnim }],
+        },
+      ]}
+    >
+      <View style={[styles.toastContent, isError ? styles.toastError : styles.toastSuccess]}>
+        {isError ? (
+          <Svg width={20} height={20} viewBox="0 0 24 24" fill="none">
+            <Circle cx="12" cy="12" r="10" stroke="#fff" strokeWidth="1.5" />
+            <Path d="M12 8v4M12 16h.01" stroke="#fff" strokeWidth="2" strokeLinecap="round" />
+          </Svg>
+        ) : (
+          <Svg width={20} height={20} viewBox="0 0 24 24" fill="none">
+            <Circle cx="12" cy="12" r="10" stroke="#fff" strokeWidth="1.5" />
+            <Path d="M8 12l3 3 5-6" stroke="#fff" strokeWidth="2" strokeLinecap="round" />
+          </Svg>
+        )}
+        <Text style={styles.toastText}>{message}</Text>
+      </View>
+    </Animated.View>
+  );
+};
 
 // Custom Error Popup Modal
 const ErrorPopupModal = ({ visible, title, message, onClose, onAction, actionButtonText }: { 
@@ -176,7 +260,7 @@ function useCountdown(initial: number) {
   return { seconds, expired: seconds <= 0, reset };
 }
 
-// OTP Input Component - FIXED
+// OTP Input Component
 const OTPInput = ({ 
   value, 
   onChange, 
@@ -199,13 +283,11 @@ const OTPInput = ({
   const handleChange = (text: string) => {
     const cleaned = text.replace(/[^0-9]/g, '').slice(0, OTP_LENGTH);
     onChange(cleaned);
-    
     if (cleaned.length === OTP_LENGTH && onComplete) {
       onComplete(cleaned);
     }
   };
 
-  // Get the index that should show the cursor/focused border
   const getActiveIndex = () => {
     if (!isFocused) return -1;
     return value.length;
@@ -260,58 +342,6 @@ const OTPInput = ({
   );
 };
 
-// Success Overlay Component for smooth transition
-const SuccessOverlay = ({ visible, onAnimationComplete }: { visible: boolean; onAnimationComplete: () => void }) => {
-  const fadeAnim = useRef(new Animated.Value(0)).current;
-  const scaleAnim = useRef(new Animated.Value(0.5)).current;
-
-  useEffect(() => {
-    if (visible) {
-      Animated.parallel([
-        Animated.timing(fadeAnim, {
-          toValue: 1,
-          duration: 400,
-          useNativeDriver: true,
-        }),
-        Animated.spring(scaleAnim, {
-          toValue: 1,
-          tension: 50,
-          friction: 7,
-          useNativeDriver: true,
-        }),
-      ]).start();
-    }
-  }, [visible]);
-
-  if (!visible) return null;
-
-  return (
-    <Animated.View
-      style={[
-        styles.successOverlay,
-        {
-          opacity: fadeAnim,
-        },
-      ]}
-    >
-      <Animated.View
-        style={[
-          styles.successContent,
-          {
-            transform: [{ scale: scaleAnim }],
-          },
-        ]}
-      >
-        <View style={styles.successIconCircle}>
-          <CheckIcon />
-        </View>
-        <Text style={styles.successTitle}>Verified!</Text>
-        <Text style={styles.successMessage}>Redirecting to reset password...</Text>
-      </Animated.View>
-    </Animated.View>
-  );
-};
-
 export default function VerifyOTP() {
   const router = useRouter();
   const { email, purpose } = useLocalSearchParams<{ email: string; purpose: 'reset' | 'register' }>();
@@ -322,7 +352,9 @@ export default function VerifyOTP() {
   const [resending, setResending] = useState(false);
   const [showErrorModal, setShowErrorModal] = useState(false);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
-  const [showSuccessOverlay, setShowSuccessOverlay] = useState(false);
+  const [toastVisible, setToastVisible] = useState(false);
+  const [toastMessage, setToastMessage] = useState('');
+  const [toastIsError, setToastIsError] = useState(false);
   const [errorModalData, setErrorModalData] = useState({ 
     title: '', 
     message: '',
@@ -331,6 +363,21 @@ export default function VerifyOTP() {
   });
 
   const { seconds, expired, reset: resetTimer } = useCountdown(300);
+
+  // 🏓 Ping backend on mount to wake up free-tier server
+  useEffect(() => {
+    authService.pingBackend?.();
+  }, []);
+
+  const showToast = (message: string, isError: boolean = false) => {
+    setToastMessage(message);
+    setToastIsError(isError);
+    setToastVisible(true);
+  };
+
+  const hideToast = () => {
+    setToastVisible(false);
+  };
 
   const showErrorPopup = (title: string, message: string, onAction?: () => void, actionButtonText?: string) => {
     setErrorModalData({ title, message, onAction, actionButtonText: actionButtonText || '' });
@@ -357,17 +404,17 @@ export default function VerifyOTP() {
 
       if (result.success) {
         if (purpose === 'reset') {
-          setShowSuccessOverlay(true);
-          
+          // ✅ Show toast then smoothly navigate
+          showToast('OTP verified! Redirecting...', false);
           setTimeout(() => {
             router.push({
               pathname: '/(auth)/reset-password',
               params: { 
                 email: email,
-                otp: otpCode 
+                otp: otpCode,
               },
             });
-          }, 400);
+          }, 1200);
         } else {
           setShowSuccessModal(true);
         }
@@ -376,7 +423,7 @@ export default function VerifyOTP() {
       }
     } catch (error: any) {
       console.error('Verification error:', error);
-      setError(error.response?.data?.message || 'Verification failed. Please try again.');
+      setError(error.response?.data?.message || 'Server error during verification. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -398,6 +445,8 @@ export default function VerifyOTP() {
       setOtp('');
       setError('');
       resetTimer();
+      // 🏓 Re-ping after resend to keep backend warm
+      authService.pingBackend?.();
       showErrorPopup('Success', 'A new OTP code has been sent to your email.');
     } catch (error: any) {
       showErrorPopup('Error', error.response?.data?.message || 'Failed to resend code');
@@ -411,6 +460,13 @@ export default function VerifyOTP() {
   return (
     <>
       <Stack.Screen options={{ headerShown: false }} />
+
+      <CustomToast
+        visible={toastVisible}
+        message={toastMessage}
+        isError={toastIsError}
+        onHide={hideToast}
+      />
       
       <ErrorPopupModal
         visible={showErrorModal}
@@ -430,11 +486,6 @@ export default function VerifyOTP() {
           router.replace('/(auth)/signin');
         }}
         buttonText="Sign In Now"
-      />
-
-      <SuccessOverlay 
-        visible={showSuccessOverlay} 
-        onAnimationComplete={() => {}}
       />
 
       <KeyboardAvoidingView 
@@ -546,251 +597,118 @@ const styles = StyleSheet.create({
     position: 'relative' 
   },
   connectorTop: { 
-    position: 'absolute', 
-    top: -7, 
-    alignSelf: 'center', 
-    width: 14, 
-    height: 14, 
-    borderRadius: 7, 
-    backgroundColor: '#ffffff', 
-    borderWidth: 2, 
-    borderColor: '#c7d2fe', 
-    zIndex: 20 
+    position: 'absolute', top: -7, alignSelf: 'center', 
+    width: 14, height: 14, borderRadius: 7, 
+    backgroundColor: '#ffffff', borderWidth: 2, borderColor: '#c7d2fe', zIndex: 20 
   },
   connectorBottom: { 
-    position: 'absolute', 
-    bottom: -7, 
-    alignSelf: 'center', 
-    width: 14, 
-    height: 14, 
-    borderRadius: 7, 
-    backgroundColor: '#ffffff', 
-    borderWidth: 2, 
-    borderColor: '#c7d2fe', 
-    zIndex: 20 
+    position: 'absolute', bottom: -7, alignSelf: 'center', 
+    width: 14, height: 14, borderRadius: 7, 
+    backgroundColor: '#ffffff', borderWidth: 2, borderColor: '#c7d2fe', zIndex: 20 
   },
   connectorLeft: { 
-    position: 'absolute', 
-    left: -7, 
-    top: '50%', 
-    transform: [{ translateY: -7 }], 
-    width: 14, 
-    height: 14, 
-    borderRadius: 7, 
-    backgroundColor: '#ffffff', 
-    borderWidth: 2, 
-    borderColor: '#c7d2fe', 
-    zIndex: 20 
+    position: 'absolute', left: -7, top: '50%', transform: [{ translateY: -7 }], 
+    width: 14, height: 14, borderRadius: 7, 
+    backgroundColor: '#ffffff', borderWidth: 2, borderColor: '#c7d2fe', zIndex: 20 
   },
   connectorRight: { 
-    position: 'absolute', 
-    right: -7, 
-    top: '50%', 
-    transform: [{ translateY: -7 }], 
-    width: 14, 
-    height: 14, 
-    borderRadius: 7, 
-    backgroundColor: '#ffffff', 
-    borderWidth: 2, 
-    borderColor: '#c7d2fe', 
-    zIndex: 20 
+    position: 'absolute', right: -7, top: '50%', transform: [{ translateY: -7 }], 
+    width: 14, height: 14, borderRadius: 7, 
+    backgroundColor: '#ffffff', borderWidth: 2, borderColor: '#c7d2fe', zIndex: 20 
   },
   backBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 24, alignSelf: 'flex-start' },
   backText: { fontSize: 14, color: '#4a5568', fontWeight: '600' },
   heading: { 
-    fontSize: 26, 
-    fontWeight: '800', 
-    color: '#0f172a', 
-    textAlign: 'center', 
-    letterSpacing: -0.6, 
-    marginBottom: 12
+    fontSize: 26, fontWeight: '800', color: '#0f172a', 
+    textAlign: 'center', letterSpacing: -0.6, marginBottom: 12,
   },
   subtitle: { fontSize: 14, color: '#7f8bb3', textAlign: 'center', lineHeight: 22, marginBottom: 32 },
   emailHighlight: { color: '#4c6fff', fontWeight: '700' },
-  
-  // OTP Input Styles
-  otpContainer: {
-    width: '100%',
-    marginBottom: 8,
-  },
-  otpRow: { 
-    flexDirection: 'row', 
-    justifyContent: 'space-between', 
-    gap: 10, 
-    marginBottom: 8,
-  },
+  otpContainer: { width: '100%', marginBottom: 8 },
+  otpRow: { flexDirection: 'row', justifyContent: 'space-between', gap: 10, marginBottom: 8 },
   hiddenInput: { 
-    position: 'absolute', 
-    width: '100%', 
-    height: '100%', 
-    opacity: 0, 
-    zIndex: 10,
-    backgroundColor: 'transparent',
+    position: 'absolute', width: '100%', height: '100%', 
+    opacity: 0, zIndex: 10, backgroundColor: 'transparent' 
   },
   otpBox: { 
-    flex: 1,
-    aspectRatio: 1,
-    maxWidth: 58,
-    borderRadius: 14, 
-    borderWidth: 1.8, 
-    borderColor: '#dde3fa', 
-    backgroundColor: '#f8faff', 
-    alignItems: 'center', 
-    justifyContent: 'center',
+    flex: 1, aspectRatio: 1, maxWidth: 58, borderRadius: 14, 
+    borderWidth: 1.8, borderColor: '#dde3fa', backgroundColor: '#f8faff', 
+    alignItems: 'center', justifyContent: 'center' 
   },
   otpBoxFocused: { 
-    borderColor: '#4c6fff', 
-    backgroundColor: '#ffffff', 
-    shadowColor: '#4c6fff', 
-    shadowOffset: { width: 0, height: 0 }, 
-    shadowOpacity: 0.18, 
-    shadowRadius: 10, 
-    elevation: 5,
+    borderColor: '#4c6fff', backgroundColor: '#ffffff', 
+    shadowColor: '#4c6fff', shadowOffset: { width: 0, height: 0 }, 
+    shadowOpacity: 0.18, shadowRadius: 10, elevation: 5 
   },
-  otpBoxFilled: { 
-    borderColor: '#a5b4fc', 
-    backgroundColor: '#f0f4ff',
-  },
-  otpBoxError: { 
-    borderColor: '#ef4444', 
-    backgroundColor: '#fff5f5',
-  },
-  otpDigit: { 
-    fontSize: 22, 
-    fontWeight: '700', 
-    color: '#1a1f36',
-  },
-  otpDigitError: { 
-    color: '#ef4444',
-  },
+  otpBoxFilled: { borderColor: '#a5b4fc', backgroundColor: '#f0f4ff' },
+  otpBoxError: { borderColor: '#ef4444', backgroundColor: '#fff5f5' },
+  otpDigit: { fontSize: 22, fontWeight: '700', color: '#1a1f36' },
+  otpDigitError: { color: '#ef4444' },
   cursor: { 
-    position: 'absolute', 
-    bottom: 12, 
-    width: 2, 
-    height: 20, 
-    borderRadius: 2, 
-    backgroundColor: '#4c6fff', 
-    opacity: 0.8,
+    position: 'absolute', bottom: 12, width: 2, height: 20, 
+    borderRadius: 2, backgroundColor: '#4c6fff', opacity: 0.8 
   },
   timerRow: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', marginTop: 14, marginBottom: 4 },
   timerLabel: { fontSize: 13, color: '#8896b3' },
   timerCount: { fontSize: 13, fontWeight: '700', color: '#4c6fff' },
   timerExpired: { fontSize: 13, color: '#ef4444', fontWeight: '600' },
   errorText: { fontSize: 12, color: '#ef4444', marginTop: 8, textAlign: 'center', fontWeight: '500' },
-  btnVerify: { backgroundColor: '#4c6fff', borderRadius: 14, paddingVertical: 16, alignItems: 'center', marginTop: 22, shadowColor: '#4c6fff', shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.32, shadowRadius: 20, elevation: 8 },
+  btnVerify: { 
+    backgroundColor: '#4c6fff', borderRadius: 14, paddingVertical: 16, alignItems: 'center', 
+    marginTop: 22, shadowColor: '#4c6fff', shadowOffset: { width: 0, height: 10 }, 
+    shadowOpacity: 0.32, shadowRadius: 20, elevation: 8 
+  },
   btnDisabled: { opacity: 0.5 },
   btnVerifyText: { color: '#ffffff', fontSize: 15, fontWeight: '700', letterSpacing: 0.3 },
   resendBtn: { alignItems: 'center', marginTop: 18, paddingVertical: 4 },
   resendText: { fontSize: 13, fontWeight: '700', color: '#1a1f36' },
   resendDisabled: { color: '#b0bbd6' },
-  // Success Overlay Styles
-  successOverlay: {
+  // Toast Styles
+  toastContainer: {
     position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: 'rgba(0, 0, 0, 0.85)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    zIndex: 2000,
-  },
-  successContent: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#ffffff',
-    borderRadius: 24,
-    padding: 32,
-    marginHorizontal: 40,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.3,
-    shadowRadius: 20,
-    elevation: 10,
-  },
-  successIconCircle: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    backgroundColor: '#d1fae5',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 20,
-  },
-  successTitle: {
-    fontSize: 24,
-    fontWeight: '800',
-    color: '#0f172a',
-    marginBottom: 8,
-  },
-  successMessage: {
-    fontSize: 14,
-    color: '#64748b',
-    textAlign: 'center',
-  },
-  gridBackground: {
-    ...StyleSheet.absoluteFillObject,
-    width: '100%',
-    height: '100%',
-  },
-  gridOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(255,255,255,0.10)',
-  },
-  errorModalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    justifyContent: 'center',
+    top: Platform.OS === 'ios' ? 60 : 50,
+    left: 20,
+    right: 20,
+    zIndex: 1000,
     alignItems: 'center',
   },
-  errorModalContainer: {
-    width: '85%',
-    maxWidth: 340,
-    backgroundColor: '#FFFFFF',
-    borderRadius: 20,
-    padding: 24,
+  toastContent: {
+    flexDirection: 'row',
     alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 12,
+    minWidth: 200,
+    maxWidth: '90%',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.15,
-    shadowRadius: 12,
-    elevation: 8,
+    shadowRadius: 8,
+    elevation: 6,
   },
-  errorModalIconWrapper: {
-    marginBottom: 16,
+  toastSuccess: { backgroundColor: '#10b981' },
+  toastError: { backgroundColor: '#ef4444' },
+  toastText: { color: '#ffffff', fontSize: 14, fontWeight: '600', marginLeft: 10, flex: 1 },
+  // Grid
+  gridBackground: { ...StyleSheet.absoluteFillObject, width: '100%', height: '100%' },
+  gridOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(255,255,255,0.10)' },
+  // Error Modal
+  errorModalOverlay: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.5)', justifyContent: 'center', alignItems: 'center' },
+  errorModalContainer: { 
+    width: '85%', maxWidth: 340, backgroundColor: '#FFFFFF', borderRadius: 20, 
+    padding: 24, alignItems: 'center', shadowColor: '#000', 
+    shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.15, shadowRadius: 12, elevation: 8 
   },
-  errorModalIconCircle: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    backgroundColor: '#f0f4ff',
-    justifyContent: 'center',
-    alignItems: 'center',
+  errorModalIconWrapper: { marginBottom: 16 },
+  errorModalIconCircle: { 
+    width: 64, height: 64, borderRadius: 32, backgroundColor: '#f0f4ff', 
+    justifyContent: 'center', alignItems: 'center' 
   },
-  errorModalTitle: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: '#1e293b',
-    textAlign: 'center',
-    marginBottom: 8,
+  errorModalTitle: { fontSize: 20, fontWeight: '700', color: '#1e293b', textAlign: 'center', marginBottom: 8 },
+  errorModalMessage: { fontSize: 14, color: '#64748b', textAlign: 'center', lineHeight: 20, marginBottom: 24 },
+  errorModalButtonPrimary: { 
+    width: '100%', paddingVertical: 12, borderRadius: 10, 
+    alignItems: 'center', backgroundColor: '#3b5bdb' 
   },
-  errorModalMessage: {
-    fontSize: 14,
-    color: '#64748b',
-    textAlign: 'center',
-    lineHeight: 20,
-    marginBottom: 24,
-  },
-  errorModalButtonPrimary: {
-    width: '100%',
-    paddingVertical: 12,
-    borderRadius: 10,
-    alignItems: 'center',
-    backgroundColor: '#3b5bdb',
-  },
-  errorModalButtonTextPrimary: {
-    color: '#ffffff',
-    fontSize: 16,
-    fontWeight: '600',
-  },
+  errorModalButtonTextPrimary: { color: '#ffffff', fontSize: 16, fontWeight: '600' },
 });
