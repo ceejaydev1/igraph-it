@@ -395,6 +395,8 @@ const googleAuth = async (req, res) => {
 // FORGOT PASSWORD
 // ============================================================================
 
+// In the forgotPassword function, update the Google account detection:
+
 const forgotPassword = async (req, res) => {
   try {
     const { email } = req.body;
@@ -409,13 +411,16 @@ const forgotPassword = async (req, res) => {
     const user = await userModel.getUserByEmail(email);
 
     if (!user) {
+      // Return success to prevent email enumeration
       return res.status(200).json({
         success: true,
         message: 'If an account exists with this email, you will receive a password reset code.'
       });
     }
 
+    // ⭐ CRITICAL: Check if user is a Google account FIRST
     if (user.auth_provider === 'google') {
+      console.log(`🔴 Google account detected for ${email} - blocking password reset`);
       return res.status(400).json({
         success: false,
         message: 'This email is linked to a Google account. Please sign in with Google instead.',
@@ -436,10 +441,17 @@ const forgotPassword = async (req, res) => {
     const otpExpiry = getOTPExpiry(5);
     await otpModel.createOTP(user.user_id, otp, 'reset', otpExpiry);
     
+    // ⭐ Send email and handle failures properly
     try {
       await sendPasswordResetEmail(email, user.full_name, otp);
+      console.log(`✅ Password reset email sent to ${email}`);
     } catch (emailError) {
-      console.error('Password reset email error:', emailError);
+      console.error('❌ Password reset email failed:', emailError.message);
+      // Return error to user so they know email failed
+      return res.status(500).json({
+        success: false,
+        message: 'Failed to send reset code. Please try again later.'
+      });
     }
 
     if (process.env.NODE_ENV === 'development') {

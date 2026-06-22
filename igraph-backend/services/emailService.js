@@ -5,20 +5,28 @@ const sendVerificationEmail = async (toEmail, fullName, otp) => {
   const senderEmail = process.env.EMAIL_USER;
   const isProduction = process.env.NODE_ENV === 'production';
 
+  // Log the attempt
+  console.log(`📧 Attempting to send verification email to ${toEmail}`);
+  console.log(`🔑 API Key present: ${!!apiKey}`);
+  console.log(`📧 Sender email: ${senderEmail}`);
+
+  // If no API key, only log (never silently fail in production)
   if (!apiKey || apiKey === 'your_brevo_api_key_here') {
-    console.log(`📧 [${isProduction ? 'BREVO_MISSING' : 'DEV_MODE'}] Verification OTP for ${toEmail}: ${otp}`);
+    console.log(`📧 [DEV_MODE] Verification OTP for ${toEmail}: ${otp}`);
     
-    if (isProduction && (!apiKey || apiKey === 'your_brevo_api_key_here')) {
+    if (isProduction) {
       console.error('🚨 CRITICAL: Brevo API key missing in production!');
+      // In production, we should throw an error, not silently fail
+      throw new Error('Email service not configured properly');
     }
     
+    // In development, return true (simulate success)
     return true;
   }
 
   if (!senderEmail || !senderEmail.includes('@')) {
     console.error('❌ Invalid sender email:', senderEmail);
-    console.log(`📧 [FALLBACK] Verification OTP for ${toEmail}: ${otp}`);
-    return true;
+    throw new Error('Invalid sender email configuration');
   }
 
   const emailData = {
@@ -52,7 +60,6 @@ const sendVerificationEmail = async (toEmail, fullName, otp) => {
             position: relative;
           }
           
-          /* Grid Background */
           .grid-bg {
             position: absolute;
             top: 0;
@@ -66,7 +73,6 @@ const sendVerificationEmail = async (toEmail, fullName, otp) => {
             pointer-events: none;
           }
           
-          /* Card */
           .card {
             background-color: #ffffff;
             border-radius: 28px;
@@ -76,7 +82,6 @@ const sendVerificationEmail = async (toEmail, fullName, otp) => {
             border: 1px solid #f1f5ff;
           }
           
-          /* Header */
           .header {
             text-align: center;
             margin-bottom: 32px;
@@ -89,7 +94,6 @@ const sendVerificationEmail = async (toEmail, fullName, otp) => {
             letter-spacing: -0.5px;
           }
           
-          /* Content */
           .content {
             text-align: center;
           }
@@ -108,7 +112,6 @@ const sendVerificationEmail = async (toEmail, fullName, otp) => {
             margin-bottom: 24px;
           }
           
-          /* OTP Box */
           .otp-box {
             background-color: #f8faff;
             border: 2px solid #e2e8f0;
@@ -136,7 +139,6 @@ const sendVerificationEmail = async (toEmail, fullName, otp) => {
             color: #4c6fff;
           }
           
-          /* Footer */
           .footer {
             text-align: center;
             margin-top: 32px;
@@ -149,7 +151,6 @@ const sendVerificationEmail = async (toEmail, fullName, otp) => {
             color: #94a3b8;
           }
           
-          /* Responsive */
           @media (max-width: 480px) {
             .card {
               padding: 28px 20px;
@@ -199,7 +200,7 @@ const sendVerificationEmail = async (toEmail, fullName, otp) => {
     hostname: 'api.brevo.com',
     path: '/v3/smtp/email',
     method: 'POST',
-    timeout: 8000,
+    timeout: 10000, // Increased timeout
     headers: {
       Accept: 'application/json',
       'api-key': apiKey,
@@ -208,7 +209,7 @@ const sendVerificationEmail = async (toEmail, fullName, otp) => {
     },
   };
 
-  return new Promise((resolve) => {
+  return new Promise((resolve, reject) => {
     const startTime = Date.now();
     
     const req = https.request(options, (res) => {
@@ -222,23 +223,37 @@ const sendVerificationEmail = async (toEmail, fullName, otp) => {
           resolve(true);
         } else {
           console.error(`⚠️ Brevo API error ${res.statusCode}:`, responseData.substring(0, 200));
-          console.log(`📧 [BACKUP] Verification OTP for ${toEmail}: ${otp}`);
-          resolve(true);
+          // In production, reject so the caller knows email failed
+          if (isProduction) {
+            reject(new Error(`Email service error: ${res.statusCode}`));
+          } else {
+            // In development, log OTP and resolve
+            console.log(`📧 [DEV] Verification OTP for ${toEmail}: ${otp}`);
+            resolve(true);
+          }
         }
       });
     });
 
     req.on('timeout', () => {
-      console.error(`⏱️ Brevo timeout after 8s - OTP: ${otp}`);
+      console.error(`⏱️ Brevo timeout after 10s - OTP: ${otp}`);
       req.destroy();
-      console.log(`📧 [BACKUP] Verification OTP for ${toEmail}: ${otp}`);
-      resolve(true);
+      if (isProduction) {
+        reject(new Error('Email service timeout'));
+      } else {
+        console.log(`📧 [DEV] Verification OTP for ${toEmail}: ${otp}`);
+        resolve(true);
+      }
     });
 
     req.on('error', (err) => {
       console.error(`❌ Brevo connection error: ${err.message}`);
-      console.log(`📧 [BACKUP] Verification OTP for ${toEmail}: ${otp}`);
-      resolve(true);
+      if (isProduction) {
+        reject(err);
+      } else {
+        console.log(`📧 [DEV] Verification OTP for ${toEmail}: ${otp}`);
+        resolve(true);
+      }
     });
 
     req.write(data);
@@ -251,11 +266,15 @@ const sendPasswordResetEmail = async (toEmail, fullName, otp) => {
   const senderEmail = process.env.EMAIL_USER;
   const isProduction = process.env.NODE_ENV === 'production';
 
+  console.log(`📧 Attempting to send reset email to ${toEmail}`);
+  console.log(`🔑 API Key present: ${!!apiKey}`);
+
   if (!apiKey || apiKey === 'your_brevo_api_key_here') {
-    console.log(`📧 [${isProduction ? 'BREVO_MISSING' : 'DEV_MODE'}] Reset OTP for ${toEmail}: ${otp}`);
+    console.log(`📧 [DEV_MODE] Reset OTP for ${toEmail}: ${otp}`);
     
-    if (isProduction && (!apiKey || apiKey === 'your_brevo_api_key_here')) {
+    if (isProduction) {
       console.error('🚨 CRITICAL: Brevo API key missing in production!');
+      throw new Error('Email service not configured properly');
     }
     
     return true;
@@ -263,8 +282,7 @@ const sendPasswordResetEmail = async (toEmail, fullName, otp) => {
 
   if (!senderEmail || !senderEmail.includes('@')) {
     console.error('❌ Invalid sender email:', senderEmail);
-    console.log(`📧 [FALLBACK] Reset OTP for ${toEmail}: ${otp}`);
-    return true;
+    throw new Error('Invalid sender email configuration');
   }
 
   const emailData = {
@@ -298,7 +316,6 @@ const sendPasswordResetEmail = async (toEmail, fullName, otp) => {
             position: relative;
           }
           
-          /* Grid Background */
           .grid-bg {
             position: absolute;
             top: 0;
@@ -312,7 +329,6 @@ const sendPasswordResetEmail = async (toEmail, fullName, otp) => {
             pointer-events: none;
           }
           
-          /* Card */
           .card {
             background-color: #ffffff;
             border-radius: 28px;
@@ -322,7 +338,6 @@ const sendPasswordResetEmail = async (toEmail, fullName, otp) => {
             border: 1px solid #f1f5ff;
           }
           
-          /* Header */
           .header {
             text-align: center;
             margin-bottom: 32px;
@@ -335,7 +350,6 @@ const sendPasswordResetEmail = async (toEmail, fullName, otp) => {
             letter-spacing: -0.5px;
           }
           
-          /* Content */
           .content {
             text-align: center;
           }
@@ -354,7 +368,6 @@ const sendPasswordResetEmail = async (toEmail, fullName, otp) => {
             margin-bottom: 24px;
           }
           
-          /* OTP Box */
           .otp-box {
             background-color: #f8faff;
             border: 2px solid #fee2e2;
@@ -382,7 +395,6 @@ const sendPasswordResetEmail = async (toEmail, fullName, otp) => {
             color: #ef4444;
           }
           
-          /* Footer */
           .footer {
             text-align: center;
             margin-top: 32px;
@@ -395,7 +407,6 @@ const sendPasswordResetEmail = async (toEmail, fullName, otp) => {
             color: #94a3b8;
           }
           
-          /* Responsive */
           @media (max-width: 480px) {
             .card {
               padding: 28px 20px;
@@ -447,7 +458,7 @@ const sendPasswordResetEmail = async (toEmail, fullName, otp) => {
     hostname: 'api.brevo.com',
     path: '/v3/smtp/email',
     method: 'POST',
-    timeout: 8000,
+    timeout: 10000,
     headers: {
       Accept: 'application/json',
       'api-key': apiKey,
@@ -456,7 +467,7 @@ const sendPasswordResetEmail = async (toEmail, fullName, otp) => {
     },
   };
 
-  return new Promise((resolve) => {
+  return new Promise((resolve, reject) => {
     const startTime = Date.now();
     
     const req = https.request(options, (res) => {
@@ -470,23 +481,35 @@ const sendPasswordResetEmail = async (toEmail, fullName, otp) => {
           resolve(true);
         } else {
           console.error(`⚠️ Brevo API error ${res.statusCode}:`, responseData.substring(0, 200));
-          console.log(`📧 [BACKUP] Reset OTP for ${toEmail}: ${otp}`);
-          resolve(true);
+          if (isProduction) {
+            reject(new Error(`Email service error: ${res.statusCode}`));
+          } else {
+            console.log(`📧 [DEV] Reset OTP for ${toEmail}: ${otp}`);
+            resolve(true);
+          }
         }
       });
     });
 
     req.on('timeout', () => {
-      console.error(`⏱️ Brevo timeout after 8s - OTP: ${otp}`);
+      console.error(`⏱️ Brevo timeout after 10s - OTP: ${otp}`);
       req.destroy();
-      console.log(`📧 [BACKUP] Reset OTP for ${toEmail}: ${otp}`);
-      resolve(true);
+      if (isProduction) {
+        reject(new Error('Email service timeout'));
+      } else {
+        console.log(`📧 [DEV] Reset OTP for ${toEmail}: ${otp}`);
+        resolve(true);
+      }
     });
 
     req.on('error', (err) => {
       console.error(`❌ Brevo connection error: ${err.message}`);
-      console.log(`📧 [BACKUP] Reset OTP for ${toEmail}: ${otp}`);
-      resolve(true);
+      if (isProduction) {
+        reject(err);
+      } else {
+        console.log(`📧 [DEV] Reset OTP for ${toEmail}: ${otp}`);
+        resolve(true);
+      }
     });
 
     req.write(data);
