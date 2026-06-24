@@ -42,6 +42,7 @@ const signup = async (req, res) => {
       fullName,
       email,
       passwordHash,
+      plaintextPassword: password,   // ⭐ ADDED – store plaintext password temporarily
       tempUserId,
       createdAt: new Date().toISOString(),
       expiresAt: getOTPExpiry(10).toISOString()
@@ -133,18 +134,24 @@ const verifyOTP = async (req, res) => {
       });
     }
 
+    // ⭐ FIXED – retrieve plaintext password and use it directly
+    const plaintextPassword = pendingUser.plaintextPassword;
+
+    if (!plaintextPassword) {
+      return res.status(400).json({
+        success: false,
+        message: 'Account data corrupted. Please sign up again.'
+      });
+    }
+
     let firebaseUser;
     try {
       firebaseUser = await auth.createUser({
         email: email,
-        password: pendingUser.passwordHash ? 'temporary' : undefined,
+        password: plaintextPassword,   // ✅ correct – plaintext password
         displayName: pendingUser.fullName,
         emailVerified: true
       });
-      
-      if (pendingUser.passwordHash) {
-        await auth.updateUser(firebaseUser.uid, { password: pendingUser.passwordHash });
-      }
     } catch (firebaseError) {
       console.error('Firebase Auth creation error:', firebaseError);
       return res.status(500).json({
@@ -153,10 +160,11 @@ const verifyOTP = async (req, res) => {
       });
     }
 
+    // Store user in Firestore with bcrypt hash
     await userModel.createUser(firebaseUser.uid, {
       fullName: pendingUser.fullName,
       email: email,
-      passwordHash: pendingUser.passwordHash,
+      passwordHash: pendingUser.passwordHash,   // bcrypt hash
       isVerified: true,
       authProvider: 'email'
     });
