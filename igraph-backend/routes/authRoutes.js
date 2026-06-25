@@ -3,6 +3,7 @@
 const express = require('express');
 const router = express.Router();
 const rateLimit = require('express-rate-limit');
+const { ipKeyGenerator } = require('express-rate-limit');
 
 const authController = require('../controllers/authController');
 const {
@@ -63,8 +64,13 @@ const emailKey = (prefix) => (req) => {
 
 /**
  * Pure IP key — used for the second (IP-level) limiter layer in prod.
+ * ✅ FIXED: Uses ipKeyGenerator to handle IPv6 properly.
  */
-const ipKey = (prefix) => (req) => `${prefix}:ip:${req.ip}`;
+const ipKey = (prefix) => (req) => {
+  // Use the library's built-in helper that handles IPv6 correctly
+  const ipPart = ipKeyGenerator(req, prefix);
+  return `${prefix}:ip:${ipPart}`;
+};
 
 /**
  * Builds a dual-layer limiter pair:
@@ -102,6 +108,7 @@ const buildLimiters = ({ prefix, windowMs, ipMax, accountMax, message }) => {
   }
 
   // Production: two limiters in sequence
+  // ✅ FIXED: Use ipKeyGenerator via ipKey helper
   const ipLimiter = rateLimit({
     ...baseConfig,
     max: ipMax,
@@ -256,7 +263,7 @@ const changePasswordLimiters = LAB_ACTIVE
       rateLimit({
         windowMs:       15 * 60 * 1000,
         max:            20,
-        keyGenerator:   (req) => `change-pw:ip:${req.ip}`,
+        keyGenerator:   ipKey('change-pw'),
         standardHeaders: true,
         legacyHeaders:  false,
         message:        { success: false, message: 'Too many password change attempts. Please try again in 15 minutes. (IP blocked)' },
