@@ -14,6 +14,7 @@ import {
   Modal,
   ToastAndroid,
   Alert,
+  Animated,
   useWindowDimensions,
 } from 'react-native';
 import { Stack, useRouter } from 'expo-router';
@@ -71,16 +72,10 @@ const getOutlineColor = (isFocused: boolean, hasError: string) => {
   return '#dde3fa';
 };
 
-const showToastMessage = (message: string, isError: boolean = false) => {
-  if (Platform.OS === 'android') {
-    ToastAndroid.show(message, ToastAndroid.SHORT);
-  } else if (Platform.OS === 'ios') {
-    Alert.alert(isError ? 'Error' : 'Success', message);
-  } else {
-    console.log(message);
-    if (isError) Alert.alert('Error', message);
-  }
-};
+// NOTE: A custom animated CustomToast component (declared further below,
+// rendered + driven by the `showToast`/`hideToast` functions inside the SignUp
+// component) replaces the old showToastMessage helper. The old version only
+// console.logged on web — meaning toasts never actually appeared on web/PWA.
 
 // ─── ICONS ────────────────────────────────────────────────────────────────────
 
@@ -117,294 +112,11 @@ const EmailIcon = () => (
   </Svg>
 );
 
-// ─── TERMS AND PRIVACY POLICY CONTENT ─────────────────────────────────────────
-
-const TermsContent = () => (
-  <View style={modalStyles.tabContent}>
-    <Text style={modalStyles.sectionTitle}>1. Acceptance of Terms</Text>
-    <Text style={modalStyles.text}>
-      By registering for or using iGraph IT ("Platform"), you agree to be bound by these Terms and
-      Conditions. If you disagree with any part, you must not use our Platform.
-    </Text>
-    <Text style={modalStyles.sectionTitle}>2. Account Registration</Text>
-    <Text style={modalStyles.subSection}>2.1 Account Security</Text>
-    <Text style={modalStyles.text}>
-      • You are responsible for maintaining password confidentiality{'\n'}
-      • You must notify us immediately of unauthorized access{'\n'}
-      • We are not liable for losses from compromised accounts
-    </Text>
-    <Text style={modalStyles.subSection}>2.2 Accuracy of Information</Text>
-    <Text style={modalStyles.text}>
-      You must provide accurate, current, and complete information during registration and update it as needed.
-    </Text>
-    <Text style={modalStyles.sectionTitle}>3. User Conduct</Text>
-    <Text style={modalStyles.text}>
-      You agree NOT to:{'\n'}
-      • Share your account credentials with others{'\n'}
-      • Attempt to bypass authentication mechanisms{'\n'}
-      • Use automated scripts to access the Platform{'\n'}
-      • Upload malicious content or code{'\n'}
-      • Attempt to access other users' data{'\n'}
-      • Reverse engineer any part of the Platform{'\n'}
-      • Use the Platform for illegal activities
-    </Text>
-    <Text style={modalStyles.sectionTitle}>4. Intellectual Property</Text>
-    <Text style={modalStyles.subSection}>4.1 Our Content</Text>
-    <Text style={modalStyles.text}>
-      All platform content, including UI design, diagrams, educational materials about SDLC and UML, and source code is owned by iGraph IT and protected by copyright laws.
-    </Text>
-    <Text style={modalStyles.subSection}>4.2 Your Content</Text>
-    <Text style={modalStyles.text}>
-      • You retain ownership of diagrams you create{'\n'}
-      • You grant us license to display your content within the Platform{'\n'}
-      • You are responsible for your content's legality
-    </Text>
-    <Text style={modalStyles.sectionTitle}>5. Authentication and Security</Text>
-    <Text style={modalStyles.subSection}>5.1 Token Management</Text>
-    <Text style={modalStyles.text}>
-      • Access tokens expire after 15 minutes{'\n'}
-      • Refresh tokens expire after 7 days{'\n'}
-      • You must re-authenticate after token expiration
-    </Text>
-    <Text style={modalStyles.subSection}>5.2 OTP Verification</Text>
-    <Text style={modalStyles.text}>
-      • OTPs expire after 5 minutes{'\n'}
-      • Maximum 3 OTP requests per 15 minutes{'\n'}
-      • Do not share OTPs with anyone
-    </Text>
-    <Text style={modalStyles.sectionTitle}>6. Limitation of Liability</Text>
-    <Text style={modalStyles.text}>
-      To the maximum extent permitted by law, the Platform is provided "as is" without warranties. We are not liable for indirect, incidental, or consequential damages.
-    </Text>
-    <Text style={modalStyles.sectionTitle}>7. Governing Law</Text>
-    <Text style={modalStyles.text}>
-      These terms are governed by the laws of the Philippines, without regard to conflict of law principles.
-    </Text>
-    <Text style={modalStyles.sectionTitle}>8. Contact Us</Text>
-    <Text style={modalStyles.text}>
-      Email: legal@igraphit.com{'\n'}Response time: Within 5 business days
-    </Text>
-    <Text style={modalStyles.footer}>
-      By using iGraph IT, you acknowledge that you have read, understood, and agree to be bound by these Terms and Conditions.
-    </Text>
-  </View>
-);
-
-const PrivacyContent = () => (
-  <View style={modalStyles.tabContent}>
-    <Text style={modalStyles.sectionTitle}>1. Introduction</Text>
-    <Text style={modalStyles.text}>
-      Welcome to iGraph IT. We are committed to protecting your personal information and your right to privacy.
-    </Text>
-    <Text style={modalStyles.sectionTitle}>2. Information We Collect</Text>
-    <Text style={modalStyles.subSection}>2.1 Personal Information You Provide</Text>
-    <Text style={modalStyles.text}>
-      • Account Information: Full name, email address, password (encrypted){'\n'}
-      • Profile Information: Profile picture (optional){'\n'}
-      • Authentication Data: Sign-in methods (email/password or Google OAuth)
-    </Text>
-    <Text style={modalStyles.subSection}>2.2 Automatically Collected Information</Text>
-    <Text style={modalStyles.text}>
-      • Usage Data: Pages visited, diagrams created, time spent on platform{'\n'}
-      • Device Information: Browser type, operating system, IP address
-    </Text>
-    <Text style={modalStyles.sectionTitle}>3. How We Use Your Information</Text>
-    <Text style={modalStyles.text}>
-      We use your information to:{'\n'}
-      • Create and manage your account{'\n'}
-      • Authenticate your identity and secure your access{'\n'}
-      • Send OTP verification and password reset emails{'\n'}
-      • Improve our platform and user experience
-    </Text>
-    <Text style={modalStyles.sectionTitle}>4. Data Storage and Security</Text>
-    <Text style={modalStyles.text}>
-      • Your password is encrypted using bcrypt (12 rounds){'\n'}
-      • Access tokens expire after 15 minutes{'\n'}
-      • Refresh tokens expire after 7 days
-    </Text>
-    <Text style={modalStyles.sectionTitle}>5. Email Communications</Text>
-    <Text style={modalStyles.text}>
-      We send account verification OTPs and password reset links. These are essential and cannot be opted out of.
-    </Text>
-    <Text style={modalStyles.sectionTitle}>6. Data Retention</Text>
-    <Text style={modalStyles.text}>
-      • Account data: Until you delete your account{'\n'}
-      • Session data: 7 days from last activity
-    </Text>
-    <Text style={modalStyles.sectionTitle}>7. Your Rights</Text>
-    <Text style={modalStyles.text}>
-      You have the right to access your data, correct inaccurate data, delete your account, and export your data.
-    </Text>
-    <Text style={modalStyles.sectionTitle}>8. Third-Party Services</Text>
-    <Text style={modalStyles.text}>
-      We use Firebase (Google) for authentication and database, and Brevo for email delivery.
-    </Text>
-    <Text style={modalStyles.sectionTitle}>9. Children's Privacy</Text>
-    <Text style={modalStyles.text}>
-      iGraph IT is not intended for children under 13. We do not knowingly collect information from children under 13.
-    </Text>
-    <Text style={modalStyles.sectionTitle}>10. Contact Us</Text>
-    <Text style={modalStyles.text}>
-      For privacy concerns, contact us at: privacy@igraphit.com
-    </Text>
-    <Text style={modalStyles.footer}>By using iGraph IT, you agree to this Privacy Policy.</Text>
-  </View>
-);
-
-// ─── POLICY MODAL ────────────────────────────────────────────────────────────
-
-const PolicyModal = ({
-  visible,
-  onClose,
-  onAgree,
-}: {
-  visible: boolean;
-  onClose: () => void;
-  onAgree: () => void;
-}) => {
-  const { width: ww, height: wh } = useWindowDimensions();
-  const [activeTab, setActiveTab] = useState<'terms' | 'privacy'>('terms');
-  const scrollViewRef = useRef<ScrollView>(null);
-  const [showScrollTop, setShowScrollTop] = useState(false);
-  const [termsRead, setTermsRead] = useState(false);
-  const [privacyRead, setPrivacyRead] = useState(false);
-  const bothRead = termsRead && privacyRead;
-
-  useEffect(() => {
-    if (visible) {
-      setTermsRead(false);
-      setPrivacyRead(false);
-      setActiveTab('terms');
-      setShowScrollTop(false);
-    }
-  }, [visible]);
-
-  const handleTabSwitch = (tab: 'terms' | 'privacy') => {
-    setActiveTab(tab);
-    setShowScrollTop(false);
-    scrollViewRef.current?.scrollTo({ y: 0, animated: false });
-  };
-
-  const handleScroll = (event: any) => {
-    const { layoutMeasurement, contentOffset, contentSize } = event.nativeEvent;
-    const offsetY = contentOffset.y;
-    setShowScrollTop(offsetY > 200);
-    const isAtBottom = layoutMeasurement.height + offsetY >= contentSize.height - 40;
-    if (isAtBottom) {
-      if (activeTab === 'terms') setTermsRead(true);
-      else setPrivacyRead(true);
-    }
-  };
-
-  const scrollToTop = () => {
-    scrollViewRef.current?.scrollTo({ y: 0, animated: true });
-  };
-
-  const handleAgree = () => {
-    onAgree();
-    onClose();
-  };
-
-  const handleDecline = () => {
-    onClose();
-  };
-
-  const modalWidth = Math.min(ww - 40, 500);
-  const modalMaxHeight = wh - 80;
-
-  return (
-    <Modal animationType="slide" transparent={true} visible={visible} onRequestClose={onClose}>
-      <View style={modalStyles.modalOverlay}>
-        <View style={[modalStyles.modalContainer, { width: modalWidth, maxHeight: modalMaxHeight }]}>
-          <View style={modalStyles.modalHeader}>
-            <Text style={modalStyles.modalTitle}>Legal Agreement</Text>
-          </View>
-
-          <View style={modalStyles.tabBar}>
-            <TouchableOpacity
-              style={[modalStyles.tab, activeTab === 'terms' && modalStyles.activeTab]}
-              onPress={() => handleTabSwitch('terms')}
-            >
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                <Text style={[modalStyles.tabText, activeTab === 'terms' && modalStyles.activeTabText]}>
-                  Terms & Conditions
-                </Text>
-                {termsRead && (
-                  <Svg width={14} height={14} viewBox="0 0 24 24" fill="none">
-                    <Circle cx="12" cy="12" r="10" fill="#3b5bdb" />
-                    <Path d="M8 12l2.5 2.5L16 9" stroke="white" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
-                  </Svg>
-                )}
-              </View>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[modalStyles.tab, activeTab === 'privacy' && modalStyles.activeTab]}
-              onPress={() => handleTabSwitch('privacy')}
-            >
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                <Text style={[modalStyles.tabText, activeTab === 'privacy' && modalStyles.activeTabText]}>
-                  Privacy Policy
-                </Text>
-                {privacyRead && (
-                  <Svg width={14} height={14} viewBox="0 0 24 24" fill="none">
-                    <Circle cx="12" cy="12" r="10" fill="#3b5bdb" />
-                    <Path d="M8 12l2.5 2.5L16 9" stroke="white" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
-                  </Svg>
-                )}
-              </View>
-            </TouchableOpacity>
-          </View>
-
-          {!bothRead && (
-            <View style={modalStyles.scrollHintBanner}>
-              <Svg width={14} height={14} viewBox="0 0 24 24" fill="none">
-                <Path d="M12 5v14M5 12l7 7 7-7" stroke="#3b5bdb" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
-              </Svg>
-              <Text style={modalStyles.scrollHintText}>
-                Please scroll to the bottom of{' '}
-                {!termsRead && !privacyRead ? 'both documents' : !termsRead ? 'Terms & Conditions' : 'Privacy Policy'}{' '}
-                to enable Agree
-              </Text>
-            </View>
-          )}
-
-          <ScrollView
-            ref={scrollViewRef}
-            showsVerticalScrollIndicator={true}
-            onScroll={handleScroll}
-            scrollEventThrottle={16}
-          >
-            {activeTab === 'terms' ? <TermsContent /> : <PrivacyContent />}
-          </ScrollView>
-
-          {showScrollTop && (
-            <TouchableOpacity style={modalStyles.scrollTopButton} onPress={scrollToTop}>
-              <Svg width={24} height={24} viewBox="0 0 24 24" fill="none">
-                <Path d="M12 19V5M5 12l7-7 7 7" stroke="#ffffff" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
-              </Svg>
-            </TouchableOpacity>
-          )}
-
-          <View style={modalStyles.modalFooter}>
-            <TouchableOpacity
-              style={[modalStyles.agreeButton, !bothRead && modalStyles.agreeButtonDisabled]}
-              onPress={bothRead ? handleAgree : undefined}
-            >
-              <Text style={[modalStyles.agreeButtonText, !bothRead && modalStyles.agreeButtonTextDisabled]}>
-                {bothRead ? 'I Agree' : 'Read First'}
-              </Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={modalStyles.declineButton} onPress={handleDecline}>
-              <Text style={modalStyles.declineButtonText}>Decline</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </View>
-    </Modal>
-  );
-};
-
 // ─── ERROR POPUP MODAL ────────────────────────────────────────────────────────
+// NOTE: Now only used for errors that are NOT about the email field
+// (e.g. network errors, popup blocked, generic Google sign-in failures).
+// Email-already-exists / Google-account-detected errors are shown inline
+// below the email input instead — see `emailInlineError` state below.
 
 const ErrorPopupModal = ({
   visible,
@@ -509,6 +221,100 @@ const SuccessModal = ({
   );
 };
 
+// ─── CUSTOM TOAST ─────────────────────────────────────────────────────────────
+// Same component/animation/styling as the forgot-password screen's toast —
+// works on iOS, Android, and web/PWA (unlike ToastAndroid/Alert).
+
+const CustomToast = ({
+  visible,
+  message,
+  isError,
+  onHide,
+}: {
+  visible: boolean;
+  message: string;
+  isError: boolean;
+  onHide: () => void;
+}) => {
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const slideAnim = useRef(new Animated.Value(-50)).current;
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    if (visible) {
+      Animated.parallel([
+        Animated.timing(fadeAnim, {
+          toValue: 1,
+          duration: 300,
+          useNativeDriver: true,
+        }),
+        Animated.spring(slideAnim, {
+          toValue: 0,
+          tension: 50,
+          friction: 7,
+          useNativeDriver: true,
+        }),
+      ]).start();
+
+      timeoutRef.current = setTimeout(() => {
+        hideToast();
+      }, 3000);
+    }
+
+    return () => {
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+      }
+    };
+  }, [visible]);
+
+  const hideToast = () => {
+    Animated.parallel([
+      Animated.timing(fadeAnim, {
+        toValue: 0,
+        duration: 300,
+        useNativeDriver: true,
+      }),
+      Animated.timing(slideAnim, {
+        toValue: -50,
+        duration: 300,
+        useNativeDriver: true,
+      }),
+    ]).start(() => {
+      onHide();
+    });
+  };
+
+  if (!visible) return null;
+
+  return (
+    <Animated.View
+      style={[
+        styles.toastContainer,
+        {
+          opacity: fadeAnim,
+          transform: [{ translateY: slideAnim }],
+        },
+      ]}
+    >
+      <View style={[styles.toastContent, isError ? styles.toastError : styles.toastSuccess]}>
+        {isError ? (
+          <Svg width={20} height={20} viewBox="0 0 24 24" fill="none">
+            <Circle cx="12" cy="12" r="10" stroke="#fff" strokeWidth="1.5" />
+            <Path d="M12 8v4M12 16h.01" stroke="#fff" strokeWidth="2" strokeLinecap="round" />
+          </Svg>
+        ) : (
+          <Svg width={20} height={20} viewBox="0 0 24 24" fill="none">
+            <Circle cx="12" cy="12" r="10" stroke="#fff" strokeWidth="1.5" />
+            <Path d="M8 12l3 3 5-6" stroke="#fff" strokeWidth="2" strokeLinecap="round" />
+          </Svg>
+        )}
+        <Text style={styles.toastText}>{message}</Text>
+      </View>
+    </Animated.View>
+  );
+};
+
 // ─── BACKGROUND ───────────────────────────────────────────────────────────────
 
 const DiagramBackground = () => (
@@ -560,7 +366,6 @@ const getStrengthLabel = (pwd: string): string => {
 
 const CompactPasswordStrength = ({ password }: { password: string }) => {
   if (!password) return null;
-
   return (
     <View style={styles.strengthContainer}>
       <View style={styles.strengthRow}>
@@ -590,7 +395,6 @@ export default function SignUp() {
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [agreed, setAgreed] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [showPolicyModal, setShowPolicyModal] = useState(false);
   const [showErrorModal, setShowErrorModal] = useState(false);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [errorModalData, setErrorModalData] = useState({
@@ -616,6 +420,26 @@ export default function SignUp() {
 
   const [inlinePasswordError, setInlinePasswordError] = useState('');
 
+  // Inline "account already exists" / "registered with Google" type errors,
+  // rendered directly below the email field (replaces the old popup modal
+  // for these specific cases).
+  const [emailInlineError, setEmailInlineError] = useState('');
+
+  // Custom toast state (same pattern as the forgot-password screen).
+  const [toastVisible, setToastVisible] = useState(false);
+  const [toastMessage, setToastMessage] = useState('');
+  const [toastIsError, setToastIsError] = useState(false);
+
+  const showToast = (message: string, isError: boolean = false) => {
+    setToastMessage(message);
+    setToastIsError(isError);
+    setToastVisible(true);
+  };
+
+  const hideToast = () => {
+    setToastVisible(false);
+  };
+
   const [fullNameFocused, setFullNameFocused] = useState(false);
   const [emailFocused, setEmailFocused] = useState(false);
   const [passwordFocused, setPasswordFocused] = useState(false);
@@ -628,7 +452,6 @@ export default function SignUp() {
   useEffect(() => {
     const handleRedirectResult = async () => {
       if (!auth || Platform.OS === 'web') return;
-      
       try {
         const result = await getRedirectResult(auth);
         if (result) {
@@ -641,26 +464,19 @@ export default function SignUp() {
         setLoading(false);
       }
     };
-    
     handleRedirectResult();
   }, []);
 
   // ── Handlers ──────────────────────────────────────────────────────────────
 
-  const openPolicyModal = () => setShowPolicyModal(true);
-
-  const handleAgree = useCallback(() => {
-    setAgreed(true);
-    setErrors((prev) => ({ ...prev, agreed: '' }));
-  }, []);
-
   const handleToggleAgreement = useCallback(() => {
-    if (!agreed) {
-      openPolicyModal();
-    } else {
-      setAgreed(false);
-    }
-  }, [agreed]);
+    setAgreed((prev) => !prev);
+    if (errors.agreed) setErrors((prev) => ({ ...prev, agreed: '' }));
+  }, [errors.agreed]);
+
+  const openPrivacyPage = useCallback(() => {
+    router.push('/(auth)/privacy1');
+  }, [router]);
 
   const showErrorPopup = (
     title: string,
@@ -706,46 +522,21 @@ export default function SignUp() {
   // ── Form Validation ──────────────────────────────────────────────────────
 
   const validate = () => {
-    const newErrors = {
-      fullName: '',
-      email: '',
-      password: '',
-      confirmPassword: '',
-      agreed: '',
-    };
+    const newErrors = { fullName: '', email: '', password: '', confirmPassword: '', agreed: '' };
     let isValid = true;
 
-    if (!fullName.trim()) {
-      newErrors.fullName = 'Name is required.';
-      isValid = false;
-    }
-    if (!email.trim()) {
-      newErrors.email = 'Email address is required.';
-      isValid = false;
-    } else if (!/\S+@\S+\.\S+/.test(email)) {
-      newErrors.email = 'Please enter a valid email.';
-      isValid = false;
-    }
-    if (!password) {
-      newErrors.password = 'Password is required.';
-      isValid = false;
-    } else if (!isPasswordValid(password)) {
+    if (!fullName.trim()) { newErrors.fullName = 'Name is required.'; isValid = false; }
+    if (!email.trim()) { newErrors.email = 'Email address is required.'; isValid = false; }
+    else if (!/\S+@\S+\.\S+/.test(email)) { newErrors.email = 'Please enter a valid email.'; isValid = false; }
+    if (!password) { newErrors.password = 'Password is required.'; isValid = false; }
+    else if (!isPasswordValid(password)) {
       const missing = getPasswordMissingRequirements(password);
       newErrors.password = `Password must include: ${missing.join(', ')}`;
       isValid = false;
     }
-    if (!confirmPassword) {
-      newErrors.confirmPassword = 'Please confirm your password.';
-      isValid = false;
-    } else if (password !== confirmPassword) {
-      newErrors.confirmPassword = 'Passwords do not match.';
-      isValid = false;
-    }
-    if (!agreed) {
-      newErrors.agreed = 'You must agree to the Terms and Privacy Policy.';
-      isValid = false;
-      openPolicyModal();
-    }
+    if (!confirmPassword) { newErrors.confirmPassword = 'Please confirm your password.'; isValid = false; }
+    else if (password !== confirmPassword) { newErrors.confirmPassword = 'Passwords do not match.'; isValid = false; }
+    if (!agreed) { newErrors.agreed = 'You must agree to the Terms and Privacy Policy.'; isValid = false; }
 
     setErrors(newErrors);
     return isValid;
@@ -754,12 +545,13 @@ export default function SignUp() {
   // ─── GOOGLE SIGN-IN ───
 
   const handleGoogleSignIn = async () => {
+    setEmailInlineError('');
+
     if (!agreed) {
       setErrors((prev) => ({
         ...prev,
         agreed: 'You must agree to the Terms and Privacy Policy before continuing',
       }));
-      openPolicyModal();
       return;
     }
     if (!auth) {
@@ -773,9 +565,7 @@ export default function SignUp() {
       const provider = new GoogleAuthProvider();
       provider.addScope('email');
       provider.addScope('profile');
-      provider.setCustomParameters({ 
-        prompt: 'select_account',
-      });
+      provider.setCustomParameters({ prompt: 'select_account' });
 
       if (Platform.OS === 'web') {
         const result = await signInWithPopup(auth, provider);
@@ -786,7 +576,6 @@ export default function SignUp() {
     } catch (error: any) {
       console.error('Google Sign-In error:', error);
       setLoading(false);
-      
       if (error.code === 'auth/popup-closed-by-user') {
         // Do nothing
       } else if (error.code === 'auth/popup-blocked') {
@@ -806,27 +595,16 @@ export default function SignUp() {
 
       if (apiResult.success) {
         showSuccessPopup('Welcome!', 'Your Google account has been successfully signed up.', '', '');
-        setTimeout(() => {
-          router.replace('/(tabs)/home');
-        }, 400);
+        setTimeout(() => { router.replace('/(tabs)/home'); }, 400);
       } else {
         await auth?.signOut();
         const msg = apiResult.message || '';
-        
         if (msg.toLowerCase().includes('already registered') || 
             msg.toLowerCase().includes('already exists') ||
             msg.toLowerCase().includes('email/password')) {
           const googleEmail = result.user.email || '';
-          if (googleEmail) {
-            setEmail(googleEmail);
-          }
-          showErrorPopup(
-            'Account Already Exists',
-            'This email is already registered with email/password. Please sign in using your email and password instead.',
-            () => router.push({ pathname: '/(auth)/signin', params: { prefilledEmail: googleEmail } }),
-            'Sign In with Email/Password',
-            <EmailIcon />
-          );
+          if (googleEmail) setEmail(googleEmail);
+          setEmailInlineError('An account with this email already exists.');
         } else {
           showErrorPopup('Sign Up Failed', msg || 'Google sign up failed. Please try again.');
         }
@@ -834,13 +612,7 @@ export default function SignUp() {
     } catch (error: any) {
       console.error('Error handling Google sign-in result:', error);
       if (error.response?.status === 409) {
-        showErrorPopup(
-          'Account Already Exists',
-          error.response?.data?.message || 'This email is already registered with email/password.',
-          () => router.push('/(auth)/signin'),
-          'Sign In with Email/Password',
-          <EmailIcon />
-        );
+        setEmailInlineError('An account with this email already exists.');
       } else {
         showErrorPopup('Sign Up Failed', error.message || 'Something went wrong');
       }
@@ -856,6 +628,7 @@ export default function SignUp() {
   // ── Email/Password Sign Up ─────────────────────────────────────────
 
   const handleSignUp = async () => {
+    setEmailInlineError('');
     if (!validate()) return;
 
     setLoading(true);
@@ -867,37 +640,20 @@ export default function SignUp() {
       if (elapsed < 500) await new Promise((r) => setTimeout(r, 500 - elapsed));
 
       if (result.success) {
-        setShowSuccessModal(true);
-        setSuccessModalData({
-          title: 'Verification Code Sent!',
-          message: `We've sent a 6-digit verification code to ${email.replace(/(.{2})(.*)(@.*)/, '$1•••$3')}`,
-          email: email,
-          purpose: 'register',
-        });
+        const maskedEmail = email.replace(/(.{2})(.*)(@.*)/, '$1•••$3');
+        showToast(`Verification code sent to ${maskedEmail}`);
+        setTimeout(() => {
+          router.push({ pathname: '/(auth)/verify-otp', params: { email, purpose: 'register' } });
+        }, 400);
       } else {
         const msg = result.message || '';
         const errorCode = result.code;
-        
         if (errorCode === 'GOOGLE_ACCOUNT' || msg.toLowerCase().includes('google') || msg.toLowerCase().includes('oauth')) {
-          showErrorPopup(
-            'Google Account Detected',
-            'This email is registered with Google. Please sign in using Google instead.',
-            handleGoogleSignIn,
-            'Sign In with Google',
-            <GoogleIcon />
-          );
-        } 
-        else if (msg.toLowerCase().includes('already registered') || 
-                   msg.toLowerCase().includes('already exists')) {
-          showErrorPopup(
-            'Email Already Exists',
-            'An account with this email already exists. Would you like to sign in instead?',
-            () => router.push({ pathname: '/(auth)/signin', params: { prefilledEmail: email } }),
-            'Go to Sign In',
-            <EmailIcon />
-          );
+          setEmailInlineError('This email is registered with Google.');
+        } else if (msg.toLowerCase().includes('already registered') || msg.toLowerCase().includes('already exists')) {
+          setEmailInlineError('An account with this email already exists.');
         } else {
-          showToastMessage(msg || 'Something went wrong', true);
+          showToast(msg || 'Something went wrong', true);
         }
       }
     } catch (error: any) {
@@ -905,30 +661,15 @@ export default function SignUp() {
       if (error.response?.data?.message) {
         const msg = error.response.data.message;
         const errorCode = error.response.data.code;
-        
         if (errorCode === 'GOOGLE_ACCOUNT' || msg.toLowerCase().includes('google') || msg.toLowerCase().includes('oauth')) {
-          showErrorPopup(
-            'Google Account Detected',
-            'This email is registered with Google. Please sign in using Google instead.',
-            handleGoogleSignIn,
-            'Sign In with Google',
-            <GoogleIcon />
-          );
-        } 
-        else if (msg.toLowerCase().includes('already registered') || 
-                   msg.toLowerCase().includes('already exists')) {
-          showErrorPopup(
-            'Email Already Exists',
-            'An account with this email already exists. Would you like to sign in instead?',
-            () => router.push({ pathname: '/(auth)/signin', params: { prefilledEmail: email } }),
-            'Go to Sign In',
-            <EmailIcon />
-          );
+          setEmailInlineError('This email is registered with Google.');
+        } else if (msg.toLowerCase().includes('already registered') || msg.toLowerCase().includes('already exists')) {
+          setEmailInlineError('An account with this email already exists.');
         } else {
-          showToastMessage(msg || 'Something went wrong', true);
+          showToast(msg || 'Something went wrong', true);
         }
       } else {
-        showToastMessage(error.message || 'Something went wrong', true);
+        showToast(error.message || 'Something went wrong', true);
       }
     } finally {
       setLoading(false);
@@ -941,7 +682,6 @@ export default function SignUp() {
     <>
       <Stack.Screen options={{ headerShown: false }} />
 
-      <PolicyModal visible={showPolicyModal} onClose={() => setShowPolicyModal(false)} onAgree={handleAgree} />
       <ErrorPopupModal visible={showErrorModal} title={errorModalData.title} message={errorModalData.message} onClose={() => setShowErrorModal(false)} onAction={errorModalData.onAction} actionButtonText={errorModalData.actionButtonText} actionIcon={errorModalData.actionIcon} />
       <SuccessModal 
         visible={showSuccessModal} 
@@ -951,6 +691,12 @@ export default function SignUp() {
         buttonText="Continue"
         email={successModalData.email}
         purpose={successModalData.purpose}
+      />
+      <CustomToast
+        visible={toastVisible}
+        message={toastMessage}
+        isError={toastIsError}
+        onHide={hideToast}
       />
 
       <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined} keyboardVerticalOffset={Platform.OS === 'ios' ? 64 : 0}>
@@ -966,7 +712,6 @@ export default function SignUp() {
           contentInsetAdjustmentBehavior="always"
         >
           <View style={styles.card}>
-            {/* Scaled-down connectors */}
             <View style={styles.connectorTop} />
             <View style={styles.connectorBottom} />
             <View style={styles.connectorLeft} />
@@ -1001,14 +746,14 @@ export default function SignUp() {
             {/* Email */}
             <View style={styles.formGroup}>
               <Text style={styles.label}>Email</Text>
-              <View style={[styles.inputWrap, emailFocused && styles.inputWrapFocused, errors.email ? styles.inputError : null]}>
+              <View style={[styles.inputWrap, emailFocused && styles.inputWrapFocused, (errors.email || emailInlineError) ? styles.inputError : null]}>
                 <TextInput
                   ref={emailRef}
-                  style={[styles.input, Platform.OS === 'web' && { outlineWidth: 1, outlineStyle: 'solid', outlineOffset: 0, borderRadius: 10, outlineColor: getOutlineColor(emailFocused, errors.email) }]}
+                  style={[styles.input, Platform.OS === 'web' && { outlineWidth: 1, outlineStyle: 'solid', outlineOffset: 0, borderRadius: 10, outlineColor: getOutlineColor(emailFocused, errors.email || emailInlineError) }]}
                   placeholder="you@example.com"
                   placeholderTextColor="#b8c0d4"
                   value={email}
-                  onChangeText={(text) => { setEmail(text); if (errors.email) setErrors({ ...errors, email: '' }); }}
+                  onChangeText={(text) => { setEmail(text); if (errors.email) setErrors({ ...errors, email: '' }); if (emailInlineError) setEmailInlineError(''); }}
                   onFocus={() => setEmailFocused(true)}
                   onBlur={() => setEmailFocused(false)}
                   keyboardType="email-address"
@@ -1025,6 +770,7 @@ export default function SignUp() {
                 />
               </View>
               {errors.email ? <Text style={styles.fieldError}>{errors.email}</Text> : null}
+              {emailInlineError ? <Text style={styles.fieldError}>{emailInlineError}</Text> : null}
             </View>
 
             {/* Password */}
@@ -1067,12 +813,8 @@ export default function SignUp() {
                   <EyeIcon visible={showPassword} />
                 </TouchableOpacity>
               </View>
-              
               <CompactPasswordStrength password={password} />
-              
-              {inlinePasswordError ? (
-                <Text style={styles.inlineErrorText}>{inlinePasswordError}</Text>
-              ) : null}
+              {inlinePasswordError ? <Text style={styles.inlineErrorText}>{inlinePasswordError}</Text> : null}
               {errors.password ? <Text style={styles.fieldError}>{errors.password}</Text> : null}
             </View>
 
@@ -1126,7 +868,7 @@ export default function SignUp() {
               )}
             </TouchableOpacity>
 
-            {/* Divider - web only for Google button */}
+            {/* Divider + Google — web only */}
             {Platform.OS === 'web' && (
               <>
                 <View style={styles.divider}>
@@ -1134,8 +876,6 @@ export default function SignUp() {
                   <Text style={styles.orText}>or</Text>
                   <View style={styles.line} />
                 </View>
-
-                {/* Google Sign Up */}
                 <TouchableOpacity style={[styles.btnGoogle, loading && styles.btnDisabled]} onPress={handleGoogleSignUp} activeOpacity={0.85} disabled={loading}>
                   {loading ? <ActivityIndicator color="#3b5bdb" size="small" /> : <GoogleIcon />}
                   <Text style={styles.btnGoogleText}>Continue with Google</Text>
@@ -1143,7 +883,7 @@ export default function SignUp() {
               </>
             )}
 
-            {/* Terms */}
+            {/* ── Terms Checkbox ── */}
             <View style={[styles.termsWrap, errors.agreed ? styles.termsError : null]}>
               <TouchableOpacity onPress={handleToggleAgreement} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
                 <View style={[styles.customCheckbox, agreed && styles.customCheckboxChecked]}>
@@ -1155,10 +895,10 @@ export default function SignUp() {
                 </View>
               </TouchableOpacity>
               <Text style={styles.termsText}>
-                I agree to the{' '}
-                <Text style={styles.termsLink} onPress={openPolicyModal}>Terms and Condition</Text>
+                By signing up, you agree to the{' '}
+                <Text style={styles.termsLink} onPress={openPrivacyPage}>Terms and Condition</Text>
                 {' & '}
-                <Text style={styles.termsLink} onPress={openPolicyModal}>Privacy Policy</Text>
+                <Text style={styles.termsLink} onPress={openPrivacyPage}>Privacy Policy</Text>
               </Text>
             </View>
             {errors.agreed ? <Text style={styles.fieldError}>{errors.agreed}</Text> : null}
@@ -1181,380 +921,89 @@ export default function SignUp() {
 
 const styles = StyleSheet.create({
   flex: { flex: 1, backgroundColor: '#eef2ff' },
-  scrollContent: { 
-    flexGrow: 1, 
-    justifyContent: 'center', 
-    alignItems: 'center', 
-    paddingVertical: 16, 
-    paddingHorizontal: 12, 
-    minHeight: SCREEN_HEIGHT 
+  scrollContent: { flexGrow: 1, justifyContent: 'center', alignItems: 'center', paddingVertical: 16, paddingHorizontal: 12, minHeight: SCREEN_HEIGHT },
+  card: { backgroundColor: '#ffffff', borderRadius: 20, paddingHorizontal: 22, paddingVertical: 22, width: '100%', maxWidth: 400, minWidth: 300, position: 'relative', shadowColor: '#1e293b', shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.06, shadowRadius: 20, elevation: 8, marginTop: 0, borderColor: '#f1f5ff' },
+  connectorTop: { position: 'absolute', top: -4, alignSelf: 'center', width: 8, height: 8, borderRadius: 4, backgroundColor: '#ffffff', borderWidth: 1.5, borderColor: '#c7d2fe' },
+  connectorBottom: { position: 'absolute', bottom: -4, alignSelf: 'center', width: 8, height: 8, borderRadius: 4, backgroundColor: '#ffffff', borderWidth: 1.5, borderColor: '#c7d2fe' },
+  connectorLeft: { position: 'absolute', left: -4, top: '50%', transform: [{ translateY: -4 }], width: 8, height: 8, borderRadius: 4, backgroundColor: '#ffffff', borderWidth: 1.5, borderColor: '#c7d2fe' },
+  connectorRight: { position: 'absolute', right: -4, top: '50%', transform: [{ translateY: -4 }], width: 8, height: 8, borderRadius: 4, backgroundColor: '#ffffff', borderWidth: 1.5, borderColor: '#c7d2fe' },
+  heading: { fontSize: 22, fontWeight: '800', color: '#0f172a', textAlign: 'center', marginBottom: 14 },
+  formGroup: { marginBottom: 10 },
+  label: { fontSize: 12, fontWeight: '600', color: '#334155', marginBottom: 3 },
+  inputWrap: { borderWidth: 1, borderColor: '#dde3fa', borderRadius: 10, backgroundColor: '#ffffff', minHeight: 36, justifyContent: 'center' },
+  inputWrapFocused: { backgroundColor: '#ffffff', shadowColor: '#3b5bdb', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.1, shadowRadius: 8, elevation: 3 },
+  input: { flex: 1, paddingHorizontal: 12, paddingVertical: Platform.OS === 'ios' ? 9 : 8, fontSize: 13, color: '#1a1f36', backgroundColor: 'transparent', minHeight: 40, textAlignVertical: 'center' },
+  inputWithIcon: { paddingRight: 40 },
+  eyeBtn: { position: 'absolute', right: 8, padding: 8 },
+  inputError: { borderColor: '#ef4444' },
+  fieldError: { fontSize: 11, color: '#ef4444', marginTop: 3, marginLeft: 2, fontWeight: '500' },
+  inlineErrorText: { fontSize: 11, color: '#f59e0b', marginTop: 2, marginLeft: 2, fontWeight: '500' },
+  strengthContainer: { marginTop: 4 },
+  strengthRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  strengthBar: { flex: 1, height: 3, backgroundColor: '#e2e6f3', borderRadius: 1.5, overflow: 'hidden' },
+  strengthFill: { height: '100%', borderRadius: 1.5 },
+  strengthText: { fontSize: 10, fontWeight: '600', minWidth: 48, textAlign: 'right' },
+  matchSuccess: { color: '#10b981', fontSize: 11, marginTop: 3, marginLeft: 2, fontWeight: '500' },
+  btnCreate: { backgroundColor: '#3b5bdb', borderRadius: 10, borderWidth: 1, borderColor: '#2f49c7', paddingVertical: 10, alignItems: 'center', marginTop: 4, overflow: 'hidden', shadowColor: '#3b5bdb', shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.2, shadowRadius: 12, elevation: 6 },
+  btnDisabled: { opacity: 0.75 },
+  btnCreateText: { color: '#ffffff', fontSize: 14, fontWeight: '700', letterSpacing: 0.3 },
+  divider: { flexDirection: 'row', alignItems: 'center', marginVertical: 8 },
+  line: { flex: 1, height: 1, backgroundColor: '#e5e9f5' },
+  orText: { marginHorizontal: 8, fontSize: 11, color: '#8896b3', fontWeight: '600' },
+  btnGoogle: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, borderWidth: 1, borderColor: '#e5e7eb', borderRadius: 10, paddingVertical: 9, marginTop: 4, backgroundColor: '#ffffff' },
+  btnGoogleText: { fontSize: 13, fontWeight: '500', color: '#1a1f36', marginLeft: 6 },
+  termsWrap: { flexDirection: 'row', alignItems: 'flex-start', gap: 8, marginTop: 10, padding: 8, borderWidth: 1, borderColor: '#e2e6f3', borderRadius: 8, backgroundColor: '#f8f9ff' },
+  termsError: { borderColor: '#ef4444' },
+  customCheckbox: { width: 16, height: 16, borderRadius: 8, borderWidth: 2, borderColor: '#8896b3', alignItems: 'center', justifyContent: 'center', marginTop: 1, flexShrink: 0 },
+  customCheckboxChecked: { borderColor: '#3b5bdb', backgroundColor: '#3b5bdb' },
+  termsText: { fontSize: 11.5, color: '#4a5568', flex: 1, lineHeight: 16 },
+  termsLink: { fontWeight: '700', color: '#3b5bdb' },
+  signinWrap: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', marginTop: 12 },
+  signinText: { fontSize: 12, color: '#64748b' },
+  signinLink: { fontSize: 12, fontWeight: '700', color: '#3b5bdb' },
+  gridBackground: { ...StyleSheet.absoluteFillObject, width: '100%', height: '100%' },
+  gridOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(255,255,255,0.10)' },
+  errorModalOverlay: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.5)', justifyContent: 'center', alignItems: 'center' },
+  errorModalContainer: { width: '85%', maxWidth: 320, backgroundColor: '#FFFFFF', borderRadius: 20, padding: 20, alignItems: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.15, shadowRadius: 12, elevation: 8 },
+  errorModalIconWrapper: { marginBottom: 12 },
+  errorModalIconCircle: { width: 56, height: 56, borderRadius: 28, backgroundColor: '#f0f4ff', justifyContent: 'center', alignItems: 'center' },
+  errorModalTitle: { fontSize: 18, fontWeight: '700', color: '#1e293b', textAlign: 'center', marginBottom: 6 },
+  errorModalMessage: { fontSize: 13, color: '#64748b', textAlign: 'center', lineHeight: 18, marginBottom: 20 },
+  errorModalButtonPrimary: { width: '100%', paddingVertical: 10, borderRadius: 10, alignItems: 'center', backgroundColor: '#3b5bdb', flexDirection: 'row', justifyContent: 'center' },
+  errorModalButtonTextPrimary: { color: '#ffffff', fontSize: 14, fontWeight: '600' },
+  toastContainer: {
+    position: 'absolute',
+    top: Platform.OS === 'ios' ? 60 : 50,
+    left: 20,
+    right: 20,
+    zIndex: 1000,
+    alignItems: 'center',
   },
-  card: { 
-    backgroundColor: '#ffffff', 
-    borderRadius: 20, 
-    paddingHorizontal: 22, 
-    paddingVertical: 22, 
-    width: '100%', 
-    maxWidth: 400, 
-    minWidth: 300, 
-    position: 'relative', 
-    shadowColor: '#1e293b', 
-    shadowOffset: { width: 0, height: 10 }, 
-    shadowOpacity: 0.06, 
-    shadowRadius: 20, 
-    elevation: 8, 
-    marginTop: 0, 
-    borderColor: '#f1f5ff' 
-  },
-  connectorTop: { 
-    position: 'absolute', 
-    top: -4, 
-    alignSelf: 'center', 
-    width: 8, 
-    height: 8, 
-    borderRadius: 4, 
-    backgroundColor: '#ffffff', 
-    borderWidth: 1.5, 
-    borderColor: '#c7d2fe' 
-  },
-  connectorBottom: { 
-    position: 'absolute', 
-    bottom: -4, 
-    alignSelf: 'center', 
-    width: 8, 
-    height: 8, 
-    borderRadius: 4, 
-    backgroundColor: '#ffffff', 
-    borderWidth: 1.5, 
-    borderColor: '#c7d2fe' 
-  },
-  connectorLeft: { 
-    position: 'absolute', 
-    left: -4, 
-    top: '50%', 
-    transform: [{ translateY: -4 }], 
-    width: 8, 
-    height: 8, 
-    borderRadius: 4, 
-    backgroundColor: '#ffffff', 
-    borderWidth: 1.5, 
-    borderColor: '#c7d2fe' 
-  },
-  connectorRight: { 
-    position: 'absolute', 
-    right: -4, 
-    top: '50%', 
-    transform: [{ translateY: -4 }], 
-    width: 8, 
-    height: 8, 
-    borderRadius: 4, 
-    backgroundColor: '#ffffff', 
-    borderWidth: 1.5, 
-    borderColor: '#c7d2fe' 
-  },
-  heading: { 
-    fontSize: 22, 
-    fontWeight: '800', 
-    color: '#0f172a', 
-    textAlign: 'center', 
-    marginBottom: 14 
-  },
-  formGroup: { 
-    marginBottom: 10 
-  },
-  label: { 
-    fontSize: 12, 
-    fontWeight: '600', 
-    color: '#334155', 
-    marginBottom: 3 
-  },
-  inputWrap: { 
-    borderWidth: 1, 
-    borderColor: '#dde3fa', 
-    borderRadius: 10, 
-    backgroundColor: '#ffffff', 
-    minHeight: 36, 
-    justifyContent: 'center' 
-  },
-  inputWrapFocused: { 
-    backgroundColor: '#ffffff', 
-    shadowColor: '#3b5bdb', 
-    shadowOffset: { width: 0, height: 4 }, 
-    shadowOpacity: 0.1, 
-    shadowRadius: 8, 
-    elevation: 3 
-  },
-  input: { 
-    flex: 1, 
-    paddingHorizontal: 12, 
-    paddingVertical: Platform.OS === 'ios' ? 9 : 8, 
-    fontSize: 13, 
-    color: '#1a1f36', 
-    backgroundColor: 'transparent', 
-    minHeight: 40, 
-    textAlignVertical: 'center' 
-  },
-  inputWithIcon: { 
-    paddingRight: 40 
-  },
-  eyeBtn: { 
-    position: 'absolute', 
-    right: 8, 
-    padding: 8 
-  },
-  inputError: { 
-    borderColor: '#ef4444' 
-  },
-  fieldError: { 
-    fontSize: 11, 
-    color: '#ef4444', 
-    marginTop: 3, 
-    marginLeft: 2, 
-    fontWeight: '500' 
-  },
-  inlineErrorText: { 
-    fontSize: 11, 
-    color: '#f59e0b', 
-    marginTop: 2, 
-    marginLeft: 2, 
-    fontWeight: '500' 
-  },
-  strengthContainer: { 
-    marginTop: 4 
-  },
-  strengthRow: {
+  toastContent: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 12,
+    minWidth: 200,
+    maxWidth: '90%',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+    elevation: 6,
   },
-  strengthBar: { 
-    flex: 1,
-    height: 3, 
-    backgroundColor: '#e2e6f3', 
-    borderRadius: 1.5, 
-    overflow: 'hidden' 
+  toastSuccess: {
+    backgroundColor: '#10b981',
   },
-  strengthFill: { 
-    height: '100%', 
-    borderRadius: 1.5 
+  toastError: {
+    backgroundColor: '#ef4444',
   },
-  strengthText: { 
-    fontSize: 10, 
+  toastText: {
+    color: '#ffffff',
+    fontSize: 14,
     fontWeight: '600',
-    minWidth: 48,
-    textAlign: 'right',
+    marginLeft: 10,
+    flex: 1,
   },
-  matchSuccess: { 
-    color: '#10b981', 
-    fontSize: 11, 
-    marginTop: 3, 
-    marginLeft: 2, 
-    fontWeight: '500'
-  },
-  btnCreate: { 
-    backgroundColor: '#3b5bdb', 
-    borderRadius: 10, 
-    borderWidth: 1, 
-    borderColor: '#2f49c7', 
-    paddingVertical: 10, 
-    alignItems: 'center', 
-    marginTop: 4, 
-    overflow: 'hidden', 
-    shadowColor: '#3b5bdb', 
-    shadowOffset: { width: 0, height: 6 }, 
-    shadowOpacity: 0.2, 
-    shadowRadius: 12, 
-    elevation: 6 
-  },
-  btnDisabled: { 
-    opacity: 0.75 
-  },
-  btnCreateText: { 
-    color: '#ffffff', 
-    fontSize: 14, 
-    fontWeight: '700', 
-    letterSpacing: 0.3 
-  },
-  divider: { 
-    flexDirection: 'row', 
-    alignItems: 'center', 
-    marginVertical: 8 
-  },
-  line: { 
-    flex: 1, 
-    height: 1, 
-    backgroundColor: '#e5e9f5' 
-  },
-  orText: { 
-    marginHorizontal: 8, 
-    fontSize: 11, 
-    color: '#8896b3', 
-    fontWeight: '600' 
-  },
-  btnGoogle: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    borderWidth: 1,
-    borderColor: '#e5e7eb',
-    borderRadius: 10,
-    paddingVertical: 9,
-    marginTop: 4,
-    backgroundColor: '#ffffff',
-  },
-  btnGoogleText: {
-    fontSize: 13,
-    fontWeight: '500',
-    color: '#1a1f36',
-    marginLeft: 6,
-  },
-  termsWrap: { 
-    flexDirection: 'row', 
-    alignItems: 'flex-start', 
-    gap: 8, 
-    marginTop: 10, 
-    padding: 8, 
-    borderWidth: 1, 
-    borderColor: '#e2e6f3', 
-    borderRadius: 8, 
-    backgroundColor: '#f8f9ff' 
-  },
-  termsError: { 
-    borderColor: '#ef4444' 
-  },
-  customCheckbox: { 
-    width: 16, 
-    height: 16, 
-    borderRadius: 8, 
-    borderWidth: 2, 
-    borderColor: '#8896b3', 
-    alignItems: 'center', 
-    justifyContent: 'center', 
-    marginTop: 1, 
-    flexShrink: 0 
-  },
-  customCheckboxChecked: { 
-    borderColor: '#3b5bdb', 
-    backgroundColor: '#3b5bdb' 
-  },
-  termsText: { 
-    fontSize: 11.5, 
-    color: '#4a5568', 
-    flex: 1, 
-    lineHeight: 16 
-  },
-  termsLink: { 
-    fontWeight: '700', 
-    color: '#3b5bdb' 
-  },
-  signinWrap: { 
-    flexDirection: 'row', 
-    justifyContent: 'center', 
-    alignItems: 'center', 
-    marginTop: 12 
-  },
-  signinText: { 
-    fontSize: 12, 
-    color: '#64748b' 
-  },
-  signinLink: { 
-    fontSize: 12, 
-    fontWeight: '700', 
-    color: '#3b5bdb' 
-  },
-  gridBackground: { 
-    ...StyleSheet.absoluteFillObject, 
-    width: '100%', 
-    height: '100%' 
-  },
-  gridOverlay: { 
-    ...StyleSheet.absoluteFillObject, 
-    backgroundColor: 'rgba(255,255,255,0.10)' 
-  },
-  errorModalOverlay: { 
-    flex: 1, 
-    backgroundColor: 'rgba(0, 0, 0, 0.5)', 
-    justifyContent: 'center', 
-    alignItems: 'center' 
-  },
-  errorModalContainer: { 
-    width: '85%', 
-    maxWidth: 320, 
-    backgroundColor: '#FFFFFF', 
-    borderRadius: 20, 
-    padding: 20, 
-    alignItems: 'center', 
-    shadowColor: '#000', 
-    shadowOffset: { width: 0, height: 4 }, 
-    shadowOpacity: 0.15, 
-    shadowRadius: 12, 
-    elevation: 8 
-  },
-  errorModalIconWrapper: { 
-    marginBottom: 12 
-  },
-  errorModalIconCircle: { 
-    width: 56, 
-    height: 56, 
-    borderRadius: 28, 
-    backgroundColor: '#f0f4ff', 
-    justifyContent: 'center', 
-    alignItems: 'center' 
-  },
-  errorModalTitle: { 
-    fontSize: 18, 
-    fontWeight: '700', 
-    color: '#1e293b', 
-    textAlign: 'center', 
-    marginBottom: 6 
-  },
-  errorModalMessage: { 
-    fontSize: 13, 
-    color: '#64748b', 
-    textAlign: 'center', 
-    lineHeight: 18, 
-    marginBottom: 20 
-  },
-  errorModalButtonPrimary: { 
-    width: '100%', 
-    paddingVertical: 10, 
-    borderRadius: 10, 
-    alignItems: 'center', 
-    backgroundColor: '#3b5bdb', 
-    flexDirection: 'row', 
-    justifyContent: 'center' 
-  },
-  errorModalButtonTextPrimary: { 
-    color: '#ffffff', 
-    fontSize: 14, 
-    fontWeight: '600' 
-  },
-});
-
-const modalStyles = StyleSheet.create({
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.5)', justifyContent: 'center', alignItems: 'center' },
-  modalContainer: { backgroundColor: '#ffffff', borderRadius: 24, overflow: 'hidden', shadowColor: '#000', shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.25, shadowRadius: 20, elevation: 15 },
-  modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, paddingVertical: 16, borderBottomWidth: 1, borderBottomColor: '#e2e6f3', backgroundColor: '#f8f9ff' },
-  modalTitle: { fontSize: 18, fontWeight: '700', color: '#1a1f36' },
-  tabBar: { flexDirection: 'row', borderBottomWidth: 1, borderBottomColor: '#e2e6f3', backgroundColor: '#ffffff' },
-  tab: { flex: 1, paddingVertical: 14, alignItems: 'center' },
-  activeTab: { borderBottomWidth: 2, borderBottomColor: '#3b5bdb' },
-  tabText: { fontSize: 14, fontWeight: '600', color: '#8896b3' },
-  activeTabText: { color: '#3b5bdb' },
-  tabContent: { padding: 20 },
-  scrollHintBanner: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: '#eef2ff', paddingHorizontal: 14, paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: '#c7d2fe' },
-  scrollHintText: { fontSize: 12, color: '#3b5bdb', flex: 1, fontWeight: '500' },
-  modalFooter: { flexDirection: 'row', padding: 16, borderTopWidth: 1, borderTopColor: '#e2e6f3', gap: 12, backgroundColor: '#ffffff' },
-  agreeButton: { flex: 1, backgroundColor: '#3b5bdb', borderRadius: 10, paddingVertical: 12, alignItems: 'center' },
-  agreeButtonDisabled: { backgroundColor: '#c7d2fe' },
-  agreeButtonText: { color: '#ffffff', fontSize: 15, fontWeight: '700' },
-  agreeButtonTextDisabled: { color: '#8fa3e0' },
-  declineButton: { flex: 1, backgroundColor: '#e5e9f5', borderRadius: 10, paddingVertical: 12, alignItems: 'center' },
-  declineButtonText: { color: '#4a5568', fontSize: 14, fontWeight: '600' },
-  scrollTopButton: { position: 'absolute', bottom: 80, right: 20, backgroundColor: '#3b5bdb', width: 48, height: 48, borderRadius: 24, justifyContent: 'center', alignItems: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8, elevation: 6, zIndex: 10 },
-  sectionTitle: { fontSize: 18, fontWeight: '700', color: '#3b5bdb', marginTop: 20, marginBottom: 8 },
-  subSection: { fontSize: 16, fontWeight: '600', color: '#4a5568', marginTop: 12, marginBottom: 4 },
-  text: { fontSize: 14, color: '#4a5568', lineHeight: 22, marginBottom: 8 },
-  footer: { fontSize: 12, color: '#8896b3', textAlign: 'center', marginTop: 24, paddingTop: 16, borderTopWidth: 1, borderTopColor: '#e2e6f3' },
 });

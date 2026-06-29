@@ -22,10 +22,90 @@ import * as authService from '../../services/authService';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
-// Custom Toast Component
-const CustomToast = ({ visible, message, isError, onHide }: { 
-  visible: boolean; 
-  message: string; 
+// ─── PASSWORD HELPERS ────────────────────────────────────────────────────────
+
+const SPECIAL_CHARS_REGEX = /[!@#$%^&*(),.?":{}|<>]/;
+
+const isPasswordValid = (pwd: string) => {
+  return (
+    pwd.length >= 8 &&
+    /[A-Z]/.test(pwd) &&
+    /[a-z]/.test(pwd) &&
+    /[0-9]/.test(pwd) &&
+    SPECIAL_CHARS_REGEX.test(pwd)
+  );
+};
+
+const getPasswordMissingRequirements = (pwd: string): string[] => {
+  const missing: string[] = [];
+  if (pwd.length < 8) missing.push('8+ characters');
+  if (!/[A-Z]/.test(pwd)) missing.push('uppercase letter');
+  if (!/[a-z]/.test(pwd)) missing.push('lowercase letter');
+  if (!/[0-9]/.test(pwd)) missing.push('number');
+  if (!SPECIAL_CHARS_REGEX.test(pwd)) missing.push('special character');
+  return missing;
+};
+
+const getStrengthPercentage = (pwd: string): number => {
+  let score = 0;
+  if (pwd.length >= 8) score++;
+  if (/[A-Z]/.test(pwd)) score++;
+  if (/[a-z]/.test(pwd)) score++;
+  if (/[0-9]/.test(pwd)) score++;
+  if (SPECIAL_CHARS_REGEX.test(pwd)) score++;
+  return (score / 5) * 100;
+};
+
+const getStrengthColor = (pwd: string): string => {
+  const p = getStrengthPercentage(pwd);
+  if (p === 100) return '#10b981';
+  if (p >= 80) return '#f59e0b';
+  if (p >= 60) return '#f97316';
+  return '#ef4444';
+};
+
+const getStrengthLabel = (pwd: string): string => {
+  const p = getStrengthPercentage(pwd);
+  if (p === 100) return 'Strong';
+  if (p >= 80) return 'Good';
+  if (p >= 60) return 'Weak';
+  return 'Very weak';
+};
+
+// ─── PASSWORD STRENGTH INDICATOR ─────────────────────────────────────────────
+
+const PasswordStrengthIndicator = ({ password }: { password: string }) => {
+  if (!password) return null;
+
+  const color = getStrengthColor(password);
+
+  return (
+    <View style={styles.strengthContainer}>
+      <View style={styles.strengthRow}>
+        <View style={styles.strengthBar}>
+          <View
+            style={[
+              styles.strengthFill,
+              { width: `${getStrengthPercentage(password)}%`, backgroundColor: color },
+            ]}
+          />
+        </View>
+        <Text style={[styles.strengthText, { color }]}>{getStrengthLabel(password)}</Text>
+      </View>
+    </View>
+  );
+};
+
+// ─── CUSTOM TOAST ─────────────────────────────────────────────────────────────
+
+const CustomToast = ({
+  visible,
+  message,
+  isError,
+  onHide,
+}: {
+  visible: boolean;
+  message: string;
   isError: boolean;
   onHide: () => void;
 }) => {
@@ -108,7 +188,8 @@ const CustomToast = ({ visible, message, isError, onHide }: {
   );
 };
 
-// DiagramBackground with grid-bg.png
+// ─── DIAGRAM BACKGROUND ───────────────────────────────────────────────────────
+
 const DiagramBackground = () => (
   <View style={StyleSheet.absoluteFillObject} pointerEvents="none">
     <Image
@@ -133,6 +214,8 @@ const DiagramBackground = () => (
   </View>
 );
 
+// ─── ICONS ────────────────────────────────────────────────────────────────────
+
 const BackIcon = () => (
   <Svg width={20} height={20} viewBox="0 0 24 24" fill="none">
     <Path d="M19 12H5M5 12l7 7M5 12l7-7" stroke="#4a5568" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" />
@@ -156,25 +239,33 @@ const EyeIcon = ({ visible }: { visible: boolean }) => (
   </Svg>
 );
 
-// Custom Error Popup Modal (kept for complex errors with actions)
-const ErrorPopupModal = ({ visible, title, message, onClose, onAction, actionButtonText }: { 
-  visible: boolean; 
-  title: string; 
-  message: string; 
+// ─── ERROR POPUP MODAL ────────────────────────────────────────────────────────
+
+const ErrorPopupModal = ({
+  visible,
+  title,
+  message,
+  onClose,
+  onAction,
+  actionButtonText,
+}: {
+  visible: boolean;
+  title: string;
+  message: string;
   onClose: () => void;
   onAction?: () => void;
   actionButtonText?: string;
 }) => {
   return (
-    <Modal 
-      animationType="fade" 
-      transparent={true} 
-      visible={visible} 
+    <Modal
+      animationType="fade"
+      transparent={true}
+      visible={visible}
       onRequestClose={onClose}
     >
-      <TouchableOpacity 
-        style={styles.errorModalOverlay} 
-        activeOpacity={1} 
+      <TouchableOpacity
+        style={styles.errorModalOverlay}
+        activeOpacity={1}
         onPress={onClose}
       >
         <View style={styles.errorModalContainer}>
@@ -205,43 +296,15 @@ const ErrorPopupModal = ({ visible, title, message, onClose, onAction, actionBut
   );
 };
 
-// Password strength indicator
-const PasswordStrengthIndicator = ({ password }: { password: string }) => {
-  const getStrength = () => {
-    if (!password) return { text: '', color: '#8896b3', percentage: 0 };
-    
-    let score = 0;
-    if (password.length >= 8) score++;
-    if (/[A-Z]/.test(password)) score++;
-    if (/[a-z]/.test(password)) score++;
-    if (/[0-9]/.test(password)) score++;
-    
-    if (score === 4) return { text: 'Strong password!', color: '#10b981', percentage: 100 };
-    if (score === 3) return { text: 'Good password', color: '#f59e0b', percentage: 75 };
-    if (score > 0) return { text: 'Weak password', color: '#ef4444', percentage: 50 };
-    return { text: 'Enter a password', color: '#8896b3', percentage: 0 };
-  };
+// ─── HELPER ───────────────────────────────────────────────────────────────────
 
-  const strength = getStrength();
-
-  if (!password) return null;
-
-  return (
-    <View style={styles.strengthContainer}>
-      <View style={styles.strengthBar}>
-        <View style={[styles.strengthFill, { width: `${strength.percentage}%`, backgroundColor: strength.color }]} />
-      </View>
-      <Text style={[styles.strengthText, { color: strength.color }]}>{strength.text}</Text>
-    </View>
-  );
-};
-
-// Helper function for outline color on web
 const getOutlineColor = (isFocused: boolean, hasError: string) => {
   if (hasError) return '#ef4444';
   if (isFocused) return '#4c6fff';
   return '#dde3fa';
 };
+
+// ─── MAIN COMPONENT ───────────────────────────────────────────────────────────
 
 export default function ResetPassword() {
   const router = useRouter();
@@ -255,15 +318,16 @@ export default function ResetPassword() {
   const [errors, setErrors] = useState({ newPassword: '', confirmPassword: '' });
   const [newPasswordFocused, setNewPasswordFocused] = useState(false);
   const [confirmPasswordFocused, setConfirmPasswordFocused] = useState(false);
+  const [inlinePasswordError, setInlinePasswordError] = useState('');
   const [showErrorModal, setShowErrorModal] = useState(false);
   const [toastVisible, setToastVisible] = useState(false);
   const [toastMessage, setToastMessage] = useState('');
   const [toastIsError, setToastIsError] = useState(false);
-  const [errorModalData, setErrorModalData] = useState({ 
-    title: '', 
+  const [errorModalData, setErrorModalData] = useState({
+    title: '',
     message: '',
     onAction: undefined as (() => void) | undefined,
-    actionButtonText: '' 
+    actionButtonText: '',
   });
 
   const confirmRef = useRef<TextInput>(null);
@@ -278,14 +342,17 @@ export default function ResetPassword() {
     setToastVisible(false);
   };
 
-  const showErrorPopup = (title: string, message: string, onAction?: () => void, actionButtonText?: string) => {
+  const showErrorPopup = (
+    title: string,
+    message: string,
+    onAction?: () => void,
+    actionButtonText?: string
+  ) => {
     setErrorModalData({ title, message, onAction, actionButtonText: actionButtonText || '' });
     setShowErrorModal(true);
   };
 
-  const isPasswordValid = (pwd: string) => {
-    return pwd.length >= 8 && /[A-Z]/.test(pwd) && /[a-z]/.test(pwd) && /[0-9]/.test(pwd);
-  };
+  // ─── Validation ───────────────────────────────────────────────────────────
 
   const validate = () => {
     const newErrors = { newPassword: '', confirmPassword: '' };
@@ -295,7 +362,8 @@ export default function ResetPassword() {
       newErrors.newPassword = 'Password is required';
       isValid = false;
     } else if (!isPasswordValid(newPassword)) {
-      newErrors.newPassword = 'Password must be at least 8 characters with uppercase, lowercase, and number';
+      const missing = getPasswordMissingRequirements(newPassword);
+      newErrors.newPassword = `Password must include: ${missing.join(', ')}`;
       isValid = false;
     }
 
@@ -311,18 +379,18 @@ export default function ResetPassword() {
     return isValid;
   };
 
+  // ─── Submit ───────────────────────────────────────────────────────────────
+
   const handleReset = async () => {
     if (!validate()) return;
 
     setLoading(true);
     try {
       const result = await authService.resetPassword(email!, otp!, newPassword);
-      
+
       if (result.success) {
         await authService.clearTokens();
-        // Show success toast instead of modal
         showToast('Password reset successful! Redirecting to sign in...', false);
-        // Redirect after toast
         setTimeout(() => {
           router.replace('/(auth)/signin');
         }, 400);
@@ -336,10 +404,12 @@ export default function ResetPassword() {
     }
   };
 
+  // ─── Render ───────────────────────────────────────────────────────────────
+
   return (
     <>
       <Stack.Screen options={{ headerShown: false }} />
-      
+
       <ErrorPopupModal
         visible={showErrorModal}
         title={errorModalData.title}
@@ -356,95 +426,128 @@ export default function ResetPassword() {
         onHide={hideToast}
       />
 
-      <KeyboardAvoidingView 
-        style={styles.flex} 
+      <KeyboardAvoidingView
+        style={styles.flex}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         keyboardVerticalOffset={Platform.OS === 'ios' ? 64 : 0}
       >
         <DiagramBackground />
-        <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
+        <ScrollView
+          contentContainerStyle={styles.scrollContent}
+          keyboardShouldPersistTaps="handled"
+        >
           <View style={styles.card}>
             {/* Connectors */}
             <View style={styles.connectorTop} />
             <View style={styles.connectorBottom} />
             <View style={styles.connectorLeft} />
             <View style={styles.connectorRight} />
-            
-            <TouchableOpacity style={styles.backBtn} onPress={() => router.back()} activeOpacity={0.7}>
+
+            <TouchableOpacity
+              style={styles.backBtn}
+              onPress={() => router.back()}
+              activeOpacity={0.7}
+            >
               <BackIcon />
               <Text style={styles.backText}>Back</Text>
             </TouchableOpacity>
-            
+
             <Text style={styles.heading}>Reset Password</Text>
             <Text style={styles.subtitle}>Enter your new password below</Text>
 
+            {/* New Password */}
             <View style={styles.formGroup}>
               <Text style={styles.label}>New Password</Text>
-              <View style={[
-                styles.inputWrap, 
-                newPasswordFocused && styles.inputWrapFocused,
-                errors.newPassword && styles.inputError
-              ]}>
+              <View
+                style={[
+                  styles.inputWrap,
+                  newPasswordFocused && styles.inputWrapFocused,
+                  errors.newPassword ? styles.inputError : null,
+                ]}
+              >
                 <TextInput
                   style={[
-                    styles.input, 
+                    styles.input,
                     styles.inputWithIcon,
-                    Platform.OS === 'web' && { 
+                    Platform.OS === 'web' && {
                       outlineWidth: 1,
                       outlineStyle: 'solid',
                       outlineOffset: 0,
                       borderRadius: 12,
                       outlineColor: getOutlineColor(newPasswordFocused, errors.newPassword),
-                    }
+                    },
                   ]}
                   placeholder="At least 8 characters"
                   placeholderTextColor="#b8c0d4"
                   value={newPassword}
                   onChangeText={(text) => {
                     setNewPassword(text);
-                    setErrors({ ...errors, newPassword: '' });
+                    if (errors.newPassword) setErrors({ ...errors, newPassword: '' });
+                    setInlinePasswordError('');
                   }}
                   onFocus={() => setNewPasswordFocused(true)}
-                  onBlur={() => setNewPasswordFocused(false)}
+                  onBlur={() => {
+                    setNewPasswordFocused(false);
+                    if (newPassword && !isPasswordValid(newPassword)) {
+                      const missing = getPasswordMissingRequirements(newPassword);
+                      setInlinePasswordError(`Missing: ${missing.join(', ')}`);
+                    } else {
+                      setInlinePasswordError('');
+                    }
+                  }}
                   secureTextEntry={!showPassword}
                   autoCapitalize="none"
                   returnKeyType="next"
                   onSubmitEditing={() => confirmRef.current?.focus()}
                 />
-                <TouchableOpacity style={styles.eyeBtn} onPress={() => setShowPassword(!showPassword)}>
+                <TouchableOpacity
+                  style={styles.eyeBtn}
+                  onPress={() => setShowPassword(!showPassword)}
+                >
                   <EyeIcon visible={showPassword} />
                 </TouchableOpacity>
               </View>
               <PasswordStrengthIndicator password={newPassword} />
-              {errors.newPassword ? <Text style={styles.errorText}>{errors.newPassword}</Text> : null}
+              {inlinePasswordError ? (
+                <Text style={styles.inlineErrorText}>{inlinePasswordError}</Text>
+              ) : null}
+              {errors.newPassword ? (
+                <Text style={styles.errorText}>{errors.newPassword}</Text>
+              ) : null}
             </View>
 
+            {/* Confirm Password */}
             <View style={styles.formGroup}>
               <Text style={styles.label}>Confirm Password</Text>
-              <View style={[
-                styles.inputWrap, 
-                confirmPasswordFocused && styles.inputWrapFocused,
-                errors.confirmPassword && styles.inputError
-              ]}>
+              <View
+                style={[
+                  styles.inputWrap,
+                  confirmPasswordFocused && styles.inputWrapFocused,
+                  errors.confirmPassword ? styles.inputError : null,
+                ]}
+              >
                 <TextInput
                   ref={confirmRef}
                   style={[
-                    styles.input, 
+                    styles.input,
                     styles.inputWithIcon,
-                    Platform.OS === 'web' && { 
+                    Platform.OS === 'web' && {
                       outlineWidth: 1,
                       outlineStyle: 'solid',
                       outlineOffset: 0,
                       borderRadius: 12,
-                      outlineColor: getOutlineColor(confirmPasswordFocused, errors.confirmPassword),
-                    }
+                      outlineColor: getOutlineColor(
+                        confirmPasswordFocused,
+                        errors.confirmPassword
+                      ),
+                    },
                   ]}
                   placeholder="Re-enter your password"
                   placeholderTextColor="#b8c0d4"
                   value={confirmPassword}
                   onChangeText={(text) => {
                     setConfirmPassword(text);
-                    setErrors({ ...errors, confirmPassword: '' });
+                    if (errors.confirmPassword) setErrors({ ...errors, confirmPassword: '' });
                   }}
                   onFocus={() => setConfirmPasswordFocused(true)}
                   onBlur={() => setConfirmPasswordFocused(false)}
@@ -453,21 +556,42 @@ export default function ResetPassword() {
                   returnKeyType="done"
                   onSubmitEditing={handleReset}
                 />
-                <TouchableOpacity style={styles.eyeBtn} onPress={() => setShowConfirmPassword(!showConfirmPassword)}>
+                <TouchableOpacity
+                  style={styles.eyeBtn}
+                  onPress={() => setShowConfirmPassword(!showConfirmPassword)}
+                >
                   <EyeIcon visible={showConfirmPassword} />
                 </TouchableOpacity>
               </View>
               {confirmPassword && newPassword === confirmPassword && !errors.confirmPassword && newPassword ? (
                 <Text style={styles.matchSuccess}>✓ Passwords match</Text>
+              ) : confirmPassword && newPassword !== confirmPassword && !errors.confirmPassword ? (
+                <Text style={styles.errorText}>✗ Doesn't match</Text>
               ) : null}
-              {errors.confirmPassword ? <Text style={styles.errorText}>{errors.confirmPassword}</Text> : null}
+              {errors.confirmPassword ? (
+                <Text style={styles.errorText}>{errors.confirmPassword}</Text>
+              ) : null}
             </View>
 
-            <TouchableOpacity style={[styles.btnReset, loading && styles.btnDisabled]} onPress={handleReset} disabled={loading}>
-              {loading ? <ActivityIndicator color="#ffffff" size="small" /> : <Text style={styles.btnResetText}>Reset Password</Text>}
+            <TouchableOpacity
+              style={[styles.btnReset, loading && styles.btnDisabled]}
+              onPress={handleReset}
+              disabled={loading}
+            >
+              {loading ? (
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                  <ActivityIndicator color="#ffffff" size="small" />
+                  <Text style={styles.btnResetText}>Resetting...</Text>
+                </View>
+              ) : (
+                <Text style={styles.btnResetText}>Reset Password</Text>
+              )}
             </TouchableOpacity>
 
-            <TouchableOpacity style={styles.signinLink} onPress={() => router.push('/(auth)/signin')}>
+            <TouchableOpacity
+              style={styles.signinLink}
+              onPress={() => router.push('/(auth)/signin')}
+            >
               <Text style={styles.signinText}>Back to Sign In</Text>
             </TouchableOpacity>
           </View>
@@ -477,134 +601,136 @@ export default function ResetPassword() {
   );
 }
 
+// ─── STYLES ──────────────────────────────────────────────────────────────────
+
 const styles = StyleSheet.create({
-  flex: { 
-    flex: 1, 
-    backgroundColor: '#eef2ff' 
+  flex: {
+    flex: 1,
+    backgroundColor: '#eef2ff',
   },
-  scrollContent: { 
-    flexGrow: 1, 
-    justifyContent: 'center', 
-    alignItems: 'center', 
-    paddingHorizontal: 18, 
+  scrollContent: {
+    flexGrow: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 18,
     paddingVertical: 40,
     minHeight: SCREEN_HEIGHT,
   },
-  card: { 
-    backgroundColor: '#ffffff', 
-    borderRadius: 28, 
-    paddingHorizontal: 32, 
-    paddingTop: 34, 
-    paddingBottom: 34, 
-    width: '100%', 
-    maxWidth: 430, 
-    shadowColor: '#1e293b', 
-    shadowOffset: { width: 0, height: 12 }, 
-    shadowOpacity: 0.12, 
-    shadowRadius: 30, 
-    elevation: 14, 
-    borderWidth: 1.5, 
-    borderColor: '#f1f5ff', 
-    position: 'relative' 
+  card: {
+    backgroundColor: '#ffffff',
+    borderRadius: 28,
+    paddingHorizontal: 32,
+    paddingTop: 34,
+    paddingBottom: 34,
+    width: '100%',
+    maxWidth: 430,
+    shadowColor: '#1e293b',
+    shadowOffset: { width: 0, height: 12 },
+    shadowOpacity: 0.12,
+    shadowRadius: 30,
+    elevation: 14,
+    borderWidth: 1.5,
+    borderColor: '#f1f5ff',
+    position: 'relative',
   },
-  connectorTop: { 
-    position: 'absolute', 
-    top: -7, 
-    alignSelf: 'center', 
-    width: 14, 
-    height: 14, 
-    borderRadius: 7, 
-    backgroundColor: '#ffffff', 
-    borderWidth: 2, 
-    borderColor: '#c7d2fe', 
-    zIndex: 20 
+  connectorTop: {
+    position: 'absolute',
+    top: -7,
+    alignSelf: 'center',
+    width: 14,
+    height: 14,
+    borderRadius: 7,
+    backgroundColor: '#ffffff',
+    borderWidth: 2,
+    borderColor: '#c7d2fe',
+    zIndex: 20,
   },
-  connectorBottom: { 
-    position: 'absolute', 
-    bottom: -7, 
-    alignSelf: 'center', 
-    width: 14, 
-    height: 14, 
-    borderRadius: 7, 
-    backgroundColor: '#ffffff', 
-    borderWidth: 2, 
-    borderColor: '#c7d2fe', 
-    zIndex: 20 
+  connectorBottom: {
+    position: 'absolute',
+    bottom: -7,
+    alignSelf: 'center',
+    width: 14,
+    height: 14,
+    borderRadius: 7,
+    backgroundColor: '#ffffff',
+    borderWidth: 2,
+    borderColor: '#c7d2fe',
+    zIndex: 20,
   },
-  connectorLeft: { 
-    position: 'absolute', 
-    left: -7, 
-    top: '50%', 
-    transform: [{ translateY: -7 }], 
-    width: 14, 
-    height: 14, 
-    borderRadius: 7, 
-    backgroundColor: '#ffffff', 
-    borderWidth: 2, 
-    borderColor: '#c7d2fe', 
-    zIndex: 20 
+  connectorLeft: {
+    position: 'absolute',
+    left: -7,
+    top: '50%',
+    transform: [{ translateY: -7 }],
+    width: 14,
+    height: 14,
+    borderRadius: 7,
+    backgroundColor: '#ffffff',
+    borderWidth: 2,
+    borderColor: '#c7d2fe',
+    zIndex: 20,
   },
-  connectorRight: { 
-    position: 'absolute', 
-    right: -7, 
-    top: '50%', 
-    transform: [{ translateY: -7 }], 
-    width: 14, 
-    height: 14, 
-    borderRadius: 7, 
-    backgroundColor: '#ffffff', 
-    borderWidth: 2, 
-    borderColor: '#c7d2fe', 
-    zIndex: 20 
+  connectorRight: {
+    position: 'absolute',
+    right: -7,
+    top: '50%',
+    transform: [{ translateY: -7 }],
+    width: 14,
+    height: 14,
+    borderRadius: 7,
+    backgroundColor: '#ffffff',
+    borderWidth: 2,
+    borderColor: '#c7d2fe',
+    zIndex: 20,
   },
-  backBtn: { 
-    flexDirection: 'row', 
-    alignItems: 'center', 
-    gap: 6, 
-    marginBottom: 24, 
-    alignSelf: 'flex-start' 
+  backBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 24,
+    alignSelf: 'flex-start',
   },
-  backText: { 
-    fontSize: 14, 
-    color: '#4a5568', 
-    fontWeight: '600' 
+  backText: {
+    fontSize: 14,
+    color: '#4a5568',
+    fontWeight: '600',
   },
-  heading: { 
-    fontSize: 26, 
-    fontWeight: '800', 
-    color: '#0f172a', 
-    textAlign: 'center', 
-    letterSpacing: -0.6, 
-    marginBottom: 12
+  heading: {
+    fontSize: 26,
+    fontWeight: '800',
+    color: '#0f172a',
+    textAlign: 'center',
+    letterSpacing: -0.6,
+    marginBottom: 12,
   },
-  subtitle: { 
-    fontSize: 14, 
-    color: '#64748b', 
-    textAlign: 'center', 
+  subtitle: {
+    fontSize: 14,
+    color: '#64748b',
+    textAlign: 'center',
     marginBottom: 28,
     lineHeight: 20,
   },
-  formGroup: { 
-    marginBottom: 16 
+  formGroup: {
+    marginBottom: 16,
   },
-  label: { 
-    fontSize: 13, 
-    fontWeight: '600', 
-    color: '#4a5568', 
-    marginBottom: 8 
+  label: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#4a5568',
+    marginBottom: 8,
   },
-  inputWrap: { 
-    borderWidth: 1, 
-    borderColor: '#dde3fa', 
-    borderRadius: 12, 
-    backgroundColor: '#ffffff', 
-    flexDirection: 'row', 
+  inputWrap: {
+    borderWidth: 1,
+    borderColor: '#dde3fa',
+    borderRadius: 12,
+    backgroundColor: '#ffffff',
+    flexDirection: 'row',
     alignItems: 'center',
     minHeight: 40,
   },
-  inputWrapFocused: { 
+  inputWrapFocused: {
     borderWidth: 1,
-    backgroundColor: '#ffffff', 
+    backgroundColor: '#ffffff',
     borderColor: '#3b5bdb',
     shadowColor: '#3b5bdb',
     shadowOffset: { width: 0, height: 6 },
@@ -612,42 +738,55 @@ const styles = StyleSheet.create({
     shadowRadius: 12,
     elevation: 4,
   },
-  inputError: { 
-    borderColor: '#ef4444' 
+  inputError: {
+    borderColor: '#ef4444',
   },
-  input: { 
-    flex: 1, 
-    paddingHorizontal: 14, 
-    paddingVertical: Platform.OS === 'ios' ? 13 : 11, 
-    fontSize: 14, 
+  input: {
+    flex: 1,
+    paddingHorizontal: 14,
+    paddingVertical: Platform.OS === 'ios' ? 13 : 11,
+    fontSize: 14,
     color: '#1a1f36',
     minHeight: 44,
     textAlignVertical: 'center',
   },
-  inputWithIcon: { 
-    paddingRight: 44 
+  inputWithIcon: {
+    paddingRight: 44,
   },
-  eyeBtn: { 
-    position: 'absolute', 
-    right: 12, 
+  eyeBtn: {
+    position: 'absolute',
+    right: 12,
     padding: 10,
   },
-  errorText: { 
-    fontSize: 12, 
-    color: '#ef4444', 
-    marginTop: 6, 
-    marginLeft: 4, 
-    fontWeight: '500' 
+  errorText: {
+    fontSize: 12,
+    color: '#ef4444',
+    marginTop: 6,
+    marginLeft: 4,
+    fontWeight: '500',
   },
+  inlineErrorText: {
+    fontSize: 11,
+    color: '#f59e0b',
+    marginTop: 4,
+    marginLeft: 4,
+    fontWeight: '500',
+  },
+  // Strength indicator
   strengthContainer: {
     marginTop: 6,
   },
+  strengthRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
   strengthBar: {
+    flex: 1,
     height: 4,
     backgroundColor: '#e2e6f3',
     borderRadius: 2,
     overflow: 'hidden',
-    marginBottom: 6,
   },
   strengthFill: {
     height: '100%',
@@ -655,44 +794,48 @@ const styles = StyleSheet.create({
   },
   strengthText: {
     fontSize: 11,
+    fontWeight: '600',
+    minWidth: 52,
+    textAlign: 'right',
   },
   matchSuccess: {
     color: '#10b981',
     fontSize: 11,
     marginTop: 6,
     marginLeft: 4,
+    fontWeight: '500',
   },
-  btnReset: { 
-    backgroundColor: '#4c6fff', 
-    borderRadius: 14, 
-    paddingVertical: 16, 
-    alignItems: 'center', 
-    marginTop: 18, 
-    shadowColor: '#4c6fff', 
-    shadowOffset: { width: 0, height: 10 }, 
-    shadowOpacity: 0.32, 
-    shadowRadius: 20, 
-    elevation: 8 
+  btnReset: {
+    backgroundColor: '#4c6fff',
+    borderRadius: 14,
+    paddingVertical: 16,
+    alignItems: 'center',
+    marginTop: 18,
+    shadowColor: '#4c6fff',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.32,
+    shadowRadius: 20,
+    elevation: 8,
   },
-  btnDisabled: { 
-    opacity: 0.75 
+  btnDisabled: {
+    opacity: 0.75,
   },
-  btnResetText: { 
-    color: '#ffffff', 
-    fontSize: 15, 
-    fontWeight: '700', 
-    letterSpacing: 0.3 
+  btnResetText: {
+    color: '#ffffff',
+    fontSize: 15,
+    fontWeight: '700',
+    letterSpacing: 0.3,
   },
-  signinLink: { 
-    alignItems: 'center', 
-    marginTop: 20 
+  signinLink: {
+    alignItems: 'center',
+    marginTop: 20,
   },
-  signinText: { 
-    fontSize: 14, 
-    color: '#4c6fff', 
-    fontWeight: '600' 
+  signinText: {
+    fontSize: 14,
+    color: '#4c6fff',
+    fontWeight: '600',
   },
-  // Toast Styles
+  // Toast
   toastContainer: {
     position: 'absolute',
     top: Platform.OS === 'ios' ? 60 : 50,
@@ -728,7 +871,7 @@ const styles = StyleSheet.create({
     marginLeft: 10,
     flex: 1,
   },
-  // Grid background styles
+  // Grid background
   gridBackground: {
     ...StyleSheet.absoluteFillObject,
     width: '100%',
@@ -738,7 +881,7 @@ const styles = StyleSheet.create({
     ...StyleSheet.absoluteFillObject,
     backgroundColor: 'rgba(255,255,255,0.10)',
   },
-  // Error Modal Styles
+  // Error modal
   errorModalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.5)',

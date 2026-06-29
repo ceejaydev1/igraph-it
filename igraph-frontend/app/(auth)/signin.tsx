@@ -50,7 +50,6 @@ const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 // ─── RESPONSIVE LOGO SIZE ─────────────────────────────────────────────────────
 
 const getResponsiveLogoSize = (windowWidth: number, windowHeight: number): number => {
-  // Scale down logo for smaller screens
   if (windowHeight < 680) {
     if (Platform.OS === 'web') {
       if (windowWidth < 480) return 36;
@@ -59,7 +58,6 @@ const getResponsiveLogoSize = (windowWidth: number, windowHeight: number): numbe
     }
     return 38;
   }
-  
   if (Platform.OS === 'web') {
     if (windowWidth < 480) return 42;
     if (windowWidth < 768) return 48;
@@ -205,7 +203,6 @@ if (Platform.OS === 'web' && typeof window !== 'undefined') {
   try {
     if (!getApps().length) {
       firebaseApp = initializeApp(firebaseConfig);
-      console.log('[Firebase] App initialized');
     } else {
       firebaseApp = getApps()[0];
     }
@@ -214,317 +211,6 @@ if (Platform.OS === 'web' && typeof window !== 'undefined') {
     console.error('[Firebase] Init error:', e.message);
   }
 }
-
-//TERMS AND PRIVACY POLICY CONTENT
-const TermsContent = () => (
-  <View style={modalStyles.tabContent}>
-    <Text style={modalStyles.sectionTitle}>1. Acceptance of Terms</Text>
-    <Text style={modalStyles.text}>
-      By registering for or using iGraph IT ("Platform"), you agree to be bound by these Terms and
-      Conditions. If you disagree with any part, you must not use our Platform.
-    </Text>
-
-    <Text style={modalStyles.sectionTitle}>2. Account Registration</Text>
-    <Text style={modalStyles.subSection}>2.1 Account Security</Text>
-    <Text style={modalStyles.text}>
-      • You are responsible for maintaining password confidentiality{'\n'}
-      • You must notify us immediately of unauthorized access{'\n'}
-      • We are not liable for losses from compromised accounts
-    </Text>
-    <Text style={modalStyles.subSection}>2.2 Accuracy of Information</Text>
-    <Text style={modalStyles.text}>
-      You must provide accurate, current, and complete information during registration and update it
-      as needed.
-    </Text>
-
-    <Text style={modalStyles.sectionTitle}>3. User Conduct</Text>
-    <Text style={modalStyles.text}>
-      You agree NOT to:{'\n'}
-      • Share your account credentials with others{'\n'}
-      • Attempt to bypass authentication mechanisms{'\n'}
-      • Use automated scripts to access the Platform{'\n'}
-      • Upload malicious content or code{'\n'}
-      • Attempt to access other users' data{'\n'}
-      • Reverse engineer any part of the Platform{'\n'}
-      • Use the Platform for illegal activities
-    </Text>
-
-    <Text style={modalStyles.sectionTitle}>4. Intellectual Property</Text>
-    <Text style={modalStyles.subSection}>4.1 Our Content</Text>
-    <Text style={modalStyles.text}>
-      All platform content, including UI design, diagrams, educational materials about SDLC and UML,
-      and source code is owned by iGraph IT and protected by copyright laws.
-    </Text>
-    <Text style={modalStyles.subSection}>4.2 Your Content</Text>
-    <Text style={modalStyles.text}>
-      • You retain ownership of diagrams you create{'\n'}
-      • You grant us license to display your content within the Platform{'\n'}
-      • You are responsible for your content's legality
-    </Text>
-
-    <Text style={modalStyles.sectionTitle}>5. Authentication and Security</Text>
-    <Text style={modalStyles.subSection}>5.1 Token Management</Text>
-    <Text style={modalStyles.text}>
-      • Access tokens expire after 15 minutes{'\n'}
-      • Refresh tokens expire after 7 days{'\n'}
-      • You must re-authenticate after token expiration
-    </Text>
-    <Text style={modalStyles.subSection}>5.2 OTP Verification</Text>
-    <Text style={modalStyles.text}>
-      • OTPs expire after 5 minutes{'\n'}
-      • Maximum 3 OTP requests per 15 minutes{'\n'}
-      • Do not share OTPs with anyone
-    </Text>
-
-    <Text style={modalStyles.sectionTitle}>6. Limitation of Liability</Text>
-    <Text style={modalStyles.text}>
-      To the maximum extent permitted by law, the Platform is provided "as is" without warranties.
-      We are not liable for indirect, incidental, or consequential damages.
-    </Text>
-
-    <Text style={modalStyles.sectionTitle}>7. Governing Law</Text>
-    <Text style={modalStyles.text}>
-      These terms are governed by the laws of the Philippines, without regard to conflict of law
-      principles.
-    </Text>
-
-    <Text style={modalStyles.sectionTitle}>8. Contact Us</Text>
-    <Text style={modalStyles.text}>
-      Email: legal@igraphit.com{'\n'}Response time: Within 5 business days
-    </Text>
-
-    <Text style={modalStyles.footer}>
-      By using iGraph IT, you acknowledge that you have read, understood, and agree to be bound by
-      these Terms and Conditions.
-    </Text>
-  </View>
-);
-
-const PrivacyContent = () => (
-  <View style={modalStyles.tabContent}>
-    <Text style={modalStyles.sectionTitle}>1. Introduction</Text>
-    <Text style={modalStyles.text}>
-      Welcome to iGraph IT. We are committed to protecting your personal information and your right
-      to privacy.
-    </Text>
-
-    <Text style={modalStyles.sectionTitle}>2. Information We Collect</Text>
-    <Text style={modalStyles.subSection}>2.1 Personal Information You Provide</Text>
-    <Text style={modalStyles.text}>
-      • Account Information: Full name, email address, password (encrypted){'\n'}
-      • Profile Information: Profile picture (optional){'\n'}
-      • Authentication Data: Sign-in methods (email/password or Google OAuth)
-    </Text>
-    <Text style={modalStyles.subSection}>2.2 Automatically Collected Information</Text>
-    <Text style={modalStyles.text}>
-      • Usage Data: Pages visited, diagrams created, time spent on platform{'\n'}
-      • Device Information: Browser type, operating system, IP address
-    </Text>
-
-    <Text style={modalStyles.sectionTitle}>3. How We Use Your Information</Text>
-    <Text style={modalStyles.text}>
-      We use your information to:{'\n'}
-      • Create and manage your account{'\n'}
-      • Authenticate your identity and secure your access{'\n'}
-      • Send OTP verification and password reset emails{'\n'}
-      • Improve our platform and user experience
-    </Text>
-
-    <Text style={modalStyles.sectionTitle}>4. Data Storage and Security</Text>
-    <Text style={modalStyles.text}>
-      • Your password is encrypted using bcrypt (12 rounds){'\n'}
-      • Access tokens expire after 15 minutes{'\n'}
-      • Refresh tokens expire after 7 days
-    </Text>
-
-    <Text style={modalStyles.sectionTitle}>5. Email Communications</Text>
-    <Text style={modalStyles.text}>
-      We send account verification OTPs and password reset links. These are essential and cannot be
-      opted out of.
-    </Text>
-
-    <Text style={modalStyles.sectionTitle}>6. Data Retention</Text>
-    <Text style={modalStyles.text}>
-      • Account data: Until you delete your account{'\n'}
-      • Session data: 7 days from last activity
-    </Text>
-
-    <Text style={modalStyles.sectionTitle}>7. Your Rights</Text>
-    <Text style={modalStyles.text}>
-      You have the right to access your data, correct inaccurate data, delete your account, and
-      export your data.
-    </Text>
-
-    <Text style={modalStyles.sectionTitle}>8. Third-Party Services</Text>
-    <Text style={modalStyles.text}>
-      We use Firebase (Google) for authentication and database, and Brevo for email delivery.
-    </Text>
-
-    <Text style={modalStyles.sectionTitle}>9. Children's Privacy</Text>
-    <Text style={modalStyles.text}>
-      iGraph IT is not intended for children under 13. We do not knowingly collect information from
-      children under 13.
-    </Text>
-
-    <Text style={modalStyles.sectionTitle}>10. Contact Us</Text>
-    <Text style={modalStyles.text}>
-      For privacy concerns, contact us at: privacy@igraphit.com
-    </Text>
-
-    <Text style={modalStyles.footer}>By using iGraph IT, you agree to this Privacy Policy.</Text>
-  </View>
-);
-
-const PolicyModal = ({
-  visible,
-  onClose,
-  onAgree,
-}: {
-  visible: boolean;
-  onClose: () => void;
-  onAgree: () => void;
-}) => {
-  const { width: ww, height: wh } = useWindowDimensions();
-  const [activeTab, setActiveTab] = useState<'terms' | 'privacy'>('terms');
-  const scrollViewRef = useRef<ScrollView>(null);
-  const [showScrollTop, setShowScrollTop] = useState(false);
-  const [termsRead, setTermsRead] = useState(false);
-  const [privacyRead, setPrivacyRead] = useState(false);
-  const bothRead = termsRead && privacyRead;
-
-  useEffect(() => {
-    if (visible) {
-      setTermsRead(false);
-      setPrivacyRead(false);
-      setActiveTab('terms');
-      setShowScrollTop(false);
-    }
-  }, [visible]);
-
-  const handleTabSwitch = (tab: 'terms' | 'privacy') => {
-    setActiveTab(tab);
-    setShowScrollTop(false);
-    scrollViewRef.current?.scrollTo({ y: 0, animated: false });
-  };
-
-  const handleScroll = (event: any) => {
-    const { layoutMeasurement, contentOffset, contentSize } = event.nativeEvent;
-    const offsetY = contentOffset.y;
-    setShowScrollTop(offsetY > 200);
-    const isAtBottom = layoutMeasurement.height + offsetY >= contentSize.height - 40;
-    if (isAtBottom) {
-      if (activeTab === 'terms') setTermsRead(true);
-      else setPrivacyRead(true);
-    }
-  };
-
-  const scrollToTop = () => {
-    scrollViewRef.current?.scrollTo({ y: 0, animated: true });
-  };
-
-  const handleAgree = () => {
-    onAgree();
-    onClose();
-  };
-
-  const handleDecline = () => {
-    onClose();
-  };
-
-  const modalWidth = Math.min(ww - 40, 500);
-  const modalMaxHeight = wh - 80;
-
-  return (
-    <Modal animationType="slide" transparent={true} visible={visible} onRequestClose={onClose}>
-      <View style={modalStyles.modalOverlay}>
-        <View style={[modalStyles.modalContainer, { width: modalWidth, maxHeight: modalMaxHeight }]}>
-          <View style={modalStyles.modalHeader}>
-            <Text style={modalStyles.modalTitle}>Legal Agreement</Text>
-          </View>
-
-          <View style={modalStyles.tabBar}>
-            <TouchableOpacity
-              style={[modalStyles.tab, activeTab === 'terms' && modalStyles.activeTab]}
-              onPress={() => handleTabSwitch('terms')}
-            >
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                <Text style={[modalStyles.tabText, activeTab === 'terms' && modalStyles.activeTabText]}>
-                  Terms & Conditions
-                </Text>
-                {termsRead && (
-                  <Svg width={14} height={14} viewBox="0 0 24 24" fill="none">
-                    <Circle cx="12" cy="12" r="10" fill="#3b5bdb" />
-                    <Path d="M8 12l2.5 2.5L16 9" stroke="white" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
-                  </Svg>
-                )}
-              </View>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[modalStyles.tab, activeTab === 'privacy' && modalStyles.activeTab]}
-              onPress={() => handleTabSwitch('privacy')}
-            >
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                <Text style={[modalStyles.tabText, activeTab === 'privacy' && modalStyles.activeTabText]}>
-                  Privacy Policy
-                </Text>
-                {privacyRead && (
-                  <Svg width={14} height={14} viewBox="0 0 24 24" fill="none">
-                    <Circle cx="12" cy="12" r="10" fill="#3b5bdb" />
-                    <Path d="M8 12l2.5 2.5L16 9" stroke="white" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
-                  </Svg>
-                )}
-              </View>
-            </TouchableOpacity>
-          </View>
-
-          {!bothRead && (
-            <View style={modalStyles.scrollHintBanner}>
-              <Svg width={14} height={14} viewBox="0 0 24 24" fill="none">
-                <Path d="M12 5v14M5 12l7 7 7-7" stroke="#3b5bdb" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
-              </Svg>
-              <Text style={modalStyles.scrollHintText}>
-                Please scroll to the bottom of{' '}
-                {!termsRead && !privacyRead ? 'both documents' : !termsRead ? 'Terms & Conditions' : 'Privacy Policy'}{' '}
-                to enable Agree
-              </Text>
-            </View>
-          )}
-
-          <ScrollView
-            ref={scrollViewRef}
-            showsVerticalScrollIndicator={true}
-            onScroll={handleScroll}
-            scrollEventThrottle={16}
-          >
-            {activeTab === 'terms' ? <TermsContent /> : <PrivacyContent />}
-          </ScrollView>
-
-          {showScrollTop && (
-            <TouchableOpacity style={modalStyles.scrollTopButton} onPress={scrollToTop}>
-              <Svg width={24} height={24} viewBox="0 0 24 24" fill="none">
-                <Path d="M12 19V5M5 12l7-7 7 7" stroke="#ffffff" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
-              </Svg>
-            </TouchableOpacity>
-          )}
-
-          <View style={modalStyles.modalFooter}>
-            <TouchableOpacity
-              style={[modalStyles.agreeButton, !bothRead && modalStyles.agreeButtonDisabled]}
-              onPress={bothRead ? handleAgree : undefined}
-            >
-              <Text style={[modalStyles.agreeButtonText, !bothRead && modalStyles.agreeButtonTextDisabled]}>
-                {bothRead ? 'I Agree' : 'Read First'}
-              </Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={modalStyles.declineButton} onPress={handleDecline}>
-              <Text style={modalStyles.declineButtonText}>Decline</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </View>
-    </Modal>
-  );
-};
 
 //ERROR POPUP
 const ErrorPopupModal = ({
@@ -611,7 +297,7 @@ const SuccessModal = ({
   );
 };
 
-// ─── BACKGROUND (matches Sign Up) ─────────────────────────────────────────────
+// ─── BACKGROUND ─────────────────────────────────────────────────────────────
 
 const DiagramBackground = () => (
   <View style={StyleSheet.absoluteFillObject} pointerEvents="none">
@@ -710,7 +396,6 @@ export default function SignIn() {
   const [passwordFocused, setPasswordFocused] = useState(false);
   const [showSuccessAnimation, setShowSuccessAnimation] = useState(false);
   const [errors, setErrors] = useState({ email: '', password: '', terms: '' });
-  const [showPolicyModal, setShowPolicyModal] = useState(false);
   const [showErrorModal, setShowErrorModal] = useState(false);
   const [errorModalData, setErrorModalData] = useState({
     title: '',
@@ -738,19 +423,15 @@ export default function SignIn() {
   useEffect(() => {
     const handleRedirectResult = async () => {
       if (!auth) return;
-      
       try {
         const result = await getRedirectResult(auth);
         if (result) {
           setLoading(true);
           const idToken = await result.user.getIdToken();
           const apiResult = await authService.googleAuth(idToken);
-          
           if (apiResult.success) {
             setShowSuccessAnimation(true);
-            setTimeout(() => {
-              router.replace('/(tabs)/home');
-            }, 400);
+            setTimeout(() => { router.replace('/(tabs)/home'); }, 400);
           } else {
             await auth.signOut();
             showErrorPopup('Sign In Failed', apiResult.message || 'Google sign in failed');
@@ -762,7 +443,6 @@ export default function SignIn() {
         setLoading(false);
       }
     };
-    
     handleRedirectResult();
   }, [auth, router]);
 
@@ -787,19 +467,14 @@ export default function SignIn() {
   }, [router]);
 
   //HANDLERS
-  const openPolicyModal = () => setShowPolicyModal(true);
-  const handleAgree = useCallback(() => {
-    setAgreed(true);
-    setErrors((prev) => ({ ...prev, terms: '' }));
-  }, []);
-
   const handleToggleAgreement = useCallback(() => {
-    if (!agreed) {
-      openPolicyModal();
-    } else {
-      setAgreed(false);
-    }
-  }, [agreed]);
+    setAgreed((prev) => !prev);
+    if (errors.terms) setErrors((prev) => ({ ...prev, terms: '' }));
+  }, [errors.terms]);
+
+  const openPrivacyPage = useCallback(() => {
+    router.push('/(auth)/privacy1');
+  }, [router]);
 
   const showErrorPopup = (title: string, message: string, onAction?: () => void, actionButtonText?: string, actionIcon?: React.ReactNode) => {
     setErrorModalData({ title, message, onAction, actionButtonText: actionButtonText || '', actionIcon });
@@ -813,9 +488,7 @@ export default function SignIn() {
       Alert.alert(isError ? 'Error' : 'Success', message);
     } else {
       console.log(message);
-      if (isError) {
-        Alert.alert('Error', message);
-      }
+      if (isError) Alert.alert('Error', message);
     }
   };
 
@@ -826,7 +499,6 @@ export default function SignIn() {
         ...prev,
         terms: 'You must agree to the Terms and Privacy Policy before continuing',
       }));
-      openPolicyModal();
       return;
     }
     if (!auth) {
@@ -840,9 +512,7 @@ export default function SignIn() {
       const provider = new GoogleAuthProvider();
       provider.addScope('email');
       provider.addScope('profile');
-      provider.setCustomParameters({ 
-        prompt: 'select_account',
-      });
+      provider.setCustomParameters({ prompt: 'select_account' });
 
       const result = await signInWithPopup(auth, provider);
       const idToken = await result.user.getIdToken();
@@ -850,9 +520,7 @@ export default function SignIn() {
 
       if (apiResult.success) {
         setShowSuccessAnimation(true);
-        setTimeout(() => {
-          router.replace('/(tabs)/home');
-        }, 400);
+        setTimeout(() => { router.replace('/(tabs)/home'); }, 400);
       } else {
         await auth.signOut();
         const msg = apiResult.message || '';
@@ -860,9 +528,7 @@ export default function SignIn() {
             msg.toLowerCase().includes('already exists') ||
             msg.toLowerCase().includes('email/password')) {
           const googleEmail = result.user.email || '';
-          if (googleEmail) {
-            setEmail(googleEmail);
-          }
+          if (googleEmail) setEmail(googleEmail);
           showErrorPopup(
             'Account Already Exists',
             'This email is already registered with email/password. Please sign in using your email and password instead.',
@@ -876,51 +542,25 @@ export default function SignIn() {
       }
     } catch (error: any) {
       console.error('Google Sign-In error:', error);
-      
       if (error.response?.status === 409) {
         const errorMsg = error.response?.data?.message || '';
         showErrorPopup(
           'Account Already Exists',
-          errorMsg || 'This email is already registered with email/password. Please sign in using your email and password instead.',
+          errorMsg || 'This email is already registered with email/password.',
           () => passwordRef.current?.focus(),
           'Sign In with Email/Password',
           <EmailIcon />
         );
-      }
-      else if (error.code === 'auth/popup-closed-by-user') {
-        // Do nothing - user cancelled
-      }
-      else if (error.code === 'auth/popup-blocked') {
-        showErrorPopup(
-          'Popup Blocked',
-          'Please allow popups for this website to sign in with Google.',
-          undefined,
-          'OK'
-        );
-      }
-      else if (error.code === 'auth/network-request-failed') {
-        showErrorPopup(
-          'Network Error',
-          'Unable to reach Google servers. Please check your internet connection.',
-          undefined,
-          'OK'
-        );
-      }
-      else if (error.code === 'auth/internal-error' || error.message?.includes('Failed to fetch')) {
-        showErrorPopup(
-          'Google Sign In Unavailable',
-          'Google Sign-In is currently unavailable. Please use email/password to sign in instead.',
-          undefined,
-          'OK'
-        );
-      }
-      else {
-        showErrorPopup(
-          'Google Sign In Failed', 
-          error.message || 'Something went wrong. Please try again.',
-          undefined,
-          'OK'
-        );
+      } else if (error.code === 'auth/popup-closed-by-user') {
+        // User cancelled
+      } else if (error.code === 'auth/popup-blocked') {
+        showErrorPopup('Popup Blocked', 'Please allow popups for this website to sign in with Google.', undefined, 'OK');
+      } else if (error.code === 'auth/network-request-failed') {
+        showErrorPopup('Network Error', 'Unable to reach Google servers. Please check your internet connection.', undefined, 'OK');
+      } else if (error.code === 'auth/internal-error' || error.message?.includes('Failed to fetch')) {
+        showErrorPopup('Google Sign In Unavailable', 'Google Sign-In is currently unavailable. Please use email/password to sign in instead.', undefined, 'OK');
+      } else {
+        showErrorPopup('Google Sign In Failed', error.message || 'Something went wrong. Please try again.', undefined, 'OK');
       }
     } finally {
       setLoading(false);
@@ -937,11 +577,7 @@ export default function SignIn() {
 
     setErrors(newErrors);
 
-    if (!agreed) {
-      openPolicyModal();
-      return;
-    }
-    if (newErrors.email || newErrors.password) return;
+    if (newErrors.email || newErrors.password || newErrors.terms) return;
 
     setLoading(true);
     const startTime = Date.now();
@@ -954,9 +590,7 @@ export default function SignIn() {
       if (result.success) {
         await saveRememberMe(email, rememberMe);
         setShowSuccessAnimation(true);
-        setTimeout(() => {
-          router.replace('/(tabs)/home');
-        }, 400);
+        setTimeout(() => { router.replace('/(tabs)/home'); }, 400);
       } else {
         const msg = result.message || '';
         if (msg === 'Invalid email or password.' || msg.toLowerCase().includes('invalid')) {
@@ -964,13 +598,8 @@ export default function SignIn() {
         } else if (msg.includes('EMAIL_NOT_VERIFIED') || msg.toLowerCase().includes('verify')) {
           showToastMessage('Please verify your email address before signing in.', true);
         } else if (msg.toLowerCase().includes('google') || msg.toLowerCase().includes('oauth')) {
-          showErrorPopup(
-            'Google Account Detected',
-            'This email is registered with Google. Please sign in using Google instead.',
-            handleFirebaseGoogleSignIn,
-            'Sign In with Google',
-            <GoogleIcon />
-          );
+          // *** INLINE ERROR instead of popup ***
+          setErrors((prev) => ({ ...prev, email: 'This email already use in google authentication.' }));
         } else {
           setErrors((prev) => ({ ...prev, password: msg || 'Invalid email or password' }));
         }
@@ -986,13 +615,8 @@ export default function SignIn() {
         } else if (msg === 'EMAIL_NOT_VERIFIED' || msg.toLowerCase().includes('verify')) {
           showToastMessage('Please verify your email address before signing in.', true);
         } else if (msg.toLowerCase().includes('google') || msg.toLowerCase().includes('oauth')) {
-          showErrorPopup(
-            'Google Account Detected',
-            'This email is registered with Google. Please sign in using Google instead.',
-            handleFirebaseGoogleSignIn,
-            'Sign In with Google',
-            <GoogleIcon />
-          );
+          // *** INLINE ERROR instead of popup ***
+          setErrors((prev) => ({ ...prev, email: 'This email already use in google authentication.' }));
         } else {
           setErrors((prev) => ({ ...prev, password: msg || 'Something went wrong' }));
         }
@@ -1020,7 +644,6 @@ export default function SignIn() {
     <>
       <Stack.Screen options={{ headerShown: false }} />
 
-      <PolicyModal visible={showPolicyModal} onClose={() => setShowPolicyModal(false)} onAgree={handleAgree} />
       <ErrorPopupModal 
         visible={showErrorModal} 
         title={errorModalData.title} 
@@ -1154,6 +777,7 @@ export default function SignIn() {
                 </TouchableOpacity>
               ) : null}
 
+              {/* ── Terms Checkbox ── */}
               <View style={[styles.termsWrap, errors.terms && styles.termsError]}>
                 <TouchableOpacity onPress={handleToggleAgreement} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
                   <View style={[styles.customCheckbox, agreed && styles.customCheckboxChecked]}>
@@ -1165,10 +789,10 @@ export default function SignIn() {
                   </View>
                 </TouchableOpacity>
                 <Text style={styles.termsText}>
-                  I agree to the{' '}
-                  <Text style={styles.termsLink} onPress={openPolicyModal}>Terms and Condition</Text>
+                  By signing in, you agree to the{' '}
+                  <Text style={styles.termsLink} onPress={openPrivacyPage}>Terms and Condition</Text>
                   {' & '}
-                  <Text style={styles.termsLink} onPress={openPolicyModal}>Privacy Policy</Text>
+                  <Text style={styles.termsLink} onPress={openPrivacyPage}>Privacy Policy</Text>
                 </Text>
               </View>
               {errors.terms ? <Text style={styles.errorText}>{errors.terms}</Text> : null}
@@ -1176,7 +800,7 @@ export default function SignIn() {
               <View style={styles.signupWrap}>
                 <Text style={styles.signupText}>New here? </Text>
                 <TouchableOpacity onPress={() => router.push('/(auth)/signup')}>
-                  <Text style={styles.signupLink}>Create account</Text>
+                  <Text style={styles.signupLink}>Sign Up</Text>
                 </TouchableOpacity>
               </View>
             </View>
@@ -1188,590 +812,61 @@ export default function SignIn() {
 }
 
 const styles = StyleSheet.create({
-
-  // Layout & Background
-  flex: {
-    flex: 1,
-    backgroundColor: '#eef2ff',
-  },
-  splashContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#eef2ff',
-  },
-  gridBackground: {
-    ...StyleSheet.absoluteFillObject,
-    width: '100%',
-    height: '100%',
-  },
-  gridOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(255,255,255,0.10)',
-  },
-  scrollContent: {
-    flexGrow: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingVertical: 20,
-    paddingHorizontal: 12,
-    minHeight: SCREEN_HEIGHT,
-  },
-
-  //CARD OUTER WRAPPER (holds the overlapping logo + card together)
-  cardOuter: {
-    width: '100%',
-    maxWidth: 400,
-    minWidth: 300,
-    alignItems: 'center',
-  },
-
-  //FORM
-  card: {
-    backgroundColor: '#ffffff',
-    borderRadius: 20,
-    paddingHorizontal: 24,
-    paddingVertical: 20,
-    paddingTop: 44,
-    width: '100%',
-    position: 'relative',
-    shadowColor: '#1e293b',
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.06,
-    shadowRadius: 20,
-    elevation: 8,
-    marginTop: 0,
-    borderColor: '#f1f5ff',
-  },
-
-  //RESTORED CONNECTORS - Scaled down to save space
-  connectorTop: {
-    position: 'absolute',
-    top: -4,
-    alignSelf: 'center',
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: '#ffffff',
-    borderWidth: 1.5,
-    borderColor: '#c7d2fe',
-  },
-  connectorBottom: {
-    position: 'absolute',
-    bottom: -4,
-    alignSelf: 'center',
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: '#ffffff',
-    borderWidth: 1.5,
-    borderColor: '#c7d2fe',
-  },
-  connectorLeft: {
-    position: 'absolute',
-    left: -4,
-    top: '50%',
-    transform: [{ translateY: -4 }],
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: '#ffffff',
-    borderWidth: 1.5,
-    borderColor: '#c7d2fe',
-  },
-  connectorRight: {
-    position: 'absolute',
-    right: -4,
-    top: '50%',
-    transform: [{ translateY: -4 }],
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: '#ffffff',
-    borderWidth: 1.5,
-    borderColor: '#c7d2fe',
-  },
-
-  //LOGO
-  logoWrap: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: -36,
-    zIndex: 10,
-  },
-  logoWrapper: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#eef2ff',
-    borderWidth: 2.5,
-    borderColor: '#3b5bdb',
-    shadowColor: '#3b5bdb',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15,
-    shadowRadius: 8,
-    elevation: 5,
-  },
-  logo: {
-    backgroundColor: 'transparent',
-  },
-  heading: {
-    fontSize: 24,
-    fontWeight: '800',
-    color: '#0f172a',
-    textAlign: 'center',
-    marginBottom: 2,
-  },
-  subtitle: {
-    fontSize: 13,
-    color: '#64748b',
-    marginBottom: 16,
-    textAlign: 'center',
-  },
-  formGroup: {
-    marginBottom: 12,
-  },
-  label: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#334155',
-    marginBottom: 4,
-  },
-  inputWrap: {
-    borderWidth: 1,
-    borderColor: '#dde3fa',
-    borderRadius: 10,
-    backgroundColor: '#ffffff',
-    minHeight: 38,
-    justifyContent: 'center',
-  },
-  inputWrapFocused: {
-    backgroundColor: '#ffffff',
-    shadowColor: '#3b5bdb',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.12,
-    shadowRadius: 8,
-    elevation: 3,
-  },
-  input: {
-    flex: 1,
-    paddingHorizontal: 12,
-    paddingVertical: Platform.OS === 'ios' ? 10 : 9,
-    fontSize: 14,
-    color: '#1a1f36',
-    backgroundColor: 'transparent',
-    minHeight: 40,
-    textAlignVertical: 'center',
-  },
-  inputWithIcon: {
-    paddingRight: 40,
-  },
-  eyeBtn: {
-    position: 'absolute',
-    right: 8,
-    padding: 10,
-  },
-
-  optionsRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginTop: 4,
-    marginBottom: 0,
-  },
-  rememberMeRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  checkbox: {
-    width: 16,
-    height: 16,
-    borderRadius: 4,
-    borderWidth: 2,
-    borderColor: '#8896b3',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  checkboxChecked: {
-    backgroundColor: '#3b5bdb',
-    borderColor: '#3b5bdb',
-  },
-  rememberMeText: {
-    fontSize: 12,
-    color: '#4a5568',
-  },
-  forgotWrap: {
-    alignItems: 'flex-end',
-  },
-  forgotText: {
-    fontSize: 12,
-    color: '#8896b3',
-    fontWeight: '500',
-  },
-
-  // Validation
-  inputError: {
-    borderColor: '#e11d48',
-  },
-  termsError: {
-    borderColor: '#e11d48',
-  },
-  errorText: {
-    fontSize: 11,
-    color: '#e11d48',
-    marginTop: 4,
-    marginLeft: 4,
-    fontWeight: '500',
-  },
-
-  // Buttons
-  btnSignIn: {
-    backgroundColor: '#3b5bdb',
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: '#2f49c7',
-    paddingVertical: 10,
-    alignItems: 'center',
-    marginTop: 2,
-    shadowColor: '#3b5bdb',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.2,
-    shadowRadius: 12,
-    elevation: 6,
-  },
-  btnDisabled: {
-    opacity: 0.75,
-  },
-  btnSignInText: {
-    color: '#ffffff',
-    fontSize: 14,
-    fontWeight: '700',
-    letterSpacing: 0.3,
-  },
-
-  // Divider
-  divider: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginVertical: 6,
-  },
-  line: {
-    flex: 1,
-    height: 1,
-    backgroundColor: '#e5e9f5',
-  },
-  orText: {
-    marginHorizontal: 10,
-    fontSize: 11,
-    color: '#8896b3',
-    fontWeight: '600',
-  },
-
-  // Google Button
-  btnGoogle: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    borderWidth: 1,
-    borderColor: '#e5e7eb',
-    borderRadius: 10,
-    paddingVertical: 9,
-    marginTop: 2,
-    backgroundColor: '#ffffff',
-  },
-  btnGoogleText: {
-    fontSize: 13,
-    fontWeight: '500',
-    color: '#1a1f36',
-    marginLeft: 6,
-  },
-
-  // Terms
-  termsWrap: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 8,
-    marginTop: 8,
-    padding: 8,
-    borderWidth: 1,
-    borderColor: '#e2e6f3',
-    borderRadius: 8,
-    backgroundColor: '#f8f9ff',
-  },
-  customCheckbox: {
-    width: 16,
-    height: 16,
-    borderRadius: 8,
-    borderWidth: 2,
-    borderColor: '#8896b3',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: 1,
-    flexShrink: 0,
-  },
-  customCheckboxChecked: {
-    borderColor: '#3b5bdb',
-    backgroundColor: '#3b5bdb',
-  },
-  termsText: {
-    fontSize: 12,
-    color: '#4a5568',
-    flex: 1,
-    lineHeight: 17,
-  },
-  termsLink: {
-    fontWeight: '700',
-    color: '#3b5bdb',
-  },
-
-  // Sign Up Link
-  signupWrap: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginTop: 12,
-  },
-  signupText: {
-    fontSize: 12,
-    color: '#64748b',
-  },
-  signupLink: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: '#3b5bdb',
-  },
-
-  // Error Modal
-  errorModalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  errorModalContainer: {
-    width: '85%',
-    maxWidth: 320,
-    backgroundColor: '#FFFFFF',
-    borderRadius: 20,
-    padding: 22,
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15,
-    shadowRadius: 12,
-    elevation: 8,
-  },
-  errorModalIconWrapper: {
-    marginBottom: 14,
-  },
-  errorModalIconCircle: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: '#f0f4ff',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  errorModalTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#1e293b',
-    textAlign: 'center',
-    marginBottom: 8,
-  },
-  errorModalMessage: {
-    fontSize: 13,
-    color: '#64748b',
-    textAlign: 'center',
-    lineHeight: 19,
-    marginBottom: 20,
-  },
-  errorModalButtonPrimary: {
-    width: '100%',
-    paddingVertical: 11,
-    borderRadius: 10,
-    alignItems: 'center',
-    backgroundColor: '#3b5bdb',
-    flexDirection: 'row',
-    justifyContent: 'center',
-  },
-  errorModalButtonTextPrimary: {
-    color: '#ffffff',
-    fontSize: 15,
-    fontWeight: '600',
-  },
-});
-
-
-// ─── MODAL STYLES ────────────────────────────────────────────────────────────
-
-const modalStyles = StyleSheet.create({
-
-  // Modal Shell
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  modalContainer: {
-    backgroundColor: '#ffffff',
-    borderRadius: 24,
-    overflow: 'hidden',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.25,
-    shadowRadius: 20,
-    elevation: 15,
-  },
-  modalHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#e2e6f3',
-    backgroundColor: '#f8f9ff',
-  },
-  modalTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#1a1f36',
-  },
-
-  // Tabs
-  tabBar: {
-    flexDirection: 'row',
-    borderBottomWidth: 1,
-    borderBottomColor: '#e2e6f3',
-    backgroundColor: '#ffffff',
-  },
-  tab: {
-    flex: 1,
-    paddingVertical: 14,
-    alignItems: 'center',
-  },
-  activeTab: {
-    borderBottomWidth: 2,
-    borderBottomColor: '#3b5bdb',
-  },
-  tabText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#8896b3',
-  },
-  activeTabText: {
-    color: '#3b5bdb',
-  },
-  tabContent: {
-    padding: 20,
-  },
-
-  // Scroll Hint
-  scrollHintBanner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    backgroundColor: '#eef2ff',
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderBottomWidth: 1,
-    borderBottomColor: '#c7d2fe',
-  },
-  scrollHintText: {
-    fontSize: 12,
-    color: '#3b5bdb',
-    flex: 1,
-    fontWeight: '500',
-  },
-
-  // Footer & Buttons
-  modalFooter: {
-    flexDirection: 'row',
-    padding: 16,
-    borderTopWidth: 1,
-    borderTopColor: '#e2e6f3',
-    gap: 12,
-    backgroundColor: '#ffffff',
-  },
-  agreeButton: {
-    flex: 1,
-    backgroundColor: '#3b5bdb',
-    borderRadius: 10,
-    paddingVertical: 12,
-    alignItems: 'center',
-  },
-  agreeButtonDisabled: {
-    backgroundColor: '#c7d2fe',
-  },
-  agreeButtonText: {
-    color: '#ffffff',
-    fontSize: 15,
-    fontWeight: '700',
-  },
-  agreeButtonTextDisabled: {
-    color: '#8fa3e0',
-  },
-  declineButton: {
-    flex: 1,
-    backgroundColor: '#e5e9f5',
-    borderRadius: 10,
-    paddingVertical: 12,
-    alignItems: 'center',
-  },
-  declineButtonText: {
-    color: '#4a5568',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  scrollTopButton: {
-    position: 'absolute',
-    bottom: 80,
-    right: 20,
-    backgroundColor: '#3b5bdb',
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    justifyContent: 'center',
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 6,
-    zIndex: 10,
-  },
-
-  // Content Typography
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#3b5bdb',
-    marginTop: 20,
-    marginBottom: 8,
-  },
-  subSection: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#4a5568',
-    marginTop: 12,
-    marginBottom: 4,
-  },
-  text: {
-    fontSize: 14,
-    color: '#4a5568',
-    lineHeight: 22,
-    marginBottom: 8,
-  },
-  footer: {
-    fontSize: 12,
-    color: '#8896b3',
-    textAlign: 'center',
-    marginTop: 24,
-    paddingTop: 16,
-    borderTopWidth: 1,
-    borderTopColor: '#e2e6f3',
-  },
+  flex: { flex: 1, backgroundColor: '#eef2ff' },
+  splashContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#eef2ff' },
+  gridBackground: { ...StyleSheet.absoluteFillObject, width: '100%', height: '100%' },
+  gridOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(255,255,255,0.10)' },
+  scrollContent: { flexGrow: 1, justifyContent: 'center', alignItems: 'center', paddingVertical: 20, paddingHorizontal: 12, minHeight: SCREEN_HEIGHT },
+  cardOuter: { width: '100%', maxWidth: 400, minWidth: 300, alignItems: 'center' },
+  card: { backgroundColor: '#ffffff', borderRadius: 20, paddingHorizontal: 24, paddingVertical: 20, paddingTop: 44, width: '100%', position: 'relative', shadowColor: '#1e293b', shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.06, shadowRadius: 20, elevation: 8, marginTop: 0, borderColor: '#f1f5ff' },
+  connectorTop: { position: 'absolute', top: -4, alignSelf: 'center', width: 8, height: 8, borderRadius: 4, backgroundColor: '#ffffff', borderWidth: 1.5, borderColor: '#c7d2fe' },
+  connectorBottom: { position: 'absolute', bottom: -4, alignSelf: 'center', width: 8, height: 8, borderRadius: 4, backgroundColor: '#ffffff', borderWidth: 1.5, borderColor: '#c7d2fe' },
+  connectorLeft: { position: 'absolute', left: -4, top: '50%', transform: [{ translateY: -4 }], width: 8, height: 8, borderRadius: 4, backgroundColor: '#ffffff', borderWidth: 1.5, borderColor: '#c7d2fe' },
+  connectorRight: { position: 'absolute', right: -4, top: '50%', transform: [{ translateY: -4 }], width: 8, height: 8, borderRadius: 4, backgroundColor: '#ffffff', borderWidth: 1.5, borderColor: '#c7d2fe' },
+  logoWrap: { alignItems: 'center', justifyContent: 'center', marginBottom: -36, zIndex: 10 },
+  logoWrapper: { alignItems: 'center', justifyContent: 'center', backgroundColor: '#eef2ff', borderWidth: 2.5, borderColor: '#3b5bdb', shadowColor: '#3b5bdb', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.15, shadowRadius: 8, elevation: 5 },
+  logo: { backgroundColor: 'transparent' },
+  heading: { fontSize: 24, fontWeight: '800', color: '#0f172a', textAlign: 'center', marginBottom: 2 },
+  subtitle: { fontSize: 13, color: '#64748b', marginBottom: 16, textAlign: 'center' },
+  formGroup: { marginBottom: 12 },
+  label: { fontSize: 12, fontWeight: '600', color: '#334155', marginBottom: 4 },
+  inputWrap: { borderWidth: 1, borderColor: '#dde3fa', borderRadius: 10, backgroundColor: '#ffffff', minHeight: 38, justifyContent: 'center' },
+  inputWrapFocused: { backgroundColor: '#ffffff', shadowColor: '#3b5bdb', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.12, shadowRadius: 8, elevation: 3 },
+  input: { flex: 1, paddingHorizontal: 12, paddingVertical: Platform.OS === 'ios' ? 10 : 9, fontSize: 14, color: '#1a1f36', backgroundColor: 'transparent', minHeight: 40, textAlignVertical: 'center' },
+  inputWithIcon: { paddingRight: 40 },
+  eyeBtn: { position: 'absolute', right: 8, padding: 10 },
+  optionsRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 4, marginBottom: 0 },
+  rememberMeRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  checkbox: { width: 16, height: 16, borderRadius: 4, borderWidth: 2, borderColor: '#8896b3', alignItems: 'center', justifyContent: 'center' },
+  checkboxChecked: { backgroundColor: '#3b5bdb', borderColor: '#3b5bdb' },
+  rememberMeText: { fontSize: 12, color: '#4a5568' },
+  forgotWrap: { alignItems: 'flex-end' },
+  forgotText: { fontSize: 12, color: '#8896b3', fontWeight: '500' },
+  inputError: { borderColor: '#e11d48' },
+  termsError: { borderColor: '#e11d48' },
+  errorText: { fontSize: 11, color: '#e11d48', marginTop: 4, marginLeft: 4, fontWeight: '500' },
+  btnSignIn: { backgroundColor: '#3b5bdb', borderRadius: 10, borderWidth: 1, borderColor: '#2f49c7', paddingVertical: 10, alignItems: 'center', marginTop: 2, shadowColor: '#3b5bdb', shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.2, shadowRadius: 12, elevation: 6 },
+  btnDisabled: { opacity: 0.75 },
+  btnSignInText: { color: '#ffffff', fontSize: 14, fontWeight: '700', letterSpacing: 0.3 },
+  divider: { flexDirection: 'row', alignItems: 'center', marginVertical: 6 },
+  line: { flex: 1, height: 1, backgroundColor: '#e5e9f5' },
+  orText: { marginHorizontal: 10, fontSize: 11, color: '#8896b3', fontWeight: '600' },
+  btnGoogle: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, borderWidth: 1, borderColor: '#e5e7eb', borderRadius: 10, paddingVertical: 9, marginTop: 2, backgroundColor: '#ffffff' },
+  btnGoogleText: { fontSize: 13, fontWeight: '500', color: '#1a1f36', marginLeft: 6 },
+  termsWrap: { flexDirection: 'row', alignItems: 'flex-start', gap: 8, marginTop: 8, padding: 8, borderWidth: 1, borderColor: '#e2e6f3', borderRadius: 8, backgroundColor: '#f8f9ff' },
+  customCheckbox: { width: 16, height: 16, borderRadius: 8, borderWidth: 2, borderColor: '#8896b3', alignItems: 'center', justifyContent: 'center', marginTop: 1, flexShrink: 0 },
+  customCheckboxChecked: { borderColor: '#3b5bdb', backgroundColor: '#3b5bdb' },
+  termsText: { fontSize: 12, color: '#4a5568', flex: 1, lineHeight: 17 },
+  termsLink: { fontWeight: '700', color: '#3b5bdb' },
+  signupWrap: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', marginTop: 12 },
+  signupText: { fontSize: 12, color: '#64748b' },
+  signupLink: { fontSize: 12, fontWeight: '700', color: '#3b5bdb' },
+  errorModalOverlay: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.5)', justifyContent: 'center', alignItems: 'center' },
+  errorModalContainer: { width: '85%', maxWidth: 320, backgroundColor: '#FFFFFF', borderRadius: 20, padding: 22, alignItems: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.15, shadowRadius: 12, elevation: 8 },
+  errorModalIconWrapper: { marginBottom: 14 },
+  errorModalIconCircle: { width: 56, height: 56, borderRadius: 28, backgroundColor: '#f0f4ff', justifyContent: 'center', alignItems: 'center' },
+  errorModalTitle: { fontSize: 18, fontWeight: '700', color: '#1e293b', textAlign: 'center', marginBottom: 8 },
+  errorModalMessage: { fontSize: 13, color: '#64748b', textAlign: 'center', lineHeight: 19, marginBottom: 20 },
+  errorModalButtonPrimary: { width: '100%', paddingVertical: 11, borderRadius: 10, alignItems: 'center', backgroundColor: '#3b5bdb', flexDirection: 'row', justifyContent: 'center' },
+  errorModalButtonTextPrimary: { color: '#ffffff', fontSize: 15, fontWeight: '600' },
 });

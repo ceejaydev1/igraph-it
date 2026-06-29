@@ -1,4 +1,4 @@
-// components/Navbar.tsx
+// components/Navbar.tsx - Full updated with mobile compact support
 
 import React, { useState, useEffect, useRef } from 'react';
 import {
@@ -18,7 +18,11 @@ import { Svg, Path, Rect, Circle } from 'react-native-svg';
 
 // ============ BREAKPOINT ============
 const DESKTOP_BREAKPOINT = 1024;
-const NAVBAR_HEIGHT = 52;
+
+// ============ HEIGHT CONSTANTS ============
+const NAVBAR_HEIGHT_DEFAULT = 52;
+const NAVBAR_HEIGHT_COMPACT = 40;
+const NAVBAR_HEIGHT_MOBILE_COMPACT = 44; // ← Mobile compact (slightly taller for touch)
 
 // ============ ICONS ============
 const DiagramIcon = ({ active }: { active: boolean }) => (
@@ -65,6 +69,9 @@ interface NavbarProps {
   fullName?: string;
   userEmail?: string;
   profilePicture?: string | null;
+  compact?: boolean;
+  hideNavLinks?: boolean;
+  actions?: React.ReactNode;
 }
 
 // ============================================================================
@@ -100,9 +107,7 @@ const getAvatarColor = (email: string): string => {
 };
 
 // ============================================================================
-// ✅ ROUTE HELPER — strips Expo Router group segments e.g. "(tabs)"
-// so comparisons against usePathname() (which never includes groups)
-// actually match. This is the fix for the underline/active-state bug.
+// ✅ ROUTE HELPER
 // ============================================================================
 
 const stripGroups = (path: string): string => {
@@ -114,7 +119,6 @@ const stripGroups = (path: string): string => {
 const isRouteActive = (pathname: string, route: string): boolean => {
   const cleanPathname = stripGroups(pathname);
   const cleanRoute = stripGroups(route);
-  // Handle the tab-group index route, which Expo Router may resolve to "/"
   if (cleanRoute === '/home') {
     return cleanPathname === '/home' || cleanPathname === '/';
   }
@@ -145,6 +149,9 @@ export default function Navbar({
   fullName = 'User',
   userEmail = '',
   profilePicture = null,
+  compact = false,
+  hideNavLinks = false,
+  actions,
 }: NavbarProps) {
   const router = useRouter();
   const pathname = usePathname();
@@ -153,6 +160,21 @@ export default function Navbar({
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   const isBurger = screenWidth < DESKTOP_BREAKPOINT;
+
+  // ─── Dynamic values based on compact mode AND platform ──────────────────
+  // Mobile compact uses 44px (better for touch), desktop compact uses 40px
+  const getNavbarHeight = () => {
+    if (!compact) return NAVBAR_HEIGHT_DEFAULT;
+    if (isBurger) return NAVBAR_HEIGHT_MOBILE_COMPACT; // 44px on mobile
+    return NAVBAR_HEIGHT_COMPACT; // 40px on desktop
+  };
+
+  const navbarHeight = getNavbarHeight();
+  const logoSize = compact ? (isBurger ? 24 : 22) : 28;
+  const logoFontSize = compact ? (isBurger ? 15 : 14) : 17;
+  const navFontSize = compact ? (isBurger ? 13 : 12) : 14;
+  const avatarSize = compact ? (isBurger ? 30 : 28) : 32;
+  const showGreeting = !compact;
 
   const iconAnim = useRef(new Animated.Value(0)).current;
   const menuAnim = useRef(new Animated.Value(0)).current;
@@ -215,8 +237,8 @@ export default function Navbar({
     return (
       <>
         <StatusBar barStyle="dark-content" backgroundColor="#ffffff" />
-        <View style={styles.desktopContainer}>
-          <View style={styles.desktopNav}>
+        <View style={[styles.desktopContainer, { height: navbarHeight }]}>
+          <View style={[styles.desktopNav, { height: navbarHeight }]}>
             {/* Logo */}
             <Pressable
               onPress={() => handleNavigation('/(tabs)/home')}
@@ -225,43 +247,57 @@ export default function Navbar({
                 pressed && styles.logoPressed,
               ]}
             >
-              <Image source={require('../assets/images/logo.png')} style={styles.logoImage} />
-              <Text style={styles.logoText}>iGraph IT</Text>
+              <Image 
+                source={require('../assets/images/logo.png')} 
+                style={[styles.logoImage, { width: logoSize, height: logoSize }]} 
+              />
+              <Text style={[styles.logoText, { fontSize: logoFontSize }]}>
+                iGraph IT
+              </Text>
             </Pressable>
 
-            {/* Navigation Items with Blue Underline */}
-            <View style={styles.navLinks}>
-              {navItems.map((item) => {
-                const isActive = isRouteActive(pathname, item.route);
-                const Icon = item.icon;
-                return (
-                  <Pressable
-                    key={item.label}
-                    onPress={() => handleNavigation(item.route)}
-                    style={({ pressed }) => [
-                      styles.navItem,
-                      pressed && styles.navItemPressed,
-                    ]}
-                  >
-                    <View style={styles.navItemInner}>
-                      <Icon active={isActive} />
-                      <Text style={[styles.navLabel, isActive && styles.navLabelActive]}>
-                        {item.label}
-                      </Text>
-                    </View>
-                    {/* ✅ Blue Underline - Full width below the nav item */}
-                    {isActive && <View style={styles.navUnderline} />}
-                  </Pressable>
-                );
-              })}
-            </View>
+            {/* Navigation Items - conditionally hidden */}
+            {!hideNavLinks && (
+              <View style={styles.navLinks}>
+                {navItems.map((item) => {
+                  const isActive = isRouteActive(pathname, item.route);
+                  const Icon = item.icon;
+                  return (
+                    <Pressable
+                      key={item.label}
+                      onPress={() => handleNavigation(item.route)}
+                      style={({ pressed }) => [
+                        styles.navItem,
+                        { height: navbarHeight },
+                        pressed && styles.navItemPressed,
+                      ]}
+                    >
+                      <View style={styles.navItemInner}>
+                        <Icon active={isActive} />
+                        <Text style={[
+                          styles.navLabel, 
+                          isActive && styles.navLabelActive,
+                          { fontSize: navFontSize }
+                        ]}>
+                          {item.label}
+                        </Text>
+                      </View>
+                      {isActive && <View style={styles.navUnderline} />}
+                    </Pressable>
+                  );
+                })}
+              </View>
+            )}
 
-            {/* Email-based Avatar */}
-            <View style={styles.greetingContainer}>
-              <Avatar fullName={fullName} email={userEmail} size={32} />
-              <Text style={styles.greetingText} numberOfLines={1}>
-                {getDisplayName(fullName, userEmail)}
-              </Text>
+            {/* Right side: Actions + Avatar */}
+            <View style={styles.navRight}>
+              {actions}
+              <Avatar fullName={fullName} email={userEmail} size={avatarSize} />
+              {showGreeting && (
+                <Text style={[styles.greetingText, { fontSize: 14 }]} numberOfLines={1}>
+                  {getDisplayName(fullName, userEmail)}
+                </Text>
+              )}
             </View>
           </View>
         </View>
@@ -277,8 +313,8 @@ export default function Navbar({
       <StatusBar barStyle="dark-content" backgroundColor="#ffffff" />
 
       {/* Top Bar */}
-      <View style={styles.mobileContainer}>
-        <View style={styles.mobileNav}>
+      <View style={[styles.mobileContainer, { height: navbarHeight }]}>
+        <View style={[styles.mobileNav, { height: navbarHeight }]}>
           {/* Logo only on left side */}
           <Pressable
             onPress={() => handleNavigation('/(tabs)/home')}
@@ -287,59 +323,67 @@ export default function Navbar({
               pressed && styles.logoPressed,
             ]}
           >
-            <Image source={require('../assets/images/logo.png')} style={styles.logoImage} />
-            <Text style={styles.logoText}>iGraph IT</Text>
+            <Image 
+              source={require('../assets/images/logo.png')} 
+              style={[styles.logoImage, { width: logoSize, height: logoSize }]} 
+            />
+            <Text style={[styles.logoText, { fontSize: logoFontSize }]}>
+              iGraph IT
+            </Text>
           </Pressable>
 
-          <Pressable 
-            onPress={toggleMenu} 
-            style={({ pressed }) => [
-              styles.menuBtn,
-              pressed && styles.menuBtnPressed,
-            ]}
-          >
-            <Animated.View
-              style={[
-                StyleSheet.absoluteFillObject,
-                styles.iconCenter,
-                {
-                  opacity: iconAnim.interpolate({
-                    inputRange: [0, 1],
-                    outputRange: [1, 0],
-                  }),
-                  transform: [{
-                    rotate: iconAnim.interpolate({
-                      inputRange: [0, 1],
-                      outputRange: ['0deg', '-90deg'],
-                    }),
-                  }],
-                },
+          <View style={styles.mobileRight}>
+            {actions}  {/* ← Save button appears here on mobile */}
+            <Pressable 
+              onPress={toggleMenu} 
+              style={({ pressed }) => [
+                styles.menuBtn,
+                pressed && styles.menuBtnPressed,
               ]}
             >
-              <MenuIcon />
-            </Animated.View>
+              <Animated.View
+                style={[
+                  StyleSheet.absoluteFillObject,
+                  styles.iconCenter,
+                  {
+                    opacity: iconAnim.interpolate({
+                      inputRange: [0, 1],
+                      outputRange: [1, 0],
+                    }),
+                    transform: [{
+                      rotate: iconAnim.interpolate({
+                        inputRange: [0, 1],
+                        outputRange: ['0deg', '-90deg'],
+                      }),
+                    }],
+                  },
+                ]}
+              >
+                <MenuIcon />
+              </Animated.View>
 
-            <Animated.View
-              style={[
-                StyleSheet.absoluteFillObject,
-                styles.iconCenter,
-                {
-                  opacity: iconAnim.interpolate({
-                    inputRange: [0, 1],
-                    outputRange: [0, 1],
-                  }),
-                  transform: [{
-                    rotate: iconAnim.interpolate({
+              <Animated.View
+                style={[
+                  StyleSheet.absoluteFillObject,
+                  styles.iconCenter,
+                  {
+                    opacity: iconAnim.interpolate({
                       inputRange: [0, 1],
-                      outputRange: ['90deg', '0deg'],
+                      outputRange: [0, 1],
                     }),
-                  }],
-                },
-              ]}
-            >
-              <CloseIcon />
-            </Animated.View>
-          </Pressable>
+                    transform: [{
+                      rotate: iconAnim.interpolate({
+                        inputRange: [0, 1],
+                        outputRange: ['90deg', '0deg'],
+                      }),
+                    }],
+                  },
+                ]}
+              >
+                <CloseIcon />
+              </Animated.View>
+            </Pressable>
+          </View>
         </View>
       </View>
 
@@ -347,7 +391,7 @@ export default function Navbar({
       {isMobileMenuOpen && (
         <>
           <Animated.View
-            style={[styles.overlay, { top: NAVBAR_HEIGHT, opacity: menuAnim }]}
+            style={[styles.overlay, { top: navbarHeight, opacity: menuAnim }]}
             pointerEvents="auto"
           >
             <Pressable style={StyleSheet.absoluteFillObject} onPress={toggleMenu} />
@@ -357,7 +401,7 @@ export default function Navbar({
             style={[
               styles.mobileMenu,
               {
-                top: NAVBAR_HEIGHT,
+                top: navbarHeight,
                 opacity: menuAnim,
                 transform: [{
                   translateY: menuAnim.interpolate({
@@ -436,7 +480,6 @@ const styles = StyleSheet.create({
     maxWidth: 1280,
     alignSelf: 'center',
     width: '100%',
-    height: NAVBAR_HEIGHT,
   },
   logoArea: {
     flexDirection: 'row',
@@ -449,12 +492,9 @@ const styles = StyleSheet.create({
     backgroundColor: '#f1f5f9',
   },
   logoImage: {
-    width: 28,
-    height: 28,
     borderRadius: 6,
   },
   logoText: {
-    fontSize: 17,
     fontWeight: '700',
     color: '#0f172a',
     letterSpacing: -0.3,
@@ -469,10 +509,8 @@ const styles = StyleSheet.create({
     flexDirection: 'column',
     alignItems: 'center',
     justifyContent: 'center',
-    height: '100%',
     paddingHorizontal: 8,
     position: 'relative',
-    minHeight: NAVBAR_HEIGHT,
   },
   navItemPressed: {
     opacity: 0.7,
@@ -480,13 +518,12 @@ const styles = StyleSheet.create({
   navItemInner: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 7,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
     borderRadius: 8,
   },
   navLabel: {
-    fontSize: 14,
     fontWeight: '500',
     color: '#64748b',
   },
@@ -494,7 +531,6 @@ const styles = StyleSheet.create({
     color: '#2563eb',
     fontWeight: '600',
   },
-  // ✅ Blue Underline Indicator - Full width below the nav item
   navUnderline: {
     position: 'absolute',
     bottom: 0,
@@ -504,8 +540,11 @@ const styles = StyleSheet.create({
     backgroundColor: '#2563eb',
     borderRadius: 2,
   },
-
-  // ── Avatar ──────────────────────────────────
+  navRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
   avatarContainer: {
     justifyContent: 'center',
     alignItems: 'center',
@@ -521,15 +560,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#ffffff',
   },
-
-  // ── Desktop Greeting ──────────────────
-  greetingContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
   greetingText: {
-    fontSize: 14,
     fontWeight: '500',
     color: '#0f172a',
   },
@@ -546,7 +577,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    height: NAVBAR_HEIGHT,
+  },
+  mobileRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
   },
   menuBtn: {
     width: 40,
@@ -612,8 +647,6 @@ const styles = StyleSheet.create({
     color: '#2563eb',
     fontWeight: '600',
   },
-  
-  // Mobile user info section (below Account)
   mobileUserInfoSection: {
     marginTop: 16,
     paddingTop: 16,
