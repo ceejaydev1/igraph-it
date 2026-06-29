@@ -1,4 +1,4 @@
-// components/shapes/ShapesBottomPanel.tsx - COMPLETE FIXED VERSION
+// components/shapes/ShapesBottomPanel.tsx - UPDATED with all new shapes
 
 import React, { useState, useRef, useEffect } from 'react';
 import {
@@ -143,14 +143,14 @@ export default function ShapesBottomPanel({
 
   const togglePanel = () => (expanded ? collapsePanel() : expandPanel());
 
-const handleShapeTap = (shape: ShapeDefinition) => {
-  if (!isGraphReady) return;
-  setLastTapped(shape.id);
-  setTimeout(() => {
-    onSelectShape(shape.id, shape); // ← This passes the shape ID
-    onClose();
-  }, 150);
-};
+  const handleShapeTap = (shape: ShapeDefinition) => {
+    if (!isGraphReady) return;
+    setLastTapped(shape.id);
+    setTimeout(() => {
+      onSelectShape(shape.id, shape);
+      onClose();
+    }, 150);
+  };
 
   const handleTabChange = (tab: string) => {
     setActiveTab(tab);

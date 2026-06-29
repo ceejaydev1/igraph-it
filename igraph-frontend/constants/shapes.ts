@@ -1,5 +1,5 @@
 // constants/shapes.ts
-// Complete shape definitions with FDD shapes matching exact specifications
+// Complete shape definitions with ALL diagram types
 
 export interface ShapeDefinition {
   id: string;
@@ -48,264 +48,72 @@ export const DIAGRAM_SHAPES: Record<string, ShapeDefinition[]> = {
   ],
 
   // ═══════════════════════════════════════════════════════════════════════════
-  // 1. FUNCTIONAL DECOMPOSITION DIAGRAM - EXACT SPECIFICATIONS
+  // 1. FUNCTIONAL DECOMPOSITION DIAGRAM
   // ═══════════════════════════════════════════════════════════════════════════
   'Functional Decomposition Diagram': [
-    { 
-      id: 'function', 
-      svgComponent: 'FDD_FunctionShape', 
-      label: 'Function', 
-      description: 'Represents a primary function or sub-function.',
-      width: 120, 
-      height: 60, 
-      category: 'UML' 
-    },
-    { 
-      id: 'input', 
-      svgComponent: 'FDD_InputShape', 
-      label: 'Input', 
-      description: 'Represents something that enters a function.',
-      width: 80, 
-      height: 50, 
-      category: 'UML' 
-    },
-    { 
-      id: 'output', 
-      svgComponent: 'FDD_OutputShape', 
-      label: 'Output', 
-      description: 'Represents something that exits a function.',
-      width: 80, 
-      height: 50, 
-      category: 'UML' 
-    },
-    { 
-      id: 'control', 
-      svgComponent: 'FDD_ControlShape', 
-      label: 'Control', 
-      description: 'Represents a control that governs a function.',
-      width: 80, 
-      height: 40, 
-      category: 'UML' 
-    },
-    { 
-      id: 'mechanism', 
-      svgComponent: 'FDD_MechanismShape', 
-      label: 'Mechanism', 
-      description: 'Represents a resource that performs a function.',
-      width: 80, 
-      height: 40, 
-      category: 'UML' 
-    },
-    { 
-      id: 'fdd-interface', 
-      svgComponent: 'FDD_InterfaceShape', 
-      label: 'Interface', 
-      description: 'Represents an interaction point with external environment.',
-      width: 80, 
-      height: 40, 
-      category: 'UML' 
-    },
-    { 
-      id: 'boundary', 
-      svgComponent: 'FDD_BoundaryShape', 
-      label: 'Boundary', 
-      description: 'Defines the system scope.',
-      width: 160, 
-      height: 120, 
-      category: 'UML' 
-    },
-    { 
-      id: 'fdd-note', 
-      svgComponent: 'FDD_NoteShape', 
-      label: 'Note', 
-      description: 'Used to add notes and assumptions.',
-      width: 100, 
-      height: 70, 
-      category: 'UML' 
-    },
-    { 
-      id: 'external-entity', 
-      svgComponent: 'FDD_ExternalEntityShape', 
-      label: 'External Entity', 
-      description: 'Represents external system or person.',
-      width: 100, 
-      height: 60, 
-      category: 'UML' 
-    },
+    { id: 'function', svgComponent: 'FDD_FunctionShape', label: 'Function', description: 'Represents a primary function or sub-function.', width: 120, height: 60, category: 'UML' },
+    { id: 'input', svgComponent: 'FDD_InputShape', label: 'Input', description: 'Represents something that enters a function.', width: 80, height: 50, category: 'UML' },
+    { id: 'output', svgComponent: 'FDD_OutputShape', label: 'Output', description: 'Represents something that exits a function.', width: 80, height: 50, category: 'UML' },
+    { id: 'control', svgComponent: 'FDD_ControlShape', label: 'Control', description: 'Represents a control that governs a function.', width: 80, height: 40, category: 'UML' },
+    { id: 'mechanism', svgComponent: 'FDD_MechanismShape', label: 'Mechanism', description: 'Represents a resource that performs a function.', width: 80, height: 40, category: 'UML' },
+    { id: 'fdd-interface', svgComponent: 'FDD_InterfaceShape', label: 'Interface', description: 'Represents an interaction point with external environment.', width: 80, height: 40, category: 'UML' },
+    { id: 'boundary', svgComponent: 'FDD_BoundaryShape', label: 'Boundary', description: 'Defines the system scope.', width: 160, height: 120, category: 'UML' },
+    { id: 'fdd-note', svgComponent: 'FDD_NoteShape', label: 'Note', description: 'Used to add notes and assumptions.', width: 100, height: 70, category: 'UML' },
+    { id: 'external-entity', svgComponent: 'FDD_ExternalEntityShape', label: 'External Entity', description: 'Represents external system or person.', width: 100, height: 60, category: 'UML' },
   ],
 
   // ═══════════════════════════════════════════════════════════════════════════
-  // 2. FLOWCHART - COMPLETE WITH ALL 15 SHAPES
+  // 2. FLOWCHART
   // ═══════════════════════════════════════════════════════════════════════════
   'Flowchart': [
-    { 
-      id: 'terminator', 
-      svgComponent: 'RoundedRectShape', 
-      label: 'Terminator', 
-      description: 'Start/End of process', 
-      width: 100, 
-      height: 50, 
-      category: 'UML' 
-    },
-    { 
-      id: 'process', 
-      svgComponent: 'RectShape', 
-      label: 'Process', 
-      description: 'Processing step', 
-      width: 120, 
-      height: 60, 
-      category: 'UML' 
-    },
-    { 
-      id: 'io', 
-      svgComponent: 'ParallelogramShape', 
-      label: 'Input / Output', 
-      description: 'Data input or output', 
-      width: 120, 
-      height: 60, 
-      category: 'UML' 
-    },
-    { 
-      id: 'decision', 
-      svgComponent: 'DiamondShape', 
-      label: 'Decision', 
-      description: 'Branch point', 
-      width: 100, 
-      height: 80, 
-      category: 'UML' 
-    },
-    { 
-      id: 'on-page-connector', 
-      svgComponent: 'CircleShape', 
-      label: 'On-Page Connector', 
-      description: 'Connection within the same page', 
-      width: 40, 
-      height: 40, 
-      category: 'UML' 
-    },
-    { 
-      id: 'off-page-connector', 
-      svgComponent: 'PentagonShape', 
-      label: 'Off-Page Connector', 
-      description: 'Connection to another page', 
-      width: 50, 
-      height: 60, 
-      category: 'UML' 
-    },
-    { 
-      id: 'flow-line', 
-      svgComponent: 'ConnectorArrowShape', 
-      label: 'Flow Line', 
-      description: 'Connector with arrow', 
-      width: 80, 
-      height: 40, 
-      category: 'UML' 
-    },
-    { 
-      id: 'document', 
-      svgComponent: 'DocumentShape', 
-      label: 'Document', 
-      description: 'Printed document', 
-      width: 100, 
-      height: 70, 
-      category: 'UML' 
-    },
-    { 
-      id: 'database', 
-      svgComponent: 'CylinderShape', 
-      label: 'Database', 
-      description: 'Data storage', 
-      width: 100, 
-      height: 70, 
-      category: 'UML' 
-    },
-    { 
-      id: 'predefined', 
-      svgComponent: 'PredefinedShape', 
-      label: 'Predefined Process', 
-      description: 'Sub-process call', 
-      width: 120, 
-      height: 60, 
-      category: 'UML' 
-    },
-    { 
-      id: 'manual-input', 
-      svgComponent: 'TrapezoidShape', 
-      label: 'Manual Input', 
-      description: 'Manual data entry', 
-      width: 100, 
-      height: 60, 
-      category: 'UML' 
-    },
-    { 
-      id: 'delay', 
-      svgComponent: 'DShape', 
-      label: 'Delay', 
-      description: 'Waiting period', 
-      width: 100, 
-      height: 60, 
-      category: 'UML' 
-    },
-    { 
-      id: 'preparation', 
-      svgComponent: 'HexagonShape', 
-      label: 'Preparation', 
-      description: 'Setup/initialization', 
-      width: 100, 
-      height: 80, 
-      category: 'UML' 
-    },
-    { 
-      id: 'display', 
-      svgComponent: 'DisplayShape', 
-      label: 'Display', 
-      description: 'Show information', 
-      width: 100, 
-      height: 60, 
-      category: 'UML' 
-    },
-    { 
-      id: 'annotation', 
-      svgComponent: 'AnnotationShape', 
-      label: 'Annotation', 
-      description: 'Comment/note', 
-      width: 100, 
-      height: 40, 
-      category: 'UML' 
-    },
+    { id: 'terminator', svgComponent: 'RoundedRectShape', label: 'Terminator', description: 'Start/End of process', width: 100, height: 50, category: 'UML' },
+    { id: 'process', svgComponent: 'RectShape', label: 'Process', description: 'Processing step', width: 120, height: 60, category: 'UML' },
+    { id: 'io', svgComponent: 'ParallelogramShape', label: 'Input / Output', description: 'Data input or output', width: 120, height: 60, category: 'UML' },
+    { id: 'decision', svgComponent: 'DiamondShape', label: 'Decision', description: 'Branch point', width: 100, height: 80, category: 'UML' },
+    { id: 'on-page-connector', svgComponent: 'CircleShape', label: 'On-Page Connector', description: 'Connection within the same page', width: 40, height: 40, category: 'UML' },
+    { id: 'off-page-connector', svgComponent: 'PentagonShape', label: 'Off-Page Connector', description: 'Connection to another page', width: 50, height: 60, category: 'UML' },
+    { id: 'flow-line', svgComponent: 'ConnectorArrowShape', label: 'Flow Line', description: 'Connector with arrow', width: 80, height: 40, category: 'UML' },
+    { id: 'document', svgComponent: 'DocumentShape', label: 'Document', description: 'Printed document', width: 100, height: 70, category: 'UML' },
+    { id: 'database', svgComponent: 'CylinderShape', label: 'Database', description: 'Data storage', width: 100, height: 70, category: 'UML' },
+    { id: 'predefined', svgComponent: 'PredefinedShape', label: 'Predefined Process', description: 'Sub-process call', width: 120, height: 60, category: 'UML' },
+    { id: 'manual-input', svgComponent: 'TrapezoidShape', label: 'Manual Input', description: 'Manual data entry', width: 100, height: 60, category: 'UML' },
+    { id: 'delay', svgComponent: 'DShape', label: 'Delay', description: 'Waiting period', width: 100, height: 60, category: 'UML' },
+    { id: 'preparation', svgComponent: 'HexagonShape', label: 'Preparation', description: 'Setup/initialization', width: 100, height: 80, category: 'UML' },
+    { id: 'display', svgComponent: 'DisplayShape', label: 'Display', description: 'Show information', width: 100, height: 60, category: 'UML' },
+    { id: 'annotation', svgComponent: 'AnnotationShape', label: 'Annotation', description: 'Comment/note', width: 100, height: 40, category: 'UML' },
   ],
 
   // ═══════════════════════════════════════════════════════════════════════════
   // 3. DATA FLOW DIAGRAM
   // ═══════════════════════════════════════════════════════════════════════════
   'Data Flow Diagram': [
-    { id: 'dfd-external-entity', svgComponent: 'RectShape', label: 'External Entity', description: 'External system or user', width: 120, height: 60, category: 'UML' },
-    { id: 'dfd-process', svgComponent: 'EllipseShape', label: 'Process', description: 'Data transformation', width: 100, height: 60, category: 'UML' },
-    { id: 'data-store', svgComponent: 'CylinderShape', label: 'Data Store', description: 'Data repository', width: 100, height: 70, category: 'UML' },
-    { id: 'data-flow', svgComponent: 'ConnectorArrowShape', label: 'Data Flow', description: 'Data movement', width: 80, height: 40, category: 'UML' },
+    { id: 'dfd-process', svgComponent: 'DFDProcessShape', label: 'Process', description: 'Data transformation (circle)', width: 80, height: 80, category: 'UML' },
+    { id: 'dfd-data-flow', svgComponent: 'DFDDataFlowShape', label: 'Data Flow', description: 'Data movement (arrow)', width: 80, height: 40, category: 'UML' },
+    { id: 'dfd-data-store', svgComponent: 'DFDDataStoreShape', label: 'Data Store (Yourdon)', description: 'Data repository (parallel lines)', width: 100, height: 60, category: 'UML' },
+    { id: 'dfd-data-store-gs', svgComponent: 'DFDDataStoreGSShape', label: 'Data Store (Gane)', description: 'Data repository (rectangle with side line)', width: 100, height: 60, category: 'UML' },
+    { id: 'dfd-external-entity', svgComponent: 'DFDExternalEntityShape', label: 'External Entity', description: 'External system or user', width: 120, height: 60, category: 'UML' },
+    { id: 'dfd-bidirectional', svgComponent: 'DFDBidirectionalShape', label: 'Bidirectional Flow', description: 'Two-way data flow', width: 80, height: 40, category: 'UML' },
+    { id: 'dfd-boundary', svgComponent: 'DFDBoundaryShape', label: 'System Boundary', description: 'System scope (dashed rectangle)', width: 200, height: 150, category: 'UML' },
+    { id: 'dfd-note', svgComponent: 'DFDNoteShape', label: 'Note', description: 'Comment/note', width: 100, height: 70, category: 'UML' },
+    { id: 'dfd-on-page', svgComponent: 'DFDOnPageShape', label: 'On-Page Connector', description: 'Connection on same page', width: 40, height: 40, category: 'UML' },
+    { id: 'dfd-off-page', svgComponent: 'DFDOffPageShape', label: 'Off-Page Connector', description: 'Connection to another page', width: 50, height: 60, category: 'UML' },
   ],
 
   // ═══════════════════════════════════════════════════════════════════════════
   // 4. ENTITY RELATIONSHIP DIAGRAM
   // ═══════════════════════════════════════════════════════════════════════════
   'Entity Relationship Diagram': [
-    { id: 'entity', svgComponent: 'EntityShape', label: 'Entity', description: 'Database table', width: 120, height: 60, category: 'UML' },
-    { id: 'weak-entity', svgComponent: 'WeakEntityShape', label: 'Weak Entity', description: 'Dependent entity', width: 120, height: 60, category: 'UML' },
-    { id: 'attribute', svgComponent: 'AttributeShape', label: 'Attribute', description: 'Entity property', width: 100, height: 50, category: 'UML' },
-    { id: 'primary-key', svgComponent: 'PrimaryKeyShape', label: 'Primary Key', description: 'Unique identifier', width: 100, height: 50, category: 'UML' },
-    { id: 'derived-attr', svgComponent: 'DerivedAttrShape', label: 'Derived Attr', description: 'Calculated attribute', width: 100, height: 50, category: 'UML' },
-    { id: 'composite-attr', svgComponent: 'CompositeAttrShape', label: 'Composite Attr', description: 'Nested attribute', width: 100, height: 60, category: 'UML' },
-    { id: 'multi-attr', svgComponent: 'MultiAttrShape', label: 'Multi-valued Attr', description: 'Multiple values', width: 100, height: 50, category: 'UML' },
-    { id: 'relationship', svgComponent: 'RelationshipShape', label: 'Relationship', description: 'Entity relationship', width: 100, height: 80, category: 'UML' },
-    { id: 'identifying-rel', svgComponent: 'IdentifyingRelShape', label: 'Identifying Rel.', description: 'Weak entity relationship', width: 100, height: 80, category: 'UML' },
-    { id: 'cardinality', svgComponent: 'CardinalityShape', label: 'Cardinality', description: 'Chen notation', width: 40, height: 30, category: 'UML' },
-    { id: 'crow-one', svgComponent: 'CrowOneShape', label: 'Exactly One', description: "Crow's Foot: 1", width: 60, height: 40, category: 'UML' },
-    { id: 'crow-zero-one', svgComponent: 'CrowZeroOneShape', label: 'Zero or One', description: "Crow's Foot: 0..1", width: 60, height: 40, category: 'UML' },
-    { id: 'crow-zero-many', svgComponent: 'CrowZeroManyShape', label: 'Zero or Many', description: "Crow's Foot: 0..*", width: 60, height: 40, category: 'UML' },
-    { id: 'crow-one-many', svgComponent: 'CrowOneManyShape', label: 'One or Many', description: "Crow's Foot: 1..*", width: 60, height: 40, category: 'UML' },
-    { id: 'crow-many', svgComponent: 'CrowManyShape', label: 'Many', description: "Crow's Foot: *", width: 60, height: 40, category: 'UML' },
-    { id: 'total-participation', svgComponent: 'TotalParticipationShape', label: 'Total Participation', description: 'Double line', width: 40, height: 40, category: 'UML' },
-    { id: 'partial-participation', svgComponent: 'PartialParticipationShape', label: 'Partial Participation', description: 'Single line', width: 40, height: 40, category: 'UML' },
+    { id: 'erd-entity', svgComponent: 'ERDEntityShape', label: 'Entity', description: 'Database table', width: 120, height: 60, category: 'UML' },
+    { id: 'erd-weak-entity', svgComponent: 'ERDWeakEntityShape', label: 'Weak Entity', description: 'Dependent entity', width: 120, height: 60, category: 'UML' },
+    { id: 'erd-relationship', svgComponent: 'ERDRelationshipShape', label: 'Relationship', description: 'Entity relationship (diamond)', width: 100, height: 80, category: 'UML' },
+    { id: 'erd-identifying-rel', svgComponent: 'ERDIdentifyingRelShape', label: 'Identifying Rel.', description: 'Weak entity relationship (double diamond)', width: 100, height: 80, category: 'UML' },
+    { id: 'erd-attribute', svgComponent: 'ERDAttributeShape', label: 'Attribute', description: 'Entity property', width: 100, height: 50, category: 'UML' },
+    { id: 'erd-multivalued-attr', svgComponent: 'ERDMultivaluedAttrShape', label: 'Multivalued Attr', description: 'Multiple values (double oval)', width: 100, height: 50, category: 'UML' },
+    { id: 'erd-derived-attr', svgComponent: 'ERDDerivedAttrShape', label: 'Derived Attr', description: 'Calculated attribute (dashed oval)', width: 100, height: 50, category: 'UML' },
+    { id: 'erd-cardinality-11', svgComponent: 'ERDCardinality11Shape', label: 'Cardinality 1:1', description: 'One to one', width: 80, height: 40, category: 'UML' },
+    { id: 'erd-cardinality-1n', svgComponent: 'ERDCardinality1NShape', label: 'Cardinality 1:N', description: 'One to many', width: 80, height: 40, category: 'UML' },
+    { id: 'erd-cardinality-n1', svgComponent: 'ERDCardinalityN1Shape', label: 'Cardinality N:1', description: 'Many to one', width: 80, height: 40, category: 'UML' },
+    { id: 'erd-cardinality-mn', svgComponent: 'ERDCardinalityMNShape', label: 'Cardinality M:N', description: 'Many to many', width: 80, height: 40, category: 'UML' },
     { id: 'erd-connector', svgComponent: 'ERDConnectorShape', label: 'Connector', description: 'Relationship line', width: 60, height: 20, category: 'UML' },
   ],
 
@@ -313,87 +121,114 @@ export const DIAGRAM_SHAPES: Record<string, ShapeDefinition[]> = {
   // 5. FISHBONE DIAGRAM
   // ═══════════════════════════════════════════════════════════════════════════
   'Fishbone Diagram': [
-    { id: 'effect', svgComponent: 'RectShape', label: 'Head (Effect)', description: 'Problem being analyzed', width: 140, height: 60, category: 'UML' },
-    { id: 'spine', svgComponent: 'ConnectorArrowShape', label: 'Spine', description: 'Central backbone', width: 100, height: 30, category: 'UML' },
-    { id: 'major-bone', svgComponent: 'ArrowDiagShape', label: 'Major Bone', description: 'Cause category', width: 80, height: 50, category: 'UML' },
-    { id: 'sub-bone', svgComponent: 'ArrowSmallShape', label: 'Sub-Cause', description: 'Specific cause', width: 60, height: 40, category: 'UML' },
-    { id: 'root-cause', svgComponent: 'TextShape', label: 'Root Cause', description: 'Final cause label', width: 80, height: 30, category: 'UML' },
+    { id: 'fishbone-spine', svgComponent: 'FishboneSpineShape', label: 'Spine', description: 'Central backbone', width: 120, height: 20, category: 'UML' },
+    { id: 'fishbone-head', svgComponent: 'FishboneHeadShape', label: 'Fish Head', description: 'Problem/Effect', width: 80, height: 60, category: 'UML' },
+    { id: 'fishbone-problem', svgComponent: 'FishboneProblemShape', label: 'Effect Box', description: 'Problem being analyzed', width: 140, height: 60, category: 'UML' },
+    { id: 'fishbone-cause-top', svgComponent: 'FishboneCauseTopShape', label: 'Main Cause (Top)', description: 'Cause category above spine', width: 60, height: 50, category: 'UML' },
+    { id: 'fishbone-cause-bottom', svgComponent: 'FishboneCauseBottomShape', label: 'Main Cause (Bottom)', description: 'Cause category below spine', width: 60, height: 50, category: 'UML' },
+    { id: 'fishbone-sub-top', svgComponent: 'FishboneSubCauseTopShape', label: 'Sub-Cause (Top)', description: 'Specific cause above spine', width: 50, height: 40, category: 'UML' },
+    { id: 'fishbone-sub-bottom', svgComponent: 'FishboneSubCauseBottomShape', label: 'Sub-Cause (Bottom)', description: 'Specific cause below spine', width: 50, height: 40, category: 'UML' },
+    { id: 'fishbone-tertiary', svgComponent: 'FishboneTertiaryShape', label: 'Tertiary Cause', description: 'Third-level cause', width: 40, height: 30, category: 'UML' },
+    { id: 'fishbone-arrow', svgComponent: 'FishboneArrowShape', label: 'Cause Arrow', description: 'Cause link arrow', width: 60, height: 30, category: 'UML' },
+    { id: 'fishbone-dashed-arrow', svgComponent: 'FishboneDashedArrowShape', label: 'Possible Cause', description: 'Possible cause link', width: 60, height: 30, category: 'UML' },
+    { id: 'fishbone-category', svgComponent: 'FishboneCategoryShape', label: 'Category Box', description: 'Category label', width: 80, height: 40, category: 'UML' },
+    { id: 'fishbone-bubble', svgComponent: 'FishboneBubbleShape', label: 'Cause Bubble', description: 'Cause/Reason bubble', width: 60, height: 40, category: 'UML' },
+    { id: 'fishbone-note', svgComponent: 'FishboneNoteShape', label: 'Note', description: 'Comment/note', width: 100, height: 70, category: 'UML' },
   ],
 
   // ═══════════════════════════════════════════════════════════════════════════
   // 6. SCHEMATIC DIAGRAM
   // ═══════════════════════════════════════════════════════════════════════════
   'Schematic Diagram': [
-    { id: 'resistor', svgComponent: 'ResistorShape', label: 'Resistor', description: 'Electrical resistance', width: 100, height: 40, category: 'UML' },
-    { id: 'capacitor', svgComponent: 'CapacitorShape', label: 'Capacitor', description: 'Charge storage', width: 80, height: 50, category: 'UML' },
-    { id: 'inductor', svgComponent: 'InductorShape', label: 'Inductor', description: 'Magnetic field storage', width: 100, height: 40, category: 'UML' },
-    { id: 'voltage', svgComponent: 'VoltageShape', label: 'Voltage Source', description: 'Power supply', width: 80, height: 80, category: 'UML' },
-    { id: 'ground', svgComponent: 'GroundShape', label: 'Ground', description: 'Reference point', width: 40, height: 50, category: 'UML' },
-    { id: 'diode', svgComponent: 'DiodeShape', label: 'Diode', description: 'One-way current', width: 80, height: 50, category: 'UML' },
-    { id: 'transistor', svgComponent: 'TransistorShape', label: 'Transistor', description: 'Semiconductor switch', width: 100, height: 80, category: 'UML' },
-    { id: 'ic', svgComponent: 'ICShape', label: 'IC', description: 'Integrated circuit', width: 100, height: 80, category: 'UML' },
-    { id: 'opamp', svgComponent: 'OpAmpShape', label: 'Op-Amp', description: 'Operational amplifier', width: 100, height: 70, category: 'UML' },
-    { id: 'switch', svgComponent: 'SwitchShape', label: 'Switch', description: 'On/Off control', width: 80, height: 60, category: 'UML' },
-    { id: 'fuse', svgComponent: 'FuseShape', label: 'Fuse', description: 'Overcurrent protection', width: 80, height: 40, category: 'UML' },
-    { id: 'transformer', svgComponent: 'TransformerShape', label: 'Transformer', description: 'Voltage conversion', width: 100, height: 60, category: 'UML' },
+    { id: 'schematic-battery', svgComponent: 'SchematicBatteryShape', label: 'DC Voltage Source', description: 'Battery', width: 80, height: 60, category: 'UML' },
+    { id: 'schematic-ac', svgComponent: 'SchematicACShape', label: 'AC Voltage Source', description: 'AC source', width: 80, height: 60, category: 'UML' },
+    { id: 'schematic-ground', svgComponent: 'SchematicGroundShape', label: 'Ground', description: 'Reference point', width: 40, height: 50, category: 'UML' },
+    { id: 'schematic-resistor', svgComponent: 'SchematicResistorShape', label: 'Resistor', description: 'Electrical resistance', width: 100, height: 40, category: 'UML' },
+    { id: 'schematic-variable-resistor', svgComponent: 'SchematicVariableResistorShape', label: 'Variable Resistor', description: 'Variable resistance', width: 100, height: 50, category: 'UML' },
+    { id: 'schematic-capacitor', svgComponent: 'SchematicCapacitorShape', label: 'Capacitor', description: 'Charge storage', width: 80, height: 50, category: 'UML' },
+    { id: 'schematic-inductor', svgComponent: 'SchematicInductorShape', label: 'Inductor', description: 'Magnetic field storage', width: 100, height: 40, category: 'UML' },
+    { id: 'schematic-diode', svgComponent: 'SchematicDiodeShape', label: 'Diode', description: 'One-way current', width: 80, height: 50, category: 'UML' },
+    { id: 'schematic-led', svgComponent: 'SchematicLEDShape', label: 'LED', description: 'Light emitting diode', width: 80, height: 50, category: 'UML' },
+    { id: 'schematic-npn', svgComponent: 'SchematicNPNShape', label: 'NPN Transistor', description: 'NPN transistor', width: 100, height: 80, category: 'UML' },
+    { id: 'schematic-switch', svgComponent: 'SchematicSwitchShape', label: 'Switch', description: 'On/Off control', width: 80, height: 60, category: 'UML' },
+    { id: 'schematic-fuse', svgComponent: 'SchematicFuseShape', label: 'Fuse', description: 'Overcurrent protection', width: 80, height: 40, category: 'UML' },
+    { id: 'schematic-connection', svgComponent: 'SchematicConnectionShape', label: 'Wire Connection', description: 'Connected wires', width: 60, height: 40, category: 'UML' },
+    { id: 'schematic-no-connection', svgComponent: 'SchematicNoConnectionShape', label: 'No Connection', description: 'Unconnected wires', width: 60, height: 40, category: 'UML' },
   ],
 
   // ═══════════════════════════════════════════════════════════════════════════
   // 7. USE CASE DIAGRAM
   // ═══════════════════════════════════════════════════════════════════════════
   'Use Case Diagram': [
-    { id: 'use-case', svgComponent: 'EllipseShape', label: 'Use Case', description: 'System functionality', width: 120, height: 60, category: 'UML' },
-    { id: 'uc-actor', svgComponent: 'ActorShape', label: 'Actor', description: 'System user', width: 60, height: 80, category: 'UML' },
-    { id: 'system-boundary', svgComponent: 'RectShape', label: 'System Boundary', description: 'System scope', width: 200, height: 150, category: 'UML' },
-    { id: 'association', svgComponent: 'LineShape', label: 'Association', description: 'Communication', width: 80, height: 20, category: 'UML' },
-    { id: 'include-rel', svgComponent: 'DashedArrowShape', label: 'Include', description: 'Mandatory behavior', width: 80, height: 40, category: 'UML' },
-    { id: 'extend-rel', svgComponent: 'DashedArrowBackShape', label: 'Extend', description: 'Optional behavior', width: 80, height: 40, category: 'UML' },
-    { id: 'generalization', svgComponent: 'TriangleArrowShape', label: 'Generalization', description: 'Inheritance', width: 80, height: 40, category: 'UML' },
+    { id: 'uc-actor', svgComponent: 'UMLActorShape', label: 'Actor', description: 'System user', width: 60, height: 80, category: 'UML' },
+    { id: 'use-case', svgComponent: 'UMLUseCaseShape', label: 'Use Case', description: 'System functionality', width: 120, height: 60, category: 'UML' },
+    { id: 'system-boundary', svgComponent: 'UMLSystemBoundaryShape', label: 'System Boundary', description: 'System scope', width: 200, height: 150, category: 'UML' },
+    { id: 'uc-association', svgComponent: 'UMLAssociationShape', label: 'Association', description: 'Communication', width: 80, height: 20, category: 'UML' },
+    { id: 'uc-include', svgComponent: 'UMLIncludeShape', label: 'Include', description: 'Mandatory behavior', width: 80, height: 40, category: 'UML' },
+    { id: 'uc-extend', svgComponent: 'UMLExtendShape', label: 'Extend', description: 'Optional behavior', width: 80, height: 40, category: 'UML' },
+    { id: 'uc-generalization', svgComponent: 'UMLGeneralizationShape', label: 'Generalization', description: 'Inheritance', width: 80, height: 40, category: 'UML' },
+    { id: 'uc-note', svgComponent: 'UMLNoteShape', label: 'Note', description: 'Comment/note', width: 100, height: 70, category: 'UML' },
+    { id: 'uc-note-connector', svgComponent: 'UMLNoteConnectorShape', label: 'Note Connector', description: 'Note connection', width: 80, height: 20, category: 'UML' },
+    { id: 'uc-include-label', svgComponent: 'UMLIncludeLabelShape', label: 'Include Label', description: '«include» text', width: 60, height: 20, category: 'UML' },
+    { id: 'uc-extend-label', svgComponent: 'UMLExtendLabelShape', label: 'Extend Label', description: '«extend» text', width: 60, height: 20, category: 'UML' },
   ],
 
   // ═══════════════════════════════════════════════════════════════════════════
   // 8. ACTIVITY DIAGRAM
   // ═══════════════════════════════════════════════════════════════════════════
   'Activity Diagram': [
-    { id: 'start-node', svgComponent: 'InitialNodeShape', label: 'Start Node', description: 'Workflow start', width: 30, height: 30, category: 'UML' },
-    { id: 'action', svgComponent: 'RoundedRectShape', label: 'Action', description: 'Activity step', width: 120, height: 60, category: 'UML' },
-    { id: 'decision-node', svgComponent: 'DiamondShape', label: 'Decision', description: 'Branch point', width: 100, height: 80, category: 'UML' },
-    { id: 'fork', svgComponent: 'ForkJoinShape', label: 'Fork', description: 'Parallel split', width: 80, height: 20, category: 'UML' },
-    { id: 'join', svgComponent: 'ForkJoinShape', label: 'Join', description: 'Parallel sync', width: 80, height: 20, category: 'UML' },
-    { id: 'end-node', svgComponent: 'FinalNodeShape', label: 'End Node', description: 'Workflow end', width: 40, height: 40, category: 'UML' },
-    { id: 'flow-edge', svgComponent: 'ConnectorArrowShape', label: 'Flow Edge', description: 'Sequence flow', width: 80, height: 40, category: 'UML' },
-    { id: 'swimlane', svgComponent: 'RectShape', label: 'Swimlane', description: 'Responsibility partition', width: 160, height: 120, category: 'UML' },
+    { id: 'act-initial-node', svgComponent: 'UMLInitialNodeShape', label: 'Initial Node', description: 'Workflow start', width: 30, height: 30, category: 'UML' },
+    { id: 'act-activity', svgComponent: 'UMLActivityShape', label: 'Action', description: 'Activity step', width: 120, height: 60, category: 'UML' },
+    { id: 'act-decision', svgComponent: 'UMLDecisionShape', label: 'Decision', description: 'Branch point', width: 100, height: 80, category: 'UML' },
+    { id: 'act-merge', svgComponent: 'UMLMergeShape', label: 'Merge', description: 'Merge point', width: 60, height: 20, category: 'UML' },
+    { id: 'act-fork', svgComponent: 'UMLForkShape', label: 'Fork', description: 'Parallel split', width: 60, height: 20, category: 'UML' },
+    { id: 'act-control-flow', svgComponent: 'UMLControlFlowShape', label: 'Control Flow', description: 'Sequence flow', width: 80, height: 40, category: 'UML' },
+    { id: 'act-object-flow', svgComponent: 'UMLObjectFlowShape', label: 'Object Flow', description: 'Object flow (dashed)', width: 80, height: 40, category: 'UML' },
+    { id: 'act-swimlane', svgComponent: 'UMLSwimlaneShape', label: 'Swimlane', description: 'Responsibility partition', width: 160, height: 120, category: 'UML' },
+    { id: 'act-final-node', svgComponent: 'UMLActivityFinalShape', label: 'Activity Final', description: 'Workflow end', width: 40, height: 40, category: 'UML' },
+    { id: 'act-flow-final', svgComponent: 'UMLFlowFinalShape', label: 'Flow Final', description: 'Flow end', width: 30, height: 30, category: 'UML' },
+    { id: 'act-note', svgComponent: 'UMLNoteShape', label: 'Note', description: 'Comment/note', width: 100, height: 70, category: 'UML' },
+    { id: 'act-constraint', svgComponent: 'UMLConstraintShape', label: 'Constraint', description: 'Constraint annotation', width: 120, height: 40, category: 'UML' },
   ],
 
   // ═══════════════════════════════════════════════════════════════════════════
   // 9. SEQUENCE DIAGRAM
   // ═══════════════════════════════════════════════════════════════════════════
   'Sequence Diagram': [
-    { id: 'seq-actor', svgComponent: 'ActorShape', label: 'Actor', description: 'Interaction initiator', width: 60, height: 80, category: 'UML' },
-    { id: 'lifeline', svgComponent: 'LifelineShape', label: 'Lifeline', description: 'Object timeline', width: 100, height: 60, category: 'UML' },
-    { id: 'activation', svgComponent: 'ActivationShape', label: 'Activation', description: 'Execution period', width: 20, height: 80, category: 'UML' },
-    { id: 'sync-msg', svgComponent: 'FilledArrowShape', label: 'Sync Message', description: 'Blocking call', width: 80, height: 40, category: 'UML' },
-    { id: 'async-msg', svgComponent: 'OpenArrowShape', label: 'Async Message', description: 'Non-blocking call', width: 80, height: 40, category: 'UML' },
-    { id: 'return-msg', svgComponent: 'DashedArrowShape', label: 'Return', description: 'Response', width: 80, height: 40, category: 'UML' },
-    { id: 'self-call', svgComponent: 'LoopArrowShape', label: 'Self-Call', description: 'Recursive call', width: 60, height: 60, category: 'UML' },
-    { id: 'create-msg', svgComponent: 'CreateArrowShape', label: 'Create', description: 'Instantiation', width: 80, height: 40, category: 'UML' },
-    { id: 'destruction', svgComponent: 'DestructionShape', label: 'Destruction', description: 'Object deletion', width: 30, height: 30, category: 'UML' },
-    { id: 'combined-fragment', svgComponent: 'DashedRectShape', label: 'Combined Fragment', description: 'Control structure', width: 120, height: 80, category: 'UML' },
+    { id: 'seq-actor', svgComponent: 'UMLActorShape', label: 'Actor', description: 'Interaction initiator', width: 60, height: 80, category: 'UML' },
+    { id: 'seq-lifeline', svgComponent: 'UMLLifelineShape', label: 'Lifeline', description: 'Object timeline', width: 100, height: 160, category: 'UML' },
+    { id: 'seq-activation', svgComponent: 'UMLActivationShape', label: 'Activation', description: 'Execution period', width: 16, height: 80, category: 'UML' },
+    { id: 'seq-destroy', svgComponent: 'UMLDestroyShape', label: 'Destroy', description: 'Object deletion (X)', width: 30, height: 30, category: 'UML' },
+    { id: 'seq-sync-msg', svgComponent: 'UMLSyncMsgShape', label: 'Sync Message', description: 'Blocking call', width: 80, height: 40, category: 'UML' },
+    { id: 'seq-async-msg', svgComponent: 'UMLAsyncMsgShape', label: 'Async Message', description: 'Non-blocking call', width: 80, height: 40, category: 'UML' },
+    { id: 'seq-return-msg', svgComponent: 'UMLReturnMsgShape', label: 'Return', description: 'Response', width: 80, height: 40, category: 'UML' },
+    { id: 'seq-alt', svgComponent: 'UMLAltShape', label: 'ALT Fragment', description: 'Alternative', width: 160, height: 120, category: 'UML' },
+    { id: 'seq-opt', svgComponent: 'UMLOptShape', label: 'OPT Fragment', description: 'Optional', width: 160, height: 100, category: 'UML' },
+    { id: 'seq-loop', svgComponent: 'UMLLoopShape', label: 'LOOP Fragment', description: 'Loop', width: 160, height: 100, category: 'UML' },
+    { id: 'seq-par', svgComponent: 'UMLParShape', label: 'PAR Fragment', description: 'Parallel', width: 160, height: 120, category: 'UML' },
+    { id: 'seq-break', svgComponent: 'UMLBreakShape', label: 'BREAK Fragment', description: 'Break', width: 160, height: 100, category: 'UML' },
+    { id: 'seq-note', svgComponent: 'UMLNoteShape', label: 'Note', description: 'Comment/note', width: 100, height: 70, category: 'UML' },
   ],
 
   // ═══════════════════════════════════════════════════════════════════════════
   // 10. CLASS DIAGRAM
   // ═══════════════════════════════════════════════════════════════════════════
   'Class Diagram': [
-    { id: 'class-box', svgComponent: 'ClassBoxShape', label: 'Class', description: 'Class definition', width: 140, height: 90, category: 'UML' },
-    { id: 'uml-interface', svgComponent: 'InterfaceShape', label: 'Interface', description: 'Contract definition', width: 140, height: 70, category: 'UML' },
-    { id: 'abstract-class', svgComponent: 'AbstractClassShape', label: 'Abstract Class', description: 'Partial implementation', width: 140, height: 90, category: 'UML' },
-    { id: 'association', svgComponent: 'LineShape', label: 'Association', description: 'Relationship', width: 80, height: 20, category: 'UML' },
-    { id: 'inheritance', svgComponent: 'TriangleArrowShape', label: 'Inheritance', description: 'Is-a relationship', width: 80, height: 40, category: 'UML' },
-    { id: 'aggregation', svgComponent: 'AggregationShape', label: 'Aggregation', description: 'Has-a (weak)', width: 80, height: 40, category: 'UML' },
-    { id: 'composition', svgComponent: 'CompositionShape', label: 'Composition', description: 'Has-a (strong)', width: 80, height: 40, category: 'UML' },
-    { id: 'dependency', svgComponent: 'DashedArrowShape', label: 'Dependency', description: 'Uses relationship', width: 80, height: 40, category: 'UML' },
-    { id: 'multiplicity', svgComponent: 'MultiplicityShape', label: 'Multiplicity', description: 'Cardinality notation', width: 40, height: 20, category: 'UML' },
+    { id: 'class-box', svgComponent: 'UMLClassShape', label: 'Class', description: 'Class definition', width: 140, height: 90, category: 'UML' },
+    { id: 'class-association', svgComponent: 'UMLAssociationShape', label: 'Association', description: 'Relationship', width: 80, height: 20, category: 'UML' },
+    { id: 'class-directed', svgComponent: 'UMLDirectedAssociationShape', label: 'Directed Association', description: 'Directed relationship', width: 80, height: 40, category: 'UML' },
+    { id: 'class-aggregation', svgComponent: 'UMLAggregationShape', label: 'Aggregation', description: 'Has-a (weak)', width: 80, height: 40, category: 'UML' },
+    { id: 'class-composition', svgComponent: 'UMLCompositionShape', label: 'Composition', description: 'Has-a (strong)', width: 80, height: 40, category: 'UML' },
+    { id: 'class-dependency', svgComponent: 'UMLDependencyShape', label: 'Dependency', description: 'Uses relationship', width: 80, height: 40, category: 'UML' },
+    { id: 'class-generalization', svgComponent: 'UMLGeneralizationShape', label: 'Generalization', description: 'Inheritance', width: 80, height: 40, category: 'UML' },
+    { id: 'class-note', svgComponent: 'UMLNoteShape', label: 'Note', description: 'Comment/note', width: 100, height: 70, category: 'UML' },
+    { id: 'class-note-connector', svgComponent: 'UMLNoteConnectorShape', label: 'Note Connector', description: 'Note connection', width: 80, height: 20, category: 'UML' },
+    { id: 'class-multiplicity-1', svgComponent: 'UMLMultiplicity1Shape', label: 'Exactly One', description: '1', width: 30, height: 20, category: 'UML' },
+    { id: 'class-multiplicity-01', svgComponent: 'UMLMultiplicity01Shape', label: 'Zero or One', description: '0..1', width: 40, height: 20, category: 'UML' },
+    { id: 'class-multiplicity-many', svgComponent: 'UMLMultiplicityManyShape', label: 'Zero or More', description: '*', width: 30, height: 20, category: 'UML' },
+    { id: 'class-multiplicity-1many', svgComponent: 'UMLMultiplicity1ManyShape', label: 'One or More', description: '1..*', width: 40, height: 20, category: 'UML' },
+    { id: 'class-multiplicity-range', svgComponent: 'UMLMultiplicityRangeShape', label: 'Range', description: 'n..m', width: 40, height: 20, category: 'UML' },
+    { id: 'class-multiplicity-n', svgComponent: 'UMLMultiplicityNShape', label: 'Exactly n', description: 'n', width: 30, height: 20, category: 'UML' },
   ],
 };
 
@@ -432,6 +267,18 @@ export const SHAPE_STYLE_MAP: Record<string, string> = {
   'DisplayShape': 'display',
   'AnnotationShape': 'annotation',
   
+  // ─── DFD Shapes ──────────────────────────────────────────────────────────
+  'DFDProcessShape': 'ellipse',
+  'DFDDataFlowShape': 'arrow',
+  'DFDDataStoreShape': 'rectangle',
+  'DFDDataStoreGSShape': 'rectangle',
+  'DFDExternalEntityShape': 'rectangle',
+  'DFDBidirectionalShape': 'arrow',
+  'DFDBoundaryShape': 'dashedRect',
+  'DFDNoteShape': 'noteStandalone',
+  'DFDOnPageShape': 'circle',
+  'DFDOffPageShape': 'pentagon',
+  
   // ─── UML Shapes ──────────────────────────────────────────────────────────
   'InitialNodeShape': 'initialNode',
   'FinalNodeShape': 'finalNode',
@@ -461,6 +308,19 @@ export const SHAPE_STYLE_MAP: Record<string, string> = {
   'TotalParticipationShape': 'totalParticipation',
   'PartialParticipationShape': 'partialParticipation',
   'ERDConnectorShape': 'erdConnector',
+  
+  // ─── ERD Additional Shapes ──────────────────────────────────────────────
+  'ERDEntityShape': 'entity',
+  'ERDWeakEntityShape': 'weakEntity',
+  'ERDRelationshipShape': 'relationship',
+  'ERDIdentifyingRelShape': 'identifyingRel',
+  'ERDAttributeShape': 'attribute',
+  'ERDMultivaluedAttrShape': 'multiAttr',
+  'ERDDerivedAttrShape': 'derivedAttr',
+  'ERDCardinality11Shape': 'text',
+  'ERDCardinality1NShape': 'text',
+  'ERDCardinalityN1Shape': 'text',
+  'ERDCardinalityMNShape': 'text',
   
   // ─── Arrow Shapes ────────────────────────────────────────────────────────
   'ArrowShape': 'arrow',
@@ -494,6 +354,21 @@ export const SHAPE_STYLE_MAP: Record<string, string> = {
   'FuseShape': 'fuse',
   'TransformerShape': 'transformer',
   
+  // ─── Fishbone Shapes ─────────────────────────────────────────────────────
+  'FishboneSpineShape': 'line',
+  'FishboneHeadShape': 'triangle',
+  'FishboneProblemShape': 'dashedRect',
+  'FishboneCauseTopShape': 'line',
+  'FishboneCauseBottomShape': 'line',
+  'FishboneSubCauseTopShape': 'line',
+  'FishboneSubCauseBottomShape': 'line',
+  'FishboneTertiaryShape': 'line',
+  'FishboneArrowShape': 'arrow',
+  'FishboneDashedArrowShape': 'dashedArrow',
+  'FishboneCategoryShape': 'rectangle',
+  'FishboneBubbleShape': 'ellipse',
+  'FishboneNoteShape': 'noteStandalone',
+  
   // ─── FDD Shapes ─────────────────────────────────────────────────────────
   'FDD_FunctionShape': 'roundedRectangle',
   'FDD_InputShape': 'rectangle',
@@ -505,13 +380,63 @@ export const SHAPE_STYLE_MAP: Record<string, string> = {
   'FDD_NoteShape': 'noteStandalone',
   'FDD_ExternalEntityShape': 'ellipse',
   
+  // ─── Use Case Shapes ─────────────────────────────────────────────────────
+  'UMLActorShape': 'actor',
+  'UMLUseCaseShape': 'ellipse',
+  'UMLSystemBoundaryShape': 'rectangle',
+  'UMLAssociationShape': 'line',
+  'UMLIncludeShape': 'dashedArrow',
+  'UMLExtendShape': 'dashedArrowBack',
+  'UMLGeneralizationShape': 'triangleArrow',
+  'UMLNoteShape': 'noteStandalone',
+  'UMLNoteConnectorShape': 'dashedLine',
+  'UMLIncludeLabelShape': 'text',
+  'UMLExtendLabelShape': 'text',
+  
+  // ─── Activity Shapes ────────────────────────────────────────────────────
+  'UMLInitialNodeShape': 'initialNode',
+  'UMLActivityShape': 'roundedRectangle',
+  'UMLDecisionShape': 'diamond',
+  'UMLMergeShape': 'forkJoin',
+  'UMLForkShape': 'forkJoin',
+  'UMLControlFlowShape': 'arrow',
+  'UMLObjectFlowShape': 'dashedArrow',
+  'UMLSwimlaneShape': 'rectangle',
+  'UMLActivityFinalShape': 'finalNode',
+  'UMLFlowFinalShape': 'destruction',
+  'UMLConstraintShape': 'dashedRect',
+  
+  // ─── Sequence Shapes ────────────────────────────────────────────────────
+  'UMLLifelineShape': 'lifeline',
+  'UMLActivationShape': 'activation',
+  'UMLDestroyShape': 'destruction',
+  'UMLSyncMsgShape': 'filledArrow',
+  'UMLAsyncMsgShape': 'openArrow',
+  'UMLReturnMsgShape': 'dashedArrow',
+  'UMLAltShape': 'dashedRect',
+  'UMLOptShape': 'dashedRect',
+  'UMLLoopShape': 'dashedRect',
+  'UMLParShape': 'dashedRect',
+  'UMLBreakShape': 'dashedRect',
+  
+  // ─── Class Shapes ──────────────────────────────────────────────────────
+  'UMLClassShape': 'classBox',
+  'UMLDirectedAssociationShape': 'arrow',
+  'UMLAggregationShape': 'aggregation',
+  'UMLCompositionShape': 'composition',
+  'UMLDependencyShape': 'dashedArrow',
+  'UMLMultiplicity1Shape': 'text',
+  'UMLMultiplicity01Shape': 'text',
+  'UMLMultiplicityManyShape': 'text',
+  'UMLMultiplicity1ManyShape': 'text',
+  'UMLMultiplicityRangeShape': 'text',
+  'UMLMultiplicityNShape': 'text',
+  
   // ─── Default ─────────────────────────────────────────────────────────────
   'default': 'default',
 };
 
-// ════════════════════════════════════════════════════════════════════════════
-// ⭐ CRITICAL: IGRAPH ID TO STYLE MAP - Maps shape IDs to canvas styles
-// ════════════════════════════════════════════════════════════════════════════
+// ─── IGRAPH ID TO STYLE MAP ──────────────────────────────────────────────────
 
 export const IGRAPH_ID_STYLE_MAP: Record<string, string> = {
   // ─── FDD Shapes ──────────────────────────────────────────────────────────
@@ -557,98 +482,124 @@ export const IGRAPH_ID_STYLE_MAP: Record<string, string> = {
   'display': 'igraph.display',
   'annotation': 'igraph.annotation',
 
-  // ─── Data Flow ──────────────────────────────────────────────────────────
-  'dfd-external-entity': 'igraph.rectangle',
-  'dfd-process': 'igraph.ellipse',
-  'data-store': 'igraph.cylinder',
-  'data-flow': 'igraph.connectorArrow',
+  // ─── DFD ────────────────────────────────────────────────────────────────
+  'dfd-process': 'igraph.dfdProcess',
+  'dfd-data-flow': 'igraph.dfdDataFlow',
+  'dfd-data-store': 'igraph.dfdDataStore',
+  'dfd-data-store-gs': 'igraph.dfdDataStoreGS',
+  'dfd-external-entity': 'igraph.dfdExternalEntity',
+  'dfd-bidirectional': 'igraph.dfdBidirectional',
+  'dfd-boundary': 'igraph.dfdBoundary',
+  'dfd-note': 'igraph.dfdNote',
+  'dfd-on-page': 'igraph.dfdOnPage',
+  'dfd-off-page': 'igraph.dfdOffPage',
 
   // ─── ERD ────────────────────────────────────────────────────────────────
-  'entity': 'igraph.entity',
-  'weak-entity': 'igraph.weakEntity',
-  'attribute': 'igraph.attribute',
-  'primary-key': 'igraph.primaryKey',
-  'derived-attr': 'igraph.derivedAttr',
-  'composite-attr': 'igraph.compositeAttr',
-  'multi-attr': 'igraph.multiAttr',
-  'relationship': 'igraph.relationship',
-  'identifying-rel': 'igraph.identifyingRel',
-  'cardinality': 'igraph.cardinality',
-  'crow-one': 'igraph.crowOne',
-  'crow-zero-one': 'igraph.crowZeroOne',
-  'crow-zero-many': 'igraph.crowZeroMany',
-  'crow-one-many': 'igraph.crowOneMany',
-  'crow-many': 'igraph.crowMany',
-  'total-participation': 'igraph.totalParticipation',
-  'partial-participation': 'igraph.partialParticipation',
+  'erd-entity': 'igraph.erdEntity',
+  'erd-weak-entity': 'igraph.erdWeakEntity',
+  'erd-relationship': 'igraph.erdRelationship',
+  'erd-identifying-rel': 'igraph.erdIdentifyingRelationship',
+  'erd-attribute': 'igraph.erdAttribute',
+  'erd-multivalued-attr': 'igraph.erdMultivaluedAttribute',
+  'erd-derived-attr': 'igraph.erdDerivedAttribute',
+  'erd-cardinality-11': 'igraph.erdCardinality11',
+  'erd-cardinality-1n': 'igraph.erdCardinality1N',
+  'erd-cardinality-n1': 'igraph.erdCardinalityN1',
+  'erd-cardinality-mn': 'igraph.erdCardinalityMN',
   'erd-connector': 'igraph.erdConnector',
 
   // ─── Fishbone ────────────────────────────────────────────────────────────
-  'effect': 'igraph.rectangle',
-  'spine': 'igraph.connectorArrow',
-  'major-bone': 'igraph.arrowDiag',
-  'sub-bone': 'igraph.arrowSmall',
-  'root-cause': 'igraph.text',
+  'fishbone-spine': 'igraph.fishboneSpine',
+  'fishbone-head': 'igraph.fishboneHead',
+  'fishbone-problem': 'igraph.fishboneProblem',
+  'fishbone-cause-top': 'igraph.fishboneCauseTop',
+  'fishbone-cause-bottom': 'igraph.fishboneCauseBottom',
+  'fishbone-sub-top': 'igraph.fishboneSubCauseTop',
+  'fishbone-sub-bottom': 'igraph.fishboneSubCauseBottom',
+  'fishbone-tertiary': 'igraph.fishboneTertiary',
+  'fishbone-arrow': 'igraph.fishboneArrow',
+  'fishbone-dashed-arrow': 'igraph.fishboneDashedArrow',
+  'fishbone-category': 'igraph.fishboneCategory',
+  'fishbone-bubble': 'igraph.fishboneBubble',
+  'fishbone-note': 'igraph.fishboneNote',
 
   // ─── Schematic ──────────────────────────────────────────────────────────
-  'resistor': 'igraph.resistor',
-  'capacitor': 'igraph.capacitor',
-  'inductor': 'igraph.inductor',
-  'voltage': 'igraph.voltage',
-  'ground': 'igraph.ground',
-  'diode': 'igraph.diode',
-  'transistor': 'igraph.transistor',
-  'ic': 'igraph.ic',
-  'opamp': 'igraph.opamp',
-  'switch': 'igraph.switch',
-  'fuse': 'igraph.fuse',
-  'transformer': 'igraph.transformer',
+  'schematic-battery': 'igraph.schematicBattery',
+  'schematic-ac': 'igraph.schematicAC',
+  'schematic-ground': 'igraph.schematicGround',
+  'schematic-resistor': 'igraph.schematicResistor',
+  'schematic-variable-resistor': 'igraph.schematicVariableResistor',
+  'schematic-capacitor': 'igraph.schematicCapacitor',
+  'schematic-inductor': 'igraph.schematicInductor',
+  'schematic-diode': 'igraph.schematicDiode',
+  'schematic-led': 'igraph.schematicLED',
+  'schematic-npn': 'igraph.schematicNPN',
+  'schematic-switch': 'igraph.schematicSwitch',
+  'schematic-fuse': 'igraph.schematicFuse',
+  'schematic-connection': 'igraph.schematicConnection',
+  'schematic-no-connection': 'igraph.schematicNoConnection',
 
   // ─── Use Case ───────────────────────────────────────────────────────────
-  'use-case': 'igraph.ellipse',
-  'uc-actor': 'igraph.actor',
-  'system-boundary': 'igraph.rectangle',
-  'association': 'igraph.line',
-  'include-rel': 'igraph.dashedArrow',
-  'extend-rel': 'igraph.dashedArrowBack',
-  'generalization': 'igraph.triangleArrow',
+  'uc-actor': 'igraph.ucActor',
+  'use-case': 'igraph.umlUseCase',
+  'system-boundary': 'igraph.umlSystemBoundary',
+  'uc-association': 'igraph.umlAssociation',
+  'uc-include': 'igraph.umlInclude',
+  'uc-extend': 'igraph.umlExtend',
+  'uc-generalization': 'igraph.umlGeneralization',
+  'uc-note': 'igraph.umlNote',
+  'uc-note-connector': 'igraph.umlNoteConnector',
+  'uc-include-label': 'igraph.umlIncludeLabel',
+  'uc-extend-label': 'igraph.umlExtendLabel',
 
   // ─── Activity ───────────────────────────────────────────────────────────
-  'start-node': 'igraph.initialNode',
-  'action': 'igraph.roundedRectangle',
-  'decision-node': 'igraph.diamond',
-  'fork': 'igraph.forkJoin',
-  'join': 'igraph.forkJoin',
-  'end-node': 'igraph.finalNode',
-  'flow-edge': 'igraph.connectorArrow',
-  'swimlane': 'igraph.rectangle',
+  'act-initial-node': 'igraph.umlInitialNode',
+  'act-activity': 'igraph.umlActivity',
+  'act-decision': 'igraph.umlDecision',
+  'act-merge': 'igraph.umlMerge',
+  'act-fork': 'igraph.umlFork',
+  'act-control-flow': 'igraph.umlControlFlow',
+  'act-object-flow': 'igraph.umlObjectFlow',
+  'act-swimlane': 'igraph.umlSwimlane',
+  'act-final-node': 'igraph.umlActivityFinal',
+  'act-flow-final': 'igraph.umlFlowFinal',
+  'act-note': 'igraph.umlNote',
+  'act-constraint': 'igraph.umlConstraint',
 
   // ─── Sequence ───────────────────────────────────────────────────────────
-  'seq-actor': 'igraph.actor',
-  'lifeline': 'igraph.lifeline',
-  'activation': 'igraph.activation',
-  'sync-msg': 'igraph.filledArrow',
-  'async-msg': 'igraph.openArrow',
-  'return-msg': 'igraph.dashedArrow',
-  'self-call': 'igraph.loopArrow',
-  'create-msg': 'igraph.createArrow',
-  'destruction': 'igraph.destruction',
-  'combined-fragment': 'igraph.dashedRect',
+  'seq-actor': 'igraph.umlActor',
+  'seq-lifeline': 'igraph.umlLifeline',
+  'seq-activation': 'igraph.umlActivation',
+  'seq-destroy': 'igraph.umlDestroy',
+  'seq-sync-msg': 'igraph.umlSyncMsg',
+  'seq-async-msg': 'igraph.umlAsyncMsg',
+  'seq-return-msg': 'igraph.umlReturnMsg',
+  'seq-alt': 'igraph.umlAlt',
+  'seq-opt': 'igraph.umlOpt',
+  'seq-loop': 'igraph.umlLoop',
+  'seq-par': 'igraph.umlPar',
+  'seq-break': 'igraph.umlBreak',
+  'seq-note': 'igraph.umlNote',
 
   // ─── Class ──────────────────────────────────────────────────────────────
-  'class-box': 'igraph.classBox',
-  'uml-interface': 'igraph.interface',
-  'abstract-class': 'igraph.abstractClass',
-  'inheritance': 'igraph.triangleArrow',
-  'aggregation': 'igraph.aggregation',
-  'composition': 'igraph.composition',
-  'dependency': 'igraph.dashedArrow',
-  'multiplicity': 'igraph.multiplicity',
+  'class-box': 'igraph.umlClass',
+  'class-association': 'igraph.umlAssociation',
+  'class-directed': 'igraph.umlDirectedAssociation',
+  'class-aggregation': 'igraph.umlAggregation',
+  'class-composition': 'igraph.umlComposition',
+  'class-dependency': 'igraph.umlDependency',
+  'class-generalization': 'igraph.umlGeneralization',
+  'class-note': 'igraph.umlNote',
+  'class-note-connector': 'igraph.umlNoteConnector',
+  'class-multiplicity-1': 'igraph.umlMultiplicity1',
+  'class-multiplicity-01': 'igraph.umlMultiplicity01',
+  'class-multiplicity-many': 'igraph.umlMultiplicityMany',
+  'class-multiplicity-1many': 'igraph.umlMultiplicity1Many',
+  'class-multiplicity-range': 'igraph.umlMultiplicityRange',
+  'class-multiplicity-n': 'igraph.umlMultiplicityN',
 };
 
-// ════════════════════════════════════════════════════════════════════════════
-// IGRAPH STYLE MAP - Maps SVG component names to canvas styles
-// ════════════════════════════════════════════════════════════════════════════
+// ─── IGRAPH STYLE MAP ──────────────────────────────────────────────────────
 
 export const IGRAPH_STYLE_MAP: Record<string, string> = {
   // ─── FDD Shapes ──────────────────────────────────────────────────────────
@@ -685,6 +636,18 @@ export const IGRAPH_STYLE_MAP: Record<string, string> = {
   'HexagonShape': 'igraph.hexagon',
   'DisplayShape': 'igraph.display',
   'AnnotationShape': 'igraph.annotation',
+
+  // ─── DFD Shapes ──────────────────────────────────────────────────────────
+  'DFDProcessShape': 'igraph.dfdProcess',
+  'DFDDataFlowShape': 'igraph.dfdDataFlow',
+  'DFDDataStoreShape': 'igraph.dfdDataStore',
+  'DFDDataStoreGSShape': 'igraph.dfdDataStoreGS',
+  'DFDExternalEntityShape': 'igraph.dfdExternalEntity',
+  'DFDBidirectionalShape': 'igraph.dfdBidirectional',
+  'DFDBoundaryShape': 'igraph.dfdBoundary',
+  'DFDNoteShape': 'igraph.dfdNote',
+  'DFDOnPageShape': 'igraph.dfdOnPage',
+  'DFDOffPageShape': 'igraph.dfdOffPage',
 
   // ─── Basic (legacy) ────────────────────────────────────────────────────
   'DoubleRectShape': 'igraph.doubleRectangle',
@@ -725,6 +688,19 @@ export const IGRAPH_STYLE_MAP: Record<string, string> = {
   'PartialParticipationShape': 'igraph.partialParticipation',
   'ERDConnectorShape': 'igraph.erdConnector',
 
+  // ─── ERD Additional ──────────────────────────────────────────────────────
+  'ERDEntityShape': 'igraph.erdEntity',
+  'ERDWeakEntityShape': 'igraph.erdWeakEntity',
+  'ERDRelationshipShape': 'igraph.erdRelationship',
+  'ERDIdentifyingRelShape': 'igraph.erdIdentifyingRelationship',
+  'ERDAttributeShape': 'igraph.erdAttribute',
+  'ERDMultivaluedAttrShape': 'igraph.erdMultivaluedAttribute',
+  'ERDDerivedAttrShape': 'igraph.erdDerivedAttribute',
+  'ERDCardinality11Shape': 'igraph.erdCardinality11',
+  'ERDCardinality1NShape': 'igraph.erdCardinality1N',
+  'ERDCardinalityN1Shape': 'igraph.erdCardinalityN1',
+  'ERDCardinalityMNShape': 'igraph.erdCardinalityMN',
+
   // ─── Arrows ─────────────────────────────────────────────────────────────
   'ArrowShape': 'igraph.arrow',
   'ArrowDownShape': 'igraph.arrowDown',
@@ -756,6 +732,73 @@ export const IGRAPH_STYLE_MAP: Record<string, string> = {
   'SwitchShape': 'igraph.switch',
   'FuseShape': 'igraph.fuse',
   'TransformerShape': 'igraph.transformer',
+
+  // ─── Fishbone ──────────────────────────────────────────────────────────
+  'FishboneSpineShape': 'igraph.fishboneSpine',
+  'FishboneHeadShape': 'igraph.fishboneHead',
+  'FishboneProblemShape': 'igraph.fishboneProblem',
+  'FishboneCauseTopShape': 'igraph.fishboneCauseTop',
+  'FishboneCauseBottomShape': 'igraph.fishboneCauseBottom',
+  'FishboneSubCauseTopShape': 'igraph.fishboneSubCauseTop',
+  'FishboneSubCauseBottomShape': 'igraph.fishboneSubCauseBottom',
+  'FishboneTertiaryShape': 'igraph.fishboneTertiary',
+  'FishboneArrowShape': 'igraph.fishboneArrow',
+  'FishboneDashedArrowShape': 'igraph.fishboneDashedArrow',
+  'FishboneCategoryShape': 'igraph.fishboneCategory',
+  'FishboneBubbleShape': 'igraph.fishboneBubble',
+  'FishboneNoteShape': 'igraph.fishboneNote',
+
+  // ─── Use Case ──────────────────────────────────────────────────────────
+  'UMLActorShape': 'igraph.ucActor',
+  'UMLUseCaseShape': 'igraph.umlUseCase',
+  'UMLSystemBoundaryShape': 'igraph.umlSystemBoundary',
+  'UMLAssociationShape': 'igraph.umlAssociation',
+  'UMLIncludeShape': 'igraph.umlInclude',
+  'UMLExtendShape': 'igraph.umlExtend',
+  'UMLGeneralizationShape': 'igraph.umlGeneralization',
+  'UMLNoteShape': 'igraph.umlNote',
+  'UMLNoteConnectorShape': 'igraph.umlNoteConnector',
+  'UMLIncludeLabelShape': 'igraph.umlIncludeLabel',
+  'UMLExtendLabelShape': 'igraph.umlExtendLabel',
+
+  // ─── Activity ──────────────────────────────────────────────────────────
+  'UMLInitialNodeShape': 'igraph.umlInitialNode',
+  'UMLActivityShape': 'igraph.umlActivity',
+  'UMLDecisionShape': 'igraph.umlDecision',
+  'UMLMergeShape': 'igraph.umlMerge',
+  'UMLForkShape': 'igraph.umlFork',
+  'UMLControlFlowShape': 'igraph.umlControlFlow',
+  'UMLObjectFlowShape': 'igraph.umlObjectFlow',
+  'UMLSwimlaneShape': 'igraph.umlSwimlane',
+  'UMLActivityFinalShape': 'igraph.umlActivityFinal',
+  'UMLFlowFinalShape': 'igraph.umlFlowFinal',
+  'UMLConstraintShape': 'igraph.umlConstraint',
+
+  // ─── Sequence ──────────────────────────────────────────────────────────
+  'UMLLifelineShape': 'igraph.umlLifeline',
+  'UMLActivationShape': 'igraph.umlActivation',
+  'UMLDestroyShape': 'igraph.umlDestroy',
+  'UMLSyncMsgShape': 'igraph.umlSyncMsg',
+  'UMLAsyncMsgShape': 'igraph.umlAsyncMsg',
+  'UMLReturnMsgShape': 'igraph.umlReturnMsg',
+  'UMLAltShape': 'igraph.umlAlt',
+  'UMLOptShape': 'igraph.umlOpt',
+  'UMLLoopShape': 'igraph.umlLoop',
+  'UMLParShape': 'igraph.umlPar',
+  'UMLBreakShape': 'igraph.umlBreak',
+
+  // ─── Class ──────────────────────────────────────────────────────────────
+  'UMLClassShape': 'igraph.umlClass',
+  'UMLDirectedAssociationShape': 'igraph.umlDirectedAssociation',
+  'UMLAggregationShape': 'igraph.umlAggregation',
+  'UMLCompositionShape': 'igraph.umlComposition',
+  'UMLDependencyShape': 'igraph.umlDependency',
+  'UMLMultiplicity1Shape': 'igraph.umlMultiplicity1',
+  'UMLMultiplicity01Shape': 'igraph.umlMultiplicity01',
+  'UMLMultiplicityManyShape': 'igraph.umlMultiplicityMany',
+  'UMLMultiplicity1ManyShape': 'igraph.umlMultiplicity1Many',
+  'UMLMultiplicityRangeShape': 'igraph.umlMultiplicityRange',
+  'UMLMultiplicityNShape': 'igraph.umlMultiplicityN',
 };
 
 // ─── HELPER FUNCTIONS ────────────────────────────────────────────────────────

@@ -1,4 +1,4 @@
-// components/shapes/ShapesPanel.tsx — FIXED blue color and rotate arrow
+// components/shapes/ShapesPanel.tsx — UPDATED with all new shape components
 
 import React, { useState, useMemo, useCallback, useRef, useEffect } from 'react';
 import {
@@ -81,7 +81,7 @@ const AnimatedArrow = ({ expanded, color }: { expanded: boolean; color: string }
 
 const getShapeComponent = (svgComponentName: string): React.ComponentType<any> | null => {
   const componentMap: Record<string, React.ComponentType<any>> = {
-    // Standard Shapes
+    // ─── Standard Shapes ────────────────────────────────────────────────────
     'RectShape': shapeComponents.RectShape,
     'RoundedRectShape': shapeComponents.RoundedRectShape,
     'CircleShape': shapeComponents.CircleShape,
@@ -97,7 +97,7 @@ const getShapeComponent = (svgComponentName: string): React.ComponentType<any> |
     'ActorShape': shapeComponents.ActorShape,
     'ConnectorArrowShape': shapeComponents.ConnectorArrowShape,
     
-    // Basic Shapes (legacy)
+    // ─── Basic Shapes (legacy) ─────────────────────────────────────────────
     'DoubleRectShape': shapeComponents.DoubleRectShape,
     'DoubleRhombusShape': shapeComponents.DoubleRhombusShape,
     'MultiOvalShape': shapeComponents.MultiOvalShape,
@@ -106,68 +106,133 @@ const getShapeComponent = (svgComponentName: string): React.ComponentType<any> |
     'DashedRectShape': shapeComponents.DashedRectShape,
     'PredefinedShape': shapeComponents.PredefinedShape,
     
-    // UML Shapes
-    'UMLActorShape': shapeComponents.ActorShape,
-    'InitialNodeShape': shapeComponents.InitialNodeShape,
-    'FinalNodeShape': shapeComponents.FinalNodeShape,
-    'ForkJoinShape': shapeComponents.ForkJoinShape,
-    'LifelineShape': shapeComponents.LifelineShape,
-    'ActivationShape': shapeComponents.ActivationShape,
-    'ClassBoxShape': shapeComponents.ClassBoxShape,
-    'InterfaceShape': shapeComponents.InterfaceShape,
-    'AbstractClassShape': shapeComponents.AbstractClassShape,
+    // ─── FDD Shapes ────────────────────────────────────────────────────────
+    'FDD_FunctionShape': shapeComponents.FDD_FunctionShape,
+    'FDD_InputShape': shapeComponents.FDD_InputShape,
+    'FDD_OutputShape': shapeComponents.FDD_OutputShape,
+    'FDD_ControlShape': shapeComponents.FDD_ControlShape,
+    'FDD_MechanismShape': shapeComponents.FDD_MechanismShape,
+    'FDD_InterfaceShape': shapeComponents.FDD_InterfaceShape,
+    'FDD_BoundaryShape': shapeComponents.FDD_BoundaryShape,
+    'FDD_NoteShape': shapeComponents.FDD_NoteShape,
+    'FDD_ExternalEntityShape': shapeComponents.FDD_ExternalEntityShape,
     
-    // ERD Shapes
-    'EntityShape': shapeComponents.EntityShape,
-    'WeakEntityShape': shapeComponents.WeakEntityShape,
-    'AttributeShape': shapeComponents.AttributeShape,
-    'PrimaryKeyShape': shapeComponents.PrimaryKeyShape,
-    'DerivedAttrShape': shapeComponents.DerivedAttrShape,
-    'CompositeAttrShape': shapeComponents.CompositeAttrShape,
-    'MultiAttrShape': shapeComponents.MultiAttrShape,
-    'RelationshipShape': shapeComponents.RelationshipShape,
-    'IdentifyingRelShape': shapeComponents.IdentifyingRelShape,
-    'CardinalityShape': shapeComponents.CardinalityShape,
-    'CrowOneShape': shapeComponents.CrowOneShape,
-    'CrowZeroOneShape': shapeComponents.CrowZeroOneShape,
-    'CrowZeroManyShape': shapeComponents.CrowZeroManyShape,
-    'CrowOneManyShape': shapeComponents.CrowOneManyShape,
-    'CrowManyShape': shapeComponents.CrowManyShape,
-    'TotalParticipationShape': shapeComponents.TotalParticipationShape,
-    'PartialParticipationShape': shapeComponents.PartialParticipationShape,
+    // ─── Flowchart Shapes ──────────────────────────────────────────────────
+    'PentagonShape': shapeComponents.PentagonShape,
+    'TrapezoidShape': shapeComponents.TrapezoidShape,
+    'DShape': shapeComponents.DShape,
+    'HexagonShape': shapeComponents.HexagonShape,
+    'DisplayShape': shapeComponents.DisplayShape,
+    'AnnotationShape': shapeComponents.AnnotationShape,
+    
+    // ─── DFD Shapes ────────────────────────────────────────────────────────
+    'DFDProcessShape': shapeComponents.DFDProcessShape,
+    'DFDDataFlowShape': shapeComponents.DFDDataFlowShape,
+    'DFDDataStoreShape': shapeComponents.DFDDataStoreShape,
+    'DFDDataStoreGSShape': shapeComponents.DFDDataStoreGSShape,
+    'DFDExternalEntityShape': shapeComponents.DFDExternalEntityShape,
+    'DFDBidirectionalShape': shapeComponents.DFDBidirectionalShape,
+    'DFDBoundaryShape': shapeComponents.DFDBoundaryShape,
+    'DFDNoteShape': shapeComponents.DFDNoteShape,
+    'DFDOnPageShape': shapeComponents.DFDOnPageShape,
+    'DFDOffPageShape': shapeComponents.DFDOffPageShape,
+    
+    // ─── ERD Shapes ────────────────────────────────────────────────────────
+    'ERDEntityShape': shapeComponents.ERDEntityShape,
+    'ERDWeakEntityShape': shapeComponents.ERDWeakEntityShape,
+    'ERDRelationshipShape': shapeComponents.ERDRelationshipShape,
+    'ERDIdentifyingRelShape': shapeComponents.ERDIdentifyingRelShape,
+    'ERDAttributeShape': shapeComponents.ERDAttributeShape,
+    'ERDMultivaluedAttrShape': shapeComponents.ERDMultivaluedAttrShape,
+    'ERDDerivedAttrShape': shapeComponents.ERDDerivedAttrShape,
+    'ERDCardinality11Shape': shapeComponents.ERDCardinality11Shape,
+    'ERDCardinality1NShape': shapeComponents.ERDCardinality1NShape,
+    'ERDCardinalityN1Shape': shapeComponents.ERDCardinalityN1Shape,
+    'ERDCardinalityMNShape': shapeComponents.ERDCardinalityMNShape,
     'ERDConnectorShape': shapeComponents.ERDConnectorShape,
     
-    // Arrow Shapes
-    'ArrowShape': shapeComponents.ArrowShape,
-    'ArrowDownShape': shapeComponents.ArrowDownShape,
-    'ArrowRightShape': shapeComponents.ArrowRightShape,
-    'FilledArrowShape': shapeComponents.FilledArrowShape,
-    'OpenArrowShape': shapeComponents.OpenArrowShape,
-    'DashedArrowShape': shapeComponents.DashedArrowShape,
-    'DashedArrowBackShape': shapeComponents.DashedArrowBackShape,
-    'TriangleArrowShape': shapeComponents.TriangleArrowShape,
-    'LoopArrowShape': shapeComponents.LoopArrowShape,
-    'CreateArrowShape': shapeComponents.CreateArrowShape,
-    'DestructionShape': shapeComponents.DestructionShape,
-    'AggregationShape': shapeComponents.AggregationShape,
-    'CompositionShape': shapeComponents.CompositionShape,
-    'MultiplicityShape': shapeComponents.MultiplicityShape,
-    'ArrowDiagShape': shapeComponents.ArrowDiagShape,
-    'ArrowSmallShape': shapeComponents.ArrowSmallShape,
+    // ─── Fishbone Shapes ──────────────────────────────────────────────────
+    'FishboneSpineShape': shapeComponents.FishboneSpineShape,
+    'FishboneHeadShape': shapeComponents.FishboneHeadShape,
+    'FishboneProblemShape': shapeComponents.FishboneProblemShape,
+    'FishboneCauseTopShape': shapeComponents.FishboneCauseTopShape,
+    'FishboneCauseBottomShape': shapeComponents.FishboneCauseBottomShape,
+    'FishboneSubCauseTopShape': shapeComponents.FishboneSubCauseTopShape,
+    'FishboneSubCauseBottomShape': shapeComponents.FishboneSubCauseBottomShape,
+    'FishboneTertiaryShape': shapeComponents.FishboneTertiaryShape,
+    'FishboneArrowShape': shapeComponents.FishboneArrowShape,
+    'FishboneDashedArrowShape': shapeComponents.FishboneDashedArrowShape,
+    'FishboneCategoryShape': shapeComponents.FishboneCategoryShape,
+    'FishboneBubbleShape': shapeComponents.FishboneBubbleShape,
+    'FishboneNoteShape': shapeComponents.FishboneNoteShape,
     
-    // Schematic Shapes
-    'ResistorShape': shapeComponents.ResistorShape,
-    'CapacitorShape': shapeComponents.CapacitorShape,
-    'InductorShape': shapeComponents.InductorShape,
-    'VoltageShape': shapeComponents.VoltageShape,
-    'GroundShape': shapeComponents.GroundShape,
-    'DiodeShape': shapeComponents.DiodeShape,
-    'TransistorShape': shapeComponents.TransistorShape,
-    'ICShape': shapeComponents.ICShape,
-    'OpAmpShape': shapeComponents.OpAmpShape,
-    'SwitchShape': shapeComponents.SwitchShape,
-    'FuseShape': shapeComponents.FuseShape,
-    'TransformerShape': shapeComponents.TransformerShape,
+    // ─── Schematic Shapes ──────────────────────────────────────────────────
+    'SchematicBatteryShape': shapeComponents.SchematicBatteryShape,
+    'SchematicACShape': shapeComponents.SchematicACShape,
+    'SchematicGroundShape': shapeComponents.SchematicGroundShape,
+    'SchematicResistorShape': shapeComponents.SchematicResistorShape,
+    'SchematicVariableResistorShape': shapeComponents.SchematicVariableResistorShape,
+    'SchematicCapacitorShape': shapeComponents.SchematicCapacitorShape,
+    'SchematicInductorShape': shapeComponents.SchematicInductorShape,
+    'SchematicDiodeShape': shapeComponents.SchematicDiodeShape,
+    'SchematicLEDShape': shapeComponents.SchematicLEDShape,
+    'SchematicNPNShape': shapeComponents.SchematicNPNShape,
+    'SchematicSwitchShape': shapeComponents.SchematicSwitchShape,
+    'SchematicFuseShape': shapeComponents.SchematicFuseShape,
+    'SchematicConnectionShape': shapeComponents.SchematicConnectionShape,
+    'SchematicNoConnectionShape': shapeComponents.SchematicNoConnectionShape,
+    
+    // ─── Use Case Shapes ──────────────────────────────────────────────────
+    'UMLActorShape': shapeComponents.UMLActorShape,
+    'UMLUseCaseShape': shapeComponents.UMLUseCaseShape,
+    'UMLSystemBoundaryShape': shapeComponents.UMLSystemBoundaryShape,
+    'UMLAssociationShape': shapeComponents.UMLAssociationShape,
+    'UMLIncludeShape': shapeComponents.UMLIncludeShape,
+    'UMLExtendShape': shapeComponents.UMLExtendShape,
+    'UMLGeneralizationShape': shapeComponents.UMLGeneralizationShape,
+    'UMLNoteShape': shapeComponents.UMLNoteShape,
+    'UMLNoteConnectorShape': shapeComponents.UMLNoteConnectorShape,
+    'UMLIncludeLabelShape': shapeComponents.UMLIncludeLabelShape,
+    'UMLExtendLabelShape': shapeComponents.UMLExtendLabelShape,
+    
+    // ─── Activity Shapes ──────────────────────────────────────────────────
+    'UMLInitialNodeShape': shapeComponents.UMLInitialNodeShape,
+    'UMLActivityShape': shapeComponents.UMLActivityShape,
+    'UMLDecisionShape': shapeComponents.UMLDecisionShape,
+    'UMLMergeShape': shapeComponents.UMLMergeShape,
+    'UMLForkShape': shapeComponents.UMLForkShape,
+    'UMLControlFlowShape': shapeComponents.UMLControlFlowShape,
+    'UMLObjectFlowShape': shapeComponents.UMLObjectFlowShape,
+    'UMLSwimlaneShape': shapeComponents.UMLSwimlaneShape,
+    'UMLActivityFinalShape': shapeComponents.UMLActivityFinalShape,
+    'UMLFlowFinalShape': shapeComponents.UMLFlowFinalShape,
+    'UMLConstraintShape': shapeComponents.UMLConstraintShape,
+    
+    // ─── Sequence Shapes ──────────────────────────────────────────────────
+    'UMLLifelineShape': shapeComponents.UMLLifelineShape,
+    'UMLActivationShape': shapeComponents.UMLActivationShape,
+    'UMLDestroyShape': shapeComponents.UMLDestroyShape,
+    'UMLSyncMsgShape': shapeComponents.UMLSyncMsgShape,
+    'UMLAsyncMsgShape': shapeComponents.UMLAsyncMsgShape,
+    'UMLReturnMsgShape': shapeComponents.UMLReturnMsgShape,
+    'UMLAltShape': shapeComponents.UMLAltShape,
+    'UMLOptShape': shapeComponents.UMLOptShape,
+    'UMLLoopShape': shapeComponents.UMLLoopShape,
+    'UMLParShape': shapeComponents.UMLParShape,
+    'UMLBreakShape': shapeComponents.UMLBreakShape,
+    
+    // ─── Class Shapes ──────────────────────────────────────────────────────
+    'UMLClassShape': shapeComponents.UMLClassShape,
+    'UMLDirectedAssociationShape': shapeComponents.UMLDirectedAssociationShape,
+    'UMLAggregationShape': shapeComponents.UMLAggregationShape,
+    'UMLCompositionShape': shapeComponents.UMLCompositionShape,
+    'UMLDependencyShape': shapeComponents.UMLDependencyShape,
+    'UMLMultiplicity1Shape': shapeComponents.UMLMultiplicity1Shape,
+    'UMLMultiplicity01Shape': shapeComponents.UMLMultiplicity01Shape,
+    'UMLMultiplicityManyShape': shapeComponents.UMLMultiplicityManyShape,
+    'UMLMultiplicity1ManyShape': shapeComponents.UMLMultiplicity1ManyShape,
+    'UMLMultiplicityRangeShape': shapeComponents.UMLMultiplicityRangeShape,
+    'UMLMultiplicityNShape': shapeComponents.UMLMultiplicityNShape,
   };
 
   return componentMap[svgComponentName] || null;
@@ -241,7 +306,7 @@ interface ShapesPanelProps {
 export default function ShapesPanel({
   onSelectShape,
   isGraphReady,
-  activeDiagramType = 'Standard', // Changed default to 'Standard'
+  activeDiagramType = 'Standard',
   onDiagramTypeChange,
 }: ShapesPanelProps) {
   const { width: windowWidth } = useWindowDimensions();
@@ -370,7 +435,7 @@ export default function ShapesPanel({
   const iconWidth = isMobile ? 40 : 48;
   const iconHeight = isMobile ? 26 : 32;
 
-  // ⭐ Colors for active state - BLUE instead of green
+  // ⭐ Colors for active state - BLUE
   const activeColor = '#4c6fff';
   const activeBgColor = '#eef2ff';
 
@@ -433,7 +498,6 @@ export default function ShapesPanel({
               <TouchableOpacity
                 style={[
                   styles.categoryHeader,
-                  // ⭐ Blue background when active
                   isActive && styles.categoryHeaderActive,
                   isDesktop && styles.categoryHeaderDesktop,
                 ]}
@@ -441,9 +505,7 @@ export default function ShapesPanel({
                 activeOpacity={0.7}
               >
                 <View style={styles.categoryHeaderLeft}>
-                  {/* ⭐ Blue dot when active */}
                   <View style={[styles.categoryDot, isActive && styles.categoryDotActive]} />
-                  {/* ⭐ Blue text when active */}
                   <Text style={[styles.categoryTitle, isActive && styles.categoryTitleActive]}>
                     {category === 'Standard' ? '⭐ Standard' : category}
                   </Text>
@@ -646,7 +708,6 @@ const styles = StyleSheet.create({
   categoryHeaderDesktop: {
     paddingVertical: 10,
   },
-  // ⭐ Blue background when active (instead of green)
   categoryHeaderActive: {
     backgroundColor: '#eef2ff',
   },
@@ -662,7 +723,6 @@ const styles = StyleSheet.create({
     borderRadius: 3,
     backgroundColor: '#cbd5e1',
   },
-  // ⭐ Blue dot when active (instead of green)
   categoryDotActive: {
     backgroundColor: '#4c6fff',
   },
@@ -672,7 +732,6 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#1a1f36',
   },
-  // ⭐ Blue text when active (instead of green)
   categoryTitleActive: {
     color: '#4c6fff',
   },

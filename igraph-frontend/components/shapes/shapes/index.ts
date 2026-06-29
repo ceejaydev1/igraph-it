@@ -25,7 +25,6 @@ export {
   DashedRectShape,
   PredefinedShape,
   RhombusShape,
-  // New Flowchart Shapes
   PentagonShape,
   TrapezoidShape,
   DShape,
@@ -47,73 +46,136 @@ export {
   FDD_ExternalEntityShape,
 } from './FDDShapes';
 
-// ─── UML Shapes ────────────────────────────────────────────────────────────
+// ─── DFD Shapes ────────────────────────────────────────────────────────────
 export {
-  ActorShape as UMLActorShape,
-  InitialNodeShape,
-  FinalNodeShape,
-  ForkJoinShape,
-  LifelineShape,
-  ActivationShape,
-  ClassBoxShape,
-  InterfaceShape,
-  AbstractClassShape,
-} from './UMLShapes';
+  DFDProcessShape,
+  DFDDataFlowShape,
+  DFDDataStoreShape,
+  DFDDataStoreGSShape,
+  DFDExternalEntityShape,
+  DFDBidirectionalShape,
+  DFDBoundaryShape,
+  DFDNoteShape,
+  DFDOnPageShape,
+  DFDOffPageShape,
+} from './DFDShapes';
 
 // ─── ERD Shapes ────────────────────────────────────────────────────────────
 export {
-  EntityShape,
-  WeakEntityShape,
-  AttributeShape,
-  PrimaryKeyShape,
-  DerivedAttrShape,
-  CompositeAttrShape,
-  MultiAttrShape,
-  RelationshipShape,
-  IdentifyingRelShape,
-  CardinalityShape,
-  CrowOneShape,
-  CrowZeroOneShape,
-  CrowZeroManyShape,
-  CrowOneManyShape,
-  CrowManyShape,
-  TotalParticipationShape,
-  PartialParticipationShape,
+  ERDEntityShape,
+  ERDWeakEntityShape,
+  ERDRelationshipShape,
+  ERDIdentifyingRelShape,
+  ERDAttributeShape,
+  ERDMultivaluedAttrShape,
+  ERDDerivedAttrShape,
+  ERDCardinality11Shape,
+  ERDCardinality1NShape,
+  ERDCardinalityN1Shape,
+  ERDCardinalityMNShape,
   ERDConnectorShape,
 } from './ERDShapes';
 
+// ─── Fishbone Shapes ───────────────────────────────────────────────────────
+export {
+  FishboneSpineShape,
+  FishboneHeadShape,
+  FishboneProblemShape,
+  FishboneCauseTopShape,
+  FishboneCauseBottomShape,
+  FishboneSubCauseTopShape,
+  FishboneSubCauseBottomShape,
+  FishboneTertiaryShape,
+  FishboneArrowShape,
+  FishboneDashedArrowShape,
+  FishboneCategoryShape,
+  FishboneBubbleShape,
+  FishboneNoteShape,
+} from './FishboneShapes';
+
 // ─── Schematic Shapes ──────────────────────────────────────────────────────
 export {
-  ResistorShape,
-  CapacitorShape,
-  InductorShape,
-  VoltageShape,
-  GroundShape,
-  DiodeShape,
-  TransistorShape,
-  ICShape,
-  OpAmpShape,
-  SwitchShape,
-  FuseShape,
-  TransformerShape,
+  SchematicBatteryShape,
+  SchematicACShape,
+  SchematicGroundShape,
+  SchematicResistorShape,
+  SchematicVariableResistorShape,
+  SchematicCapacitorShape,
+  SchematicInductorShape,
+  SchematicDiodeShape,
+  SchematicLEDShape,
+  SchematicNPNShape,
+  SchematicSwitchShape,
+  SchematicFuseShape,
+  SchematicConnectionShape,
+  SchematicNoConnectionShape,
 } from './SchematicShapes';
 
-// ─── Arrow Shapes ──────────────────────────────────────────────────────────
+// ─── Use Case Shapes ──────────────────────────────────────────────────────
 export {
-  ArrowShape,
-  ArrowDownShape,
-  ArrowRightShape,
-  FilledArrowShape,
-  OpenArrowShape,
-  DashedArrowShape,
-  DashedArrowBackShape,
-  TriangleArrowShape,
-  LoopArrowShape,
-  CreateArrowShape,
-  DestructionShape,
-  AggregationShape,
-  CompositionShape,
-  MultiplicityShape,
-  ArrowDiagShape,
-  ArrowSmallShape,
-} from './ArrowShapes';
+  UMLActorShape,
+  UMLUseCaseShape,
+  UMLSystemBoundaryShape,
+  UMLAssociationShape,
+  UMLIncludeShape,
+  UMLExtendShape,
+  UMLGeneralizationShape,
+  UMLNoteShape,
+  UMLNoteConnectorShape,
+  UMLIncludeLabelShape,
+  UMLExtendLabelShape,
+} from './UseCaseShapes';
+
+// ─── Activity Shapes ──────────────────────────────────────────────────────
+export {
+  UMLInitialNodeShape,
+  UMLActivityShape,
+  UMLDecisionShape,
+  UMLMergeShape,
+  UMLForkShape,
+  UMLControlFlowShape,
+  UMLObjectFlowShape,
+  UMLSwimlaneShape,
+  UMLActivityFinalShape,
+  UMLFlowFinalShape,
+  UMLConstraintShape,
+} from './ActivityShapes';
+
+// ─── Sequence Shapes ──────────────────────────────────────────────────────
+export {
+  UMLLifelineShape,
+  UMLActivationShape,
+  UMLDestroyShape,
+  UMLSyncMsgShape,
+  UMLAsyncMsgShape,
+  UMLReturnMsgShape,
+  UMLAltShape,
+  UMLOptShape,
+  UMLLoopShape,
+  UMLParShape,
+  UMLBreakShape,
+} from './SequenceShapes';
+
+// ─── Class Shapes ──────────────────────────────────────────────────────────
+export {
+  UMLClassShape,
+  UMLDirectedAssociationShape,
+  UMLAggregationShape,
+  UMLCompositionShape,
+  UMLDependencyShape,
+  UMLMultiplicity1Shape,
+  UMLMultiplicity01Shape,
+  UMLMultiplicityManyShape,
+  UMLMultiplicity1ManyShape,
+  UMLMultiplicityRangeShape,
+  UMLMultiplicityNShape,
+} from './ClassShapes';
+
+// ─── Shared UML Shapes (re-exported from UseCaseShapes) ──────────────────
+// Note: These are already exported above from UseCaseShapes.
+// DO NOT re-export them again here to avoid duplicate identifiers.
+// The following shapes are already available from UseCaseShapes:
+// - UMLNoteShape
+// - UMLNoteConnectorShape
+// - UMLAssociationShape
+// - UMLGeneralizationShape

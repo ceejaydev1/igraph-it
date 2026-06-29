@@ -1,9 +1,8 @@
 // components/shapes/shapes/ERDShapes.tsx
-// Entity Relationship Diagram (ERD) shapes
-// Chen Notation and Crow's Foot variants
+// Entity Relationship Diagram shapes
 
 import React from 'react';
-import { Svg, Rect, Ellipse, Polygon, Circle, Line, G, Path, Text as SvgText } from 'react-native-svg';
+import { Svg, Rect, Ellipse, Polygon, Line, Path, Text as SvgText } from 'react-native-svg';
 
 interface ShapeProps {
   width: number;
@@ -13,9 +12,9 @@ interface ShapeProps {
   strokeWidth?: number;
 }
 
-// ─── Entity ──────────────────────────────────────────────────────────────────
+// ─── 1. Entity ─────────────────────────────────────────────────────────────
 
-export const EntityShape: React.FC<ShapeProps> = ({
+export const ERDEntityShape: React.FC<ShapeProps> = ({
   width,
   height,
   color = '#1a1f36',
@@ -23,22 +22,13 @@ export const EntityShape: React.FC<ShapeProps> = ({
   strokeWidth = 2,
 }) => (
   <Svg width={width} height={height} viewBox={`0 0 ${width} ${height}`}>
-    <Rect
-      x={4}
-      y={4}
-      width={width - 8}
-      height={height - 8}
-      fill={fillColor}
-      stroke={color}
-      strokeWidth={strokeWidth}
-      rx={2}
-    />
+    <Rect x={4} y={4} width={width - 8} height={height - 8} fill={fillColor} stroke={color} strokeWidth={strokeWidth} rx={2} />
   </Svg>
 );
 
-// ─── Weak Entity (Double Rectangle) ────────────────────────────────────────
+// ─── 2. Weak Entity ────────────────────────────────────────────────────────
 
-export const WeakEntityShape: React.FC<ShapeProps> = ({
+export const ERDWeakEntityShape: React.FC<ShapeProps> = ({
   width,
   height,
   color = '#1a1f36',
@@ -46,201 +36,14 @@ export const WeakEntityShape: React.FC<ShapeProps> = ({
   strokeWidth = 2,
 }) => (
   <Svg width={width} height={height} viewBox={`0 0 ${width} ${height}`}>
-    <Rect
-      x={4}
-      y={4}
-      width={width - 8}
-      height={height - 8}
-      fill={fillColor}
-      stroke={color}
-      strokeWidth={strokeWidth}
-      rx={2}
-    />
-    <Rect
-      x={8}
-      y={8}
-      width={width - 16}
-      height={height - 16}
-      fill="none"
-      stroke={color}
-      strokeWidth={1.5}
-      rx={2}
-    />
+    <Rect x={4} y={4} width={width - 8} height={height - 8} fill={fillColor} stroke={color} strokeWidth={strokeWidth} rx={2} />
+    <Rect x={8} y={8} width={width - 16} height={height - 16} fill="none" stroke={color} strokeWidth={1.5} rx={2} />
   </Svg>
 );
 
-// ─── Attribute ──────────────────────────────────────────────────────────────
+// ─── 3. Relationship (Diamond) ────────────────────────────────────────────
 
-export const AttributeShape: React.FC<ShapeProps> = ({
-  width,
-  height,
-  color = '#1a1f36',
-  fillColor = '#ffffff',
-  strokeWidth = 2,
-}) => {
-  const cx = width / 2;
-  const cy = height / 2;
-  return (
-    <Svg width={width} height={height} viewBox={`0 0 ${width} ${height}`}>
-      <Ellipse
-        cx={cx}
-        cy={cy}
-        rx={width / 2 - 4}
-        ry={height / 2 - 4}
-        fill={fillColor}
-        stroke={color}
-        strokeWidth={strokeWidth}
-      />
-    </Svg>
-  );
-};
-
-// ─── Primary Key Attribute (Underlined) ────────────────────────────────────
-
-export const PrimaryKeyShape: React.FC<ShapeProps> = ({
-  width,
-  height,
-  color = '#1a1f36',
-  fillColor = '#ffffff',
-  strokeWidth = 2,
-}) => {
-  const cx = width / 2;
-  const cy = height / 2;
-  return (
-    <Svg width={width} height={height} viewBox={`0 0 ${width} ${height}`}>
-      <Ellipse
-        cx={cx}
-        cy={cy}
-        rx={width / 2 - 4}
-        ry={height / 2 - 4}
-        fill={fillColor}
-        stroke={color}
-        strokeWidth={strokeWidth}
-      />
-      <Line
-        x1={width * 0.15}
-        y1={height - 6}
-        x2={width * 0.85}
-        y2={height - 6}
-        stroke={color}
-        strokeWidth={2}
-      />
-    </Svg>
-  );
-};
-
-// ─── Derived Attribute (Dashed Oval) ──────────────────────────────────────
-
-export const DerivedAttrShape: React.FC<ShapeProps> = ({
-  width,
-  height,
-  color = '#1a1f36',
-  fillColor = '#ffffff',
-  strokeWidth = 2,
-}) => {
-  const cx = width / 2;
-  const cy = height / 2;
-  return (
-    <Svg width={width} height={height} viewBox={`0 0 ${width} ${height}`}>
-      <Ellipse
-        cx={cx}
-        cy={cy}
-        rx={width / 2 - 4}
-        ry={height / 2 - 4}
-        fill={fillColor}
-        stroke={color}
-        strokeWidth={strokeWidth}
-        strokeDasharray="4,3"
-      />
-    </Svg>
-  );
-};
-
-// ─── Composite Attribute ────────────────────────────────────────────────────
-
-export const CompositeAttrShape: React.FC<ShapeProps> = ({
-  width,
-  height,
-  color = '#1a1f36',
-  fillColor = '#ffffff',
-  strokeWidth = 2,
-}) => {
-  const cx = width / 2;
-  const cy = height / 2;
-  const childRadius = Math.min(width, height) * 0.25;
-  return (
-    <Svg width={width} height={height} viewBox={`0 0 ${width} ${height}`}>
-      {/* Parent oval */}
-      <Ellipse
-        cx={cx}
-        cy={cy}
-        rx={width / 2 - 4}
-        ry={height / 2 - 4}
-        fill={fillColor}
-        stroke={color}
-        strokeWidth={strokeWidth}
-      />
-      {/* Child oval (composite part) */}
-      <Ellipse
-        cx={cx + childRadius * 1.2}
-        cy={cy + childRadius * 0.8}
-        rx={childRadius}
-        ry={childRadius * 0.7}
-        fill={fillColor}
-        stroke={color}
-        strokeWidth={strokeWidth}
-      />
-      {/* Connecting line */}
-      <Line
-        x1={cx + width * 0.2}
-        y1={cy + height * 0.1}
-        x2={cx + childRadius * 0.8}
-        y2={cy + childRadius * 0.5}
-        stroke={color}
-        strokeWidth={strokeWidth}
-      />
-    </Svg>
-  );
-};
-
-// ─── Multi-valued Attribute (Double Oval) ─────────────────────────────────
-
-export const MultiAttrShape: React.FC<ShapeProps> = ({
-  width,
-  height,
-  color = '#1a1f36',
-  fillColor = '#ffffff',
-  strokeWidth = 2,
-}) => {
-  const cx = width / 2;
-  const cy = height / 2;
-  return (
-    <Svg width={width} height={height} viewBox={`0 0 ${width} ${height}`}>
-      <Ellipse
-        cx={cx}
-        cy={cy}
-        rx={width / 2 - 4}
-        ry={height / 2 - 4}
-        fill={fillColor}
-        stroke={color}
-        strokeWidth={strokeWidth}
-      />
-      <Ellipse
-        cx={cx}
-        cy={cy}
-        rx={width / 2 - 8}
-        ry={height / 2 - 8}
-        fill="none"
-        stroke={color}
-        strokeWidth={1.5}
-      />
-    </Svg>
-  );
-};
-
-// ─── Relationship (Diamond) ────────────────────────────────────────────────
-
-export const RelationshipShape: React.FC<ShapeProps> = ({
+export const ERDRelationshipShape: React.FC<ShapeProps> = ({
   width,
   height,
   color = '#1a1f36',
@@ -261,9 +64,9 @@ export const RelationshipShape: React.FC<ShapeProps> = ({
   );
 };
 
-// ─── Identifying Relationship (Double Diamond) ────────────────────────────
+// ─── 4. Identifying Relationship (Double Diamond) ────────────────────────
 
-export const IdentifyingRelShape: React.FC<ShapeProps> = ({
+export const ERDIdentifyingRelShape: React.FC<ShapeProps> = ({
   width,
   height,
   color = '#1a1f36',
@@ -290,215 +93,71 @@ export const IdentifyingRelShape: React.FC<ShapeProps> = ({
   );
 };
 
-// ─── Cardinality (Chen Notation - Numbers) ────────────────────────────────
+// ─── 5. Attribute ──────────────────────────────────────────────────────────
 
-export const CardinalityShape: React.FC<ShapeProps> = ({
+export const ERDAttributeShape: React.FC<ShapeProps> = ({
   width,
   height,
   color = '#1a1f36',
+  fillColor = '#ffffff',
+  strokeWidth = 2,
 }) => {
   const cx = width / 2;
   const cy = height / 2;
   return (
     <Svg width={width} height={height} viewBox={`0 0 ${width} ${height}`}>
-      <Rect
-        x={4}
-        y={4}
-        width={width - 8}
-        height={height - 8}
-        fill="none"
-        stroke={color}
-        strokeWidth={1.5}
-        rx={2}
-      />
-      <SvgText
-        x={cx}
-        y={cy + 4}
-        fontSize={Math.min(width, height) * 0.5}
-        fill={color}
-        textAnchor="middle"
-        fontWeight="600"
-      >
-        1
-      </SvgText>
+      <Ellipse cx={cx} cy={cy} rx={width / 2 - 4} ry={height / 2 - 4} fill={fillColor} stroke={color} strokeWidth={strokeWidth} />
     </Svg>
   );
 };
 
-// ─── Crow's Foot - One ─────────────────────────────────────────────────────
+// ─── 6. Multivalued Attribute ─────────────────────────────────────────────
 
-export const CrowOneShape: React.FC<ShapeProps> = ({
+export const ERDMultivaluedAttrShape: React.FC<ShapeProps> = ({
   width,
   height,
   color = '#1a1f36',
+  fillColor = '#ffffff',
   strokeWidth = 2,
 }) => {
+  const cx = width / 2;
   const cy = height / 2;
   return (
     <Svg width={width} height={height} viewBox={`0 0 ${width} ${height}`}>
-      <Line x1={4} y1={cy} x2={width - 4} y2={cy} stroke={color} strokeWidth={strokeWidth} />
-      <Line x1={width - 4} y1={4} x2={width - 4} y2={height - 4} stroke={color} strokeWidth={strokeWidth} />
+      <Ellipse cx={cx} cy={cy} rx={width / 2 - 4} ry={height / 2 - 4} fill={fillColor} stroke={color} strokeWidth={strokeWidth} />
+      <Ellipse cx={cx} cy={cy} rx={width / 2 - 8} ry={height / 2 - 8} fill="none" stroke={color} strokeWidth={1.5} />
     </Svg>
   );
 };
 
-// ─── Crow's Foot - Zero or One ────────────────────────────────────────────
+// ─── 7. Derived Attribute ─────────────────────────────────────────────────
 
-export const CrowZeroOneShape: React.FC<ShapeProps> = ({
+export const ERDDerivedAttrShape: React.FC<ShapeProps> = ({
   width,
   height,
   color = '#1a1f36',
+  fillColor = '#ffffff',
   strokeWidth = 2,
 }) => {
+  const cx = width / 2;
   const cy = height / 2;
-  const r = Math.min(width, height) * 0.3;
   return (
     <Svg width={width} height={height} viewBox={`0 0 ${width} ${height}`}>
-      <Line x1={4} y1={cy} x2={width - r - 4} y2={cy} stroke={color} strokeWidth={strokeWidth} />
-      <Circle cx={width - r - 4} cy={cy} r={r} fill="none" stroke={color} strokeWidth={strokeWidth} />
-      <Line x1={width - r - 4} y1={cy - r} x2={width - r - 4} y2={cy + r} stroke={color} strokeWidth={strokeWidth} />
-    </Svg>
-  );
-};
-
-// ─── Crow's Foot - Zero or Many ───────────────────────────────────────────
-
-export const CrowZeroManyShape: React.FC<ShapeProps> = ({
-  width,
-  height,
-  color = '#1a1f36',
-  strokeWidth = 2,
-}) => {
-  const cy = height / 2;
-  const r = Math.min(width, height) * 0.2;
-  return (
-    <Svg width={width} height={height} viewBox={`0 0 ${width} ${height}`}>
-      <Line x1={4} y1={cy} x2={width - 8} y2={cy} stroke={color} strokeWidth={strokeWidth} />
-      <Circle cx={width - 8} cy={cy} r={r} fill="none" stroke={color} strokeWidth={strokeWidth} />
-      <Line x1={width - 8} y1={cy - r * 2} x2={width - 8} y2={cy + r * 2} stroke={color} strokeWidth={strokeWidth} />
-      <Line
-        x1={width - 8 - r * 0.5}
-        y1={cy - r * 1.5}
-        x2={width - 8 + r * 0.5}
-        y2={cy - r * 1.5}
+      <Ellipse
+        cx={cx}
+        cy={cy}
+        rx={width / 2 - 4}
+        ry={height / 2 - 4}
+        fill={fillColor}
         stroke={color}
         strokeWidth={strokeWidth}
-      />
-      <Line
-        x1={width - 8 - r * 0.5}
-        y1={cy + r * 1.5}
-        x2={width - 8 + r * 0.5}
-        y2={cy + r * 1.5}
-        stroke={color}
-        strokeWidth={strokeWidth}
+        strokeDasharray="6,4"
       />
     </Svg>
   );
 };
 
-// ─── Crow's Foot - One or Many ────────────────────────────────────────────
-
-export const CrowOneManyShape: React.FC<ShapeProps> = ({
-  width,
-  height,
-  color = '#1a1f36',
-  strokeWidth = 2,
-}) => {
-  const cy = height / 2;
-  const r = Math.min(width, height) * 0.2;
-  return (
-    <Svg width={width} height={height} viewBox={`0 0 ${width} ${height}`}>
-      <Line x1={4} y1={cy} x2={width - 8} y2={cy} stroke={color} strokeWidth={strokeWidth} />
-      <Line x1={width - 8} y1={cy - r * 1.5} x2={width - 8} y2={cy + r * 1.5} stroke={color} strokeWidth={strokeWidth} />
-      <Line
-        x1={width - 8 - r * 0.5}
-        y1={cy - r * 1.5}
-        x2={width - 8 + r * 0.5}
-        y2={cy - r * 1.5}
-        stroke={color}
-        strokeWidth={strokeWidth}
-      />
-      <Line
-        x1={width - 8 - r * 0.5}
-        y1={cy + r * 1.5}
-        x2={width - 8 + r * 0.5}
-        y2={cy + r * 1.5}
-        stroke={color}
-        strokeWidth={strokeWidth}
-      />
-    </Svg>
-  );
-};
-
-// ─── Crow's Foot - Exactly Many ───────────────────────────────────────────
-
-export const CrowManyShape: React.FC<ShapeProps> = ({
-  width,
-  height,
-  color = '#1a1f36',
-  strokeWidth = 2,
-}) => {
-  const cy = height / 2;
-  const r = Math.min(width, height) * 0.2;
-  return (
-    <Svg width={width} height={height} viewBox={`0 0 ${width} ${height}`}>
-      <Line x1={4} y1={cy} x2={width - 8} y2={cy} stroke={color} strokeWidth={strokeWidth} />
-      <Line
-        x1={width - 8 - r * 0.5}
-        y1={cy - r * 1.5}
-        x2={width - 8 + r * 0.5}
-        y2={cy - r * 1.5}
-        stroke={color}
-        strokeWidth={strokeWidth}
-      />
-      <Line
-        x1={width - 8 - r * 0.5}
-        y1={cy + r * 1.5}
-        x2={width - 8 + r * 0.5}
-        y2={cy + r * 1.5}
-        stroke={color}
-        strokeWidth={strokeWidth}
-      />
-    </Svg>
-  );
-};
-
-// ─── Total Participation (Double Line) ─────────────────────────────────────
-
-export const TotalParticipationShape: React.FC<ShapeProps> = ({
-  width,
-  height,
-  color = '#1a1f36',
-  strokeWidth = 2,
-}) => {
-  const cy = height / 2;
-  return (
-    <Svg width={width} height={height} viewBox={`0 0 ${width} ${height}`}>
-      <Line x1={4} y1={cy} x2={width - 4} y2={cy} stroke={color} strokeWidth={strokeWidth} />
-      <Line x1={6} y1={4} x2={6} y2={height - 4} stroke={color} strokeWidth={strokeWidth} />
-      <Line x1={10} y1={4} x2={10} y2={height - 4} stroke={color} strokeWidth={strokeWidth} />
-    </Svg>
-  );
-};
-
-// ─── Partial Participation (Single Line) ──────────────────────────────────
-
-export const PartialParticipationShape: React.FC<ShapeProps> = ({
-  width,
-  height,
-  color = '#1a1f36',
-  strokeWidth = 2,
-}) => {
-  const cy = height / 2;
-  return (
-    <Svg width={width} height={height} viewBox={`0 0 ${width} ${height}`}>
-      <Line x1={4} y1={cy} x2={width - 4} y2={cy} stroke={color} strokeWidth={strokeWidth} />
-      <Line x1={6} y1={4} x2={6} y2={height - 4} stroke={color} strokeWidth={strokeWidth} />
-    </Svg>
-  );
-};
-
-// ─── ERD Connector Line ────────────────────────────────────────────────────
+// ─── 8. ERD Connector ─────────────────────────────────────────────────────
 
 export const ERDConnectorShape: React.FC<ShapeProps> = ({
   width,
@@ -509,6 +168,78 @@ export const ERDConnectorShape: React.FC<ShapeProps> = ({
   const cy = height / 2;
   return (
     <Svg width={width} height={height} viewBox={`0 0 ${width} ${height}`}>
+      <Line x1={4} y1={cy} x2={width - 4} y2={cy} stroke={color} strokeWidth={strokeWidth} />
+    </Svg>
+  );
+};
+
+// ─── 9. Cardinality 1:1 ───────────────────────────────────────────────────
+
+export const ERDCardinality11Shape: React.FC<ShapeProps> = ({
+  width,
+  height,
+  color = '#1a1f36',
+  strokeWidth = 2,
+}) => {
+  const cy = height * 0.65;
+  return (
+    <Svg width={width} height={height} viewBox={`0 0 ${width} ${height}`}>
+      <SvgText x={width * 0.15} y={height * 0.5} fontSize={14} fill={color} textAnchor="middle" fontWeight="600">1</SvgText>
+      <SvgText x={width * 0.85} y={height * 0.5} fontSize={14} fill={color} textAnchor="middle" fontWeight="600">1</SvgText>
+      <Line x1={4} y1={cy} x2={width - 4} y2={cy} stroke={color} strokeWidth={strokeWidth} />
+    </Svg>
+  );
+};
+
+// ─── 10. Cardinality 1:N ──────────────────────────────────────────────────
+
+export const ERDCardinality1NShape: React.FC<ShapeProps> = ({
+  width,
+  height,
+  color = '#1a1f36',
+  strokeWidth = 2,
+}) => {
+  const cy = height * 0.65;
+  return (
+    <Svg width={width} height={height} viewBox={`0 0 ${width} ${height}`}>
+      <SvgText x={width * 0.15} y={height * 0.5} fontSize={14} fill={color} textAnchor="middle" fontWeight="600">1</SvgText>
+      <SvgText x={width * 0.85} y={height * 0.5} fontSize={14} fill={color} textAnchor="middle" fontWeight="600">N</SvgText>
+      <Line x1={4} y1={cy} x2={width - 4} y2={cy} stroke={color} strokeWidth={strokeWidth} />
+    </Svg>
+  );
+};
+
+// ─── 11. Cardinality N:1 ──────────────────────────────────────────────────
+
+export const ERDCardinalityN1Shape: React.FC<ShapeProps> = ({
+  width,
+  height,
+  color = '#1a1f36',
+  strokeWidth = 2,
+}) => {
+  const cy = height * 0.65;
+  return (
+    <Svg width={width} height={height} viewBox={`0 0 ${width} ${height}`}>
+      <SvgText x={width * 0.15} y={height * 0.5} fontSize={14} fill={color} textAnchor="middle" fontWeight="600">N</SvgText>
+      <SvgText x={width * 0.85} y={height * 0.5} fontSize={14} fill={color} textAnchor="middle" fontWeight="600">1</SvgText>
+      <Line x1={4} y1={cy} x2={width - 4} y2={cy} stroke={color} strokeWidth={strokeWidth} />
+    </Svg>
+  );
+};
+
+// ─── 12. Cardinality M:N ──────────────────────────────────────────────────
+
+export const ERDCardinalityMNShape: React.FC<ShapeProps> = ({
+  width,
+  height,
+  color = '#1a1f36',
+  strokeWidth = 2,
+}) => {
+  const cy = height * 0.65;
+  return (
+    <Svg width={width} height={height} viewBox={`0 0 ${width} ${height}`}>
+      <SvgText x={width * 0.15} y={height * 0.5} fontSize={14} fill={color} textAnchor="middle" fontWeight="600">M</SvgText>
+      <SvgText x={width * 0.85} y={height * 0.5} fontSize={14} fill={color} textAnchor="middle" fontWeight="600">N</SvgText>
       <Line x1={4} y1={cy} x2={width - 4} y2={cy} stroke={color} strokeWidth={strokeWidth} />
     </Svg>
   );
