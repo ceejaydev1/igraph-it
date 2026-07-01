@@ -1,4 +1,4 @@
-// components/DiagramCanvas.tsx — FULL UPDATED WITH FDD SHAPES
+// components/DiagramCanvas.tsx — FULL UPDATED WITH FIXED DROP HANDLER
 
 import React, { useEffect, useRef, useCallback, useState } from 'react';
 import { View, StyleSheet, Platform, Text } from 'react-native';
@@ -23,7 +23,7 @@ import type {
 } from '@maxgraph/core';
 
 // ── Import custom shape registration ────────────────────────────────────
-import { registerAllCustomShapes, IGRAPH_STYLE_MAP, IGRAPH_ID_STYLE_MAP } from './maxgraph-custom-shapes';
+import { registerAllCustomShapes, IGRAPH_ID_STYLE_MAP } from './maxgraph-custom-shapes';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -41,7 +41,7 @@ const DROP_H = 60;
 // ════════════════════════════════════════════════════════════════════════════
 if (Platform.OS === 'web') {
   registerAllCustomShapes();
-  console.log('✅ FDD Interface shape registered with maxGraph');
+  console.log('✅ All custom shapes registered with maxGraph');
 }
 
 // ─── Grid painter ─────────────────────────────────────────────────────────────
@@ -247,11 +247,369 @@ const WebCanvas = ({ onReady, onChange, onSelectionChange, umlType = 'flowchart'
         strokeWidth: 2,
       },
       
+      // ─── DFD Shapes ──────────────────────────────────────────────────────
+      'igraph.dfdProcess': { 
+        ...base, 
+        shape: 'igraph.dfdProcess',
+        fillColor: '#ffffff',
+        strokeColor: '#1a1f36',
+        strokeWidth: 2,
+      },
+      'igraph.dfdDataFlow': { 
+        ...base, 
+        shape: 'igraph.dfdDataFlow',
+        fillColor: 'transparent',
+        strokeColor: '#1a1f36',
+        strokeWidth: 2,
+      },
+      'igraph.dfdDataStore': { 
+        ...base, 
+        shape: 'igraph.dfdDataStore',
+        fillColor: 'transparent',
+        strokeColor: '#1a1f36',
+        strokeWidth: 2,
+      },
+      'igraph.dfdDataStoreGS': { 
+        ...base, 
+        shape: 'igraph.dfdDataStoreGS',
+        fillColor: '#ffffff',
+        strokeColor: '#1a1f36',
+        strokeWidth: 2,
+      },
+      'igraph.dfdExternalEntity': { 
+        ...base, 
+        shape: 'igraph.dfdExternalEntity',
+        fillColor: '#ffffff',
+        strokeColor: '#1a1f36',
+        strokeWidth: 2,
+      },
+      'igraph.dfdBidirectional': { 
+        ...base, 
+        shape: 'igraph.dfdBidirectional',
+        fillColor: 'transparent',
+        strokeColor: '#1a1f36',
+        strokeWidth: 2,
+      },
+      'igraph.dfdBoundary': { 
+        ...base, 
+        shape: 'igraph.dfdBoundary',
+        fillColor: 'transparent',
+        strokeColor: '#1a1f36',
+        strokeWidth: 2,
+      },
+      'igraph.dfdNote': { 
+        ...base, 
+        shape: 'igraph.dfdNote',
+        fillColor: '#fef9c3',
+        strokeColor: '#1a1f36',
+        strokeWidth: 2,
+      },
+      'igraph.dfdOnPage': { 
+        ...base, 
+        shape: 'igraph.dfdOnPage',
+        fillColor: '#ffffff',
+        strokeColor: '#1a1f36',
+        strokeWidth: 2,
+      },
+      'igraph.dfdOffPage': { 
+        ...base, 
+        shape: 'igraph.dfdOffPage',
+        fillColor: '#ffffff',
+        strokeColor: '#1a1f36',
+        strokeWidth: 2,
+      },
+
+      // ─── Fishbone Shapes ──────────────────────────────────────────────
+      'igraph.fishboneSpine': { 
+        ...base, 
+        shape: 'igraph.fishboneSpine',
+        fillColor: 'transparent',
+        strokeColor: '#1a1f36',
+        strokeWidth: 2,
+      },
+      'igraph.fishboneHead': { 
+        ...base, 
+        shape: 'igraph.fishboneHead',
+        fillColor: '#ffffff',
+        strokeColor: '#1a1f36',
+        strokeWidth: 2,
+      },
+      'igraph.fishboneProblem': { 
+        ...base, 
+        shape: 'igraph.fishboneProblem',
+        fillColor: 'transparent',
+        strokeColor: '#1a1f36',
+        strokeWidth: 2,
+      },
+      'igraph.fishboneCauseTop': { 
+        ...base, 
+        shape: 'igraph.fishboneCauseTop',
+        fillColor: 'transparent',
+        strokeColor: '#1a1f36',
+        strokeWidth: 2,
+      },
+      'igraph.fishboneCauseBottom': { 
+        ...base, 
+        shape: 'igraph.fishboneCauseBottom',
+        fillColor: 'transparent',
+        strokeColor: '#1a1f36',
+        strokeWidth: 2,
+      },
+      'igraph.fishboneSubCauseTop': { 
+        ...base, 
+        shape: 'igraph.fishboneSubCauseTop',
+        fillColor: 'transparent',
+        strokeColor: '#1a1f36',
+        strokeWidth: 2,
+      },
+      'igraph.fishboneSubCauseBottom': { 
+        ...base, 
+        shape: 'igraph.fishboneSubCauseBottom',
+        fillColor: 'transparent',
+        strokeColor: '#1a1f36',
+        strokeWidth: 2,
+      },
+      'igraph.fishboneTertiary': { 
+        ...base, 
+        shape: 'igraph.fishboneTertiary',
+        fillColor: 'transparent',
+        strokeColor: '#1a1f36',
+        strokeWidth: 1.5,
+      },
+      'igraph.fishboneArrow': { 
+        ...base, 
+        shape: 'igraph.fishboneArrow',
+        fillColor: '#1a1f36',
+        strokeColor: '#1a1f36',
+        strokeWidth: 2,
+      },
+      'igraph.fishboneDashedArrow': { 
+        ...base, 
+        shape: 'igraph.fishboneDashedArrow',
+        fillColor: '#1a1f36',
+        strokeColor: '#1a1f36',
+        strokeWidth: 2,
+      },
+      'igraph.fishboneCategory': { 
+        ...base, 
+        shape: 'igraph.fishboneCategory',
+        fillColor: '#ffffff',
+        strokeColor: '#1a1f36',
+        strokeWidth: 2,
+      },
+      'igraph.fishboneBubble': { 
+        ...base, 
+        shape: 'igraph.fishboneBubble',
+        fillColor: '#ffffff',
+        strokeColor: '#1a1f36',
+        strokeWidth: 2,
+      },
+      'igraph.fishboneNote': { 
+        ...base, 
+        shape: 'igraph.fishboneNote',
+        fillColor: '#fef9c3',
+        strokeColor: '#1a1f36',
+        strokeWidth: 2,
+      },
+
+      // ─── Schematic Shapes ──────────────────────────────────────────────
+      'igraph.schematicBattery': { 
+        ...base, 
+        shape: 'igraph.schematicBattery',
+        fillColor: 'transparent',
+        strokeColor: '#1a1f36',
+        strokeWidth: 2,
+      },
+      'igraph.schematicAC': { 
+        ...base, 
+        shape: 'igraph.schematicAC',
+        fillColor: 'transparent',
+        strokeColor: '#1a1f36',
+        strokeWidth: 2,
+      },
+      'igraph.schematicGround': { 
+        ...base, 
+        shape: 'igraph.schematicGround',
+        fillColor: 'transparent',
+        strokeColor: '#1a1f36',
+        strokeWidth: 2,
+      },
+      'igraph.schematicResistor': { 
+        ...base, 
+        shape: 'igraph.schematicResistor',
+        fillColor: 'transparent',
+        strokeColor: '#1a1f36',
+        strokeWidth: 2,
+      },
+      'igraph.schematicVariableResistor': { 
+        ...base, 
+        shape: 'igraph.schematicVariableResistor',
+        fillColor: 'transparent',
+        strokeColor: '#1a1f36',
+        strokeWidth: 2,
+      },
+      'igraph.schematicCapacitor': { 
+        ...base, 
+        shape: 'igraph.schematicCapacitor',
+        fillColor: 'transparent',
+        strokeColor: '#1a1f36',
+        strokeWidth: 2,
+      },
+      'igraph.schematicInductor': { 
+        ...base, 
+        shape: 'igraph.schematicInductor',
+        fillColor: 'transparent',
+        strokeColor: '#1a1f36',
+        strokeWidth: 2,
+      },
+      'igraph.schematicDiode': { 
+        ...base, 
+        shape: 'igraph.schematicDiode',
+        fillColor: '#ffffff',
+        strokeColor: '#1a1f36',
+        strokeWidth: 2,
+      },
+      'igraph.schematicLED': { 
+        ...base, 
+        shape: 'igraph.schematicLED',
+        fillColor: '#ffffff',
+        strokeColor: '#1a1f36',
+        strokeWidth: 2,
+      },
+      'igraph.schematicNPN': { 
+        ...base, 
+        shape: 'igraph.schematicNPN',
+        fillColor: 'transparent',
+        strokeColor: '#1a1f36',
+        strokeWidth: 2,
+      },
+      'igraph.schematicSwitch': { 
+        ...base, 
+        shape: 'igraph.schematicSwitch',
+        fillColor: 'transparent',
+        strokeColor: '#1a1f36',
+        strokeWidth: 2,
+      },
+      'igraph.schematicFuse': { 
+        ...base, 
+        shape: 'igraph.schematicFuse',
+        fillColor: '#ffffff',
+        strokeColor: '#1a1f36',
+        strokeWidth: 2,
+      },
+      'igraph.schematicConnection': { 
+        ...base, 
+        shape: 'igraph.schematicConnection',
+        fillColor: '#1a1f36',
+        strokeColor: '#1a1f36',
+        strokeWidth: 2,
+      },
+      'igraph.schematicNoConnection': { 
+        ...base, 
+        shape: 'igraph.schematicNoConnection',
+        fillColor: 'transparent',
+        strokeColor: '#1a1f36',
+        strokeWidth: 2,
+      },
+
+      // ─── Use Case Shapes ──────────────────────────────────────────────
+      'igraph.umlInclude': { 
+        ...base, 
+        shape: 'igraph.umlInclude',
+        fillColor: '#1a1f36',
+        strokeColor: '#1a1f36',
+        strokeWidth: 2,
+      },
+      'igraph.umlExtend': { 
+        ...base, 
+        shape: 'igraph.umlExtend',
+        fillColor: '#1a1f36',
+        strokeColor: '#1a1f36',
+        strokeWidth: 2,
+      },
+
+      // ─── Activity Shapes ──────────────────────────────────────────────
+      'igraph.umlInitialNode': { 
+        ...base, 
+        shape: 'igraph.umlInitialNode',
+        fillColor: '#1a1f36',
+        strokeColor: '#1a1f36',
+        strokeWidth: 2,
+      },
+      'igraph.umlMerge': { 
+        ...base, 
+        shape: 'igraph.umlMerge',
+        fillColor: '#1a1f36',
+        strokeColor: '#1a1f36',
+        strokeWidth: 2,
+      },
+      'igraph.umlFork': { 
+        ...base, 
+        shape: 'igraph.umlFork',
+        fillColor: '#1a1f36',
+        strokeColor: '#1a1f36',
+        strokeWidth: 2,
+      },
+      'igraph.umlControlFlow': { 
+        ...base, 
+        shape: 'igraph.umlControlFlow',
+        fillColor: '#1a1f36',
+        strokeColor: '#1a1f36',
+        strokeWidth: 2,
+      },
+      'igraph.umlObjectFlow': { 
+        ...base, 
+        shape: 'igraph.umlObjectFlow',
+        fillColor: '#1a1f36',
+        strokeColor: '#1a1f36',
+        strokeWidth: 2,
+      },
+      'igraph.umlActivityFinal': { 
+        ...base, 
+        shape: 'igraph.umlActivityFinal',
+        fillColor: '#1a1f36',
+        strokeColor: '#1a1f36',
+        strokeWidth: 2,
+      },
+      'igraph.umlFlowFinal': { 
+        ...base, 
+        shape: 'igraph.umlFlowFinal',
+        fillColor: 'transparent',
+        strokeColor: '#1a1f36',
+        strokeWidth: 2,
+      },
+
+      // ─── Sequence Shapes ──────────────────────────────────────────────
+      'igraph.umlSyncMsg': { 
+        ...base, 
+        shape: 'igraph.umlSyncMsg',
+        fillColor: '#1a1f36',
+        strokeColor: '#1a1f36',
+        strokeWidth: 2,
+      },
+      'igraph.umlAsyncMsg': { 
+        ...base, 
+        shape: 'igraph.umlAsyncMsg',
+        fillColor: 'transparent',
+        strokeColor: '#1a1f36',
+        strokeWidth: 2,
+      },
+
+      // ─── Class Shapes ──────────────────────────────────────────────────
+      'igraph.umlComposition': { 
+        ...base, 
+        shape: 'igraph.umlComposition',
+        fillColor: '#1a1f36',
+        strokeColor: '#1a1f36',
+        strokeWidth: 2,
+      },
+
       // ─── Standard Shapes ─────────────────────────────────────────────────
       'igraph.rectangle':        { ...base, shape: 'igraph.rectangle' },
       'igraph.roundedRectangle': { ...base, shape: 'igraph.roundedRectangle' },
       'igraph.ellipse':          { ...base, shape: 'igraph.ellipse' },
-      'igraph.rhombus':          { ...base, shape: 'igraph.rhombus' },
+      'igraph.diamond':          { ...base, shape: 'igraph.diamond' },
+      'igraph.triangle':         { ...base, shape: 'igraph.triangle' },
       'igraph.parallelogram':    { ...base, shape: 'igraph.parallelogram' },
       'igraph.cylinder':         { ...base, shape: 'igraph.cylinder' },
       'igraph.note':             { ...base, shape: 'igraph.note', fillColor: '#fef9c3' },
@@ -262,7 +620,6 @@ const WebCanvas = ({ onReady, onChange, onSelectionChange, umlType = 'flowchart'
       'igraph.line':             { ...base, shape: 'igraph.line' },
       'igraph.text':             { ...base, shape: 'igraph.text' },
       'igraph.dashedRect':       { ...base, shape: 'igraph.dashedRect' },
-      'igraph.triangle':         { ...base, shape: 'igraph.triangle' },
       'igraph.predefined':       { ...base, shape: 'igraph.predefined' },
       'igraph.actor':         { ...base, shape: 'igraph.actor' },
       'igraph.initialNode':   { ...base, shape: 'igraph.initialNode', fillColor: '#1a1f36', strokeColor: '#1a1f36' },
@@ -319,16 +676,67 @@ const WebCanvas = ({ onReady, onChange, onSelectionChange, umlType = 'flowchart'
       'igraph.switch':      { ...base, shape: 'igraph.switch' },
       'igraph.fuse':        { ...base, shape: 'igraph.fuse' },
       'igraph.transformer': { ...base, shape: 'igraph.transformer' },
+      'igraph.pentagon':    { ...base, shape: 'igraph.pentagon' },
+      'igraph.trapezoid':   { ...base, shape: 'igraph.trapezoid' },
+      'igraph.dshape':      { ...base, shape: 'igraph.dshape' },
+      'igraph.hexagon':     { ...base, shape: 'igraph.hexagon' },
+      'igraph.display':     { ...base, shape: 'igraph.display' },
+      'igraph.annotation':  { ...base, shape: 'igraph.annotation' },
+      'igraph.ucActor':         { ...base, shape: 'igraph.ucActor' },
+      'igraph.umlUseCase':      { ...base, shape: 'igraph.umlUseCase' },
+      'igraph.umlSystemBoundary': { ...base, shape: 'igraph.umlSystemBoundary' },
+      'igraph.umlAssociation':  { ...base, shape: 'igraph.umlAssociation' },
+      'igraph.umlGeneralization': { ...base, shape: 'igraph.umlGeneralization' },
+      'igraph.umlNote':         { ...base, shape: 'igraph.umlNote', fillColor: '#fef9c3' },
+      'igraph.umlNoteConnector': { ...base, shape: 'igraph.umlNoteConnector' },
+      'igraph.umlIncludeLabel': { ...base, shape: 'igraph.umlIncludeLabel' },
+      'igraph.umlExtendLabel':  { ...base, shape: 'igraph.umlExtendLabel' },
+      'igraph.umlActivity':     { ...base, shape: 'igraph.umlActivity' },
+      'igraph.umlDecision':     { ...base, shape: 'igraph.umlDecision' },
+      'igraph.umlSwimlane':     { ...base, shape: 'igraph.umlSwimlane' },
+      'igraph.umlConstraint':   { ...base, shape: 'igraph.umlConstraint' },
+      'igraph.umlLifeline':     { ...base, shape: 'igraph.umlLifeline' },
+      'igraph.umlActivation':   { ...base, shape: 'igraph.umlActivation' },
+      'igraph.umlDestroy':      { ...base, shape: 'igraph.umlDestroy' },
+      'igraph.umlReturnMsg':    { ...base, shape: 'igraph.umlReturnMsg' },
+      'igraph.umlAlt':          { ...base, shape: 'igraph.umlAlt' },
+      'igraph.umlOpt':          { ...base, shape: 'igraph.umlOpt' },
+      'igraph.umlLoop':         { ...base, shape: 'igraph.umlLoop' },
+      'igraph.umlPar':          { ...base, shape: 'igraph.umlPar' },
+      'igraph.umlBreak':        { ...base, shape: 'igraph.umlBreak' },
+      'igraph.umlClass':        { ...base, shape: 'igraph.umlClass' },
+      'igraph.umlDirectedAssociation': { ...base, shape: 'igraph.umlDirectedAssociation' },
+      'igraph.umlAggregation':  { ...base, shape: 'igraph.umlAggregation' },
+      'igraph.umlDependency':   { ...base, shape: 'igraph.umlDependency' },
+      'igraph.umlMultiplicity1': { ...base, shape: 'igraph.umlMultiplicity1' },
+      'igraph.umlMultiplicity01': { ...base, shape: 'igraph.umlMultiplicity01' },
+      'igraph.umlMultiplicityMany': { ...base, shape: 'igraph.umlMultiplicityMany' },
+      'igraph.umlMultiplicity1Many': { ...base, shape: 'igraph.umlMultiplicity1Many' },
+      'igraph.umlMultiplicityRange': { ...base, shape: 'igraph.umlMultiplicityRange' },
+      'igraph.umlMultiplicityN': { ...base, shape: 'igraph.umlMultiplicityN' },
+      'igraph.erdEntity':       { ...base, shape: 'igraph.erdEntity' },
+      'igraph.erdWeakEntity':   { ...base, shape: 'igraph.erdWeakEntity' },
+      'igraph.erdRelationship': { ...base, shape: 'igraph.erdRelationship' },
+      'igraph.erdIdentifyingRelationship': { ...base, shape: 'igraph.erdIdentifyingRelationship' },
+      'igraph.erdAttribute':    { ...base, shape: 'igraph.erdAttribute' },
+      'igraph.erdMultivaluedAttribute': { ...base, shape: 'igraph.erdMultivaluedAttribute' },
+      'igraph.erdDerivedAttribute': { ...base, shape: 'igraph.erdDerivedAttribute' },
+      'igraph.erdCardinality11': { ...base, shape: 'igraph.erdCardinality11' },
+      'igraph.erdCardinality1N': { ...base, shape: 'igraph.erdCardinality1N' },
+      'igraph.erdCardinalityN1': { ...base, shape: 'igraph.erdCardinalityN1' },
+      'igraph.erdCardinalityMN': { ...base, shape: 'igraph.erdCardinalityMN' },
     };
 
     Object.entries(styles).forEach(([key, style]) => {
       stylesheet.putCellStyle(key, style);
     });
 
-    console.log('✅ Registered igraph stylesheet entries with FDD shapes');
+    console.log('✅ Registered igraph stylesheet entries');
   }, []);
 
-  // ─── Drop handler ──────────────────────────────────────────────────────────
+  // ═════════════════════════════════════════════════════════════════════════
+  // ⭐ FIXED DROP HANDLER - Preserves fill colors from style definitions
+  // ═════════════════════════════════════════════════════════════════════════
 
   const handleDrop = useCallback((e: DragEvent) => {
     e.preventDefault();
@@ -345,15 +753,14 @@ const WebCanvas = ({ onReady, onChange, onSelectionChange, umlType = 'flowchart'
     const cy = Math.round((y - DROP_H / 2) / GRID_SIZE) * GRID_SIZE;
 
     try {
-      // ⭐ FIX: Use the ID style map to get the correct FDD style
-      const styleKey = IGRAPH_ID_STYLE_MAP[shapeId]
-        ?? IGRAPH_STYLE_MAP[shapeId]
-        ?? 'igraph.rectangle';
+      // ⭐ Get the style key from the ID map
+      const styleKey = IGRAPH_ID_STYLE_MAP[shapeId] ?? 'igraph.rectangle';
 
-      // Get the style from the stylesheet to preserve FDD colors
+      // ⭐ Get the style from the stylesheet to preserve ALL style properties
       const stylesheet = graph.getStylesheet();
       const existingStyle = stylesheet.getCellStyle(styleKey);
       
+      // ⭐ Build the style object preserving fillColor, strokeColor, etc.
       const styleObject: CellStateStyle = {
         shape: styleKey,
         fillColor: existingStyle?.fillColor || '#ffffff',
