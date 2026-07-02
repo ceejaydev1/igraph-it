@@ -1,4 +1,4 @@
-// app/(tabs)/create.tsx — COMPLETE with page management, working zoom, and draw.io-style icons
+// app/(tabs)/create.tsx — with focus fix when closing shapes panel
 
 import React, { useState, useRef, useCallback, useEffect } from 'react';
 import {
@@ -228,6 +228,23 @@ export default function CreateScreen() {
     }
   };
 
+  // ─── ⭐ Focus helper ─────────────────────────────────────────────────────────
+
+  const focusGraph = useCallback(() => {
+    if (graphInstance && graphInstance.container) {
+      try {
+        // Focus the container element directly
+        const container = graphInstance.container;
+        if (container && typeof container.focus === 'function') {
+          container.focus();
+          console.log('🎯 Graph container focused');
+        }
+      } catch (e) {
+        console.warn('Could not focus graph:', e);
+      }
+    }
+  }, [graphInstance]);
+
   // ─── Page management functions ─────────────────────────────────────────────
 
   const getPageXml = (pageId: string): string => {
@@ -257,6 +274,9 @@ export default function CreateScreen() {
         console.error('Error loading page:', e);
       }
     }
+    
+    // ⭐ Focus the graph after switching pages
+    setTimeout(focusGraph, 100);
   };
 
   const addNewPage = () => {
@@ -287,6 +307,9 @@ export default function CreateScreen() {
     }
     setNewPageName('');
     setShowPageModal(false);
+    
+    // ⭐ Focus the graph after adding a new page
+    setTimeout(focusGraph, 100);
   };
 
   const renamePage = (pageId: string, newName: string) => {
@@ -326,6 +349,9 @@ export default function CreateScreen() {
               const xml = pageXmlCache.current.get(newActiveId) || '';
               setDiagramXml(xml);
             }
+            
+            // ⭐ Focus the graph after deleting a page
+            setTimeout(focusGraph, 100);
           }
         }
       ]
@@ -345,6 +371,9 @@ export default function CreateScreen() {
     setPages([...pages, newPage]);
     setActivePageId(newPage.id);
     setDiagramXml(newPage.xml);
+    
+    // ⭐ Focus the graph after duplicating a page
+    setTimeout(focusGraph, 100);
   };
 
   // ─── Zoom functions ────────────────────────────────────────────────────────
@@ -423,6 +452,9 @@ export default function CreateScreen() {
 
       graph.setSelectionCell(cell);
       console.log(`✅ Added "${shapeId}" as "${styleKey}" at (${x}, ${y})`);
+      
+      // ⭐ Focus the graph after adding a shape
+      setTimeout(focusGraph, 50);
     } catch (e) {
       console.error('Error adding shape:', e);
     }
@@ -451,6 +483,8 @@ export default function CreateScreen() {
         if (activePageId) {
           pageXmlCache.current.set(activePageId, xml);
         }
+        // ⭐ Focus the graph after undo
+        setTimeout(focusGraph, 50);
       }
     } catch (e) { console.error('Undo error:', e); }
   };
@@ -466,6 +500,8 @@ export default function CreateScreen() {
         if (activePageId) {
           pageXmlCache.current.set(activePageId, xml);
         }
+        // ⭐ Focus the graph after redo
+        setTimeout(focusGraph, 50);
       }
     } catch (e) { console.error('Redo error:', e); }
   };
@@ -473,7 +509,24 @@ export default function CreateScreen() {
   const toggleShapesPanel = () => {
     setShowShapesPanel(prev => !prev);
     if (activeTool !== 'shapes') setActiveTool('shapes');
+    
+    // ⭐ CRITICAL FIX: When closing the panel, focus the graph
+    // When opening the panel, we might not want to steal focus
+    if (showShapesPanel) {
+      // We're about to close it - refocus the graph
+      setTimeout(focusGraph, 100);
+    }
   };
+
+  // ─── ⭐ Effect to refocus graph when panel state changes ──────────────────
+
+  useEffect(() => {
+    // When the shapes panel is closed (showShapesPanel becomes false),
+    // refocus the graph
+    if (!showShapesPanel && isGraphReady) {
+      setTimeout(focusGraph, 150);
+    }
+  }, [showShapesPanel, isGraphReady, focusGraph]);
 
   // ─── Format Bar Actions ────────────────────────────────────────────────────
 
@@ -856,7 +909,11 @@ export default function CreateScreen() {
           <View style={styles.iconRail}>
             <TouchableOpacity
               style={[styles.railBtn, isPanelVisible && styles.railBtnActive]}
-              onPress={() => setIsPanelVisible(prev => !prev)}
+              onPress={() => {
+                setIsPanelVisible(prev => !prev);
+                // ⭐ When toggling panel visibility, refocus the graph
+                setTimeout(focusGraph, 100);
+              }}
               activeOpacity={0.7}
             >
               <ICONS.Shapes color={isPanelVisible ? '#ffffff' : '#4a5568'} />
@@ -969,6 +1026,8 @@ export default function CreateScreen() {
                   onPress={() => {
                     setShowPageModal(false);
                     setNewPageName('');
+                    // ⭐ Refocus graph after modal closes
+                    setTimeout(focusGraph, 100);
                   }}
                 >
                   <Text style={styles.modalCancelText}>Cancel</Text>

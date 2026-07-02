@@ -1,4 +1,4 @@
-// components/DiagramCanvas.tsx — FULL UPDATED WITH FIXED DROP HANDLER
+// components/DiagramCanvas.tsx — FULL UPDATED CODE with draw.io-style selection
 
 import React, { useEffect, useRef, useCallback, useState } from 'react';
 import { View, StyleSheet, Platform, Text } from 'react-native';
@@ -11,6 +11,10 @@ import {
   KeyHandler,
   UndoManager,
   ModelXmlSerializer,
+  HandleConfig,
+  VertexHandlerConfig,
+  EdgeHandlerConfig,
+  CellState,
 } from '@maxgraph/core';
 
 import type {
@@ -20,10 +24,13 @@ import type {
   CellStateStyle,
   AlignValue,
   VAlignValue,
+  WhiteSpaceValue,
 } from '@maxgraph/core';
 
 // ── Import custom shape registration ────────────────────────────────────
 import { registerAllCustomShapes, IGRAPH_ID_STYLE_MAP } from './maxgraph-custom-shapes';
+// ── Import Universal Vertex Handler ─────────────────────────────────────
+import { UniversalVertexHandler } from './maxgraph-universal-handler';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -36,8 +43,180 @@ const MAJOR_EVERY = 5;
 const DROP_W = 120;
 const DROP_H = 60;
 
+// ─────────────────────────────────────────────────────────────────────────
+// Shapes whose selection box must be a square, not a 120×60 rectangle.
+// A circle/diamond/etc. drawn inside a wide rectangle only fills the short
+// dimension, leaving visible "extra" selection box on the sides — this is
+// what fixes that, matching draw.io's default drop sizes per shape type.
+// ─────────────────────────────────────────────────────────────────────────
+const SQUARE_DROP_SHAPES = new Set<string>([
+  'igraph.circle',
+  'igraph.ellipse',
+  'igraph.diamond',
+  'igraph.doubleRhombus',
+  'igraph.multiOval',
+  'igraph.hexagon',
+  'igraph.pentagon',
+  'igraph.umlUseCase',
+  'igraph.umlDecision',
+  'igraph.umlInitialNode',
+  'igraph.initialNode',
+  'igraph.finalNode',
+  'igraph.umlActivityFinal',
+  'igraph.umlFlowFinal',
+  'igraph.dfdProcess',
+  'igraph.dfdOnPage',
+  'igraph.attribute',
+  'igraph.primaryKey',
+  'igraph.derivedAttr',
+  'igraph.compositeAttr',
+  'igraph.multiAttr',
+  'igraph.erdAttribute',
+  'igraph.erdMultivaluedAttribute',
+  'igraph.erdDerivedAttribute',
+  'igraph.relationship',
+  'igraph.identifyingRel',
+  'igraph.erdRelationship',
+  'igraph.erdIdentifyingRelationship',
+  'igraph.crowOne',
+  'igraph.crowZeroOne',
+]);
+
+function getDropSize(styleKey: string): { w: number; h: number } {
+  if (SQUARE_DROP_SHAPES.has(styleKey)) {
+    return { w: 80, h: 80 };
+  }
+  return { w: DROP_W, h: DROP_H };
+}
+
 // ════════════════════════════════════════════════════════════════════════════
-// ⭐ CRITICAL: Register shapes BEFORE any Graph is created
+// ⭐ INJECT HANDLE STYLES - Ensures blue handles override maxGraph defaults
+// ════════════════════════════════════════════════════════════════════════════
+
+const injectHandleStyles = () => {
+  if (typeof document === 'undefined') return;
+  
+  const styleId = 'igraph-handle-styles';
+  if (document.getElementById(styleId)) return;
+  
+  const style = document.createElement('style');
+  style.id = styleId;
+  style.textContent = `
+    /* Force blue handles - using correct maxGraph class names */
+    .mxHandle,
+    .mxHandle div,
+    div.mxHandle {
+      background-color: #4c6fff !important;
+      border-color: #4c6fff !important;
+      border-radius: 50% !important;
+      width: 8px !important;
+      height: 8px !important;
+      border: 1.5px solid #4c6fff !important;
+      background: #ffffff !important;
+      box-sizing: border-box !important;
+      position: absolute !important;
+      box-shadow: none !important;
+      margin: 0 !important;
+      padding: 0 !important;
+    }
+    
+    /* Position handles at exact shape boundaries */
+    .mxHandleNorth,
+    div.mxHandleNorth {
+      top: -4px !important;
+      left: 50% !important;
+      margin-left: -4px !important;
+      margin-top: 0 !important;
+    }
+    .mxHandleSouth,
+    div.mxHandleSouth {
+      bottom: -4px !important;
+      left: 50% !important;
+      margin-left: -4px !important;
+      margin-top: 0 !important;
+    }
+    .mxHandleEast,
+    div.mxHandleEast {
+      right: -4px !important;
+      top: 50% !important;
+      margin-top: -4px !important;
+      margin-left: 0 !important;
+    }
+    .mxHandleWest,
+    div.mxHandleWest {
+      left: -4px !important;
+      top: 50% !important;
+      margin-top: -4px !important;
+      margin-left: 0 !important;
+    }
+    .mxHandleNorthEast,
+    div.mxHandleNorthEast {
+      top: -4px !important;
+      right: -4px !important;
+    }
+    .mxHandleNorthWest,
+    div.mxHandleNorthWest {
+      top: -4px !important;
+      left: -4px !important;
+    }
+    .mxHandleSouthEast,
+    div.mxHandleSouthEast {
+      bottom: -4px !important;
+      right: -4px !important;
+    }
+    .mxHandleSouthWest,
+    div.mxHandleSouthWest {
+      bottom: -4px !important;
+      left: -4px !important;
+    }
+    
+    /* Selection border - dashed like draw.io */
+    .mxSelectionBorder {
+      border-color: #4c6fff !important;
+      border-style: dashed !important;
+      border-width: 1.5px !important;
+    }
+    
+    /* Rubber band */
+    .mxRubberband {
+      border-color: #4c6fff !important;
+      background: rgba(76, 111, 255, 0.1) !important;
+      border-style: solid !important;
+      border-width: 1px !important;
+    }
+  `;
+  document.head.appendChild(style);
+  console.log('🎨 Injected draw.io-style handle styles');
+};
+
+// Inject styles immediately
+if (Platform.OS === 'web') {
+  injectHandleStyles();
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// ⭐ CRITICAL: Configure selection handles BEFORE any Graph is created
+// ════════════════════════════════════════════════════════════════════════════
+
+// Set handle colors to blue (#4c6fff)
+HandleConfig.fillColor = '#4c6fff';
+HandleConfig.strokeColor = '#4c6fff';
+HandleConfig.size = 8;
+
+// Configure vertex selection styling - dashed like draw.io
+VertexHandlerConfig.selectionColor = '#4c6fff';
+VertexHandlerConfig.selectionDashed = true;
+VertexHandlerConfig.selectionStrokeWidth = 1.5;
+
+// Configure edge selection styling
+EdgeHandlerConfig.selectionColor = '#4c6fff';
+EdgeHandlerConfig.selectionDashed = true;
+EdgeHandlerConfig.selectionStrokeWidth = 1.5;
+
+console.log('🎨 Selection handle config set to draw.io style (dashed, blue, circular handles)');
+
+// ════════════════════════════════════════════════════════════════════════════
+// ⭐ Register shapes BEFORE any Graph is created
 // ════════════════════════════════════════════════════════════════════════════
 if (Platform.OS === 'web') {
   registerAllCustomShapes();
@@ -735,7 +914,7 @@ const WebCanvas = ({ onReady, onChange, onSelectionChange, umlType = 'flowchart'
   }, []);
 
   // ═════════════════════════════════════════════════════════════════════════
-  // ⭐ FIXED DROP HANDLER - Preserves fill colors from style definitions
+  // ⭐ FIXED DROP HANDLER - Uses square dimensions for circular shapes
   // ═════════════════════════════════════════════════════════════════════════
 
   const handleDrop = useCallback((e: DragEvent) => {
@@ -747,33 +926,26 @@ const WebCanvas = ({ onReady, onChange, onSelectionChange, umlType = 'flowchart'
     const graphDiv = graphDivRef.current;
     if (!shapeId || !graph || !graphDiv) return;
 
+    const styleKey = IGRAPH_ID_STYLE_MAP[shapeId] ?? 'igraph.rectangle';
+    const { w: dropW, h: dropH } = getDropSize(styleKey);
+
     const { x, y } = clientToGraphCoords(graph, e.clientX, e.clientY, graphDiv);
 
-    const cx = Math.round((x - DROP_W / 2) / GRID_SIZE) * GRID_SIZE;
-    const cy = Math.round((y - DROP_H / 2) / GRID_SIZE) * GRID_SIZE;
+    const cx = Math.round((x - dropW / 2) / GRID_SIZE) * GRID_SIZE;
+    const cy = Math.round((y - dropH / 2) / GRID_SIZE) * GRID_SIZE;
 
     try {
-      // ⭐ Get the style key from the ID map
-      const styleKey = IGRAPH_ID_STYLE_MAP[shapeId] ?? 'igraph.rectangle';
-
-      // ⭐ Get the style from the stylesheet to preserve ALL style properties
-      const stylesheet = graph.getStylesheet();
-      const existingStyle = stylesheet.getCellStyle(styleKey);
-      
-      // ⭐ Build the style object preserving fillColor, strokeColor, etc.
       const styleObject: CellStateStyle = {
         shape: styleKey,
-        fillColor: existingStyle?.fillColor || '#ffffff',
-        strokeColor: existingStyle?.strokeColor || '#1a1f36',
-        strokeWidth: existingStyle?.strokeWidth || 2,
-        fontColor: existingStyle?.fontColor || '#1a1f36',
-        fontSize: existingStyle?.fontSize || 12,
+        fillColor: '#ffffff',
+        strokeColor: '#1a1f36',
+        strokeWidth: 2,
+        fontColor: '#1a1f36',
+        fontSize: 12,
         align: 'center' as AlignValue,
         verticalAlign: 'middle' as VAlignValue,
-        whiteSpace: 'wrap',
+        whiteSpace: 'wrap' as WhiteSpaceValue,
       };
-
-      console.log(`🔄 Dropping shape "${shapeId}" → style:`, styleKey, styleObject);
 
       const cell = graph.insertVertex(
         null,
@@ -781,8 +953,8 @@ const WebCanvas = ({ onReady, onChange, onSelectionChange, umlType = 'flowchart'
         '',
         cx,
         cy,
-        DROP_W,
-        DROP_H,
+        dropW,
+        dropH,
         styleObject,
       );
 
@@ -792,146 +964,11 @@ const WebCanvas = ({ onReady, onChange, onSelectionChange, umlType = 'flowchart'
         handleSelectionChange();
       }, 10);
       
-      console.log(`✅ Dropped "${shapeId}" as "${styleKey}" at (${cx}, ${cy})`);
+      console.log(`✅ Dropped "${shapeId}" as "${styleKey}" at (${cx}, ${cy}) with size ${dropW}x${dropH}`);
     } catch (err) {
       console.error('Drop error:', err);
     }
   }, [handleSelectionChange]);
-
-  // ═════════════════════════════════════════════════════════════════════════
-  // ⭐ FIX: Force BLUE selection handles AND dashed border
-  // ═════════════════════════════════════════════════════════════════════════
-  
-  const forceBlueSelectionHandles = useCallback((graph: Graph) => {
-    console.log('🎨 Applying blue selection handle fix...');
-    
-    try {
-      Object.assign(graph, {
-        selectionColor: '#4c6fff',
-        selectionFillColor: '#4c6fff',
-        selectionStrokeColor: '#4c6fff',
-        selectionHandleSize: 8,
-        selectionDashed: true,
-        handleColor: '#4c6fff',
-        handleStrokeColor: '#4c6fff',
-        handleFillColor: '#4c6fff',
-        selectionBorderColor: '#4c6fff',
-        selectionBorderStyle: 'dashed',
-        selectionBorderWidth: 2,
-      });
-      
-      const selectionHandler = (graph as any).selectionHandler;
-      if (selectionHandler) {
-        selectionHandler.borderColor = '#4c6fff';
-        selectionHandler.fillColor = '#4c6fff';
-        selectionHandler.strokeColor = '#4c6fff';
-        selectionHandler.handleSize = 8;
-        selectionHandler.dashed = true;
-        selectionHandler.borderStyle = 'dashed';
-        
-        if (typeof selectionHandler.refresh === 'function') {
-          selectionHandler.refresh();
-        }
-        
-        if (selectionHandler.handles && Array.isArray(selectionHandler.handles)) {
-          selectionHandler.handles.forEach((handle: any) => {
-            if (handle) {
-              Object.assign(handle, {
-                fillColor: '#4c6fff',
-                strokeColor: '#4c6fff',
-                color: '#4c6fff',
-              });
-            }
-          });
-        }
-        
-        console.log('✅ Selection handler configured');
-      } else {
-        console.warn('⚠️ Selection handler not available');
-      }
-      
-      const styleId = 'mx-selection-blue';
-      let styleEl = document.getElementById(styleId);
-      
-      if (!styleEl) {
-        styleEl = document.createElement('style');
-        styleEl.id = styleId;
-        document.head.appendChild(styleEl);
-      }
-      
-      styleEl.textContent = `
-        .mxSelectionBorder {
-          border-color: #4c6fff !important;
-          border-style: dashed !important;
-          border-width: 2px !important;
-          outline: none !important;
-        }
-        
-        .mxSelectionHandle {
-          background-color: #4c6fff !important;
-          border-color: #4c6fff !important;
-          border-radius: 4px !important;
-          width: 8px !important;
-          height: 8px !important;
-          box-shadow: 0 0 4px rgba(76, 111, 255, 0.3) !important;
-        }
-        
-        .mxSelectionHandle div {
-          background-color: #4c6fff !important;
-        }
-        
-        .mxSelectionHandle.mxHandleNorth,
-        .mxSelectionHandle.mxHandleSouth,
-        .mxSelectionHandle.mxHandleEast,
-        .mxSelectionHandle.mxHandleWest,
-        .mxSelectionHandle.mxHandleNorthEast,
-        .mxSelectionHandle.mxHandleNorthWest,
-        .mxSelectionHandle.mxHandleSouthEast,
-        .mxSelectionHandle.mxHandleSouthWest {
-          background-color: #4c6fff !important;
-          border-color: #4c6fff !important;
-        }
-        
-        .mxRubberband {
-          border-color: #4c6fff !important;
-          background: rgba(76, 111, 255, 0.15) !important;
-          border-style: dashed !important;
-        }
-        
-        .mxConnectionPoint {
-          background-color: #4c6fff !important;
-          border-color: #4c6fff !important;
-        }
-        
-        .mxCellHighlight {
-          stroke: #4c6fff !important;
-          fill: rgba(76, 111, 255, 0.08) !important;
-        }
-        
-        .mxCellSelected {
-          filter: drop-shadow(0 0 6px rgba(76, 111, 255, 0.3)) !important;
-        }
-      `;
-      
-      console.log('✅ CSS styles injected/updated');
-      
-      try {
-        const selectionCells = graph.getSelectionCells();
-        if (selectionCells.length > 0) {
-          graph.clearSelection();
-          setTimeout(() => {
-            graph.setSelectionCells(selectionCells);
-          }, 10);
-        }
-      } catch (e) {
-        // Ignore
-      }
-      
-      console.log('🎨 Blue selection handle fix applied (including dashed border)');
-    } catch (error) {
-      console.error('❌ Error applying blue selection fix:', error);
-    }
-  }, []);
 
   // ─── Init Graph ─────────────────────────────────────────────────────────────
 
@@ -965,21 +1002,22 @@ const WebCanvas = ({ onReady, onChange, onSelectionChange, umlType = 'flowchart'
       graphDiv.style.cursor     = 'default';
       graphDiv.style.userSelect = 'none';
 
-      // ═════════════════════════════════════════════════════════════════════════
       // 1. CREATE THE GRAPH
-      // ═════════════════════════════════════════════════════════════════════════
       const graph = new Graph(graphDiv);
       graphRef.current = graph;
 
       // ═════════════════════════════════════════════════════════════════════════
-      // 2. REGISTER STYLES BEFORE ANY OTHER CONFIGURATION
+      // ⭐ 2. BIND UNIVERSAL VERTEX HANDLER - Draw.io style selection!
       // ═════════════════════════════════════════════════════════════════════════
+      graph.createVertexHandler = (state: CellState) => {
+        return new UniversalVertexHandler(state);
+      };
+      console.log('✅ Universal Vertex Handler bound to graph (draw.io style)');
+
+      // 3. REGISTER STYLES
       registerShapeStyles(graph);
 
-      // ═════════════════════════════════════════════════════════════════════════
-      // 3. CONFIGURE THE GRAPH
-      // ═════════════════════════════════════════════════════════════════════════
-
+      // 4. CONFIGURE THE GRAPH
       graph.setGridEnabled(true);
       graph.setGridSize(GRID_SIZE);
       graph.setConnectable(true);
@@ -990,24 +1028,14 @@ const WebCanvas = ({ onReady, onChange, onSelectionChange, umlType = 'flowchart'
       graph.setAutoSizeCells(false);
       graph.setEnterStopsCellEditing(true);
       graph.setHtmlLabels(true);
-      
       graph.setCellsMovable(true);
       graph.setCellsSelectable(true);
       graph.setCellsResizable(true);
       graph.setCellsEditable(true);
       graph.setCellsDeletable(true);
-
       graph.setPanning(true);
 
-      // ═════════════════════════════════════════════════════════════════════════
-      // ⭐ FIX: Apply blue selection handles immediately after graph creation
-      // ═════════════════════════════════════════════════════════════════════════
-      forceBlueSelectionHandles(graph);
-
-      // ═════════════════════════════════════════════════════════════════════════
-      // 4. SELECTION CHANGE LISTENER
-      // ═════════════════════════════════════════════════════════════════════════
-      
+      // 5. SELECTION CHANGE LISTENER
       graph.getSelectionModel().addListener(InternalEvent.CHANGE, () => {
         handleSelectionChange();
       });
@@ -1020,10 +1048,7 @@ const WebCanvas = ({ onReady, onChange, onSelectionChange, umlType = 'flowchart'
         setTimeout(handleSelectionChange, 10);
       });
 
-      // ═════════════════════════════════════════════════════════════════════════
-      // 5. PLUGINS
-      // ═════════════════════════════════════════════════════════════════════════
-
+      // 6. PLUGINS
       const panningHandler    = graph.getPlugin('PanningHandler')    as PanningHandler    | null;
       const connectionHandler = graph.getPlugin('ConnectionHandler') as ConnectionHandler | null;
       const fitPlugin         = graph.getPlugin('FitPlugin')         as FitPlugin         | null;
@@ -1040,7 +1065,7 @@ const WebCanvas = ({ onReady, onChange, onSelectionChange, umlType = 'flowchart'
 
       new RubberBandHandler(graph);
 
-      // ── Undo ──────────────────────────────────────────────────────────────
+      // Undo
       const undoManager  = new UndoManager();
       const undoListener = (_: any, evt: any) =>
         undoManager.undoableEditHappened(evt.getProperty('edit'));
@@ -1048,15 +1073,17 @@ const WebCanvas = ({ onReady, onChange, onSelectionChange, umlType = 'flowchart'
       graph.getView().addListener(InternalEvent.UNDO, undoListener);
       (graph as any).undoManager = undoManager;
 
-      // ── Keyboard ──────────────────────────────────────────────────────────
+      // Keyboard
       const keyHandler = new KeyHandler(graph);
       keyHandler.bindKey(46, () => graph.removeCells());
       keyHandler.bindKey(8,  () => graph.removeCells());
+      keyHandler.bindKey(13, () => graph.removeCells());
       keyHandler.bindControlKey(90, () => undoManager.undo());
       keyHandler.bindControlKey(89, () => undoManager.redo());
       keyHandler.bindControlShiftKey(90, () => undoManager.redo());
       keyHandler.bindControlKey(65, () => graph.selectAll(undefined, true));
       keyHandler.bindKey(27, () => graph.clearSelection());
+      
       const nudge = (dx: number, dy: number) => {
         const cells = graph.getSelectionCells();
         if (cells.length) graph.moveCells(cells, dx, dy);
@@ -1066,7 +1093,7 @@ const WebCanvas = ({ onReady, onChange, onSelectionChange, umlType = 'flowchart'
       keyHandler.bindKey(39, () => nudge(GRID_SIZE,  0));
       keyHandler.bindKey(40, () => nudge(0,  GRID_SIZE));
 
-      // ── Scroll-to-zoom ────────────────────────────────────────────────────
+      // Scroll-to-zoom
       InternalEvent.addMouseWheelListener((evt: Event, up: boolean) => {
         const e = evt as WheelEvent;
         if (e.ctrlKey || e.metaKey) {
@@ -1076,7 +1103,7 @@ const WebCanvas = ({ onReady, onChange, onSelectionChange, umlType = 'flowchart'
         }
       }, graphDiv);
 
-      // ── Space-hold panning ────────────────────────────────────────────────
+      // Space-hold panning
       let spaceDown = false;
       graphDiv.addEventListener('keydown', (e: KeyboardEvent) => {
         if (e.code === 'Space' && !spaceDown) {
@@ -1093,12 +1120,12 @@ const WebCanvas = ({ onReady, onChange, onSelectionChange, umlType = 'flowchart'
         }
       });
 
-      // ── Grid repaint ──────────────────────────────────────────────────────
+      // Grid repaint
       graph.getView().addListener('scale',             () => repaintGrid());
       graph.getView().addListener('translate',         () => repaintGrid());
       graph.getView().addListener('scaleAndTranslate', () => repaintGrid());
 
-      // ── onChange ──────────────────────────────────────────────────────────
+      // onChange
       graph.getDataModel().addListener(InternalEvent.CHANGE, () => {
         try {
           const xml = new ModelXmlSerializer(graph.getDataModel()).export();
@@ -1106,7 +1133,7 @@ const WebCanvas = ({ onReady, onChange, onSelectionChange, umlType = 'flowchart'
         } catch (_) {}
       });
 
-      // ── Drag-and-drop ─────────────────────────────────────────────────────
+      // Drag-and-drop
       const dropTarget = wrapper;
 
       const onDragOver = (e: DragEvent) => {
@@ -1128,21 +1155,24 @@ const WebCanvas = ({ onReady, onChange, onSelectionChange, umlType = 'flowchart'
       dropTarget.addEventListener('dragleave', onDragLeave);
       dropTarget.addEventListener('drop',      onDrop);
 
-      // ── Fit and focus ─────────────────────────────────────────────────────
+      graphDiv.addEventListener('keydown', (e: KeyboardEvent) => {
+        if (e.key === 'Enter') {
+          e.stopPropagation();
+        }
+      });
+
+      // Fit and focus
       timers.push(setTimeout(() => {
         if (destroyed) return;
         fitPlugin?.fit();
         repaintGrid();
         graphDiv.focus();
-        
-        forceBlueSelectionHandles(graph);
-        
         setTimeout(handleSelectionChange, 100);
       }, 150));
 
       repaintGrid();
 
-      console.log('✅ maxGraph ready');
+      console.log('✅ maxGraph ready with draw.io-style selection');
       onReadyRef.current?.(graph);
       if (!destroyed) setLoading(false);
 
@@ -1153,6 +1183,7 @@ const WebCanvas = ({ onReady, onChange, onSelectionChange, umlType = 'flowchart'
         dropTarget.removeEventListener('dragover',  onDragOver);
         dropTarget.removeEventListener('dragleave', onDragLeave);
         dropTarget.removeEventListener('drop',      onDrop);
+        graphDiv.removeEventListener('keydown', () => {});
         keyHandler.onDestroy();
         graph.destroy();
         graphRef.current = null;
@@ -1163,7 +1194,7 @@ const WebCanvas = ({ onReady, onChange, onSelectionChange, umlType = 'flowchart'
       setLoading(false);
       return undefined;
     }
-  }, [repaintGrid, resizeGridCanvas, handleDrop, registerShapeStyles, forceBlueSelectionHandles, handleSelectionChange]);
+  }, [repaintGrid, resizeGridCanvas, handleDrop, registerShapeStyles, handleSelectionChange]);
 
   useEffect(() => {
     const cleanup = initGraph();
