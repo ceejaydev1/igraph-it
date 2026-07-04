@@ -15,10 +15,11 @@ import {
   ToastAndroid,
   Alert,
   Animated,
+  Easing,
   useWindowDimensions,
 } from 'react-native';
-import { Stack, useRouter } from 'expo-router';
-import { Svg, Circle, Rect, Path } from 'react-native-svg';
+import { Stack, useRouter, useLocalSearchParams } from 'expo-router';
+import { Svg, Circle, Rect, Path, Defs, LinearGradient, Stop } from 'react-native-svg';
 import { initializeApp, FirebaseApp, getApps } from 'firebase/app';
 import {
   getAuth,
@@ -72,10 +73,139 @@ const getOutlineColor = (isFocused: boolean, hasError: string) => {
   return '#dde3fa';
 };
 
-// NOTE: A custom animated CustomToast component (declared further below,
-// rendered + driven by the `showToast`/`hideToast` functions inside the SignUp
-// component) replaces the old showToastMessage helper. The old version only
-// console.logged on web — meaning toasts never actually appeared on web/PWA.
+// ─── RESPONSIVE LOGO SIZE (ported from signin.tsx) ───────────────────────────
+
+const getResponsiveLogoSize = (windowWidth: number, windowHeight: number): number => {
+  if (windowHeight < 680) {
+    if (Platform.OS === 'web') {
+      if (windowWidth < 480) return 36;
+      if (windowWidth < 768) return 40;
+      return 48;
+    }
+    return 38;
+  }
+  if (Platform.OS === 'web') {
+    if (windowWidth < 480) return 42;
+    if (windowWidth < 768) return 48;
+    if (windowWidth < 1024) return 52;
+    if (windowWidth < 1440) return 56;
+    return 64;
+  }
+  if (Platform.OS === 'ios') return 44;
+  if (Platform.OS === 'android') return 42;
+  return 44;
+};
+
+// ─── ANIMATED LOGO (ported from signin.tsx) ──────────────────────────────────
+
+const AnimatedLogo = ({
+  size,
+  isInputFocused = false,
+  showSuccess = false,
+  onAnimationComplete,
+}: {
+  size?: number;
+  isInputFocused?: boolean;
+  showSuccess?: boolean;
+  onAnimationComplete?: () => void;
+}) => {
+  const entranceAnim = useRef(new Animated.Value(0)).current;
+  const pulseAnim = useRef(new Animated.Value(1)).current;
+  const rotateAnim = useRef(new Animated.Value(0)).current;
+  const pulseLoop = useRef<Animated.CompositeAnimation | null>(null);
+
+  useEffect(() => {
+    Animated.parallel([
+      Animated.spring(entranceAnim, {
+        toValue: 1,
+        friction: 6,
+        tension: 40,
+        useNativeDriver: true,
+      }),
+      Animated.timing(rotateAnim, {
+        toValue: 1,
+        duration: 600,
+        easing: Easing.out(Easing.back(0.5)),
+        useNativeDriver: true,
+      }),
+    ]).start();
+  }, []);
+
+  useEffect(() => {
+    if (showSuccess) {
+      if (pulseLoop.current) {
+        pulseLoop.current.stop();
+        pulseLoop.current = null;
+      }
+      Animated.sequence([
+        Animated.spring(pulseAnim, { toValue: 1.3, friction: 2, tension: 60, useNativeDriver: true }),
+        Animated.spring(pulseAnim, { toValue: 1, friction: 4, tension: 40, useNativeDriver: true }),
+        Animated.spring(pulseAnim, { toValue: 1.1, friction: 3, tension: 50, useNativeDriver: true }),
+        Animated.spring(pulseAnim, { toValue: 1, friction: 5, useNativeDriver: true }),
+      ]).start(() => {
+        if (onAnimationComplete) onAnimationComplete();
+      });
+    } else if (isInputFocused) {
+      pulseLoop.current = Animated.loop(
+        Animated.sequence([
+          Animated.timing(pulseAnim, { toValue: 1.05, duration: 800, useNativeDriver: true }),
+          Animated.timing(pulseAnim, { toValue: 1, duration: 800, useNativeDriver: true }),
+        ])
+      );
+      pulseLoop.current.start();
+    } else {
+      if (pulseLoop.current) {
+        pulseLoop.current.stop();
+        pulseLoop.current = null;
+      }
+      pulseAnim.setValue(1);
+    }
+
+    return () => {
+      if (pulseLoop.current) {
+        pulseLoop.current.stop();
+        pulseLoop.current = null;
+      }
+    };
+  }, [isInputFocused, showSuccess]);
+
+  const scale = entranceAnim.interpolate({ inputRange: [0, 1], outputRange: [0.8, 1] });
+  const rotate = rotateAnim.interpolate({ inputRange: [0, 1], outputRange: ['-13deg', '-8deg'] });
+  const opacity = entranceAnim.interpolate({ inputRange: [0, 0.5, 1], outputRange: [0, 0.5, 1] });
+  const finalSize = size || 44;
+
+  const padding = finalSize * 0.25;
+  const containerSize = finalSize + (padding * 2);
+  const borderRadius = containerSize * 0.22;
+
+  return (
+    <Animated.View
+      style={[
+        styles.logoWrapper,
+        {
+          opacity,
+          transform: [{ scale }, { scale: pulseAnim }, { rotate }],
+          width: containerSize,
+          height: containerSize,
+          borderRadius: borderRadius,
+        },
+      ]}
+    >
+      <Image
+        source={require('../../assets/images/logo.png')}
+        style={[
+          styles.logo,
+          {
+            width: finalSize,
+            height: finalSize,
+            borderRadius: finalSize * 0.22,
+          },
+        ]}
+        resizeMode="contain"
+      />
+    </Animated.View>
+  );
+};
 
 // ─── ICONS ────────────────────────────────────────────────────────────────────
 
@@ -113,10 +243,6 @@ const EmailIcon = () => (
 );
 
 // ─── ERROR POPUP MODAL ────────────────────────────────────────────────────────
-// NOTE: Now only used for errors that are NOT about the email field
-// (e.g. network errors, popup blocked, generic Google sign-in failures).
-// Email-already-exists / Google-account-detected errors are shown inline
-// below the email input instead — see `emailInlineError` state below.
 
 const ErrorPopupModal = ({
   visible,
@@ -190,9 +316,9 @@ const SuccessModal = ({
     onClose();
     if (email && purpose) {
       setTimeout(() => {
-        router.push({ 
-          pathname: '/(auth)/verify-otp', 
-          params: { email, purpose } 
+        router.push({
+          pathname: '/(auth)/verify-otp',
+          params: { email, purpose }
         });
       }, 100);
     }
@@ -222,8 +348,6 @@ const SuccessModal = ({
 };
 
 // ─── CUSTOM TOAST ─────────────────────────────────────────────────────────────
-// Same component/animation/styling as the forgot-password screen's toast —
-// works on iOS, Android, and web/PWA (unlike ToastAndroid/Alert).
 
 const CustomToast = ({
   visible,
@@ -319,15 +443,70 @@ const CustomToast = ({
 
 const DiagramBackground = () => (
   <View style={StyleSheet.absoluteFillObject} pointerEvents="none">
+    <Svg width="100%" height="100%" viewBox={`0 0 ${SCREEN_WIDTH} ${SCREEN_HEIGHT}`} preserveAspectRatio="xMidYMid slice" style={StyleSheet.absoluteFillObject}>
+      <Defs>
+        <LinearGradient id="bgWash" x1="0%" y1="0%" x2="100%" y2="100%">
+          <Stop offset="0%" stopColor="#e8edff" stopOpacity="1" />
+          <Stop offset="55%" stopColor="#eef2ff" stopOpacity="1" />
+          <Stop offset="100%" stopColor="#e3e9ff" stopOpacity="1" />
+        </LinearGradient>
+        <LinearGradient id="blobTopRight" x1="0%" y1="0%" x2="100%" y2="100%">
+          <Stop offset="0%" stopColor="#c7d2fe" stopOpacity="0.55" />
+          <Stop offset="100%" stopColor="#c7d2fe" stopOpacity="0" />
+        </LinearGradient>
+        <LinearGradient id="blobBottomLeft" x1="0%" y1="0%" x2="100%" y2="100%">
+          <Stop offset="0%" stopColor="#b6c2ff" stopOpacity="0.45" />
+          <Stop offset="100%" stopColor="#b6c2ff" stopOpacity="0" />
+        </LinearGradient>
+      </Defs>
+
+      <Rect x="0" y="0" width={SCREEN_WIDTH} height={SCREEN_HEIGHT} fill="url(#bgWash)" />
+      <Circle cx={SCREEN_WIDTH * 0.9} cy={SCREEN_HEIGHT * 0.08} r={SCREEN_WIDTH * 0.55} fill="url(#blobTopRight)" />
+      <Circle cx={SCREEN_WIDTH * 0.05} cy={SCREEN_HEIGHT * 0.95} r={SCREEN_WIDTH * 0.5} fill="url(#blobBottomLeft)" />
+    </Svg>
+
     <Image source={require('../../assets/images/grid-bg.png')} style={styles.gridBackground} resizeMode="repeat" />
     <View style={styles.gridOverlay} />
+
     <Svg width="100%" height="100%" viewBox={`0 0 ${SCREEN_WIDTH} ${SCREEN_HEIGHT}`} preserveAspectRatio="xMidYMid slice" style={StyleSheet.absoluteFillObject}>
-      <Path d={`M ${SCREEN_WIDTH * 0.08} ${SCREEN_HEIGHT * 0.25} C ${SCREEN_WIDTH * 0.22} ${SCREEN_HEIGHT * 0.10}, ${SCREEN_WIDTH * 0.36} ${SCREEN_HEIGHT * 0.42}, ${SCREEN_WIDTH * 0.52} ${SCREEN_HEIGHT * 0.32}`} stroke="#bfd0ff" strokeWidth="2" strokeDasharray="8 10" fill="none" opacity="0.32" />
-      <Path d={`M ${SCREEN_WIDTH * 0.82} ${SCREEN_HEIGHT * 0.18} C ${SCREEN_WIDTH * 0.96} ${SCREEN_HEIGHT * 0.30}, ${SCREEN_WIDTH * 0.95} ${SCREEN_HEIGHT * 0.55}, ${SCREEN_WIDTH * 0.78} ${SCREEN_HEIGHT * 0.76}`} stroke="#bfd0ff" strokeWidth="2" strokeDasharray="8 10" fill="none" opacity="0.32" />
-      <Rect x={SCREEN_WIDTH * 0.07} y={SCREEN_HEIGHT * 0.12} width="130" height="72" rx="14" stroke="#bfd0ff" strokeWidth="1.4" fill="none" opacity="0.38" />
-      <Rect x={SCREEN_WIDTH * 0.74} y={SCREEN_HEIGHT * 0.16} width="140" height="78" rx="14" stroke="#bfd0ff" strokeWidth="1.4" fill="none" opacity="0.38" />
-      <Path d={`M ${SCREEN_WIDTH * 0.15} ${SCREEN_HEIGHT * 0.56} L ${SCREEN_WIDTH * 0.19} ${SCREEN_HEIGHT * 0.60} L ${SCREEN_WIDTH * 0.15} ${SCREEN_HEIGHT * 0.64} L ${SCREEN_WIDTH * 0.11} ${SCREEN_HEIGHT * 0.60} Z`} stroke="#bfd0ff" strokeWidth="1.5" fill="none" opacity="0.35" />
-      <Circle cx={SCREEN_WIDTH * 0.76} cy={SCREEN_HEIGHT * 0.72} r="24" stroke="#bfd0ff" strokeWidth="2" fill="none" opacity="0.3" />
+
+      {/* ── Mini class diagram (top-left): name / attributes / methods ── */}
+      <Rect x={SCREEN_WIDTH * 0.06} y={SCREEN_HEIGHT * 0.09} width="118" height="88" rx="6" stroke="#a9b8ff" strokeWidth="1.5" fill="#ffffff" fillOpacity="0.4" opacity="0.55" />
+      <Path d={`M ${SCREEN_WIDTH * 0.06} ${SCREEN_HEIGHT * 0.09 + 26} h 118`} stroke="#a9b8ff" strokeWidth="1.5" opacity="0.55" />
+      <Path d={`M ${SCREEN_WIDTH * 0.06} ${SCREEN_HEIGHT * 0.09 + 58} h 118`} stroke="#a9b8ff" strokeWidth="1.5" opacity="0.55" />
+      <Rect x={SCREEN_WIDTH * 0.06 + 10} y={SCREEN_HEIGHT * 0.09 + 10} width="54" height="7" rx="3" fill="#a9b8ff" opacity="0.5" />
+      <Rect x={SCREEN_WIDTH * 0.06 + 10} y={SCREEN_HEIGHT * 0.09 + 35} width="40" height="5" rx="2.5" fill="#c3cdff" opacity="0.5" />
+      <Rect x={SCREEN_WIDTH * 0.06 + 10} y={SCREEN_HEIGHT * 0.09 + 45} width="60" height="5" rx="2.5" fill="#c3cdff" opacity="0.5" />
+      <Rect x={SCREEN_WIDTH * 0.06 + 10} y={SCREEN_HEIGHT * 0.09 + 67} width="48" height="5" rx="2.5" fill="#c3cdff" opacity="0.5" />
+      <Rect x={SCREEN_WIDTH * 0.06 + 10} y={SCREEN_HEIGHT * 0.09 + 77} width="56" height="5" rx="2.5" fill="#c3cdff" opacity="0.5" />
+
+      {/* Association line + multiplicity dot toward the ERD entity */}
+      <Path d={`M ${SCREEN_WIDTH * 0.06 + 118} ${SCREEN_HEIGHT * 0.09 + 44} C ${SCREEN_WIDTH * 0.34} ${SCREEN_HEIGHT * 0.05}, ${SCREEN_WIDTH * 0.42} ${SCREEN_HEIGHT * 0.14}, ${SCREEN_WIDTH * 0.55} ${SCREEN_HEIGHT * 0.16}`} stroke="#a9b8ff" strokeWidth="1.5" fill="none" opacity="0.45" />
+      <Circle cx={SCREEN_WIDTH * 0.06 + 122} cy={SCREEN_HEIGHT * 0.09 + 44} r="2.5" fill="#a9b8ff" opacity="0.5" />
+
+      {/* ── ERD entity (upper-right): rectangle with header row ── */}
+      <Rect x={SCREEN_WIDTH * 0.72} y={SCREEN_HEIGHT * 0.13} width="132" height="70" rx="6" stroke="#a9b8ff" strokeWidth="1.5" fill="#ffffff" fillOpacity="0.4" opacity="0.5" />
+      <Path d={`M ${SCREEN_WIDTH * 0.72} ${SCREEN_HEIGHT * 0.13 + 22} h 132`} stroke="#a9b8ff" strokeWidth="1.5" opacity="0.5" />
+      <Rect x={SCREEN_WIDTH * 0.72 + 10} y={SCREEN_HEIGHT * 0.13 + 8} width="50" height="6" rx="3" fill="#a9b8ff" opacity="0.5" />
+      <Circle cx={SCREEN_WIDTH * 0.72 + 12} cy={SCREEN_HEIGHT * 0.13 + 34} r="2" fill="#c3cdff" opacity="0.6" />
+      <Rect x={SCREEN_WIDTH * 0.72 + 20} y={SCREEN_HEIGHT * 0.13 + 31} width="46" height="5" rx="2.5" fill="#c3cdff" opacity="0.5" />
+      <Circle cx={SCREEN_WIDTH * 0.72 + 12} cy={SCREEN_HEIGHT * 0.13 + 48} r="2" fill="#c3cdff" opacity="0.6" />
+      <Rect x={SCREEN_WIDTH * 0.72 + 20} y={SCREEN_HEIGHT * 0.13 + 45} width="58" height="5" rx="2.5" fill="#c3cdff" opacity="0.5" />
+
+      {/* ── Use-case oval + actor stick figure (lower-left) ── */}
+      <Circle cx={SCREEN_WIDTH * 0.10} cy={SCREEN_HEIGHT * 0.60} r="4.5" stroke="#a9b8ff" strokeWidth="1.6" fill="none" opacity="0.5" />
+      <Path d={`M ${SCREEN_WIDTH * 0.10} ${SCREEN_HEIGHT * 0.60 + 4.5} v 16 M ${SCREEN_WIDTH * 0.10 - 8} ${SCREEN_HEIGHT * 0.60 + 12} h 16 M ${SCREEN_WIDTH * 0.10} ${SCREEN_HEIGHT * 0.60 + 20.5} l -7 12 M ${SCREEN_WIDTH * 0.10} ${SCREEN_HEIGHT * 0.60 + 20.5} l 7 12`} stroke="#a9b8ff" strokeWidth="1.6" fill="none" opacity="0.5" />
+      <Path d={`M ${SCREEN_WIDTH * 0.10 + 12} ${SCREEN_HEIGHT * 0.60 + 12} L ${SCREEN_WIDTH * 0.24} ${SCREEN_HEIGHT * 0.60 + 6}`} stroke="#a9b8ff" strokeWidth="1.5" strokeDasharray="5 6" opacity="0.45" />
+      <Path d={`M ${SCREEN_WIDTH * 0.24} ${SCREEN_HEIGHT * 0.60 + 6} m -22, 0 a 22,13 0 1,0 44,0 a 22,13 0 1,0 -44,0`} stroke="#a9b8ff" strokeWidth="1.5" fill="#ffffff" fillOpacity="0.35" opacity="0.5" />
+
+      {/* ── Flowchart bits (lower-right): decision diamond + terminator ── */}
+      <Path d={`M ${SCREEN_WIDTH * 0.80} ${SCREEN_HEIGHT * 0.66} L ${SCREEN_WIDTH * 0.80 + 20} ${SCREEN_HEIGHT * 0.66 + 14} L ${SCREEN_WIDTH * 0.80} ${SCREEN_HEIGHT * 0.66 + 28} L ${SCREEN_WIDTH * 0.80 - 20} ${SCREEN_HEIGHT * 0.66 + 14} Z`} stroke="#a9b8ff" strokeWidth="1.5" fill="#ffffff" fillOpacity="0.35" opacity="0.5" />
+      <Path d={`M ${SCREEN_WIDTH * 0.80} ${SCREEN_HEIGHT * 0.66 + 28} v 22`} stroke="#a9b8ff" strokeWidth="1.5" strokeDasharray="4 5" opacity="0.4" />
+      <Rect x={SCREEN_WIDTH * 0.80 - 30} y={SCREEN_HEIGHT * 0.66 + 50} width="60" height="24" rx="12" stroke="#a9b8ff" strokeWidth="1.5" fill="#ffffff" fillOpacity="0.35" opacity="0.5" />
+
+      {/* Faint sequence-diagram lifeline for balance, center-right */}
+      <Path d={`M ${SCREEN_WIDTH * 0.90} ${SCREEN_HEIGHT * 0.35} v 90`} stroke="#bfd0ff" strokeWidth="1.4" strokeDasharray="3 6" opacity="0.35" />
+      <Rect x={SCREEN_WIDTH * 0.90 - 26} y={SCREEN_HEIGHT * 0.35} width="52" height="18" rx="4" stroke="#bfd0ff" strokeWidth="1.4" fill="none" opacity="0.35" />
     </Svg>
   </View>
 );
@@ -384,11 +563,13 @@ const CompactPasswordStrength = ({ password }: { password: string }) => {
 
 export default function SignUp() {
   const router = useRouter();
-  const { height: windowHeight } = useWindowDimensions();
+  const params = useLocalSearchParams();
+  const { width: windowWidth, height: windowHeight } = useWindowDimensions();
   const isSmallScreen = windowHeight < 680;
+  const logoSize = getResponsiveLogoSize(windowWidth, windowHeight);
 
   const [fullName, setFullName] = useState('');
-  const [email, setEmail] = useState('');
+  const [email, setEmail] = useState((params.prefilledEmail as string) || '');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -397,6 +578,7 @@ export default function SignUp() {
   const [loading, setLoading] = useState(false);
   const [showErrorModal, setShowErrorModal] = useState(false);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const [showSuccessAnimation, setShowSuccessAnimation] = useState(false);
   const [errorModalData, setErrorModalData] = useState({
     title: '',
     message: '',
@@ -419,13 +601,9 @@ export default function SignUp() {
   });
 
   const [inlinePasswordError, setInlinePasswordError] = useState('');
-
-  // Inline "account already exists" / "registered with Google" type errors,
-  // rendered directly below the email field (replaces the old popup modal
-  // for these specific cases).
   const [emailInlineError, setEmailInlineError] = useState('');
 
-  // Custom toast state (same pattern as the forgot-password screen).
+  // Custom toast state
   const [toastVisible, setToastVisible] = useState(false);
   const [toastMessage, setToastMessage] = useState('');
   const [toastIsError, setToastIsError] = useState(false);
@@ -445,9 +623,42 @@ export default function SignUp() {
   const [passwordFocused, setPasswordFocused] = useState(false);
   const [confirmPasswordFocused, setConfirmPasswordFocused] = useState(false);
 
+  const isAnyInputFocused = fullNameFocused || emailFocused || passwordFocused || confirmPasswordFocused;
+
+  // Card entrance animation
+  const cardOpacity = useRef(new Animated.Value(0)).current;
+  const cardTranslateY = useRef(new Animated.Value(20)).current;
+  const [isAnimatingOut, setIsAnimatingOut] = useState(false);
+
   const emailRef = useRef<TextInput>(null);
   const passwordRef = useRef<TextInput>(null);
   const confirmPasswordRef = useRef<TextInput>(null);
+
+  useEffect(() => {
+    // Only animate entrance if not coming from signin (no prefilledEmail means fresh load)
+    const hasPrefilledEmail = params.prefilledEmail !== undefined;
+    
+    if (hasPrefilledEmail) {
+      // Coming from signin - skip entrance animation, set directly
+      cardOpacity.setValue(1);
+      cardTranslateY.setValue(0);
+    } else {
+      // Fresh load - animate entrance
+      Animated.parallel([
+        Animated.timing(cardOpacity, {
+          toValue: 1,
+          duration: 400,
+          useNativeDriver: true,
+        }),
+        Animated.timing(cardTranslateY, {
+          toValue: 0,
+          duration: 400,
+          easing: Easing.out(Easing.cubic),
+          useNativeDriver: true,
+        }),
+      ]).start();
+    }
+  }, []);
 
   useEffect(() => {
     const handleRedirectResult = async () => {
@@ -494,12 +705,37 @@ export default function SignUp() {
     setShowSuccessModal(true);
   };
 
+  // Smooth navigation to sign in
+  const navigateToSignIn = useCallback(() => {
+    if (isAnimatingOut) return;
+    setIsAnimatingOut(true);
+    
+    Animated.parallel([
+      Animated.timing(cardOpacity, {
+        toValue: 0,
+        duration: 150,
+        useNativeDriver: true,
+      }),
+      Animated.timing(cardTranslateY, {
+        toValue: -20,
+        duration: 150,
+        easing: Easing.in(Easing.cubic),
+        useNativeDriver: true,
+      }),
+    ]).start(() => {
+      router.push({
+        pathname: '/(auth)/signin',
+        params: email ? { prefilledEmail: email } : {}
+      });
+    });
+  }, [cardOpacity, cardTranslateY, router, email, isAnimatingOut]);
+
   // ── Password Validation Helpers ──────────────────────────────────────────
 
   const isPasswordValid = (pwd: string) => {
-    return pwd.length >= 8 && 
-           /[A-Z]/.test(pwd) && 
-           /[a-z]/.test(pwd) && 
+    return pwd.length >= 8 &&
+           /[A-Z]/.test(pwd) &&
+           /[a-z]/.test(pwd) &&
            /[0-9]/.test(pwd) &&
            SPECIAL_CHARS_REGEX.test(pwd);
   };
@@ -594,12 +830,13 @@ export default function SignUp() {
       const apiResult = await authService.googleAuth(idToken);
 
       if (apiResult.success) {
+        setShowSuccessAnimation(true);
         showSuccessPopup('Welcome!', 'Your Google account has been successfully signed up.', '', '');
         setTimeout(() => { router.replace('/(tabs)/home'); }, 400);
       } else {
         await auth?.signOut();
         const msg = apiResult.message || '';
-        if (msg.toLowerCase().includes('already registered') || 
+        if (msg.toLowerCase().includes('already registered') ||
             msg.toLowerCase().includes('already exists') ||
             msg.toLowerCase().includes('email/password')) {
           const googleEmail = result.user.email || '';
@@ -680,14 +917,17 @@ export default function SignUp() {
 
   return (
     <>
-      <Stack.Screen options={{ headerShown: false }} />
+      <Stack.Screen options={{ 
+        headerShown: false,
+        animation: 'none',
+      }} />
 
       <ErrorPopupModal visible={showErrorModal} title={errorModalData.title} message={errorModalData.message} onClose={() => setShowErrorModal(false)} onAction={errorModalData.onAction} actionButtonText={errorModalData.actionButtonText} actionIcon={errorModalData.actionIcon} />
-      <SuccessModal 
-        visible={showSuccessModal} 
-        title={successModalData.title} 
-        message={successModalData.message} 
-        onClose={() => setShowSuccessModal(false)} 
+      <SuccessModal
+        visible={showSuccessModal}
+        title={successModalData.title}
+        message={successModalData.message}
+        onClose={() => setShowSuccessModal(false)}
         buttonText="Continue"
         email={successModalData.email}
         purpose={successModalData.purpose}
@@ -702,214 +942,226 @@ export default function SignUp() {
       <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined} keyboardVerticalOffset={Platform.OS === 'ios' ? 64 : 0}>
         <DiagramBackground />
 
-        <ScrollView 
-          contentContainerStyle={styles.scrollContent} 
-          keyboardShouldPersistTaps="handled" 
-          showsVerticalScrollIndicator={false} 
+        <ScrollView
+          contentContainerStyle={styles.scrollContent}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
           bounces={false}
-          automaticallyAdjustKeyboardInsets={true} 
-          keyboardDismissMode="interactive" 
+          automaticallyAdjustKeyboardInsets={true}
+          keyboardDismissMode="interactive"
           contentInsetAdjustmentBehavior="always"
         >
-          <View style={styles.card}>
-            <View style={styles.connectorTop} />
-            <View style={styles.connectorBottom} />
-            <View style={styles.connectorLeft} />
-            <View style={styles.connectorRight} />
-
-            <Text style={[styles.heading, isSmallScreen && { fontSize: 20 }]}>Sign Up</Text>
-
-            {/* Full Name */}
-            <View style={styles.formGroup}>
-              <Text style={styles.label}>Full Name</Text>
-              <View style={[styles.inputWrap, fullNameFocused && styles.inputWrapFocused, errors.fullName ? styles.inputError : null]}>
-                <TextInput
-                  style={[styles.input, Platform.OS === 'web' && { outlineWidth: 1, outlineStyle: 'solid', outlineOffset: 0, borderRadius: 10, outlineColor: getOutlineColor(fullNameFocused, errors.fullName) }]}
-                  placeholder="Juan dela Cruz"
-                  placeholderTextColor="#b8c0d4"
-                  value={fullName}
-                  onChangeText={(text) => { setFullName(text); if (errors.fullName) setErrors({ ...errors, fullName: '' }); }}
-                  onFocus={() => setFullNameFocused(true)}
-                  onBlur={() => setFullNameFocused(false)}
-                  autoCapitalize="words"
-                  returnKeyType="next"
-                  blurOnSubmit={false}
-                  onSubmitEditing={() => emailRef.current?.focus()}
-                  underlineColorAndroid="transparent"
-                  selectionColor="#3b5bdb"
-                  cursorColor="#3b5bdb"
-                />
-              </View>
-              {errors.fullName ? <Text style={styles.fieldError}>{errors.fullName}</Text> : null}
+          <View style={styles.cardOuter}>
+            <View style={styles.logoWrap}>
+              <AnimatedLogo size={logoSize} isInputFocused={isAnyInputFocused} showSuccess={showSuccessAnimation} />
             </View>
 
-            {/* Email */}
-            <View style={styles.formGroup}>
-              <Text style={styles.label}>Email</Text>
-              <View style={[styles.inputWrap, emailFocused && styles.inputWrapFocused, (errors.email || emailInlineError) ? styles.inputError : null]}>
-                <TextInput
-                  ref={emailRef}
-                  style={[styles.input, Platform.OS === 'web' && { outlineWidth: 1, outlineStyle: 'solid', outlineOffset: 0, borderRadius: 10, outlineColor: getOutlineColor(emailFocused, errors.email || emailInlineError) }]}
-                  placeholder="you@example.com"
-                  placeholderTextColor="#b8c0d4"
-                  value={email}
-                  onChangeText={(text) => { setEmail(text); if (errors.email) setErrors({ ...errors, email: '' }); if (emailInlineError) setEmailInlineError(''); }}
-                  onFocus={() => setEmailFocused(true)}
-                  onBlur={() => setEmailFocused(false)}
-                  keyboardType="email-address"
-                  autoCapitalize="none"
-                  autoCorrect={false}
-                  returnKeyType="next"
-                  blurOnSubmit={false}
-                  onSubmitEditing={() => passwordRef.current?.focus()}
-                  underlineColorAndroid="transparent"
-                  selectionColor="#3b5bdb"
-                  cursorColor="#3b5bdb"
-                  autoComplete="off"
-                  importantForAutofill="no"
-                />
-              </View>
-              {errors.email ? <Text style={styles.fieldError}>{errors.email}</Text> : null}
-              {emailInlineError ? <Text style={styles.fieldError}>{emailInlineError}</Text> : null}
-            </View>
+            <Animated.View style={[
+              styles.card,
+              {
+                opacity: cardOpacity,
+                transform: [{ translateY: cardTranslateY }],
+              }
+            ]}>
+              <View style={styles.connectorTop} />
+              <View style={styles.connectorBottom} />
+              <View style={styles.connectorLeft} />
+              <View style={styles.connectorRight} />
 
-            {/* Password */}
-            <View style={styles.formGroup}>
-              <Text style={styles.label}>Password</Text>
-              <View style={[styles.inputWrap, passwordFocused && styles.inputWrapFocused, errors.password ? styles.inputError : null]}>
-                <TextInput
-                  ref={passwordRef}
-                  style={[styles.input, styles.inputWithIcon, Platform.OS === 'web' && { outlineWidth: 1, outlineStyle: 'solid', outlineOffset: 0, borderRadius: 10, outlineColor: getOutlineColor(passwordFocused, errors.password) }]}
-                  placeholder="Create a strong password"
-                  placeholderTextColor="#b8c0d4"
-                  value={password}
-                  onChangeText={(text) => { 
-                    setPassword(text); 
-                    if (errors.password) setErrors({ ...errors, password: '' });
-                    setInlinePasswordError('');
-                  }}
-                  onFocus={() => setPasswordFocused(true)}
-                  onBlur={() => {
-                    setPasswordFocused(false);
-                    if (password && !isPasswordValid(password)) {
-                      const missing = getPasswordMissingRequirements(password);
-                      setInlinePasswordError(`Missing: ${missing.join(', ')}`);
-                    } else {
+              <Text style={[styles.heading, isSmallScreen && { fontSize: 20 }]}>Sign Up</Text>
+
+              {/* Full Name */}
+              <View style={styles.formGroup}>
+                <Text style={styles.label}>Full Name</Text>
+                <View style={[styles.inputWrap, fullNameFocused && styles.inputWrapFocused, errors.fullName ? styles.inputError : null]}>
+                  <TextInput
+                    style={[styles.input, Platform.OS === 'web' && { outlineWidth: 1, outlineStyle: 'solid', outlineOffset: 0, borderRadius: 10, outlineColor: getOutlineColor(fullNameFocused, errors.fullName) }]}
+                    placeholder="Juan dela Cruz"
+                    placeholderTextColor="#b8c0d4"
+                    value={fullName}
+                    onChangeText={(text) => { setFullName(text); if (errors.fullName) setErrors({ ...errors, fullName: '' }); }}
+                    onFocus={() => setFullNameFocused(true)}
+                    onBlur={() => setFullNameFocused(false)}
+                    autoCapitalize="words"
+                    returnKeyType="next"
+                    blurOnSubmit={false}
+                    onSubmitEditing={() => emailRef.current?.focus()}
+                    underlineColorAndroid="transparent"
+                    selectionColor="#3b5bdb"
+                    cursorColor="#3b5bdb"
+                  />
+                </View>
+                {errors.fullName ? <Text style={styles.fieldError}>{errors.fullName}</Text> : null}
+              </View>
+
+              {/* Email */}
+              <View style={styles.formGroup}>
+                <Text style={styles.label}>Email</Text>
+                <View style={[styles.inputWrap, emailFocused && styles.inputWrapFocused, (errors.email || emailInlineError) ? styles.inputError : null]}>
+                  <TextInput
+                    ref={emailRef}
+                    style={[styles.input, Platform.OS === 'web' && { outlineWidth: 1, outlineStyle: 'solid', outlineOffset: 0, borderRadius: 10, outlineColor: getOutlineColor(emailFocused, errors.email || emailInlineError) }]}
+                    placeholder="you@example.com"
+                    placeholderTextColor="#b8c0d4"
+                    value={email}
+                    onChangeText={(text) => { setEmail(text); if (errors.email) setErrors({ ...errors, email: '' }); if (emailInlineError) setEmailInlineError(''); }}
+                    onFocus={() => setEmailFocused(true)}
+                    onBlur={() => setEmailFocused(false)}
+                    keyboardType="email-address"
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                    returnKeyType="next"
+                    blurOnSubmit={false}
+                    onSubmitEditing={() => passwordRef.current?.focus()}
+                    underlineColorAndroid="transparent"
+                    selectionColor="#3b5bdb"
+                    cursorColor="#3b5bdb"
+                    autoComplete="off"
+                    importantForAutofill="no"
+                  />
+                </View>
+                {errors.email ? <Text style={styles.fieldError}>{errors.email}</Text> : null}
+                {emailInlineError ? <Text style={styles.fieldError}>{emailInlineError}</Text> : null}
+              </View>
+
+              {/* Password */}
+              <View style={styles.formGroup}>
+                <Text style={styles.label}>Password</Text>
+                <View style={[styles.inputWrap, passwordFocused && styles.inputWrapFocused, errors.password ? styles.inputError : null]}>
+                  <TextInput
+                    ref={passwordRef}
+                    style={[styles.input, styles.inputWithIcon, Platform.OS === 'web' && { outlineWidth: 1, outlineStyle: 'solid', outlineOffset: 0, borderRadius: 10, outlineColor: getOutlineColor(passwordFocused, errors.password) }]}
+                    placeholder="Create a strong password"
+                    placeholderTextColor="#b8c0d4"
+                    value={password}
+                    onChangeText={(text) => {
+                      setPassword(text);
+                      if (errors.password) setErrors({ ...errors, password: '' });
                       setInlinePasswordError('');
-                    }
-                  }}
-                  secureTextEntry={!showPassword}
-                  autoCapitalize="none"
-                  returnKeyType="next"
-                  blurOnSubmit={false}
-                  onSubmitEditing={() => confirmPasswordRef.current?.focus()}
-                  underlineColorAndroid="transparent"
-                  selectionColor="#3b5bdb"
-                  cursorColor="#3b5bdb"
-                  autoComplete="off"
-                  importantForAutofill="no"
-                />
-                <TouchableOpacity style={styles.eyeBtn} onPress={() => setShowPassword(!showPassword)}>
-                  <EyeIcon visible={showPassword} />
-                </TouchableOpacity>
-              </View>
-              <CompactPasswordStrength password={password} />
-              {inlinePasswordError ? <Text style={styles.inlineErrorText}>{inlinePasswordError}</Text> : null}
-              {errors.password ? <Text style={styles.fieldError}>{errors.password}</Text> : null}
-            </View>
-
-            {/* Confirm Password */}
-            <View style={styles.formGroup}>
-              <Text style={styles.label}>Confirm Password</Text>
-              <View style={[styles.inputWrap, confirmPasswordFocused && styles.inputWrapFocused, errors.confirmPassword ? styles.inputError : null]}>
-                <TextInput
-                  ref={confirmPasswordRef}
-                  style={[styles.input, styles.inputWithIcon, Platform.OS === 'web' && { outlineWidth: 1, outlineStyle: 'solid', outlineOffset: 0, borderRadius: 10, outlineColor: getOutlineColor(confirmPasswordFocused, errors.confirmPassword) }]}
-                  placeholder="Re-enter your password"
-                  placeholderTextColor="#b8c0d4"
-                  value={confirmPassword}
-                  onChangeText={(text) => { setConfirmPassword(text); if (errors.confirmPassword) setErrors({ ...errors, confirmPassword: '' }); }}
-                  onFocus={() => setConfirmPasswordFocused(true)}
-                  onBlur={() => setConfirmPasswordFocused(false)}
-                  secureTextEntry={!showConfirmPassword}
-                  autoCapitalize="none"
-                  returnKeyType="done"
-                  blurOnSubmit={true}
-                  onSubmitEditing={handleSignUp}
-                  underlineColorAndroid="transparent"
-                  selectionColor="#3b5bdb"
-                  cursorColor="#3b5bdb"
-                  autoComplete="off"
-                  importantForAutofill="no"
-                />
-                <TouchableOpacity style={styles.eyeBtn} onPress={() => setShowConfirmPassword(!showConfirmPassword)}>
-                  <EyeIcon visible={showConfirmPassword} />
-                </TouchableOpacity>
-              </View>
-              {confirmPassword ? (
-                doPasswordsMatch() ? (
-                  <Text style={styles.matchSuccess}>✓ Match</Text>
-                ) : !errors.confirmPassword ? (
-                  <Text style={styles.fieldError}>✗ Doesn't match</Text>
-                ) : null
-              ) : null}
-              {errors.confirmPassword ? <Text style={styles.fieldError}>{errors.confirmPassword}</Text> : null}
-            </View>
-
-            {/* Sign Up Button */}
-            <TouchableOpacity style={[styles.btnCreate, loading && styles.btnDisabled]} onPress={handleSignUp} activeOpacity={0.85} disabled={loading}>
-              {loading ? (
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                  <ActivityIndicator color="#ffffff" size="small" />
-                  <Text style={styles.btnCreateText}>Creating Account...</Text>
+                    }}
+                    onFocus={() => setPasswordFocused(true)}
+                    onBlur={() => {
+                      setPasswordFocused(false);
+                      if (password && !isPasswordValid(password)) {
+                        const missing = getPasswordMissingRequirements(password);
+                        setInlinePasswordError(`Missing: ${missing.join(', ')}`);
+                      } else {
+                        setInlinePasswordError('');
+                      }
+                    }}
+                    secureTextEntry={!showPassword}
+                    autoCapitalize="none"
+                    returnKeyType="next"
+                    blurOnSubmit={false}
+                    onSubmitEditing={() => confirmPasswordRef.current?.focus()}
+                    underlineColorAndroid="transparent"
+                    selectionColor="#3b5bdb"
+                    cursorColor="#3b5bdb"
+                    autoComplete="off"
+                    importantForAutofill="no"
+                  />
+                  <TouchableOpacity style={styles.eyeBtn} onPress={() => setShowPassword(!showPassword)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+                    <EyeIcon visible={showPassword} />
+                  </TouchableOpacity>
                 </View>
-              ) : (
-                <Text style={styles.btnCreateText}>Sign Up</Text>
+                <CompactPasswordStrength password={password} />
+                {inlinePasswordError ? <Text style={styles.inlineErrorText}>{inlinePasswordError}</Text> : null}
+                {errors.password ? <Text style={styles.fieldError}>{errors.password}</Text> : null}
+              </View>
+
+              {/* Confirm Password */}
+              <View style={styles.formGroup}>
+                <Text style={styles.label}>Confirm Password</Text>
+                <View style={[styles.inputWrap, confirmPasswordFocused && styles.inputWrapFocused, errors.confirmPassword ? styles.inputError : null]}>
+                  <TextInput
+                    ref={confirmPasswordRef}
+                    style={[styles.input, styles.inputWithIcon, Platform.OS === 'web' && { outlineWidth: 1, outlineStyle: 'solid', outlineOffset: 0, borderRadius: 10, outlineColor: getOutlineColor(confirmPasswordFocused, errors.confirmPassword) }]}
+                    placeholder="Re-enter your password"
+                    placeholderTextColor="#b8c0d4"
+                    value={confirmPassword}
+                    onChangeText={(text) => { setConfirmPassword(text); if (errors.confirmPassword) setErrors({ ...errors, confirmPassword: '' }); }}
+                    onFocus={() => setConfirmPasswordFocused(true)}
+                    onBlur={() => setConfirmPasswordFocused(false)}
+                    secureTextEntry={!showConfirmPassword}
+                    autoCapitalize="none"
+                    returnKeyType="done"
+                    blurOnSubmit={true}
+                    onSubmitEditing={handleSignUp}
+                    underlineColorAndroid="transparent"
+                    selectionColor="#3b5bdb"
+                    cursorColor="#3b5bdb"
+                    autoComplete="off"
+                    importantForAutofill="no"
+                  />
+                  <TouchableOpacity style={styles.eyeBtn} onPress={() => setShowConfirmPassword(!showConfirmPassword)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+                    <EyeIcon visible={showConfirmPassword} />
+                  </TouchableOpacity>
+                </View>
+                {confirmPassword ? (
+                  doPasswordsMatch() ? (
+                    <Text style={styles.matchSuccess}>✓ Match</Text>
+                  ) : !errors.confirmPassword ? (
+                    <Text style={styles.fieldError}>✗ Doesn't match</Text>
+                  ) : null
+                ) : null}
+                {errors.confirmPassword ? <Text style={styles.fieldError}>{errors.confirmPassword}</Text> : null}
+              </View>
+
+              {/* Sign Up Button */}
+              <TouchableOpacity style={[styles.btnCreate, loading && styles.btnDisabled]} onPress={handleSignUp} activeOpacity={0.85} disabled={loading}>
+                {loading ? (
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                    <ActivityIndicator color="#ffffff" size="small" />
+                    <Text style={styles.btnCreateText}>Creating Account...</Text>
+                  </View>
+                ) : (
+                  <Text style={styles.btnCreateText}>Sign Up</Text>
+                )}
+              </TouchableOpacity>
+
+              {/* Divider + Google — web only */}
+              {Platform.OS === 'web' && (
+                <>
+                  <View style={styles.divider}>
+                    <View style={styles.line} />
+                    <Text style={styles.orText}>or</Text>
+                    <View style={styles.line} />
+                  </View>
+                  <TouchableOpacity style={[styles.btnGoogle, loading && styles.btnDisabled]} onPress={handleGoogleSignUp} activeOpacity={0.85} disabled={loading}>
+                    {loading ? <ActivityIndicator color="#3b5bdb" size="small" /> : <GoogleIcon />}
+                    <Text style={styles.btnGoogleText}>Continue with Google</Text>
+                  </TouchableOpacity>
+                </>
               )}
-            </TouchableOpacity>
 
-            {/* Divider + Google — web only */}
-            {Platform.OS === 'web' && (
-              <>
-                <View style={styles.divider}>
-                  <View style={styles.line} />
-                  <Text style={styles.orText}>or</Text>
-                  <View style={styles.line} />
-                </View>
-                <TouchableOpacity style={[styles.btnGoogle, loading && styles.btnDisabled]} onPress={handleGoogleSignUp} activeOpacity={0.85} disabled={loading}>
-                  {loading ? <ActivityIndicator color="#3b5bdb" size="small" /> : <GoogleIcon />}
-                  <Text style={styles.btnGoogleText}>Continue with Google</Text>
+              {/* ── Terms Checkbox ── */}
+              <View style={styles.termsWrap}>
+                <TouchableOpacity onPress={handleToggleAgreement} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                  <View style={[styles.customCheckbox, agreed && styles.customCheckboxChecked, errors.agreed ? styles.customCheckboxError : null]}>
+                    {agreed && (
+                      <Svg width={9} height={9} viewBox="0 0 10 10">
+                        <Path d="M2 5l2.5 2.5L8 3" stroke="white" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" fill="none" />
+                      </Svg>
+                    )}
+                  </View>
                 </TouchableOpacity>
-              </>
-            )}
+                <Text style={styles.termsText}>
+                  By signing up, you agree to the{' '}
+                  <Text style={styles.termsLink} onPress={openPrivacyPage}>Terms and Condition</Text>
+                  {' & '}
+                  <Text style={styles.termsLink} onPress={openPrivacyPage}>Privacy Policy</Text>
+                </Text>
+              </View>
+              {errors.agreed ? <Text style={styles.fieldError}>{errors.agreed}</Text> : null}
 
-            {/* ── Terms Checkbox ── */}
-            <View style={[styles.termsWrap, errors.agreed ? styles.termsError : null]}>
-              <TouchableOpacity onPress={handleToggleAgreement} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                <View style={[styles.customCheckbox, agreed && styles.customCheckboxChecked]}>
-                  {agreed && (
-                    <Svg width={9} height={9} viewBox="0 0 10 10">
-                      <Path d="M2 5l2.5 2.5L8 3" stroke="white" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" fill="none" />
-                    </Svg>
-                  )}
-                </View>
-              </TouchableOpacity>
-              <Text style={styles.termsText}>
-                By signing up, you agree to the{' '}
-                <Text style={styles.termsLink} onPress={openPrivacyPage}>Terms and Condition</Text>
-                {' & '}
-                <Text style={styles.termsLink} onPress={openPrivacyPage}>Privacy Policy</Text>
-              </Text>
-            </View>
-            {errors.agreed ? <Text style={styles.fieldError}>{errors.agreed}</Text> : null}
-
-            {/* Sign In link */}
-            <View style={styles.signinWrap}>
-              <Text style={styles.signinText}>Have an account? </Text>
-              <TouchableOpacity onPress={() => router.push('/(auth)/signin')}>
-                <Text style={styles.signinLink}>Sign In</Text>
-              </TouchableOpacity>
-            </View>
+              {/* Sign In link */}
+              <View style={styles.signinWrap}>
+                <Text style={styles.signinText}>Have an account? </Text>
+                <TouchableOpacity onPress={navigateToSignIn}>
+                  <Text style={styles.signinLink}>Sign In</Text>
+                </TouchableOpacity>
+              </View>
+            </Animated.View>
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
@@ -922,11 +1174,15 @@ export default function SignUp() {
 const styles = StyleSheet.create({
   flex: { flex: 1, backgroundColor: '#eef2ff' },
   scrollContent: { flexGrow: 1, justifyContent: 'center', alignItems: 'center', paddingVertical: 16, paddingHorizontal: 12, minHeight: SCREEN_HEIGHT },
-  card: { backgroundColor: '#ffffff', borderRadius: 20, paddingHorizontal: 22, paddingVertical: 22, width: '100%', maxWidth: 400, minWidth: 300, position: 'relative', shadowColor: '#1e293b', shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.06, shadowRadius: 20, elevation: 8, marginTop: 0, borderColor: '#f1f5ff' },
+  cardOuter: { width: '100%', maxWidth: 400, minWidth: 300, alignItems: 'center' },
+  card: { backgroundColor: '#ffffff', borderRadius: 20, paddingHorizontal: 22, paddingVertical: 20, paddingTop: 44, width: '100%', position: 'relative', shadowColor: '#1e293b', shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.06, shadowRadius: 20, elevation: 8, marginTop: 0, borderColor: '#f1f5ff'},
   connectorTop: { position: 'absolute', top: -4, alignSelf: 'center', width: 8, height: 8, borderRadius: 4, backgroundColor: '#ffffff', borderWidth: 1.5, borderColor: '#c7d2fe' },
   connectorBottom: { position: 'absolute', bottom: -4, alignSelf: 'center', width: 8, height: 8, borderRadius: 4, backgroundColor: '#ffffff', borderWidth: 1.5, borderColor: '#c7d2fe' },
   connectorLeft: { position: 'absolute', left: -4, top: '50%', transform: [{ translateY: -4 }], width: 8, height: 8, borderRadius: 4, backgroundColor: '#ffffff', borderWidth: 1.5, borderColor: '#c7d2fe' },
   connectorRight: { position: 'absolute', right: -4, top: '50%', transform: [{ translateY: -4 }], width: 8, height: 8, borderRadius: 4, backgroundColor: '#ffffff', borderWidth: 1.5, borderColor: '#c7d2fe' },
+  logoWrap: { alignItems: 'center', justifyContent: 'center', marginBottom: -36, zIndex: 10 },
+  logoWrapper: { alignItems: 'center', justifyContent: 'center', backgroundColor: '#eef2ff', borderWidth: 2.5, borderColor: '#3b5bdb', shadowColor: '#3b5bdb', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.15, shadowRadius: 8, elevation: 5 },
+  logo: { backgroundColor: 'transparent' },
   heading: { fontSize: 22, fontWeight: '800', color: '#0f172a', textAlign: 'center', marginBottom: 14 },
   formGroup: { marginBottom: 10 },
   label: { fontSize: 12, fontWeight: '600', color: '#334155', marginBottom: 3 },
@@ -934,7 +1190,7 @@ const styles = StyleSheet.create({
   inputWrapFocused: { backgroundColor: '#ffffff', shadowColor: '#3b5bdb', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.1, shadowRadius: 8, elevation: 3 },
   input: { flex: 1, paddingHorizontal: 12, paddingVertical: Platform.OS === 'ios' ? 9 : 8, fontSize: 13, color: '#1a1f36', backgroundColor: 'transparent', minHeight: 40, textAlignVertical: 'center' },
   inputWithIcon: { paddingRight: 40 },
-  eyeBtn: { position: 'absolute', right: 8, padding: 8 },
+  eyeBtn: { position: 'absolute', right: 8, padding: 12 },
   inputError: { borderColor: '#ef4444' },
   fieldError: { fontSize: 11, color: '#ef4444', marginTop: 3, marginLeft: 2, fontWeight: '500' },
   inlineErrorText: { fontSize: 11, color: '#f59e0b', marginTop: 2, marginLeft: 2, fontWeight: '500' },
@@ -952,11 +1208,11 @@ const styles = StyleSheet.create({
   orText: { marginHorizontal: 8, fontSize: 11, color: '#8896b3', fontWeight: '600' },
   btnGoogle: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, borderWidth: 1, borderColor: '#e5e7eb', borderRadius: 10, paddingVertical: 9, marginTop: 4, backgroundColor: '#ffffff' },
   btnGoogleText: { fontSize: 13, fontWeight: '500', color: '#1a1f36', marginLeft: 6 },
-  termsWrap: { flexDirection: 'row', alignItems: 'flex-start', gap: 8, marginTop: 10, padding: 8, borderWidth: 1, borderColor: '#e2e6f3', borderRadius: 8, backgroundColor: '#f8f9ff' },
-  termsError: { borderColor: '#ef4444' },
-  customCheckbox: { width: 16, height: 16, borderRadius: 8, borderWidth: 2, borderColor: '#8896b3', alignItems: 'center', justifyContent: 'center', marginTop: 1, flexShrink: 0 },
+  termsWrap: { flexDirection: 'row', alignItems: 'flex-start', gap: 8, marginTop: 12, paddingHorizontal: 2 },
+  customCheckbox: { width: 16, height: 16, borderRadius: 4, borderWidth: 2, borderColor: '#8896b3', alignItems: 'center', justifyContent: 'center', marginTop: 1, flexShrink: 0 },
   customCheckboxChecked: { borderColor: '#3b5bdb', backgroundColor: '#3b5bdb' },
-  termsText: { fontSize: 11.5, color: '#4a5568', flex: 1, lineHeight: 16 },
+  customCheckboxError: { borderColor: '#ef4444' },
+  termsText: { fontSize: 12, color: '#4a5568', flex: 1, lineHeight: 17 },
   termsLink: { fontWeight: '700', color: '#3b5bdb' },
   signinWrap: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', marginTop: 12 },
   signinText: { fontSize: 12, color: '#64748b' },

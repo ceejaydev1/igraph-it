@@ -1,14 +1,4 @@
 // components/maxgraph-universal-handler.ts
-//
-// Draw.io selection behavior, matched exactly:
-//  1. Selection outline = dashed rectangle sized to the vertex's actual
-//     bounding box (no per-shape geometry tracing).
-//  2. Resize handles = small circles (white fill, blue border) positioned
-//     at the corners/edge-midpoints of that same bounding box.
-//
-// Handle shape must be overridden at the Shape level (createSizerShape),
-// not via CSS — maxGraph renders handles as SVG shapes, so `.mxHandle`
-// CSS rules never actually apply to them.
 
 import {
   VertexHandler,
@@ -35,7 +25,7 @@ export class UniversalVertexHandler extends VertexHandler {
     const shape = new RectangleShape(
       bounds,
       'none',      // no fill
-      HANDLE_STROKE,
+      '#4c6fff',   // BLUE stroke
       1.5,
     );
     shape.isDashed = true;
@@ -50,9 +40,9 @@ export class UniversalVertexHandler extends VertexHandler {
   createSizerShape(bounds: Rectangle, index: number, fillColor?: string): Shape {
     const shape = new EllipseShape(
       bounds,
-      fillColor ?? HANDLE_FILL,
-      HANDLE_STROKE,
-      HANDLE_STROKE_WIDTH,
+      fillColor ?? '#ffffff',
+      '#4c6fff',   // BLUE stroke
+      1.5,
     );
     shape.isDashed = false;
     return shape;

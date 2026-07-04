@@ -40,6 +40,9 @@ import {
   Circle,
   Rect,
   Path,
+  Defs,
+  LinearGradient,
+  Stop,
 } from 'react-native-svg';
 
 import * as authService from '../../services/authService';
@@ -301,15 +304,70 @@ const SuccessModal = ({
 
 const DiagramBackground = () => (
   <View style={StyleSheet.absoluteFillObject} pointerEvents="none">
+    <Svg width="100%" height="100%" viewBox={`0 0 ${SCREEN_WIDTH} ${SCREEN_HEIGHT}`} preserveAspectRatio="xMidYMid slice" style={StyleSheet.absoluteFillObject}>
+      <Defs>
+        <LinearGradient id="bgWash" x1="0%" y1="0%" x2="100%" y2="100%">
+          <Stop offset="0%" stopColor="#e8edff" stopOpacity="1" />
+          <Stop offset="55%" stopColor="#eef2ff" stopOpacity="1" />
+          <Stop offset="100%" stopColor="#e3e9ff" stopOpacity="1" />
+        </LinearGradient>
+        <LinearGradient id="blobTopRight" x1="0%" y1="0%" x2="100%" y2="100%">
+          <Stop offset="0%" stopColor="#c7d2fe" stopOpacity="0.55" />
+          <Stop offset="100%" stopColor="#c7d2fe" stopOpacity="0" />
+        </LinearGradient>
+        <LinearGradient id="blobBottomLeft" x1="0%" y1="0%" x2="100%" y2="100%">
+          <Stop offset="0%" stopColor="#b6c2ff" stopOpacity="0.45" />
+          <Stop offset="100%" stopColor="#b6c2ff" stopOpacity="0" />
+        </LinearGradient>
+      </Defs>
+
+      <Rect x="0" y="0" width={SCREEN_WIDTH} height={SCREEN_HEIGHT} fill="url(#bgWash)" />
+      <Circle cx={SCREEN_WIDTH * 0.9} cy={SCREEN_HEIGHT * 0.08} r={SCREEN_WIDTH * 0.55} fill="url(#blobTopRight)" />
+      <Circle cx={SCREEN_WIDTH * 0.05} cy={SCREEN_HEIGHT * 0.95} r={SCREEN_WIDTH * 0.5} fill="url(#blobBottomLeft)" />
+    </Svg>
+
     <Image source={require('../../assets/images/grid-bg.png')} style={styles.gridBackground} resizeMode="repeat" />
     <View style={styles.gridOverlay} />
+
     <Svg width="100%" height="100%" viewBox={`0 0 ${SCREEN_WIDTH} ${SCREEN_HEIGHT}`} preserveAspectRatio="xMidYMid slice" style={StyleSheet.absoluteFillObject}>
-      <Path d={`M ${SCREEN_WIDTH * 0.08} ${SCREEN_HEIGHT * 0.25} C ${SCREEN_WIDTH * 0.22} ${SCREEN_HEIGHT * 0.10}, ${SCREEN_WIDTH * 0.36} ${SCREEN_HEIGHT * 0.42}, ${SCREEN_WIDTH * 0.52} ${SCREEN_HEIGHT * 0.32}`} stroke="#bfd0ff" strokeWidth="2" strokeDasharray="8 10" fill="none" opacity="0.32" />
-      <Path d={`M ${SCREEN_WIDTH * 0.82} ${SCREEN_HEIGHT * 0.18} C ${SCREEN_WIDTH * 0.96} ${SCREEN_HEIGHT * 0.30}, ${SCREEN_WIDTH * 0.95} ${SCREEN_HEIGHT * 0.55}, ${SCREEN_WIDTH * 0.78} ${SCREEN_HEIGHT * 0.76}`} stroke="#bfd0ff" strokeWidth="2" strokeDasharray="8 10" fill="none" opacity="0.32" />
-      <Rect x={SCREEN_WIDTH * 0.07} y={SCREEN_HEIGHT * 0.12} width="130" height="72" rx="14" stroke="#bfd0ff" strokeWidth="1.4" fill="none" opacity="0.38" />
-      <Rect x={SCREEN_WIDTH * 0.74} y={SCREEN_HEIGHT * 0.16} width="140" height="78" rx="14" stroke="#bfd0ff" strokeWidth="1.4" fill="none" opacity="0.38" />
-      <Path d={`M ${SCREEN_WIDTH * 0.15} ${SCREEN_HEIGHT * 0.56} L ${SCREEN_WIDTH * 0.19} ${SCREEN_HEIGHT * 0.60} L ${SCREEN_WIDTH * 0.15} ${SCREEN_HEIGHT * 0.64} L ${SCREEN_WIDTH * 0.11} ${SCREEN_HEIGHT * 0.60} Z`} stroke="#bfd0ff" strokeWidth="1.5" fill="none" opacity="0.35" />
-      <Circle cx={SCREEN_WIDTH * 0.76} cy={SCREEN_HEIGHT * 0.72} r="24" stroke="#bfd0ff" strokeWidth="2" fill="none" opacity="0.3" />
+
+      {/* ── Mini class diagram (top-left): name / attributes / methods ── */}
+      <Rect x={SCREEN_WIDTH * 0.06} y={SCREEN_HEIGHT * 0.09} width="118" height="88" rx="6" stroke="#a9b8ff" strokeWidth="1.5" fill="#ffffff" fillOpacity="0.4" opacity="0.55" />
+      <Path d={`M ${SCREEN_WIDTH * 0.06} ${SCREEN_HEIGHT * 0.09 + 26} h 118`} stroke="#a9b8ff" strokeWidth="1.5" opacity="0.55" />
+      <Path d={`M ${SCREEN_WIDTH * 0.06} ${SCREEN_HEIGHT * 0.09 + 58} h 118`} stroke="#a9b8ff" strokeWidth="1.5" opacity="0.55" />
+      <Rect x={SCREEN_WIDTH * 0.06 + 10} y={SCREEN_HEIGHT * 0.09 + 10} width="54" height="7" rx="3" fill="#a9b8ff" opacity="0.5" />
+      <Rect x={SCREEN_WIDTH * 0.06 + 10} y={SCREEN_HEIGHT * 0.09 + 35} width="40" height="5" rx="2.5" fill="#c3cdff" opacity="0.5" />
+      <Rect x={SCREEN_WIDTH * 0.06 + 10} y={SCREEN_HEIGHT * 0.09 + 45} width="60" height="5" rx="2.5" fill="#c3cdff" opacity="0.5" />
+      <Rect x={SCREEN_WIDTH * 0.06 + 10} y={SCREEN_HEIGHT * 0.09 + 67} width="48" height="5" rx="2.5" fill="#c3cdff" opacity="0.5" />
+      <Rect x={SCREEN_WIDTH * 0.06 + 10} y={SCREEN_HEIGHT * 0.09 + 77} width="56" height="5" rx="2.5" fill="#c3cdff" opacity="0.5" />
+
+      {/* Association line + multiplicity dot toward the ERD entity */}
+      <Path d={`M ${SCREEN_WIDTH * 0.06 + 118} ${SCREEN_HEIGHT * 0.09 + 44} C ${SCREEN_WIDTH * 0.34} ${SCREEN_HEIGHT * 0.05}, ${SCREEN_WIDTH * 0.42} ${SCREEN_HEIGHT * 0.14}, ${SCREEN_WIDTH * 0.55} ${SCREEN_HEIGHT * 0.16}`} stroke="#a9b8ff" strokeWidth="1.5" fill="none" opacity="0.45" />
+      <Circle cx={SCREEN_WIDTH * 0.06 + 122} cy={SCREEN_HEIGHT * 0.09 + 44} r="2.5" fill="#a9b8ff" opacity="0.5" />
+
+      {/* ── ERD entity (upper-right): rectangle with header row ── */}
+      <Rect x={SCREEN_WIDTH * 0.72} y={SCREEN_HEIGHT * 0.13} width="132" height="70" rx="6" stroke="#a9b8ff" strokeWidth="1.5" fill="#ffffff" fillOpacity="0.4" opacity="0.5" />
+      <Path d={`M ${SCREEN_WIDTH * 0.72} ${SCREEN_HEIGHT * 0.13 + 22} h 132`} stroke="#a9b8ff" strokeWidth="1.5" opacity="0.5" />
+      <Rect x={SCREEN_WIDTH * 0.72 + 10} y={SCREEN_HEIGHT * 0.13 + 8} width="50" height="6" rx="3" fill="#a9b8ff" opacity="0.5" />
+      <Circle cx={SCREEN_WIDTH * 0.72 + 12} cy={SCREEN_HEIGHT * 0.13 + 34} r="2" fill="#c3cdff" opacity="0.6" />
+      <Rect x={SCREEN_WIDTH * 0.72 + 20} y={SCREEN_HEIGHT * 0.13 + 31} width="46" height="5" rx="2.5" fill="#c3cdff" opacity="0.5" />
+      <Circle cx={SCREEN_WIDTH * 0.72 + 12} cy={SCREEN_HEIGHT * 0.13 + 48} r="2" fill="#c3cdff" opacity="0.6" />
+      <Rect x={SCREEN_WIDTH * 0.72 + 20} y={SCREEN_HEIGHT * 0.13 + 45} width="58" height="5" rx="2.5" fill="#c3cdff" opacity="0.5" />
+
+      {/* ── Use-case oval + actor stick figure (lower-left) ── */}
+      <Circle cx={SCREEN_WIDTH * 0.10} cy={SCREEN_HEIGHT * 0.60} r="4.5" stroke="#a9b8ff" strokeWidth="1.6" fill="none" opacity="0.5" />
+      <Path d={`M ${SCREEN_WIDTH * 0.10} ${SCREEN_HEIGHT * 0.60 + 4.5} v 16 M ${SCREEN_WIDTH * 0.10 - 8} ${SCREEN_HEIGHT * 0.60 + 12} h 16 M ${SCREEN_WIDTH * 0.10} ${SCREEN_HEIGHT * 0.60 + 20.5} l -7 12 M ${SCREEN_WIDTH * 0.10} ${SCREEN_HEIGHT * 0.60 + 20.5} l 7 12`} stroke="#a9b8ff" strokeWidth="1.6" fill="none" opacity="0.5" />
+      <Path d={`M ${SCREEN_WIDTH * 0.10 + 12} ${SCREEN_HEIGHT * 0.60 + 12} L ${SCREEN_WIDTH * 0.24} ${SCREEN_HEIGHT * 0.60 + 6}`} stroke="#a9b8ff" strokeWidth="1.5" strokeDasharray="5 6" opacity="0.45" />
+      <Path d={`M ${SCREEN_WIDTH * 0.24} ${SCREEN_HEIGHT * 0.60 + 6} m -22, 0 a 22,13 0 1,0 44,0 a 22,13 0 1,0 -44,0`} stroke="#a9b8ff" strokeWidth="1.5" fill="#ffffff" fillOpacity="0.35" opacity="0.5" />
+
+      {/* ── Flowchart bits (lower-right): decision diamond + terminator ── */}
+      <Path d={`M ${SCREEN_WIDTH * 0.80} ${SCREEN_HEIGHT * 0.66} L ${SCREEN_WIDTH * 0.80 + 20} ${SCREEN_HEIGHT * 0.66 + 14} L ${SCREEN_WIDTH * 0.80} ${SCREEN_HEIGHT * 0.66 + 28} L ${SCREEN_WIDTH * 0.80 - 20} ${SCREEN_HEIGHT * 0.66 + 14} Z`} stroke="#a9b8ff" strokeWidth="1.5" fill="#ffffff" fillOpacity="0.35" opacity="0.5" />
+      <Path d={`M ${SCREEN_WIDTH * 0.80} ${SCREEN_HEIGHT * 0.66 + 28} v 22`} stroke="#a9b8ff" strokeWidth="1.5" strokeDasharray="4 5" opacity="0.4" />
+      <Rect x={SCREEN_WIDTH * 0.80 - 30} y={SCREEN_HEIGHT * 0.66 + 50} width="60" height="24" rx="12" stroke="#a9b8ff" strokeWidth="1.5" fill="#ffffff" fillOpacity="0.35" opacity="0.5" />
+
+      {/* Faint sequence-diagram lifeline for balance, center-right */}
+      <Path d={`M ${SCREEN_WIDTH * 0.90} ${SCREEN_HEIGHT * 0.35} v 90`} stroke="#bfd0ff" strokeWidth="1.4" strokeDasharray="3 6" opacity="0.35" />
+      <Rect x={SCREEN_WIDTH * 0.90 - 26} y={SCREEN_HEIGHT * 0.35} width="52" height="18" rx="4" stroke="#bfd0ff" strokeWidth="1.4" fill="none" opacity="0.35" />
     </Svg>
   </View>
 );
@@ -385,7 +443,13 @@ export default function SignIn() {
   const params = useLocalSearchParams();
   const { width: windowWidth, height: windowHeight } = useWindowDimensions();
 
-  const [initialLoading, setInitialLoading] = useState(true);
+  // NOTE: `initialLoading` gate was removed. It previously made this screen
+  // render `null` while an async session check resolved, causing a blank
+  // frame -> abrupt pop-in "flick" when navigating here from signup.tsx
+  // (which has no such gate). The session check below now runs in the
+  // background and only redirects if a valid session is found; it no
+  // longer blocks the initial render, so signin.tsx mounts its UI
+  // immediately just like signup.tsx does.
   const [email, setEmail] = useState((params.prefilledEmail as string) || '');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -404,12 +468,41 @@ export default function SignIn() {
     actionButtonText: '',
     actionIcon: undefined as React.ReactNode | undefined,
   });
+  
+  // Card entrance animation
+  const cardOpacity = useRef(new Animated.Value(0)).current;
+  const cardTranslateY = useRef(new Animated.Value(20)).current;
+  const [isAnimatingOut, setIsAnimatingOut] = useState(false);
 
   const passwordRef = useRef<TextInput>(null);
   const logoSize = getResponsiveLogoSize(windowWidth, windowHeight);
   const isSmallScreen = windowHeight < 680;
 
   useEffect(() => {
+    // Only animate entrance if not coming from signup (no prefilledEmail means fresh load)
+    const hasPrefilledEmail = params.prefilledEmail !== undefined;
+    
+    if (hasPrefilledEmail) {
+      // Coming from signup - skip entrance animation, set directly
+      cardOpacity.setValue(1);
+      cardTranslateY.setValue(0);
+    } else {
+      // Fresh load - animate entrance
+      Animated.parallel([
+        Animated.timing(cardOpacity, {
+          toValue: 1,
+          duration: 400,
+          useNativeDriver: true,
+        }),
+        Animated.timing(cardTranslateY, {
+          toValue: 0,
+          duration: 400,
+          easing: Easing.out(Easing.cubic),
+          useNativeDriver: true,
+        }),
+      ]).start();
+    }
+
     const loadEmail = async () => {
       const remembered = await loadRememberedEmail();
       if (remembered) {
@@ -446,6 +539,9 @@ export default function SignIn() {
     handleRedirectResult();
   }, [auth, router]);
 
+  // Background session check — no longer gates the initial render.
+  // If a valid session exists, redirect; otherwise do nothing and let the
+  // form stay visible (it was already rendered on mount).
   useEffect(() => {
     const checkExistingSession = async () => {
       try {
@@ -454,13 +550,10 @@ export default function SignIn() {
           const response = await authService.verifyToken();
           if (response.success) {
             router.replace('/(tabs)/home');
-            return;
           }
         }
       } catch (error) {
         console.log('No valid session found');
-      } finally {
-        setInitialLoading(false);
       }
     };
     checkExistingSession();
@@ -491,6 +584,31 @@ export default function SignIn() {
       if (isError) Alert.alert('Error', message);
     }
   };
+
+  // Smooth navigation to sign up
+  const navigateToSignUp = useCallback(() => {
+    if (isAnimatingOut) return;
+    setIsAnimatingOut(true);
+    
+    Animated.parallel([
+      Animated.timing(cardOpacity, {
+        toValue: 0,
+        duration: 150,
+        useNativeDriver: true,
+      }),
+      Animated.timing(cardTranslateY, {
+        toValue: -20,
+        duration: 150,
+        easing: Easing.in(Easing.cubic),
+        useNativeDriver: true,
+      }),
+    ]).start(() => {
+      router.push({
+        pathname: '/(auth)/signup',
+        params: email ? { prefilledEmail: email } : {}
+      });
+    });
+  }, [cardOpacity, cardTranslateY, router, email, isAnimatingOut]);
 
   //GOOGLE SIGN IN
   const handleFirebaseGoogleSignIn = async () => {
@@ -598,7 +716,6 @@ export default function SignIn() {
         } else if (msg.includes('EMAIL_NOT_VERIFIED') || msg.toLowerCase().includes('verify')) {
           showToastMessage('Please verify your email address before signing in.', true);
         } else if (msg.toLowerCase().includes('google') || msg.toLowerCase().includes('oauth')) {
-          // *** INLINE ERROR instead of popup ***
           setErrors((prev) => ({ ...prev, email: 'This email already use in google authentication.' }));
         } else {
           setErrors((prev) => ({ ...prev, password: msg || 'Invalid email or password' }));
@@ -615,7 +732,6 @@ export default function SignIn() {
         } else if (msg === 'EMAIL_NOT_VERIFIED' || msg.toLowerCase().includes('verify')) {
           showToastMessage('Please verify your email address before signing in.', true);
         } else if (msg.toLowerCase().includes('google') || msg.toLowerCase().includes('oauth')) {
-          // *** INLINE ERROR instead of popup ***
           setErrors((prev) => ({ ...prev, email: 'This email already use in google authentication.' }));
         } else {
           setErrors((prev) => ({ ...prev, password: msg || 'Something went wrong' }));
@@ -636,13 +752,12 @@ export default function SignIn() {
     return defaultColor;
   };
 
-  if (initialLoading) {
-    return null;
-  }
-
   return (
     <>
-      <Stack.Screen options={{ headerShown: false }} />
+      <Stack.Screen options={{ 
+        headerShown: false,
+        animation: 'none',
+      }} />
 
       <ErrorPopupModal 
         visible={showErrorModal} 
@@ -671,7 +786,13 @@ export default function SignIn() {
               <AnimatedLogo size={logoSize} isInputFocused={isAnyInputFocused} showSuccess={showSuccessAnimation} />
             </View>
 
-            <View style={styles.card}>
+            <Animated.View style={[
+              styles.card,
+              {
+                opacity: cardOpacity,
+                transform: [{ translateY: cardTranslateY }],
+              }
+            ]}>
               <View style={styles.connectorTop} />
               <View style={styles.connectorBottom} />
               <View style={styles.connectorLeft} />
@@ -730,7 +851,7 @@ export default function SignIn() {
                     autoComplete="off"
                     importantForAutofill="no"
                   />
-                  <TouchableOpacity style={styles.eyeBtn} onPress={() => setShowPassword(!showPassword)}>
+                  <TouchableOpacity style={styles.eyeBtn} onPress={() => setShowPassword(!showPassword)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
                     <EyeIcon visible={showPassword} />
                   </TouchableOpacity>
                 </View>
@@ -777,10 +898,9 @@ export default function SignIn() {
                 </TouchableOpacity>
               ) : null}
 
-              {/* ── Terms Checkbox ── */}
-              <View style={[styles.termsWrap, errors.terms && styles.termsError]}>
+              <View style={styles.termsWrap}>
                 <TouchableOpacity onPress={handleToggleAgreement} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                  <View style={[styles.customCheckbox, agreed && styles.customCheckboxChecked]}>
+                  <View style={[styles.customCheckbox, agreed && styles.customCheckboxChecked, errors.terms && styles.customCheckboxError]}>
                     {agreed && (
                       <Svg width={9} height={9} viewBox="0 0 10 10">
                         <Path d="M2 5l2.5 2.5L8 3" stroke="white" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" fill="none" />
@@ -799,11 +919,11 @@ export default function SignIn() {
 
               <View style={styles.signupWrap}>
                 <Text style={styles.signupText}>New here? </Text>
-                <TouchableOpacity onPress={() => router.push('/(auth)/signup')}>
+                <TouchableOpacity onPress={navigateToSignUp}>
                   <Text style={styles.signupLink}>Sign Up</Text>
                 </TouchableOpacity>
               </View>
-            </View>
+            </Animated.View>
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
@@ -834,7 +954,7 @@ const styles = StyleSheet.create({
   inputWrapFocused: { backgroundColor: '#ffffff', shadowColor: '#3b5bdb', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.12, shadowRadius: 8, elevation: 3 },
   input: { flex: 1, paddingHorizontal: 12, paddingVertical: Platform.OS === 'ios' ? 10 : 9, fontSize: 14, color: '#1a1f36', backgroundColor: 'transparent', minHeight: 40, textAlignVertical: 'center' },
   inputWithIcon: { paddingRight: 40 },
-  eyeBtn: { position: 'absolute', right: 8, padding: 10 },
+  eyeBtn: { position: 'absolute', right: 8, padding: 12 },
   optionsRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 4, marginBottom: 0 },
   rememberMeRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   checkbox: { width: 16, height: 16, borderRadius: 4, borderWidth: 2, borderColor: '#8896b3', alignItems: 'center', justifyContent: 'center' },
@@ -843,7 +963,6 @@ const styles = StyleSheet.create({
   forgotWrap: { alignItems: 'flex-end' },
   forgotText: { fontSize: 12, color: '#8896b3', fontWeight: '500' },
   inputError: { borderColor: '#e11d48' },
-  termsError: { borderColor: '#e11d48' },
   errorText: { fontSize: 11, color: '#e11d48', marginTop: 4, marginLeft: 4, fontWeight: '500' },
   btnSignIn: { backgroundColor: '#3b5bdb', borderRadius: 10, borderWidth: 1, borderColor: '#2f49c7', paddingVertical: 10, alignItems: 'center', marginTop: 2, shadowColor: '#3b5bdb', shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.2, shadowRadius: 12, elevation: 6 },
   btnDisabled: { opacity: 0.75 },
@@ -853,9 +972,10 @@ const styles = StyleSheet.create({
   orText: { marginHorizontal: 10, fontSize: 11, color: '#8896b3', fontWeight: '600' },
   btnGoogle: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, borderWidth: 1, borderColor: '#e5e7eb', borderRadius: 10, paddingVertical: 9, marginTop: 2, backgroundColor: '#ffffff' },
   btnGoogleText: { fontSize: 13, fontWeight: '500', color: '#1a1f36', marginLeft: 6 },
-  termsWrap: { flexDirection: 'row', alignItems: 'flex-start', gap: 8, marginTop: 8, padding: 8, borderWidth: 1, borderColor: '#e2e6f3', borderRadius: 8, backgroundColor: '#f8f9ff' },
-  customCheckbox: { width: 16, height: 16, borderRadius: 8, borderWidth: 2, borderColor: '#8896b3', alignItems: 'center', justifyContent: 'center', marginTop: 1, flexShrink: 0 },
+  termsWrap: { flexDirection: 'row', alignItems: 'flex-start', gap: 8, marginTop: 12, paddingHorizontal: 2 },
+  customCheckbox: { width: 16, height: 16, borderRadius: 4, borderWidth: 2, borderColor: '#8896b3', alignItems: 'center', justifyContent: 'center', marginTop: 1, flexShrink: 0 },
   customCheckboxChecked: { borderColor: '#3b5bdb', backgroundColor: '#3b5bdb' },
+  customCheckboxError: { borderColor: '#e11d48' },
   termsText: { fontSize: 12, color: '#4a5568', flex: 1, lineHeight: 17 },
   termsLink: { fontWeight: '700', color: '#3b5bdb' },
   signupWrap: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', marginTop: 12 },

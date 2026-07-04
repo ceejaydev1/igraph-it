@@ -1,4 +1,4 @@
-// components/DiagramCanvas.tsx — FULL UPDATED CODE with draw.io-style selection
+// components/DiagramCanvas.tsx — COMPLETE FIXED VERSION
 
 import React, { useEffect, useRef, useCallback, useState } from 'react';
 import { View, StyleSheet, Platform, Text } from 'react-native';
@@ -27,28 +27,23 @@ import type {
   WhiteSpaceValue,
 } from '@maxgraph/core';
 
-// ── Import custom shape registration ────────────────────────────────────
 import { registerAllCustomShapes, IGRAPH_ID_STYLE_MAP } from './maxgraph-custom-shapes';
-// ── Import Universal Vertex Handler ─────────────────────────────────────
 import { UniversalVertexHandler } from './maxgraph-universal-handler';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const GRID_SIZE   = 10;
-const CANVAS_BG   = '#f8faff';
+const GRID_SIZE = 10;
+const CANVAS_BG = '#f8faff';
 const MINOR_COLOR = '#dde3ed';
 const MAJOR_COLOR = '#bec8d9';
 const MAJOR_EVERY = 5;
+const BLACK = '#1a1f36';
+const BLUE = '#4c6fff';
 
 const DROP_W = 120;
 const DROP_H = 60;
+const NEW_SHAPE_SPACING = 160;
 
-// ─────────────────────────────────────────────────────────────────────────
-// Shapes whose selection box must be a square, not a 120×60 rectangle.
-// A circle/diamond/etc. drawn inside a wide rectangle only fills the short
-// dimension, leaving visible "extra" selection box on the sides — this is
-// what fixes that, matching draw.io's default drop sizes per shape type.
-// ─────────────────────────────────────────────────────────────────────────
 const SQUARE_DROP_SHAPES = new Set<string>([
   'igraph.circle',
   'igraph.ellipse',
@@ -89,141 +84,24 @@ function getDropSize(styleKey: string): { w: number; h: number } {
   return { w: DROP_W, h: DROP_H };
 }
 
-// ════════════════════════════════════════════════════════════════════════════
-// ⭐ INJECT HANDLE STYLES - Ensures blue handles override maxGraph defaults
-// ════════════════════════════════════════════════════════════════════════════
-
-const injectHandleStyles = () => {
-  if (typeof document === 'undefined') return;
-  
-  const styleId = 'igraph-handle-styles';
-  if (document.getElementById(styleId)) return;
-  
-  const style = document.createElement('style');
-  style.id = styleId;
-  style.textContent = `
-    /* Force blue handles - using correct maxGraph class names */
-    .mxHandle,
-    .mxHandle div,
-    div.mxHandle {
-      background-color: #4c6fff !important;
-      border-color: #4c6fff !important;
-      border-radius: 50% !important;
-      width: 8px !important;
-      height: 8px !important;
-      border: 1.5px solid #4c6fff !important;
-      background: #ffffff !important;
-      box-sizing: border-box !important;
-      position: absolute !important;
-      box-shadow: none !important;
-      margin: 0 !important;
-      padding: 0 !important;
-    }
-    
-    /* Position handles at exact shape boundaries */
-    .mxHandleNorth,
-    div.mxHandleNorth {
-      top: -4px !important;
-      left: 50% !important;
-      margin-left: -4px !important;
-      margin-top: 0 !important;
-    }
-    .mxHandleSouth,
-    div.mxHandleSouth {
-      bottom: -4px !important;
-      left: 50% !important;
-      margin-left: -4px !important;
-      margin-top: 0 !important;
-    }
-    .mxHandleEast,
-    div.mxHandleEast {
-      right: -4px !important;
-      top: 50% !important;
-      margin-top: -4px !important;
-      margin-left: 0 !important;
-    }
-    .mxHandleWest,
-    div.mxHandleWest {
-      left: -4px !important;
-      top: 50% !important;
-      margin-top: -4px !important;
-      margin-left: 0 !important;
-    }
-    .mxHandleNorthEast,
-    div.mxHandleNorthEast {
-      top: -4px !important;
-      right: -4px !important;
-    }
-    .mxHandleNorthWest,
-    div.mxHandleNorthWest {
-      top: -4px !important;
-      left: -4px !important;
-    }
-    .mxHandleSouthEast,
-    div.mxHandleSouthEast {
-      bottom: -4px !important;
-      right: -4px !important;
-    }
-    .mxHandleSouthWest,
-    div.mxHandleSouthWest {
-      bottom: -4px !important;
-      left: -4px !important;
-    }
-    
-    /* Selection border - dashed like draw.io */
-    .mxSelectionBorder {
-      border-color: #4c6fff !important;
-      border-style: dashed !important;
-      border-width: 1.5px !important;
-    }
-    
-    /* Rubber band */
-    .mxRubberband {
-      border-color: #4c6fff !important;
-      background: rgba(76, 111, 255, 0.1) !important;
-      border-style: solid !important;
-      border-width: 1px !important;
-    }
-  `;
-  document.head.appendChild(style);
-  console.log('🎨 Injected draw.io-style handle styles');
-};
-
-// Inject styles immediately
-if (Platform.OS === 'web') {
-  injectHandleStyles();
-}
-
-// ════════════════════════════════════════════════════════════════════════════
-// ⭐ CRITICAL: Configure selection handles BEFORE any Graph is created
-// ════════════════════════════════════════════════════════════════════════════
-
-// Set handle colors to blue (#4c6fff)
-HandleConfig.fillColor = '#4c6fff';
-HandleConfig.strokeColor = '#4c6fff';
+HandleConfig.fillColor = BLUE;
+HandleConfig.strokeColor = BLUE;
 HandleConfig.size = 8;
 
-// Configure vertex selection styling - dashed like draw.io
-VertexHandlerConfig.selectionColor = '#4c6fff';
+VertexHandlerConfig.selectionColor = BLUE;
 VertexHandlerConfig.selectionDashed = true;
 VertexHandlerConfig.selectionStrokeWidth = 1.5;
 
-// Configure edge selection styling
-EdgeHandlerConfig.selectionColor = '#4c6fff';
+EdgeHandlerConfig.selectionColor = BLUE;
 EdgeHandlerConfig.selectionDashed = true;
 EdgeHandlerConfig.selectionStrokeWidth = 1.5;
 
-console.log('🎨 Selection handle config set to draw.io style (dashed, blue, circular handles)');
+console.log('🎨 All configs set to BLUE (#4c6fff)');
 
-// ════════════════════════════════════════════════════════════════════════════
-// ⭐ Register shapes BEFORE any Graph is created
-// ════════════════════════════════════════════════════════════════════════════
 if (Platform.OS === 'web') {
   registerAllCustomShapes();
   console.log('✅ All custom shapes registered with maxGraph');
 }
-
-// ─── Grid painter ─────────────────────────────────────────────────────────────
 
 function paintGridOnCanvas(
   canvas: HTMLCanvasElement,
@@ -241,33 +119,39 @@ function paintGridOnCanvas(
 
   const minorSize = GRID_SIZE * scale;
   const majorSize = minorSize * MAJOR_EVERY;
-  const offsetX   = ((tx.x % majorSize) + majorSize) % majorSize;
-  const offsetY   = ((tx.y % majorSize) + majorSize) % majorSize;
+  const offsetX = ((tx.x % majorSize) + majorSize) % majorSize;
+  const offsetY = ((tx.y % majorSize) + majorSize) % majorSize;
 
   ctx.beginPath();
   ctx.strokeStyle = MINOR_COLOR;
-  ctx.lineWidth   = 0.5;
-  for (let x = offsetX; x <= W; x += minorSize) { ctx.moveTo(x, 0); ctx.lineTo(x, H); }
-  for (let y = offsetY; y <= H; y += minorSize) { ctx.moveTo(0, y); ctx.lineTo(W, y); }
+  ctx.lineWidth = 0.5;
+  for (let x = offsetX; x <= W; x += minorSize) {
+    ctx.moveTo(x, 0);
+    ctx.lineTo(x, H);
+  }
+  for (let y = offsetY; y <= H; y += minorSize) {
+    ctx.moveTo(0, y);
+    ctx.lineTo(W, y);
+  }
   ctx.stroke();
 
   ctx.beginPath();
   ctx.strokeStyle = MAJOR_COLOR;
-  ctx.lineWidth   = 1;
+  ctx.lineWidth = 1;
   for (let x = offsetX; x <= W; x += minorSize) {
     if (Math.round((x - offsetX) / minorSize) % MAJOR_EVERY === 0) {
-      ctx.moveTo(x, 0); ctx.lineTo(x, H);
+      ctx.moveTo(x, 0);
+      ctx.lineTo(x, H);
     }
   }
   for (let y = offsetY; y <= H; y += minorSize) {
     if (Math.round((y - offsetY) / minorSize) % MAJOR_EVERY === 0) {
-      ctx.moveTo(0, y); ctx.lineTo(W, y);
+      ctx.moveTo(0, y);
+      ctx.lineTo(W, y);
     }
   }
   ctx.stroke();
 }
-
-// ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function clientToGraphCoords(
   graph: Graph,
@@ -275,17 +159,15 @@ function clientToGraphCoords(
   clientY: number,
   containerEl: HTMLElement,
 ): { x: number; y: number } {
-  const rect      = containerEl.getBoundingClientRect();
-  const scale     = graph.getView().getScale();
+  const rect = containerEl.getBoundingClientRect();
+  const scale = graph.getView().getScale();
   const translate = graph.getView().getTranslate();
 
   const x = (clientX - rect.left) / scale - translate.x;
-  const y = (clientY - rect.top)  / scale - translate.y;
+  const y = (clientY - rect.top) / scale - translate.y;
 
   return { x, y };
 }
-
-// ─── Props ────────────────────────────────────────────────────────────────────
 
 interface DiagramCanvasProps {
   onReady?: (graph: any) => void;
@@ -294,53 +176,49 @@ interface DiagramCanvasProps {
   umlType?: string;
 }
 
-// ─── WebCanvas ────────────────────────────────────────────────────────────────
-
 const WebCanvas = ({ onReady, onChange, onSelectionChange, umlType = 'flowchart' }: DiagramCanvasProps) => {
-  const wrapperRef    = useRef<HTMLDivElement>(null);
+  const wrapperRef = useRef<HTMLDivElement>(null);
   const gridCanvasRef = useRef<HTMLCanvasElement>(null);
-  const graphDivRef   = useRef<HTMLDivElement>(null);
-  const graphRef      = useRef<Graph | null>(null);
+  const graphDivRef = useRef<HTMLDivElement>(null);
+  const graphRef = useRef<Graph | null>(null);
 
   const [isDragOver, setIsDragOver] = useState(false);
-  const [error,      setError]      = useState<string | null>(null);
-  const [loading,    setLoading]    = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
   const [selectedCell, setSelectedCell] = useState<any>(null);
 
-  const onReadyRef  = useRef(onReady);
+  const onReadyRef = useRef(onReady);
   const onChangeRef = useRef(onChange);
   const onSelectionChangeRef = useRef(onSelectionChange);
-  
-  useEffect(() => { onReadyRef.current  = onReady;  }, [onReady]);
+
+  useEffect(() => { onReadyRef.current = onReady; }, [onReady]);
   useEffect(() => { onChangeRef.current = onChange; }, [onChange]);
   useEffect(() => { onSelectionChangeRef.current = onSelectionChange; }, [onSelectionChange]);
 
   const resizeGridCanvas = useCallback(() => {
     const wrapper = wrapperRef.current;
-    const gc      = gridCanvasRef.current;
+    const gc = gridCanvasRef.current;
     if (!wrapper || !gc) return;
-    gc.width  = wrapper.offsetWidth;
+    gc.width = wrapper.offsetWidth;
     gc.height = wrapper.offsetHeight;
   }, []);
 
   const repaintGrid = useCallback(() => {
-    const gc    = gridCanvasRef.current;
+    const gc = gridCanvasRef.current;
     const graph = graphRef.current;
     if (!gc || !graph) return;
     paintGridOnCanvas(gc, graph.getView().getScale(), graph.getView().getTranslate());
   }, []);
 
-  // ─── Selection change handler ──────────────────────────────────────────────
-
   const handleSelectionChange = useCallback(() => {
     const graph = graphRef.current;
     if (!graph) return;
-    
+
     try {
       const selection = graph.getSelectionCells();
       const selectedCell = selection.length === 1 ? selection[0] : null;
       setSelectedCell(selectedCell);
-      
+
       if (onSelectionChangeRef.current) {
         onSelectionChangeRef.current(selectedCell);
       }
@@ -349,555 +227,537 @@ const WebCanvas = ({ onReady, onChange, onSelectionChange, umlType = 'flowchart'
     }
   }, []);
 
-  // ─── Register stylesheet entries ────────────────────────────────────────────
   const registerShapeStyles = useCallback((graph: Graph) => {
     const stylesheet = graph.getStylesheet();
 
     const base: CellStateStyle = {
-      fillColor:     '#ffffff',
-      strokeColor:   '#1a1f36',
-      strokeWidth:   2,
-      fontColor:     '#1a1f36',
-      fontSize:      12,
-      align:         'center' as AlignValue,
+      fillColor: '#ffffff',
+      strokeColor: BLACK,
+      strokeWidth: 2,
+      fontColor: BLACK,
+      fontSize: 12,
+      align: 'center' as AlignValue,
       verticalAlign: 'middle' as VAlignValue,
     };
 
     const styles: Record<string, CellStateStyle> = {
-      // ─── FDD Shapes ──────────────────────────────────────────────────────
-      'igraph.fdd.function': { 
-        ...base, 
+      'igraph.fdd.function': {
+        ...base,
         shape: 'igraph.fdd.function',
         fillColor: '#DCEAF7',
         strokeColor: '#4A78A8',
         strokeWidth: 2,
       },
-      'igraph.fdd.input': { 
-        ...base, 
+      'igraph.fdd.input': {
+        ...base,
         shape: 'igraph.fdd.input',
         fillColor: '#DCEFD2',
         strokeColor: '#5A9E4B',
         strokeWidth: 2,
       },
-      'igraph.fdd.output': { 
-        ...base, 
+      'igraph.fdd.output': {
+        ...base,
         shape: 'igraph.fdd.output',
         fillColor: '#FBE8B8',
         strokeColor: '#F39C12',
         strokeWidth: 2,
       },
-      'igraph.fdd.control': { 
-        ...base, 
+      'igraph.fdd.control': {
+        ...base,
         shape: 'igraph.fdd.control',
-        strokeColor: '#000000',
+        strokeColor: BLACK,
         strokeWidth: 2,
       },
-      'igraph.fdd.mechanism': { 
-        ...base, 
+      'igraph.fdd.mechanism': {
+        ...base,
         shape: 'igraph.fdd.mechanism',
-        strokeColor: '#000000',
+        strokeColor: BLACK,
         strokeWidth: 2,
       },
-      'igraph.fdd.interface': { 
-        ...base, 
+      'igraph.fdd.interface': {
+        ...base,
         shape: 'igraph.fdd.interface',
-        strokeColor: '#000000',
+        strokeColor: BLACK,
         strokeWidth: 2,
       },
-      'igraph.fdd.boundary': { 
-        ...base, 
+      'igraph.fdd.boundary': {
+        ...base,
         shape: 'igraph.fdd.boundary',
         fillColor: 'transparent',
         strokeColor: '#666666',
         strokeWidth: 2,
       },
-      'igraph.fdd.note': { 
-        ...base, 
+      'igraph.fdd.note': {
+        ...base,
         shape: 'igraph.fdd.note',
         fillColor: '#FFF4CC',
         strokeColor: '#B7950B',
         strokeWidth: 2,
       },
-      'igraph.fdd.externalEntity': { 
-        ...base, 
+      'igraph.fdd.externalEntity': {
+        ...base,
         shape: 'igraph.fdd.externalEntity',
         fillColor: '#F4F4F4',
         strokeColor: '#8E8E8E',
         strokeWidth: 2,
       },
-      
-      // ─── DFD Shapes ──────────────────────────────────────────────────────
-      'igraph.dfdProcess': { 
-        ...base, 
+      'igraph.dfdProcess': {
+        ...base,
         shape: 'igraph.dfdProcess',
         fillColor: '#ffffff',
-        strokeColor: '#1a1f36',
+        strokeColor: BLACK,
         strokeWidth: 2,
       },
-      'igraph.dfdDataFlow': { 
-        ...base, 
+      'igraph.dfdDataFlow': {
+        ...base,
         shape: 'igraph.dfdDataFlow',
         fillColor: 'transparent',
-        strokeColor: '#1a1f36',
+        strokeColor: BLACK,
         strokeWidth: 2,
       },
-      'igraph.dfdDataStore': { 
-        ...base, 
+      'igraph.dfdDataStore': {
+        ...base,
         shape: 'igraph.dfdDataStore',
         fillColor: 'transparent',
-        strokeColor: '#1a1f36',
+        strokeColor: BLACK,
         strokeWidth: 2,
       },
-      'igraph.dfdDataStoreGS': { 
-        ...base, 
+      'igraph.dfdDataStoreGS': {
+        ...base,
         shape: 'igraph.dfdDataStoreGS',
         fillColor: '#ffffff',
-        strokeColor: '#1a1f36',
+        strokeColor: BLACK,
         strokeWidth: 2,
       },
-      'igraph.dfdExternalEntity': { 
-        ...base, 
+      'igraph.dfdExternalEntity': {
+        ...base,
         shape: 'igraph.dfdExternalEntity',
         fillColor: '#ffffff',
-        strokeColor: '#1a1f36',
+        strokeColor: BLACK,
         strokeWidth: 2,
       },
-      'igraph.dfdBidirectional': { 
-        ...base, 
+      'igraph.dfdBidirectional': {
+        ...base,
         shape: 'igraph.dfdBidirectional',
         fillColor: 'transparent',
-        strokeColor: '#1a1f36',
+        strokeColor: BLACK,
         strokeWidth: 2,
       },
-      'igraph.dfdBoundary': { 
-        ...base, 
+      'igraph.dfdBoundary': {
+        ...base,
         shape: 'igraph.dfdBoundary',
         fillColor: 'transparent',
-        strokeColor: '#1a1f36',
+        strokeColor: BLACK,
         strokeWidth: 2,
       },
-      'igraph.dfdNote': { 
-        ...base, 
+      'igraph.dfdNote': {
+        ...base,
         shape: 'igraph.dfdNote',
         fillColor: '#fef9c3',
-        strokeColor: '#1a1f36',
+        strokeColor: BLACK,
         strokeWidth: 2,
       },
-      'igraph.dfdOnPage': { 
-        ...base, 
+      'igraph.dfdOnPage': {
+        ...base,
         shape: 'igraph.dfdOnPage',
         fillColor: '#ffffff',
-        strokeColor: '#1a1f36',
+        strokeColor: BLACK,
         strokeWidth: 2,
       },
-      'igraph.dfdOffPage': { 
-        ...base, 
+      'igraph.dfdOffPage': {
+        ...base,
         shape: 'igraph.dfdOffPage',
         fillColor: '#ffffff',
-        strokeColor: '#1a1f36',
+        strokeColor: BLACK,
         strokeWidth: 2,
       },
-
-      // ─── Fishbone Shapes ──────────────────────────────────────────────
-      'igraph.fishboneSpine': { 
-        ...base, 
+      'igraph.fishboneSpine': {
+        ...base,
         shape: 'igraph.fishboneSpine',
         fillColor: 'transparent',
-        strokeColor: '#1a1f36',
+        strokeColor: BLACK,
         strokeWidth: 2,
       },
-      'igraph.fishboneHead': { 
-        ...base, 
+      'igraph.fishboneHead': {
+        ...base,
         shape: 'igraph.fishboneHead',
         fillColor: '#ffffff',
-        strokeColor: '#1a1f36',
+        strokeColor: BLACK,
         strokeWidth: 2,
       },
-      'igraph.fishboneProblem': { 
-        ...base, 
+      'igraph.fishboneProblem': {
+        ...base,
         shape: 'igraph.fishboneProblem',
         fillColor: 'transparent',
-        strokeColor: '#1a1f36',
+        strokeColor: BLACK,
         strokeWidth: 2,
       },
-      'igraph.fishboneCauseTop': { 
-        ...base, 
+      'igraph.fishboneCauseTop': {
+        ...base,
         shape: 'igraph.fishboneCauseTop',
         fillColor: 'transparent',
-        strokeColor: '#1a1f36',
+        strokeColor: BLACK,
         strokeWidth: 2,
       },
-      'igraph.fishboneCauseBottom': { 
-        ...base, 
+      'igraph.fishboneCauseBottom': {
+        ...base,
         shape: 'igraph.fishboneCauseBottom',
         fillColor: 'transparent',
-        strokeColor: '#1a1f36',
+        strokeColor: BLACK,
         strokeWidth: 2,
       },
-      'igraph.fishboneSubCauseTop': { 
-        ...base, 
+      'igraph.fishboneSubCauseTop': {
+        ...base,
         shape: 'igraph.fishboneSubCauseTop',
         fillColor: 'transparent',
-        strokeColor: '#1a1f36',
+        strokeColor: BLACK,
         strokeWidth: 2,
       },
-      'igraph.fishboneSubCauseBottom': { 
-        ...base, 
+      'igraph.fishboneSubCauseBottom': {
+        ...base,
         shape: 'igraph.fishboneSubCauseBottom',
         fillColor: 'transparent',
-        strokeColor: '#1a1f36',
+        strokeColor: BLACK,
         strokeWidth: 2,
       },
-      'igraph.fishboneTertiary': { 
-        ...base, 
+      'igraph.fishboneTertiary': {
+        ...base,
         shape: 'igraph.fishboneTertiary',
         fillColor: 'transparent',
-        strokeColor: '#1a1f36',
+        strokeColor: BLACK,
         strokeWidth: 1.5,
       },
-      'igraph.fishboneArrow': { 
-        ...base, 
+      'igraph.fishboneArrow': {
+        ...base,
         shape: 'igraph.fishboneArrow',
-        fillColor: '#1a1f36',
-        strokeColor: '#1a1f36',
+        fillColor: BLACK,
+        strokeColor: BLACK,
         strokeWidth: 2,
       },
-      'igraph.fishboneDashedArrow': { 
-        ...base, 
+      'igraph.fishboneDashedArrow': {
+        ...base,
         shape: 'igraph.fishboneDashedArrow',
-        fillColor: '#1a1f36',
-        strokeColor: '#1a1f36',
+        fillColor: BLACK,
+        strokeColor: BLACK,
         strokeWidth: 2,
       },
-      'igraph.fishboneCategory': { 
-        ...base, 
+      'igraph.fishboneCategory': {
+        ...base,
         shape: 'igraph.fishboneCategory',
         fillColor: '#ffffff',
-        strokeColor: '#1a1f36',
+        strokeColor: BLACK,
         strokeWidth: 2,
       },
-      'igraph.fishboneBubble': { 
-        ...base, 
+      'igraph.fishboneBubble': {
+        ...base,
         shape: 'igraph.fishboneBubble',
         fillColor: '#ffffff',
-        strokeColor: '#1a1f36',
+        strokeColor: BLACK,
         strokeWidth: 2,
       },
-      'igraph.fishboneNote': { 
-        ...base, 
+      'igraph.fishboneNote': {
+        ...base,
         shape: 'igraph.fishboneNote',
         fillColor: '#fef9c3',
-        strokeColor: '#1a1f36',
+        strokeColor: BLACK,
         strokeWidth: 2,
       },
-
-      // ─── Schematic Shapes ──────────────────────────────────────────────
-      'igraph.schematicBattery': { 
-        ...base, 
+      'igraph.schematicBattery': {
+        ...base,
         shape: 'igraph.schematicBattery',
         fillColor: 'transparent',
-        strokeColor: '#1a1f36',
+        strokeColor: BLACK,
         strokeWidth: 2,
       },
-      'igraph.schematicAC': { 
-        ...base, 
+      'igraph.schematicAC': {
+        ...base,
         shape: 'igraph.schematicAC',
         fillColor: 'transparent',
-        strokeColor: '#1a1f36',
+        strokeColor: BLACK,
         strokeWidth: 2,
       },
-      'igraph.schematicGround': { 
-        ...base, 
+      'igraph.schematicGround': {
+        ...base,
         shape: 'igraph.schematicGround',
         fillColor: 'transparent',
-        strokeColor: '#1a1f36',
+        strokeColor: BLACK,
         strokeWidth: 2,
       },
-      'igraph.schematicResistor': { 
-        ...base, 
+      'igraph.schematicResistor': {
+        ...base,
         shape: 'igraph.schematicResistor',
         fillColor: 'transparent',
-        strokeColor: '#1a1f36',
+        strokeColor: BLACK,
         strokeWidth: 2,
       },
-      'igraph.schematicVariableResistor': { 
-        ...base, 
+      'igraph.schematicVariableResistor': {
+        ...base,
         shape: 'igraph.schematicVariableResistor',
         fillColor: 'transparent',
-        strokeColor: '#1a1f36',
+        strokeColor: BLACK,
         strokeWidth: 2,
       },
-      'igraph.schematicCapacitor': { 
-        ...base, 
+      'igraph.schematicCapacitor': {
+        ...base,
         shape: 'igraph.schematicCapacitor',
         fillColor: 'transparent',
-        strokeColor: '#1a1f36',
+        strokeColor: BLACK,
         strokeWidth: 2,
       },
-      'igraph.schematicInductor': { 
-        ...base, 
+      'igraph.schematicInductor': {
+        ...base,
         shape: 'igraph.schematicInductor',
         fillColor: 'transparent',
-        strokeColor: '#1a1f36',
+        strokeColor: BLACK,
         strokeWidth: 2,
       },
-      'igraph.schematicDiode': { 
-        ...base, 
+      'igraph.schematicDiode': {
+        ...base,
         shape: 'igraph.schematicDiode',
         fillColor: '#ffffff',
-        strokeColor: '#1a1f36',
+        strokeColor: BLACK,
         strokeWidth: 2,
       },
-      'igraph.schematicLED': { 
-        ...base, 
+      'igraph.schematicLED': {
+        ...base,
         shape: 'igraph.schematicLED',
         fillColor: '#ffffff',
-        strokeColor: '#1a1f36',
+        strokeColor: BLACK,
         strokeWidth: 2,
       },
-      'igraph.schematicNPN': { 
-        ...base, 
+      'igraph.schematicNPN': {
+        ...base,
         shape: 'igraph.schematicNPN',
         fillColor: 'transparent',
-        strokeColor: '#1a1f36',
+        strokeColor: BLACK,
         strokeWidth: 2,
       },
-      'igraph.schematicSwitch': { 
-        ...base, 
+      'igraph.schematicSwitch': {
+        ...base,
         shape: 'igraph.schematicSwitch',
         fillColor: 'transparent',
-        strokeColor: '#1a1f36',
+        strokeColor: BLACK,
         strokeWidth: 2,
       },
-      'igraph.schematicFuse': { 
-        ...base, 
+      'igraph.schematicFuse': {
+        ...base,
         shape: 'igraph.schematicFuse',
         fillColor: '#ffffff',
-        strokeColor: '#1a1f36',
+        strokeColor: BLACK,
         strokeWidth: 2,
       },
-      'igraph.schematicConnection': { 
-        ...base, 
+      'igraph.schematicConnection': {
+        ...base,
         shape: 'igraph.schematicConnection',
-        fillColor: '#1a1f36',
-        strokeColor: '#1a1f36',
+        fillColor: BLACK,
+        strokeColor: BLACK,
         strokeWidth: 2,
       },
-      'igraph.schematicNoConnection': { 
-        ...base, 
+      'igraph.schematicNoConnection': {
+        ...base,
         shape: 'igraph.schematicNoConnection',
         fillColor: 'transparent',
-        strokeColor: '#1a1f36',
+        strokeColor: BLACK,
         strokeWidth: 2,
       },
-
-      // ─── Use Case Shapes ──────────────────────────────────────────────
-      'igraph.umlInclude': { 
-        ...base, 
+      'igraph.umlInclude': {
+        ...base,
         shape: 'igraph.umlInclude',
-        fillColor: '#1a1f36',
-        strokeColor: '#1a1f36',
+        fillColor: BLACK,
+        strokeColor: BLACK,
         strokeWidth: 2,
       },
-      'igraph.umlExtend': { 
-        ...base, 
+      'igraph.umlExtend': {
+        ...base,
         shape: 'igraph.umlExtend',
-        fillColor: '#1a1f36',
-        strokeColor: '#1a1f36',
+        fillColor: BLACK,
+        strokeColor: BLACK,
         strokeWidth: 2,
       },
-
-      // ─── Activity Shapes ──────────────────────────────────────────────
-      'igraph.umlInitialNode': { 
-        ...base, 
+      'igraph.umlInitialNode': {
+        ...base,
         shape: 'igraph.umlInitialNode',
-        fillColor: '#1a1f36',
-        strokeColor: '#1a1f36',
+        fillColor: BLACK,
+        strokeColor: BLACK,
         strokeWidth: 2,
       },
-      'igraph.umlMerge': { 
-        ...base, 
+      'igraph.umlMerge': {
+        ...base,
         shape: 'igraph.umlMerge',
-        fillColor: '#1a1f36',
-        strokeColor: '#1a1f36',
+        fillColor: BLACK,
+        strokeColor: BLACK,
         strokeWidth: 2,
       },
-      'igraph.umlFork': { 
-        ...base, 
+      'igraph.umlFork': {
+        ...base,
         shape: 'igraph.umlFork',
-        fillColor: '#1a1f36',
-        strokeColor: '#1a1f36',
+        fillColor: BLACK,
+        strokeColor: BLACK,
         strokeWidth: 2,
       },
-      'igraph.umlControlFlow': { 
-        ...base, 
+      'igraph.umlControlFlow': {
+        ...base,
         shape: 'igraph.umlControlFlow',
-        fillColor: '#1a1f36',
-        strokeColor: '#1a1f36',
+        fillColor: BLACK,
+        strokeColor: BLACK,
         strokeWidth: 2,
       },
-      'igraph.umlObjectFlow': { 
-        ...base, 
+      'igraph.umlObjectFlow': {
+        ...base,
         shape: 'igraph.umlObjectFlow',
-        fillColor: '#1a1f36',
-        strokeColor: '#1a1f36',
+        fillColor: BLACK,
+        strokeColor: BLACK,
         strokeWidth: 2,
       },
-      'igraph.umlActivityFinal': { 
-        ...base, 
+      'igraph.umlActivityFinal': {
+        ...base,
         shape: 'igraph.umlActivityFinal',
-        fillColor: '#1a1f36',
-        strokeColor: '#1a1f36',
+        fillColor: BLACK,
+        strokeColor: BLACK,
         strokeWidth: 2,
       },
-      'igraph.umlFlowFinal': { 
-        ...base, 
+      'igraph.umlFlowFinal': {
+        ...base,
         shape: 'igraph.umlFlowFinal',
         fillColor: 'transparent',
-        strokeColor: '#1a1f36',
+        strokeColor: BLACK,
         strokeWidth: 2,
       },
-
-      // ─── Sequence Shapes ──────────────────────────────────────────────
-      'igraph.umlSyncMsg': { 
-        ...base, 
+      'igraph.umlSyncMsg': {
+        ...base,
         shape: 'igraph.umlSyncMsg',
-        fillColor: '#1a1f36',
-        strokeColor: '#1a1f36',
+        fillColor: BLACK,
+        strokeColor: BLACK,
         strokeWidth: 2,
       },
-      'igraph.umlAsyncMsg': { 
-        ...base, 
+      'igraph.umlAsyncMsg': {
+        ...base,
         shape: 'igraph.umlAsyncMsg',
         fillColor: 'transparent',
-        strokeColor: '#1a1f36',
+        strokeColor: BLACK,
         strokeWidth: 2,
       },
-
-      // ─── Class Shapes ──────────────────────────────────────────────────
-      'igraph.umlComposition': { 
-        ...base, 
+      'igraph.umlComposition': {
+        ...base,
         shape: 'igraph.umlComposition',
-        fillColor: '#1a1f36',
-        strokeColor: '#1a1f36',
+        fillColor: BLACK,
+        strokeColor: BLACK,
         strokeWidth: 2,
       },
-
-      // ─── Standard Shapes ─────────────────────────────────────────────────
-      'igraph.rectangle':        { ...base, shape: 'igraph.rectangle' },
+      'igraph.rectangle': { ...base, shape: 'igraph.rectangle' },
       'igraph.roundedRectangle': { ...base, shape: 'igraph.roundedRectangle' },
-      'igraph.ellipse':          { ...base, shape: 'igraph.ellipse' },
-      'igraph.diamond':          { ...base, shape: 'igraph.diamond' },
-      'igraph.triangle':         { ...base, shape: 'igraph.triangle' },
-      'igraph.parallelogram':    { ...base, shape: 'igraph.parallelogram' },
-      'igraph.cylinder':         { ...base, shape: 'igraph.cylinder' },
-      'igraph.note':             { ...base, shape: 'igraph.note', fillColor: '#fef9c3' },
-      'igraph.cloud':            { ...base, shape: 'igraph.cloud', fillColor: '#e0f2fe' },
-      'igraph.doubleRectangle':  { ...base, shape: 'igraph.doubleRectangle' },
-      'igraph.doubleRhombus':    { ...base, shape: 'igraph.doubleRhombus' },
-      'igraph.multiOval':        { ...base, shape: 'igraph.multiOval' },
-      'igraph.line':             { ...base, shape: 'igraph.line' },
-      'igraph.text':             { ...base, shape: 'igraph.text' },
-      'igraph.dashedRect':       { ...base, shape: 'igraph.dashedRect' },
-      'igraph.predefined':       { ...base, shape: 'igraph.predefined' },
-      'igraph.actor':         { ...base, shape: 'igraph.actor' },
-      'igraph.initialNode':   { ...base, shape: 'igraph.initialNode', fillColor: '#1a1f36', strokeColor: '#1a1f36' },
-      'igraph.finalNode':     { ...base, shape: 'igraph.finalNode' },
-      'igraph.forkJoin':      { ...base, shape: 'igraph.forkJoin', fillColor: '#1a1f36', strokeColor: '#1a1f36' },
-      'igraph.lifeline':      { ...base, shape: 'igraph.lifeline' },
-      'igraph.activation':    { ...base, shape: 'igraph.activation' },
-      'igraph.classBox':      { ...base, shape: 'igraph.classBox' },
-      'igraph.interface':     { ...base, shape: 'igraph.interface' },
+      'igraph.ellipse': { ...base, shape: 'igraph.ellipse' },
+      'igraph.diamond': { ...base, shape: 'igraph.diamond' },
+      'igraph.triangle': { ...base, shape: 'igraph.triangle' },
+      'igraph.parallelogram': { ...base, shape: 'igraph.parallelogram' },
+      'igraph.cylinder': { ...base, shape: 'igraph.cylinder' },
+      'igraph.note': { ...base, shape: 'igraph.note', fillColor: '#fef9c3' },
+      'igraph.cloud': { ...base, shape: 'igraph.cloud', fillColor: '#e0f2fe' },
+      'igraph.doubleRectangle': { ...base, shape: 'igraph.doubleRectangle' },
+      'igraph.doubleRhombus': { ...base, shape: 'igraph.doubleRhombus' },
+      'igraph.multiOval': { ...base, shape: 'igraph.multiOval' },
+      'igraph.line': { ...base, shape: 'igraph.line' },
+      'igraph.text': { ...base, shape: 'igraph.text' },
+      'igraph.dashedRect': { ...base, shape: 'igraph.dashedRect' },
+      'igraph.predefined': { ...base, shape: 'igraph.predefined' },
+      'igraph.actor': { ...base, shape: 'igraph.actor' },
+      'igraph.initialNode': { ...base, shape: 'igraph.initialNode', fillColor: BLACK, strokeColor: BLACK },
+      'igraph.finalNode': { ...base, shape: 'igraph.finalNode' },
+      'igraph.forkJoin': { ...base, shape: 'igraph.forkJoin', fillColor: BLACK, strokeColor: BLACK },
+      'igraph.lifeline': { ...base, shape: 'igraph.lifeline' },
+      'igraph.activation': { ...base, shape: 'igraph.activation' },
+      'igraph.classBox': { ...base, shape: 'igraph.classBox' },
+      'igraph.interface': { ...base, shape: 'igraph.interface' },
       'igraph.abstractClass': { ...base, shape: 'igraph.abstractClass' },
-      'igraph.entity':               { ...base, shape: 'igraph.entity' },
-      'igraph.weakEntity':           { ...base, shape: 'igraph.weakEntity' },
-      'igraph.attribute':            { ...base, shape: 'igraph.attribute' },
-      'igraph.primaryKey':           { ...base, shape: 'igraph.primaryKey' },
-      'igraph.derivedAttr':          { ...base, shape: 'igraph.derivedAttr' },
-      'igraph.compositeAttr':        { ...base, shape: 'igraph.compositeAttr' },
-      'igraph.multiAttr':            { ...base, shape: 'igraph.multiAttr' },
-      'igraph.relationship':         { ...base, shape: 'igraph.relationship' },
-      'igraph.identifyingRel':       { ...base, shape: 'igraph.identifyingRel' },
-      'igraph.cardinality':          { ...base, shape: 'igraph.cardinality' },
-      'igraph.crowOne':              { ...base, shape: 'igraph.crowOne' },
-      'igraph.crowZeroOne':          { ...base, shape: 'igraph.crowZeroOne' },
-      'igraph.crowZeroMany':         { ...base, shape: 'igraph.crowZeroMany' },
-      'igraph.crowOneMany':          { ...base, shape: 'igraph.crowOneMany' },
-      'igraph.crowMany':             { ...base, shape: 'igraph.crowMany' },
-      'igraph.totalParticipation':   { ...base, shape: 'igraph.totalParticipation' },
+      'igraph.entity': { ...base, shape: 'igraph.entity' },
+      'igraph.weakEntity': { ...base, shape: 'igraph.weakEntity' },
+      'igraph.attribute': { ...base, shape: 'igraph.attribute' },
+      'igraph.primaryKey': { ...base, shape: 'igraph.primaryKey' },
+      'igraph.derivedAttr': { ...base, shape: 'igraph.derivedAttr' },
+      'igraph.compositeAttr': { ...base, shape: 'igraph.compositeAttr' },
+      'igraph.multiAttr': { ...base, shape: 'igraph.multiAttr' },
+      'igraph.relationship': { ...base, shape: 'igraph.relationship' },
+      'igraph.identifyingRel': { ...base, shape: 'igraph.identifyingRel' },
+      'igraph.cardinality': { ...base, shape: 'igraph.cardinality' },
+      'igraph.crowOne': { ...base, shape: 'igraph.crowOne' },
+      'igraph.crowZeroOne': { ...base, shape: 'igraph.crowZeroOne' },
+      'igraph.crowZeroMany': { ...base, shape: 'igraph.crowZeroMany' },
+      'igraph.crowOneMany': { ...base, shape: 'igraph.crowOneMany' },
+      'igraph.crowMany': { ...base, shape: 'igraph.crowMany' },
+      'igraph.totalParticipation': { ...base, shape: 'igraph.totalParticipation' },
       'igraph.partialParticipation': { ...base, shape: 'igraph.partialParticipation' },
-      'igraph.erdConnector':         { ...base, shape: 'igraph.erdConnector' },
-      'igraph.arrow':           { ...base, shape: 'igraph.arrow' },
-      'igraph.arrowDown':       { ...base, shape: 'igraph.arrowDown' },
-      'igraph.arrowRight':      { ...base, shape: 'igraph.arrowRight' },
-      'igraph.filledArrow':     { ...base, shape: 'igraph.filledArrow' },
-      'igraph.openArrow':       { ...base, shape: 'igraph.openArrow' },
-      'igraph.dashedArrow':     { ...base, shape: 'igraph.dashedArrow' },
+      'igraph.erdConnector': { ...base, shape: 'igraph.erdConnector' },
+      'igraph.arrow': { ...base, shape: 'igraph.arrow' },
+      'igraph.arrowDown': { ...base, shape: 'igraph.arrowDown' },
+      'igraph.arrowRight': { ...base, shape: 'igraph.arrowRight' },
+      'igraph.filledArrow': { ...base, shape: 'igraph.filledArrow' },
+      'igraph.openArrow': { ...base, shape: 'igraph.openArrow' },
+      'igraph.dashedArrow': { ...base, shape: 'igraph.dashedArrow' },
       'igraph.dashedArrowBack': { ...base, shape: 'igraph.dashedArrowBack' },
-      'igraph.triangleArrow':   { ...base, shape: 'igraph.triangleArrow' },
-      'igraph.loopArrow':       { ...base, shape: 'igraph.loopArrow' },
-      'igraph.createArrow':     { ...base, shape: 'igraph.createArrow' },
-      'igraph.destruction':     { ...base, shape: 'igraph.destruction' },
-      'igraph.aggregation':     { ...base, shape: 'igraph.aggregation' },
-      'igraph.composition':     { ...base, shape: 'igraph.composition', fillColor: '#1a1f36' },
-      'igraph.multiplicity':    { ...base, shape: 'igraph.multiplicity' },
-      'igraph.arrowDiag':       { ...base, shape: 'igraph.arrowDiag' },
-      'igraph.arrowSmall':      { ...base, shape: 'igraph.arrowSmall' },
-      'igraph.resistor':    { ...base, shape: 'igraph.resistor' },
-      'igraph.capacitor':   { ...base, shape: 'igraph.capacitor' },
-      'igraph.inductor':    { ...base, shape: 'igraph.inductor' },
-      'igraph.voltage':     { ...base, shape: 'igraph.voltage' },
-      'igraph.ground':      { ...base, shape: 'igraph.ground' },
-      'igraph.diode':       { ...base, shape: 'igraph.diode' },
-      'igraph.transistor':  { ...base, shape: 'igraph.transistor' },
-      'igraph.ic':          { ...base, shape: 'igraph.ic' },
-      'igraph.opamp':       { ...base, shape: 'igraph.opamp' },
-      'igraph.switch':      { ...base, shape: 'igraph.switch' },
-      'igraph.fuse':        { ...base, shape: 'igraph.fuse' },
+      'igraph.triangleArrow': { ...base, shape: 'igraph.triangleArrow' },
+      'igraph.loopArrow': { ...base, shape: 'igraph.loopArrow' },
+      'igraph.createArrow': { ...base, shape: 'igraph.createArrow' },
+      'igraph.destruction': { ...base, shape: 'igraph.destruction' },
+      'igraph.aggregation': { ...base, shape: 'igraph.aggregation' },
+      'igraph.composition': { ...base, shape: 'igraph.composition', fillColor: BLACK },
+      'igraph.multiplicity': { ...base, shape: 'igraph.multiplicity' },
+      'igraph.arrowDiag': { ...base, shape: 'igraph.arrowDiag' },
+      'igraph.arrowSmall': { ...base, shape: 'igraph.arrowSmall' },
+      'igraph.resistor': { ...base, shape: 'igraph.resistor' },
+      'igraph.capacitor': { ...base, shape: 'igraph.capacitor' },
+      'igraph.inductor': { ...base, shape: 'igraph.inductor' },
+      'igraph.voltage': { ...base, shape: 'igraph.voltage' },
+      'igraph.ground': { ...base, shape: 'igraph.ground' },
+      'igraph.diode': { ...base, shape: 'igraph.diode' },
+      'igraph.transistor': { ...base, shape: 'igraph.transistor' },
+      'igraph.ic': { ...base, shape: 'igraph.ic' },
+      'igraph.opamp': { ...base, shape: 'igraph.opamp' },
+      'igraph.switch': { ...base, shape: 'igraph.switch' },
+      'igraph.fuse': { ...base, shape: 'igraph.fuse' },
       'igraph.transformer': { ...base, shape: 'igraph.transformer' },
-      'igraph.pentagon':    { ...base, shape: 'igraph.pentagon' },
-      'igraph.trapezoid':   { ...base, shape: 'igraph.trapezoid' },
-      'igraph.dshape':      { ...base, shape: 'igraph.dshape' },
-      'igraph.hexagon':     { ...base, shape: 'igraph.hexagon' },
-      'igraph.display':     { ...base, shape: 'igraph.display' },
-      'igraph.annotation':  { ...base, shape: 'igraph.annotation' },
-      'igraph.ucActor':         { ...base, shape: 'igraph.ucActor' },
-      'igraph.umlUseCase':      { ...base, shape: 'igraph.umlUseCase' },
+      'igraph.pentagon': { ...base, shape: 'igraph.pentagon' },
+      'igraph.trapezoid': { ...base, shape: 'igraph.trapezoid' },
+      'igraph.dshape': { ...base, shape: 'igraph.dshape' },
+      'igraph.hexagon': { ...base, shape: 'igraph.hexagon' },
+      'igraph.display': { ...base, shape: 'igraph.display' },
+      'igraph.annotation': { ...base, shape: 'igraph.annotation' },
+      'igraph.ucActor': { ...base, shape: 'igraph.ucActor' },
+      'igraph.umlUseCase': { ...base, shape: 'igraph.umlUseCase' },
       'igraph.umlSystemBoundary': { ...base, shape: 'igraph.umlSystemBoundary' },
-      'igraph.umlAssociation':  { ...base, shape: 'igraph.umlAssociation' },
+      'igraph.umlAssociation': { ...base, shape: 'igraph.umlAssociation' },
       'igraph.umlGeneralization': { ...base, shape: 'igraph.umlGeneralization' },
-      'igraph.umlNote':         { ...base, shape: 'igraph.umlNote', fillColor: '#fef9c3' },
+      'igraph.umlNote': { ...base, shape: 'igraph.umlNote', fillColor: '#fef9c3' },
       'igraph.umlNoteConnector': { ...base, shape: 'igraph.umlNoteConnector' },
       'igraph.umlIncludeLabel': { ...base, shape: 'igraph.umlIncludeLabel' },
-      'igraph.umlExtendLabel':  { ...base, shape: 'igraph.umlExtendLabel' },
-      'igraph.umlActivity':     { ...base, shape: 'igraph.umlActivity' },
-      'igraph.umlDecision':     { ...base, shape: 'igraph.umlDecision' },
-      'igraph.umlSwimlane':     { ...base, shape: 'igraph.umlSwimlane' },
-      'igraph.umlConstraint':   { ...base, shape: 'igraph.umlConstraint' },
-      'igraph.umlLifeline':     { ...base, shape: 'igraph.umlLifeline' },
-      'igraph.umlActivation':   { ...base, shape: 'igraph.umlActivation' },
-      'igraph.umlDestroy':      { ...base, shape: 'igraph.umlDestroy' },
-      'igraph.umlReturnMsg':    { ...base, shape: 'igraph.umlReturnMsg' },
-      'igraph.umlAlt':          { ...base, shape: 'igraph.umlAlt' },
-      'igraph.umlOpt':          { ...base, shape: 'igraph.umlOpt' },
-      'igraph.umlLoop':         { ...base, shape: 'igraph.umlLoop' },
-      'igraph.umlPar':          { ...base, shape: 'igraph.umlPar' },
-      'igraph.umlBreak':        { ...base, shape: 'igraph.umlBreak' },
-      'igraph.umlClass':        { ...base, shape: 'igraph.umlClass' },
+      'igraph.umlExtendLabel': { ...base, shape: 'igraph.umlExtendLabel' },
+      'igraph.umlActivity': { ...base, shape: 'igraph.umlActivity' },
+      'igraph.umlDecision': { ...base, shape: 'igraph.umlDecision' },
+      'igraph.umlSwimlane': { ...base, shape: 'igraph.umlSwimlane' },
+      'igraph.umlConstraint': { ...base, shape: 'igraph.umlConstraint' },
+      'igraph.umlLifeline': { ...base, shape: 'igraph.umlLifeline' },
+      'igraph.umlActivation': { ...base, shape: 'igraph.umlActivation' },
+      'igraph.umlDestroy': { ...base, shape: 'igraph.umlDestroy' },
+      'igraph.umlReturnMsg': { ...base, shape: 'igraph.umlReturnMsg' },
+      'igraph.umlAlt': { ...base, shape: 'igraph.umlAlt' },
+      'igraph.umlOpt': { ...base, shape: 'igraph.umlOpt' },
+      'igraph.umlLoop': { ...base, shape: 'igraph.umlLoop' },
+      'igraph.umlPar': { ...base, shape: 'igraph.umlPar' },
+      'igraph.umlBreak': { ...base, shape: 'igraph.umlBreak' },
+      'igraph.umlClass': { ...base, shape: 'igraph.umlClass' },
       'igraph.umlDirectedAssociation': { ...base, shape: 'igraph.umlDirectedAssociation' },
-      'igraph.umlAggregation':  { ...base, shape: 'igraph.umlAggregation' },
-      'igraph.umlDependency':   { ...base, shape: 'igraph.umlDependency' },
+      'igraph.umlAggregation': { ...base, shape: 'igraph.umlAggregation' },
+      'igraph.umlDependency': { ...base, shape: 'igraph.umlDependency' },
       'igraph.umlMultiplicity1': { ...base, shape: 'igraph.umlMultiplicity1' },
       'igraph.umlMultiplicity01': { ...base, shape: 'igraph.umlMultiplicity01' },
       'igraph.umlMultiplicityMany': { ...base, shape: 'igraph.umlMultiplicityMany' },
       'igraph.umlMultiplicity1Many': { ...base, shape: 'igraph.umlMultiplicity1Many' },
       'igraph.umlMultiplicityRange': { ...base, shape: 'igraph.umlMultiplicityRange' },
       'igraph.umlMultiplicityN': { ...base, shape: 'igraph.umlMultiplicityN' },
-      'igraph.erdEntity':       { ...base, shape: 'igraph.erdEntity' },
-      'igraph.erdWeakEntity':   { ...base, shape: 'igraph.erdWeakEntity' },
+      'igraph.erdEntity': { ...base, shape: 'igraph.erdEntity' },
+      'igraph.erdWeakEntity': { ...base, shape: 'igraph.erdWeakEntity' },
       'igraph.erdRelationship': { ...base, shape: 'igraph.erdRelationship' },
       'igraph.erdIdentifyingRelationship': { ...base, shape: 'igraph.erdIdentifyingRelationship' },
-      'igraph.erdAttribute':    { ...base, shape: 'igraph.erdAttribute' },
+      'igraph.erdAttribute': { ...base, shape: 'igraph.erdAttribute' },
       'igraph.erdMultivaluedAttribute': { ...base, shape: 'igraph.erdMultivaluedAttribute' },
       'igraph.erdDerivedAttribute': { ...base, shape: 'igraph.erdDerivedAttribute' },
       'igraph.erdCardinality11': { ...base, shape: 'igraph.erdCardinality11' },
@@ -912,10 +772,6 @@ const WebCanvas = ({ onReady, onChange, onSelectionChange, umlType = 'flowchart'
 
     console.log('✅ Registered igraph stylesheet entries');
   }, []);
-
-  // ═════════════════════════════════════════════════════════════════════════
-  // ⭐ FIXED DROP HANDLER - Uses square dimensions for circular shapes
-  // ═════════════════════════════════════════════════════════════════════════
 
   const handleDrop = useCallback((e: DragEvent) => {
     e.preventDefault();
@@ -938,9 +794,9 @@ const WebCanvas = ({ onReady, onChange, onSelectionChange, umlType = 'flowchart'
       const styleObject: CellStateStyle = {
         shape: styleKey,
         fillColor: '#ffffff',
-        strokeColor: '#1a1f36',
+        strokeColor: BLACK,
         strokeWidth: 2,
-        fontColor: '#1a1f36',
+        fontColor: BLACK,
         fontSize: 12,
         align: 'center' as AlignValue,
         verticalAlign: 'middle' as VAlignValue,
@@ -963,19 +819,459 @@ const WebCanvas = ({ onReady, onChange, onSelectionChange, umlType = 'flowchart'
         graph.setSelectionCell(cell);
         handleSelectionChange();
       }, 10);
-      
+
       console.log(`✅ Dropped "${shapeId}" as "${styleKey}" at (${cx}, ${cy}) with size ${dropW}x${dropH}`);
     } catch (err) {
       console.error('Drop error:', err);
     }
   }, [handleSelectionChange]);
 
-  // ─── Init Graph ─────────────────────────────────────────────────────────────
+  // ════════════════════════════════════════════════════════════════════════════
+  // ⭐ DRAW.IO STYLE: CLICK ARROWS (Top, Bottom, Left, Right)
+  // ════════════════════════════════════════════════════════════════════════════
+
+  const setupClickArrows = useCallback((graph: Graph) => {
+    const container = graph.container;
+    if (!container) return;
+
+    let arrowDivs: HTMLDivElement[] = [];
+    let currentArrowCell: any = null;
+
+    // ─── Create SVG chevron/triangle arrow ────────────────────────────────────
+    function createArrowSVG(direction: 'up' | 'down' | 'left' | 'right', size: number = 16): string {
+      const half = size / 2;
+      let points: string;
+
+      switch (direction) {
+        case 'up':
+          points = `${half},2 ${size - 2},${size - 2} 2,${size - 2}`;
+          break;
+        case 'down':
+          points = `${half},${size - 2} ${size - 2},2 2,2`;
+          break;
+        case 'left':
+          points = `2,${half} ${size - 2},${size - 2} ${size - 2},2`;
+          break;
+        case 'right':
+          points = `${size - 2},${half} 2,2 2,${size - 2}`;
+          break;
+      }
+
+      return `<svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}"><polygon points="${points}" fill="currentColor"/></svg>`;
+    }
+
+    function createArrowButtons(cell: any) {
+      arrowDivs.forEach(div => div.remove());
+      arrowDivs = [];
+
+      const geo = cell.getGeometry();
+      if (!geo) return;
+
+      const view = graph.getView();
+      const scale = view.getScale();
+      const translate = view.getTranslate();
+
+      const cx = (geo.x + translate.x) * scale + (geo.width * scale) / 2;
+      const cy = (geo.y + translate.y) * scale + (geo.height * scale) / 2;
+      const w = geo.width * scale;
+      const h = geo.height * scale;
+
+      // ─── Draw.io style: smaller, positioned 10-15px outside selection box ──
+      const spacing = 14;
+      const arrowSize = 14;
+      const restColor = '#a8c5ff'; // light blue at rest
+      const hoverColor = '#4c6fff'; // dark blue on hover
+
+      const directions: { dx: number; dy: number; label: 'up' | 'down' | 'left' | 'right' }[] = [
+        { dx: 0, dy: -1, label: 'up' },
+        { dx: 0, dy: 1, label: 'down' },
+        { dx: -1, dy: 0, label: 'left' },
+        { dx: 1, dy: 0, label: 'right' },
+      ];
+
+      directions.forEach((dir) => {
+        const div = document.createElement('div');
+        const x = cx + dir.dx * (w / 2 + spacing);
+        const y = cy + dir.dy * (h / 2 + spacing);
+
+        div.style.position = 'absolute';
+        div.style.left = (x - arrowSize / 2) + 'px';
+        div.style.top = (y - arrowSize / 2) + 'px';
+        div.style.width = arrowSize + 'px';
+        div.style.height = arrowSize + 'px';
+        div.style.cursor = 'pointer';
+        div.style.pointerEvents = 'all';
+        div.style.zIndex = '10';
+        div.style.display = 'flex';
+        div.style.alignItems = 'center';
+        div.style.justifyContent = 'center';
+        div.style.color = restColor;
+        div.style.transition = 'color 0.15s ease, transform 0.15s ease';
+        div.style.userSelect = 'none';
+
+        // ─── SVG arrow (no background circle) ──────────────────────────────────
+        div.innerHTML = createArrowSVG(dir.label, arrowSize);
+
+        // ─── Hover: darken to full BLUE and scale up ──────────────────────────
+        div.addEventListener('mouseenter', () => {
+          div.style.color = hoverColor;
+          div.style.transform = 'scale(1.25)';
+        });
+        div.addEventListener('mouseleave', () => {
+          div.style.color = restColor;
+          div.style.transform = 'scale(1)';
+        });
+
+        // ─── Click: create new connected shape ─────────────────────────────────
+        div.addEventListener('click', (e) => {
+          e.stopPropagation();
+          e.preventDefault();
+
+          const style = cell.getStyle();
+          const styleObj = typeof style === 'string' ? {} : style;
+          
+          const newX = geo.x + dir.dx * (geo.width / 2 + NEW_SHAPE_SPACING / scale);
+          const newY = geo.y + dir.dy * (geo.height / 2 + NEW_SHAPE_SPACING / scale);
+
+          const roundedX = Math.round(newX / GRID_SIZE) * GRID_SIZE;
+          const roundedY = Math.round(newY / GRID_SIZE) * GRID_SIZE;
+
+          let shapeStyle: CellStateStyle = {
+            shape: styleObj.shape || 'igraph.rectangle',
+            fillColor: styleObj.fillColor || '#ffffff',
+            strokeColor: styleObj.strokeColor || BLACK,
+            strokeWidth: styleObj.strokeWidth || 2,
+            fontColor: styleObj.fontColor || BLACK,
+            fontSize: styleObj.fontSize || 12,
+            align: (styleObj.align as AlignValue) || 'center',
+            verticalAlign: (styleObj.verticalAlign as VAlignValue) || 'middle',
+            whiteSpace: (styleObj.whiteSpace as WhiteSpaceValue) || 'wrap',
+          };
+
+          const newCell = graph.insertVertex(
+            null,
+            null,
+            '',
+            roundedX,
+            roundedY,
+            geo.width,
+            geo.height,
+            shapeStyle,
+          );
+
+          const edgeStyle = {
+            strokeColor: BLACK,
+            strokeWidth: 2,
+            edgeStyle: 'orthogonalEdgeStyle',
+          };
+
+          graph.insertEdge(
+            null,
+            null,
+            '',
+            cell,
+            newCell,
+            edgeStyle,
+          );
+
+          graph.clearSelection();
+          setTimeout(() => {
+            graph.setSelectionCell(newCell);
+            handleSelectionChange();
+            removeArrowButtons();
+          }, 10);
+
+          console.log(`✅ Created new shape ${dir.label} of selected cell`);
+        });
+
+        container.appendChild(div);
+        arrowDivs.push(div);
+      });
+    }
+
+    function removeArrowButtons() {
+      arrowDivs.forEach(div => div.remove());
+      arrowDivs = [];
+      currentArrowCell = null;
+    }
+
+    // ─── Listen for selection changes ──────────────────────────────────────
+    const selectionHandler = () => {
+      const selection = graph.getSelectionCells();
+      const selected = selection.length === 1 ? selection[0] : null;
+
+      if (selected && selected.isVertex && selected.isVertex()) {
+        if (currentArrowCell !== selected) {
+          removeArrowButtons();
+          currentArrowCell = selected;
+          setTimeout(() => {
+            if (currentArrowCell === selected) {
+              createArrowButtons(selected);
+            }
+          }, 50);
+        }
+      } else {
+        removeArrowButtons();
+      }
+    };
+
+    graph.getSelectionModel().addListener(InternalEvent.CHANGE, selectionHandler);
+
+    const clickOutsideHandler = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      if (!target.closest('.mxCell') && !target.closest('.mxRubberband')) {
+        removeArrowButtons();
+      }
+    };
+
+    return () => {
+      graph.getSelectionModel().removeListener(selectionHandler);
+      removeArrowButtons();
+    };
+
+  }, [handleSelectionChange]);
+
+  // ════════════════════════════════════════════════════════════════════════════
+  // ⭐ DRAW.IO STYLE: HOVER CONNECTION POINTS (X marks + 4 arrows on HOVER)
+  // ════════════════════════════════════════════════════════════════════════════
+
+  const setupHoverUI = useCallback((graph: Graph) => {
+    const container = graph.container;
+    if (!container) return;
+
+    let connectionPointsDivs: HTMLDivElement[] = [];
+    let hoverArrowDivs: HTMLDivElement[] = [];
+    let currentHoveredCell: any = null;
+    let hoverTimeout: ReturnType<typeof setTimeout> | null = null;
+    let lastHoveredCell: any = null;
+
+    function createConnectionPoints(cell: any) {
+      connectionPointsDivs.forEach(div => div.remove());
+      connectionPointsDivs = [];
+
+      const geo = cell.getGeometry();
+      if (!geo) return;
+
+      const view = graph.getView();
+      const scale = view.getScale();
+      const translate = view.getTranslate();
+
+      const x = (geo.x + translate.x) * scale;
+      const y = (geo.y + translate.y) * scale;
+      const w = geo.width * scale;
+      const h = geo.height * scale;
+
+      const points = [
+        { x: x + w / 2, y: y },
+        { x: x + w / 2, y: y + h },
+        { x: x, y: y + h / 2 },
+        { x: x + w, y: y + h / 2 },
+        { x: x, y: y },
+        { x: x + w, y: y },
+        { x: x, y: y + h },
+        { x: x + w, y: y + h },
+      ];
+
+      points.forEach((pt) => {
+        const div = document.createElement('div');
+        div.style.position = 'absolute';
+        div.style.left = (pt.x - 6) + 'px';
+        div.style.top = (pt.y - 6) + 'px';
+        div.style.width = '12px';
+        div.style.height = '12px';
+        div.style.cursor = 'crosshair';
+        div.style.pointerEvents = 'all';
+        div.style.zIndex = '10';
+        div.style.display = 'flex';
+        div.style.alignItems = 'center';
+        div.style.justifyContent = 'center';
+
+        div.innerHTML = `
+          <svg width="10" height="10" viewBox="0 0 10 10">
+            <line x1="1" y1="1" x2="9" y2="9" stroke="${BLUE}" stroke-width="1.5" stroke-linecap="round"/>
+            <line x1="9" y1="1" x2="1" y2="9" stroke="${BLUE}" stroke-width="1.5" stroke-linecap="round"/>
+            <circle cx="5" cy="5" r="1.5" fill="${BLUE}" opacity="0.6"/>
+          </svg>
+        `;
+
+        div.addEventListener('mouseenter', () => {
+          div.style.transform = 'scale(1.3)';
+          div.style.transition = 'transform 0.1s ease';
+        });
+        div.addEventListener('mouseleave', () => {
+          div.style.transform = 'scale(1)';
+        });
+
+        container.appendChild(div);
+        connectionPointsDivs.push(div);
+      });
+    }
+
+    function createHoverArrows(cell: any) {
+      hoverArrowDivs.forEach(div => div.remove());
+      hoverArrowDivs = [];
+
+      const geo = cell.getGeometry();
+      if (!geo) return;
+
+      const view = graph.getView();
+      const scale = view.getScale();
+      const translate = view.getTranslate();
+
+      const cx = (geo.x + translate.x) * scale + (geo.width * scale) / 2;
+      const cy = (geo.y + translate.y) * scale + (geo.height * scale) / 2;
+      const w = geo.width * scale;
+      const h = geo.height * scale;
+
+      const spacing = 18;
+      const arrowSize = 10;
+
+      const directions = [
+        { dx: 0, dy: -1, angle: 0 },
+        { dx: 0, dy: 1, angle: 180 },
+        { dx: -1, dy: 0, angle: -90 },
+        { dx: 1, dy: 0, angle: 90 },
+      ];
+
+      directions.forEach((dir) => {
+        const div = document.createElement('div');
+        const x = cx + dir.dx * (w / 2 + spacing);
+        const y = cy + dir.dy * (h / 2 + spacing);
+
+        div.style.position = 'absolute';
+        div.style.left = (x - arrowSize / 2) + 'px';
+        div.style.top = (y - arrowSize / 2) + 'px';
+        div.style.width = arrowSize + 'px';
+        div.style.height = arrowSize + 'px';
+        div.style.cursor = 'pointer';
+        div.style.pointerEvents = 'all';
+        div.style.zIndex = '10';
+        div.style.display = 'flex';
+        div.style.alignItems = 'center';
+        div.style.justifyContent = 'center';
+        div.style.opacity = '0.5';
+        div.style.transition = 'opacity 0.15s ease, transform 0.15s ease';
+
+        div.innerHTML = `
+          <svg width="${arrowSize}" height="${arrowSize}" viewBox="0 0 12 12" style="transform: rotate(${dir.angle}deg)">
+            <polygon points="2,6 10,2 10,10" fill="${BLUE}"/>
+          </svg>
+        `;
+
+        div.addEventListener('mouseenter', () => {
+          div.style.opacity = '1';
+          div.style.transform = 'scale(1.3)';
+        });
+        div.addEventListener('mouseleave', () => {
+          div.style.opacity = '0.5';
+          div.style.transform = 'scale(1)';
+        });
+
+        container.appendChild(div);
+        hoverArrowDivs.push(div);
+      });
+    }
+
+    function showHoverUI(cell: any) {
+      if (!cell || !cell.isVertex()) return;
+      if (currentHoveredCell === cell) return;
+
+      hideHoverUI();
+      currentHoveredCell = cell;
+      createConnectionPoints(cell);
+      createHoverArrows(cell);
+    }
+
+    function hideHoverUI() {
+      connectionPointsDivs.forEach(div => div.remove());
+      connectionPointsDivs = [];
+      hoverArrowDivs.forEach(div => div.remove());
+      hoverArrowDivs = [];
+      currentHoveredCell = null;
+    }
+
+    function findCellUnderMouse(mx: number, my: number): any {
+      const root = graph.getDataModel().getRoot();
+      const allCells: any[] = [];
+
+      function collectCells(cell: any) {
+        if (!cell) return;
+        allCells.push(cell);
+        const children = graph.getChildCells(cell, true, true);
+        if (children && children.length > 0) {
+          children.forEach((child: any) => collectCells(child));
+        }
+      }
+
+      collectCells(root);
+
+      for (const cell of allCells) {
+        if (cell.isVertex && cell.isVertex()) {
+          const geo = cell.getGeometry();
+          if (geo) {
+            const view = graph.getView();
+            const scale = view.getScale();
+            const translate = view.getTranslate();
+
+            const cx = (geo.x + translate.x) * scale;
+            const cy = (geo.y + translate.y) * scale;
+            const cw = geo.width * scale;
+            const ch = geo.height * scale;
+
+            if (mx >= cx && mx <= cx + cw && my >= cy && my <= cy + ch) {
+              return cell;
+            }
+          }
+        }
+      }
+      return null;
+    }
+
+    container.addEventListener('mousemove', (e: MouseEvent) => {
+      const rect = container.getBoundingClientRect();
+      const mx = e.clientX - rect.left;
+      const my = e.clientY - rect.top;
+
+      const foundCell = findCellUnderMouse(mx, my);
+
+      if (foundCell) {
+        if (hoverTimeout) {
+          clearTimeout(hoverTimeout);
+          hoverTimeout = null;
+        }
+        if (foundCell !== lastHoveredCell) {
+          lastHoveredCell = foundCell;
+          showHoverUI(foundCell);
+        }
+      } else {
+        if (!hoverTimeout) {
+          hoverTimeout = setTimeout(() => {
+            hideHoverUI();
+            lastHoveredCell = null;
+            hoverTimeout = null;
+          }, 150);
+        }
+      }
+    });
+
+    container.addEventListener('mouseleave', () => {
+      if (hoverTimeout) {
+        clearTimeout(hoverTimeout);
+        hoverTimeout = null;
+      }
+      hideHoverUI();
+      lastHoveredCell = null;
+    });
+
+    console.log('✅ Draw.io style hover UI (X points + hover arrows) enabled');
+  }, []);
+
+  // ─── INIT GRAPH ────────────────────────────────────────────────────────────
 
   const initGraph = useCallback(() => {
     const graphDiv = graphDivRef.current;
-    const gc       = gridCanvasRef.current;
-    const wrapper  = wrapperRef.current;
+    const gc = gridCanvasRef.current;
+    const wrapper = wrapperRef.current;
     if (!graphDiv || !gc || !wrapper) return undefined;
 
     setError(null);
@@ -983,11 +1279,12 @@ const WebCanvas = ({ onReady, onChange, onSelectionChange, umlType = 'flowchart'
 
     let destroyed = false;
     const timers: ReturnType<typeof setTimeout>[] = [];
+    let cleanupClickArrows: (() => void) | undefined;
 
     try {
       console.log('🔄 Initializing maxGraph...');
 
-      gc.width  = wrapper.offsetWidth;
+      gc.width = wrapper.offsetWidth;
       gc.height = wrapper.offsetHeight;
 
       const ro = new ResizeObserver(() => { resizeGridCanvas(); repaintGrid(); });
@@ -995,29 +1292,89 @@ const WebCanvas = ({ onReady, onChange, onSelectionChange, umlType = 'flowchart'
 
       InternalEvent.disableContextMenu(graphDiv);
 
-      graphDiv.style.position   = 'absolute';
-      graphDiv.style.overflow   = 'hidden';
-      graphDiv.style.width      = '100%';
-      graphDiv.style.height     = '100%';
-      graphDiv.style.cursor     = 'default';
+      graphDiv.style.position = 'absolute';
+      graphDiv.style.overflow = 'hidden';
+      graphDiv.style.width = '100%';
+      graphDiv.style.height = '100%';
+      graphDiv.style.cursor = 'default';
       graphDiv.style.userSelect = 'none';
 
-      // 1. CREATE THE GRAPH
       const graph = new Graph(graphDiv);
       graphRef.current = graph;
 
-      // ═════════════════════════════════════════════════════════════════════════
-      // ⭐ 2. BIND UNIVERSAL VERTEX HANDLER - Draw.io style selection!
-      // ═════════════════════════════════════════════════════════════════════════
+      const defaultEdgeStyle = graph.getStylesheet().getDefaultEdgeStyle();
+      defaultEdgeStyle.strokeColor = BLACK;
+      defaultEdgeStyle.strokeWidth = 2;
+
+      const stylesheet = graph.getStylesheet();
+      const edgeStyleNames = ['defaultEdge', 'edgeStyle', 'roundedEdge', 'orthogonalEdge', 'entityRelation', 'arrow', 'connector'];
+      edgeStyleNames.forEach(styleName => {
+        const style = stylesheet.styles.get(styleName);
+        if (style) {
+          style.strokeColor = BLACK;
+          stylesheet.styles.set(styleName, style);
+        }
+      });
+
+      console.log('⚫ Default edge style set to BLACK');
+
+      const connectionHandler = graph.getPlugin('ConnectionHandler') as ConnectionHandler | null;
+
+      if (connectionHandler) {
+        // @ts-ignore
+        const constraintHandler = connectionHandler.constraintHandler;
+        if (constraintHandler) {
+          constraintHandler.highlightColor = BLUE;
+        }
+        if (connectionHandler.marker) {
+          connectionHandler.marker.validColor = BLUE;
+        }
+        // @ts-ignore
+        connectionHandler.highlightColor = BLUE;
+      }
+
+      const styleElement = document.createElement('style');
+      styleElement.id = 'igraph-force-blue';
+      styleElement.textContent = `
+        .mxCellHighlight {
+          stroke: ${BLUE} !important;
+          fill: rgba(76, 111, 255, 0.08) !important;
+        }
+        .mxRubberband {
+          border-color: ${BLUE} !important;
+          background: rgba(76, 111, 255, 0.1) !important;
+        }
+        .mxConnectionPoint {
+          background: ${BLUE} !important;
+          border-color: ${BLUE} !important;
+        }
+        .mxHandle {
+          background: #ffffff !important;
+          border: 1.5px solid ${BLUE} !important;
+        }
+        .mxHandle:hover {
+          background: ${BLUE} !important;
+        }
+        .mxCell {
+          stroke: ${BLACK} !important;
+        }
+        .mxEdge {
+          stroke: ${BLACK} !important;
+        }
+        .mxEdgeSelection {
+          stroke: ${BLUE} !important;
+        }
+      `;
+      document.head.appendChild(styleElement);
+      console.log('🔵 Force blue CSS injected with black edges');
+
       graph.createVertexHandler = (state: CellState) => {
         return new UniversalVertexHandler(state);
       };
-      console.log('✅ Universal Vertex Handler bound to graph (draw.io style)');
+      console.log('✅ Universal Vertex Handler bound to graph');
 
-      // 3. REGISTER STYLES
       registerShapeStyles(graph);
 
-      // 4. CONFIGURE THE GRAPH
       graph.setGridEnabled(true);
       graph.setGridSize(GRID_SIZE);
       graph.setConnectable(true);
@@ -1035,7 +1392,6 @@ const WebCanvas = ({ onReady, onChange, onSelectionChange, umlType = 'flowchart'
       graph.setCellsDeletable(true);
       graph.setPanning(true);
 
-      // 5. SELECTION CHANGE LISTENER
       graph.getSelectionModel().addListener(InternalEvent.CHANGE, () => {
         handleSelectionChange();
       });
@@ -1048,52 +1404,42 @@ const WebCanvas = ({ onReady, onChange, onSelectionChange, umlType = 'flowchart'
         setTimeout(handleSelectionChange, 10);
       });
 
-      // 6. PLUGINS
-      const panningHandler    = graph.getPlugin('PanningHandler')    as PanningHandler    | null;
-      const connectionHandler = graph.getPlugin('ConnectionHandler') as ConnectionHandler | null;
-      const fitPlugin         = graph.getPlugin('FitPlugin')         as FitPlugin         | null;
+      const panningHandler = graph.getPlugin('PanningHandler') as PanningHandler | null;
+      const fitPlugin = graph.getPlugin('FitPlugin') as FitPlugin | null;
 
       if (panningHandler) {
         panningHandler.useLeftButtonForPanning = false;
         panningHandler.ignoreCell = false;
       }
 
-      if (connectionHandler) {
-        connectionHandler.outlineConnect     = true;
-        connectionHandler.insertBeforeSource = false;
-      }
-
       new RubberBandHandler(graph);
 
-      // Undo
-      const undoManager  = new UndoManager();
+      const undoManager = new UndoManager();
       const undoListener = (_: any, evt: any) =>
         undoManager.undoableEditHappened(evt.getProperty('edit'));
       graph.getDataModel().addListener(InternalEvent.UNDO, undoListener);
       graph.getView().addListener(InternalEvent.UNDO, undoListener);
       (graph as any).undoManager = undoManager;
 
-      // Keyboard
       const keyHandler = new KeyHandler(graph);
       keyHandler.bindKey(46, () => graph.removeCells());
-      keyHandler.bindKey(8,  () => graph.removeCells());
+      keyHandler.bindKey(8, () => graph.removeCells());
       keyHandler.bindKey(13, () => graph.removeCells());
       keyHandler.bindControlKey(90, () => undoManager.undo());
       keyHandler.bindControlKey(89, () => undoManager.redo());
       keyHandler.bindControlShiftKey(90, () => undoManager.redo());
       keyHandler.bindControlKey(65, () => graph.selectAll(undefined, true));
       keyHandler.bindKey(27, () => graph.clearSelection());
-      
+
       const nudge = (dx: number, dy: number) => {
         const cells = graph.getSelectionCells();
         if (cells.length) graph.moveCells(cells, dx, dy);
       };
       keyHandler.bindKey(37, () => nudge(-GRID_SIZE, 0));
       keyHandler.bindKey(38, () => nudge(0, -GRID_SIZE));
-      keyHandler.bindKey(39, () => nudge(GRID_SIZE,  0));
-      keyHandler.bindKey(40, () => nudge(0,  GRID_SIZE));
+      keyHandler.bindKey(39, () => nudge(GRID_SIZE, 0));
+      keyHandler.bindKey(40, () => nudge(0, GRID_SIZE));
 
-      // Scroll-to-zoom
       InternalEvent.addMouseWheelListener((evt: Event, up: boolean) => {
         const e = evt as WheelEvent;
         if (e.ctrlKey || e.metaKey) {
@@ -1103,7 +1449,6 @@ const WebCanvas = ({ onReady, onChange, onSelectionChange, umlType = 'flowchart'
         }
       }, graphDiv);
 
-      // Space-hold panning
       let spaceDown = false;
       graphDiv.addEventListener('keydown', (e: KeyboardEvent) => {
         if (e.code === 'Space' && !spaceDown) {
@@ -1120,20 +1465,17 @@ const WebCanvas = ({ onReady, onChange, onSelectionChange, umlType = 'flowchart'
         }
       });
 
-      // Grid repaint
-      graph.getView().addListener('scale',             () => repaintGrid());
-      graph.getView().addListener('translate',         () => repaintGrid());
+      graph.getView().addListener('scale', () => repaintGrid());
+      graph.getView().addListener('translate', () => repaintGrid());
       graph.getView().addListener('scaleAndTranslate', () => repaintGrid());
 
-      // onChange
       graph.getDataModel().addListener(InternalEvent.CHANGE, () => {
         try {
           const xml = new ModelXmlSerializer(graph.getDataModel()).export();
           onChangeRef.current?.(xml);
-        } catch (_) {}
+        } catch (_) { }
       });
 
-      // Drag-and-drop
       const dropTarget = wrapper;
 
       const onDragOver = (e: DragEvent) => {
@@ -1151,9 +1493,9 @@ const WebCanvas = ({ onReady, onChange, onSelectionChange, umlType = 'flowchart'
 
       const onDrop = (e: DragEvent) => handleDrop(e);
 
-      dropTarget.addEventListener('dragover',  onDragOver);
+      dropTarget.addEventListener('dragover', onDragOver);
       dropTarget.addEventListener('dragleave', onDragLeave);
-      dropTarget.addEventListener('drop',      onDrop);
+      dropTarget.addEventListener('drop', onDrop);
 
       graphDiv.addEventListener('keydown', (e: KeyboardEvent) => {
         if (e.key === 'Enter') {
@@ -1161,7 +1503,10 @@ const WebCanvas = ({ onReady, onChange, onSelectionChange, umlType = 'flowchart'
         }
       });
 
-      // Fit and focus
+      setupHoverUI(graph);
+
+      cleanupClickArrows = setupClickArrows(graph);
+
       timers.push(setTimeout(() => {
         if (destroyed) return;
         fitPlugin?.fit();
@@ -1172,7 +1517,7 @@ const WebCanvas = ({ onReady, onChange, onSelectionChange, umlType = 'flowchart'
 
       repaintGrid();
 
-      console.log('✅ maxGraph ready with draw.io-style selection');
+      console.log('✅ maxGraph ready with BLACK edges + BLUE selection + click arrows');
       onReadyRef.current?.(graph);
       if (!destroyed) setLoading(false);
 
@@ -1180,11 +1525,12 @@ const WebCanvas = ({ onReady, onChange, onSelectionChange, umlType = 'flowchart'
         destroyed = true;
         timers.forEach(clearTimeout);
         ro.disconnect();
-        dropTarget.removeEventListener('dragover',  onDragOver);
+        dropTarget.removeEventListener('dragover', onDragOver);
         dropTarget.removeEventListener('dragleave', onDragLeave);
-        dropTarget.removeEventListener('drop',      onDrop);
-        graphDiv.removeEventListener('keydown', () => {});
+        dropTarget.removeEventListener('drop', onDrop);
+        graphDiv.removeEventListener('keydown', () => { });
         keyHandler.onDestroy();
+        if (cleanupClickArrows) cleanupClickArrows();
         graph.destroy();
         graphRef.current = null;
       };
@@ -1194,14 +1540,12 @@ const WebCanvas = ({ onReady, onChange, onSelectionChange, umlType = 'flowchart'
       setLoading(false);
       return undefined;
     }
-  }, [repaintGrid, resizeGridCanvas, handleDrop, registerShapeStyles, handleSelectionChange]);
+  }, [repaintGrid, resizeGridCanvas, handleDrop, registerShapeStyles, handleSelectionChange, setupHoverUI, setupClickArrows]);
 
   useEffect(() => {
     const cleanup = initGraph();
     return () => cleanup?.();
   }, [initGraph]);
-
-  // ─── Render ─────────────────────────────────────────────────────────────────
 
   return (
     <div
@@ -1211,12 +1555,12 @@ const WebCanvas = ({ onReady, onChange, onSelectionChange, umlType = 'flowchart'
       <canvas
         ref={gridCanvasRef}
         style={{
-          position:      'absolute',
-          inset:         0,
-          width:         '100%',
-          height:        '100%',
-          zIndex:        0,
-          display:       'block',
+          position: 'absolute',
+          inset: 0,
+          width: '100%',
+          height: '100%',
+          zIndex: 0,
+          display: 'block',
           pointerEvents: 'none',
         }}
       />
@@ -1226,40 +1570,40 @@ const WebCanvas = ({ onReady, onChange, onSelectionChange, umlType = 'flowchart'
         tabIndex={0}
         style={{
           position: 'absolute',
-          inset:    0,
-          zIndex:   1,
-          outline:  'none',
+          inset: 0,
+          zIndex: 1,
+          outline: 'none',
         }}
       />
 
       {isDragOver && (
         <div
           style={{
-            position:        'absolute',
-            inset:           0,
-            zIndex:          3,
-            pointerEvents:   'none',
-            border:          '2px dashed #4c6fff',
-            borderRadius:    4,
+            position: 'absolute',
+            inset: 0,
+            zIndex: 3,
+            pointerEvents: 'none',
+            border: `2px dashed ${BLUE}`,
+            borderRadius: 4,
             backgroundColor: 'rgba(76, 111, 255, 0.04)',
-            boxSizing:       'border-box',
-            transition:      'opacity 0.1s',
+            boxSizing: 'border-box',
+            transition: 'opacity 0.1s',
           }}
         />
       )}
 
       {error && (
         <div style={{
-          position:        'absolute',
-          inset:           0,
-          zIndex:          4,
-          display:         'flex',
-          flexDirection:   'column',
-          justifyContent:  'center',
-          alignItems:      'center',
+          position: 'absolute',
+          inset: 0,
+          zIndex: 4,
+          display: 'flex',
+          flexDirection: 'column',
+          justifyContent: 'center',
+          alignItems: 'center',
           backgroundColor: CANVAS_BG,
-          padding:         20,
-          fontFamily:      'system-ui, sans-serif',
+          padding: 20,
+          fontFamily: 'system-ui, sans-serif',
         }}>
           <div style={{ fontSize: 48, marginBottom: 16 }}>⚠️</div>
           <h3 style={{ margin: 0, color: '#1e293b' }}>Diagram Editor Error</h3>
@@ -1269,22 +1613,22 @@ const WebCanvas = ({ onReady, onChange, onSelectionChange, umlType = 'flowchart'
 
       {!error && loading && (
         <div style={{
-          position:        'absolute',
-          inset:           0,
-          zIndex:          4,
-          display:         'flex',
-          flexDirection:   'column',
-          justifyContent:  'center',
-          alignItems:      'center',
+          position: 'absolute',
+          inset: 0,
+          zIndex: 4,
+          display: 'flex',
+          flexDirection: 'column',
+          justifyContent: 'center',
+          alignItems: 'center',
           backgroundColor: CANVAS_BG,
         }}>
           <div style={{
-            width:        40,
-            height:       40,
-            border:       '4px solid #e2e8f0',
-            borderTop:    '4px solid #4c6fff',
+            width: 40,
+            height: 40,
+            border: '4px solid #e2e8f0',
+            borderTop: `4px solid ${BLUE}`,
             borderRadius: '50%',
-            animation:    'igraph-spin 0.8s linear infinite',
+            animation: 'igraph-spin 0.8s linear infinite',
           }} />
           <p style={{ color: '#64748b', marginTop: 16 }}>Loading Diagram Editor...</p>
           <style>{`
@@ -1298,8 +1642,6 @@ const WebCanvas = ({ onReady, onChange, onSelectionChange, umlType = 'flowchart'
     </div>
   );
 };
-
-// ─── Main Component ──────────────────────────────────────────────────────────
 
 export default function DiagramCanvas({ onReady, onChange, onSelectionChange, umlType }: DiagramCanvasProps) {
   if (Platform.OS !== 'web') {
@@ -1318,8 +1660,8 @@ export default function DiagramCanvas({ onReady, onChange, onSelectionChange, um
 }
 
 const styles = StyleSheet.create({
-  container:         { flex: 1, backgroundColor: CANVAS_BG },
-  nativeNotice:      { flex: 1, backgroundColor: CANVAS_BG, justifyContent: 'center', alignItems: 'center', padding: 20 },
+  container: { flex: 1, backgroundColor: CANVAS_BG },
+  nativeNotice: { flex: 1, backgroundColor: CANVAS_BG, justifyContent: 'center', alignItems: 'center', padding: 20 },
   nativeNoticeTitle: { fontSize: 20, fontWeight: '700', color: '#1e293b', marginBottom: 6 },
-  nativeNoticeText:  { fontSize: 14, color: '#64748b', textAlign: 'center' },
+  nativeNoticeText: { fontSize: 14, color: '#64748b', textAlign: 'center' },
 });
