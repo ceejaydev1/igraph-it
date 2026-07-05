@@ -11,7 +11,9 @@
       "resizeMode": "contain",
       "backgroundColor": "#eef0fb"
     },
-    "assetBundlePatterns": ["**/*"],
+    "assetBundlePatterns": [
+      "**/*"
+    ],
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.dcttarlac.igraphit"
@@ -37,7 +39,10 @@
       "lang": "en",
       "bundler": "metro"
     },
-    "plugins": ["expo-router"],
+    "plugins": [
+      "expo-router",
+      "expo-font"
+    ],
     "scheme": "igraphit",
     "experiments": {
       "typedRoutes": true

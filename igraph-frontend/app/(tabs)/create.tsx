@@ -1,4 +1,5 @@
-// app/(tabs)/create.tsx — with focus fix when closing shapes panel
+// igraph-frontend/app/(tabs)/create.tsx
+// Updated mobile section - Floating Undo/Redo buttons
 
 import React, { useState, useRef, useCallback, useEffect } from 'react';
 import {
@@ -25,49 +26,22 @@ import { ICONS } from '../../constants/icons';
 import { COLORS, SPACING } from '@/constants/theme';
 import { IGRAPH_ID_STYLE_MAP } from '@/components/maxgraph-custom-shapes';
 
-// ─── DRAW.IO STYLE ICONS ────────────────────────────────────────────────────
+// ─── UNDO/REDO ICONS ─────────────────────────────────────────────────────
 
-// Draw.io style Undo icon (curved arrow pointing left)
-const UndoIcon = ({ color = '#4a5568' }: { color?: string }) => (
-  <Svg width={18} height={18} viewBox="0 0 24 24" fill="none">
-    <Path
-      d="M3 7V12H8"
-      stroke={color}
-      strokeWidth={1.8}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    />
-    <Path
-      d="M3 12C3 16.9706 7.02944 21 12 21C16.9706 21 21 16.9706 21 12C21 7.02944 16.9706 3 12 3C9.043 3 6.44067 4.54204 4.9 6.8"
-      stroke={color}
-      strokeWidth={1.8}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    />
+const UndoIcon = ({ color = '#4a5568', size = 20 }: { color?: string; size?: number }) => (
+  <Svg width={size} height={size} viewBox="0 0 24 24" fill={color}>
+    <Path d="M9.41 7H15a7 7 0 110 14h-1v-2h1a5 5 0 000-10H9.41l2.3 2.29L10.29 13 5 7.71 10.29 2.4l1.42 1.42L9.41 7z"/>
   </Svg>
 );
 
-// Draw.io style Redo icon (curved arrow pointing right)
-const RedoIcon = ({ color = '#4a5568' }: { color?: string }) => (
-  <Svg width={18} height={18} viewBox="0 0 24 24" fill="none">
-    <Path
-      d="M21 7V12H16"
-      stroke={color}
-      strokeWidth={1.8}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    />
-    <Path
-      d="M21 12C21 16.9706 16.9706 21 12 21C7.02944 21 3 16.9706 3 12C3 7.02944 7.02944 3 12 3C14.957 3 17.5593 4.54204 19.1 6.8"
-      stroke={color}
-      strokeWidth={1.8}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    />
+const RedoIcon = ({ color = '#4a5568', size = 20 }: { color?: string; size?: number }) => (
+  <Svg width={size} height={size} viewBox="0 0 24 24" fill={color}>
+    <Path d="M14.59 7H9a7 7 0 100 14h1v-2H9a5 5 0 010-10h5.59l-2.3 2.29L13.71 13 19 7.71 13.71 2.4l-1.42 1.42L14.59 7z"/>
   </Svg>
 );
 
-// Draw.io style Zoom In icon (magnifying glass with plus)
+// ─── ZOOM ICONS ──────────────────────────────────────────────────────────────
+
 const ZoomInIcon = ({ color = '#4a5568' }: { color?: string }) => (
   <Svg width={16} height={16} viewBox="0 0 24 24" fill="none">
     <Circle cx="11" cy="11" r="7" stroke={color} strokeWidth={1.8} />
@@ -77,7 +51,6 @@ const ZoomInIcon = ({ color = '#4a5568' }: { color?: string }) => (
   </Svg>
 );
 
-// Draw.io style Zoom Out icon (magnifying glass with minus)
 const ZoomOutIcon = ({ color = '#4a5568' }: { color?: string }) => (
   <Svg width={16} height={16} viewBox="0 0 24 24" fill="none">
     <Circle cx="11" cy="11" r="7" stroke={color} strokeWidth={1.8} />
@@ -86,64 +59,54 @@ const ZoomOutIcon = ({ color = '#4a5568' }: { color?: string }) => (
   </Svg>
 );
 
-// Draw.io style Page icon
-const PageIcon = ({ color = '#4a5568' }: { color?: string }) => (
-  <Svg width={14} height={14} viewBox="0 0 24 24" fill="none">
-    <Rect x="3" y="3" width="18" height="18" rx="2" stroke={color} strokeWidth={1.8} />
-    <Path d="M8 8h8M8 12h6M8 16h4" stroke={color} strokeWidth={1.8} strokeLinecap="round" />
-  </Svg>
-);
+// ─── DOWNLOAD DROPDOWN ──────────────────────────────────────────────────────
 
-// Draw.io style Close icon for page tabs
-const CloseTabIcon = ({ color = '#94a3b8' }: { color?: string }) => (
-  <Svg width={12} height={12} viewBox="0 0 24 24" fill="none">
-    <Path d="M18 6L6 18M6 6L18 18" stroke={color} strokeWidth={2} strokeLinecap="round" />
-  </Svg>
-);
+const DownloadDropdown = ({
+  onSelectFormat,
+  style,
+  align = 'right',
+}: {
+  onSelectFormat: (format: 'png' | 'svg' | 'pdf' | 'jpg') => void;
+  style?: any;
+  align?: 'left' | 'right';
+}) => {
+  const formats = [
+    { id: 'png', label: 'PNG', description: 'High quality, lossless', icon: '🖼️' },
+    { id: 'svg', label: 'SVG', description: 'Vector, scalable', icon: '📐' },
+    { id: 'pdf', label: 'PDF', description: 'Document format', icon: '📄' },
+    { id: 'jpg', label: 'JPG', description: 'Smaller file size', icon: '🖼️' },
+  ] as const;
 
-// ─── Format Bar Icons ────────────────────────────────────────────────────────
+  return (
+    <View
+      style={[
+        styles.downloadDropdown,
+        align === 'left' ? { left: 0 } : { right: 0 },
+        style,
+      ]}
+    >
+      {formats.map((format, index) => (
+        <TouchableOpacity
+          key={format.id}
+          style={[
+            styles.downloadDropdownItem,
+            index === formats.length - 1 && styles.downloadDropdownItemLast,
+          ]}
+          onPress={() => onSelectFormat(format.id)}
+          activeOpacity={0.6}
+        >
+          <Text style={styles.downloadDropdownIcon}>{format.icon}</Text>
+          <View style={styles.downloadDropdownTextWrap}>
+            <Text style={styles.downloadDropdownLabel}>{format.label}</Text>
+            <Text style={styles.downloadDropdownDescription}>{format.description}</Text>
+          </View>
+        </TouchableOpacity>
+      ))}
+    </View>
+  );
+};
 
-const BoldIcon = ({ color = '#4a5568' }: { color?: string }) => (
-  <Svg width={14} height={14} viewBox="0 0 24 24" fill="none">
-    <Path d="M6 4h8a4 4 0 0 1 4 4 4 4 0 0 1-4 4H6z" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
-    <Path d="M6 12h9a4 4 0 0 1 4 4 4 4 0 0 1-4 4H6z" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
-  </Svg>
-);
-
-const ItalicIcon = ({ color = '#4a5568' }: { color?: string }) => (
-  <Svg width={14} height={14} viewBox="0 0 24 24" fill="none">
-    <Path d="M19 4h-9M14 20H5M15 4L9 20" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
-  </Svg>
-);
-
-const UnderlineIcon = ({ color = '#4a5568' }: { color?: string }) => (
-  <Svg width={14} height={14} viewBox="0 0 24 24" fill="none">
-    <Path d="M6 4v6a6 6 0 0 0 12 0V4" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
-    <Path d="M4 20h16" stroke={color} strokeWidth={2} strokeLinecap="round" />
-  </Svg>
-);
-
-const StrikeThroughIcon = ({ color = '#4a5568' }: { color?: string }) => (
-  <Svg width={14} height={14} viewBox="0 0 24 24" fill="none">
-    <Path d="M6 16h12M8 12h8M10 8h4" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
-  </Svg>
-);
-
-const FontColorIcon = ({ color = '#4a5568' }: { color?: string }) => (
-  <Svg width={14} height={14} viewBox="0 0 24 24" fill="none">
-    <Path d="M4 20L12 4L20 20" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
-    <Path d="M8 14h8" stroke={color} strokeWidth={2} strokeLinecap="round" />
-    <Circle cx="12" cy="18" r="2" fill={color} />
-  </Svg>
-);
-
-// ─── SHAPE DIMENSIONS ─────────────────────────────────────────────────────────
-
-const SHAPE_W = 120;
-const SHAPE_H = 60;
-const GRID = 10;
-
-// ─── PAGE MANAGEMENT ─────────────────────────────────────────────────────────
+// ─── MAIN COMPONENT ──────────────────────────────────────────────────────────
 
 interface Page {
   id: string;
@@ -152,8 +115,6 @@ interface Page {
 }
 
 const generatePageId = () => `page_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`;
-
-// ─── MAIN COMPONENT ──────────────────────────────────────────────────────────
 
 export default function CreateScreen() {
   const router = useRouter();
@@ -168,11 +129,26 @@ export default function CreateScreen() {
   const [isPanelVisible, setIsPanelVisible] = useState(true);
   const [activeTool, setActiveTool] = useState<'shapes' | 'text' | 'draw' | 'comment'>('shapes');
   const [activeUmlType, setActiveUmlType] = useState('Functional Decomposition Diagram');
-  
+
+  // ─── Download state ──────────────────────────────────────────────────────────
+  const [showDownloadDropdown, setShowDownloadDropdown] = useState(false);
+  const [isDownloading, setIsDownloading] = useState(false);
+
+  // ─── Print state ─────────────────────────────────────────────────────────────
+  const [showPrintModal, setShowPrintModal] = useState(false);
+  const [printPreviewUrl, setPrintPreviewUrl] = useState<string | null>(null);
+  const [printCopies, setPrintCopies] = useState('1');
+  const [printPageRange, setPrintPageRange] = useState('');
+  const [printOrientation, setPrintOrientation] = useState<'portrait' | 'landscape'>('portrait');
+  const [printPaperSize, setPrintPaperSize] = useState<string>('Letter');
+  const [showPaperSizeDropdown, setShowPaperSizeDropdown] = useState(false);
+  const [showOrientationDropdown, setShowOrientationDropdown] = useState(false);
+  const [isPreparingPrint, setIsPreparingPrint] = useState(false);
+
   // ─── Zoom state ─────────────────────────────────────────────────────────────
   const [zoomLevel, setZoomLevel] = useState(100);
   const ZOOM_STEPS = [50, 75, 100, 125, 150, 200, 300, 400];
-  
+
   // ─── Page state ─────────────────────────────────────────────────────────────
   const [pages, setPages] = useState<Page[]>([
     { id: generatePageId(), name: 'Page 1', xml: '' }
@@ -182,10 +158,10 @@ export default function CreateScreen() {
   const [newPageName, setNewPageName] = useState('');
   const [renamePageId, setRenamePageId] = useState<string | null>(null);
   const [renamePageName, setRenamePageName] = useState('');
-  
+
   // ─── Page XML cache ─────────────────────────────────────────────────────────
   const pageXmlCache = useRef<Map<string, string>>(new Map());
-  
+
   // ─── Format Bar State ──────────────────────────────────────────────────────
   const [selectedFont, setSelectedFont] = useState('Inter');
   const [selectedFontSize, setSelectedFontSize] = useState('10');
@@ -193,7 +169,7 @@ export default function CreateScreen() {
   const [isItalic, setIsItalic] = useState(false);
   const [isUnderline, setIsUnderline] = useState(false);
   const [isStrikeThrough, setIsStrikeThrough] = useState(false);
-  
+
   const getZoomIndex = (current: number): number => {
     let closest = 0;
     let minDiff = Infinity;
@@ -222,18 +198,16 @@ export default function CreateScreen() {
 
   const handleGraphChange = (xml: string) => {
     setDiagramXml(xml);
-    // Cache the XML for the current page
     if (activePageId) {
       pageXmlCache.current.set(activePageId, xml);
     }
   };
 
-  // ─── ⭐ Focus helper ─────────────────────────────────────────────────────────
+  // ─── Focus helper ─────────────────────────────────────────────────────────
 
   const focusGraph = useCallback(() => {
     if (graphInstance && graphInstance.container) {
       try {
-        // Focus the container element directly
         const container = graphInstance.container;
         if (container && typeof container.focus === 'function') {
           container.focus();
@@ -253,29 +227,24 @@ export default function CreateScreen() {
 
   const switchToPage = (pageId: string) => {
     if (pageId === activePageId) return;
-    
-    // Save current page XML
+
     if (activePageId && diagramXml) {
       pageXmlCache.current.set(activePageId, diagramXml);
     }
-    
-    // Switch to new page
+
     setActivePageId(pageId);
     const pageXml = pageXmlCache.current.get(pageId) || '';
     setDiagramXml(pageXml);
-    
-    // Load the page content into the graph
+
     if (graphInstance && pageXml) {
       try {
-        // Clear the graph and load the saved XML
         const model = graphInstance.getModel();
         console.log(`📄 Switched to page: ${pageId}`);
       } catch (e) {
         console.error('Error loading page:', e);
       }
     }
-    
-    // ⭐ Focus the graph after switching pages
+
     setTimeout(focusGraph, 100);
   };
 
@@ -286,18 +255,16 @@ export default function CreateScreen() {
       name: pageName,
       xml: '',
     };
-    
-    // Save current page before adding new one
+
     if (activePageId && diagramXml) {
       pageXmlCache.current.set(activePageId, diagramXml);
     }
-    
+
     setPages([...pages, newPage]);
     setActivePageId(newPage.id);
     setDiagramXml('');
     if (graphInstance) {
       try {
-        // Clear the graph for the new page
         const model = graphInstance.getModel();
         model.clear();
         graphInstance.clearSelection();
@@ -307,14 +274,13 @@ export default function CreateScreen() {
     }
     setNewPageName('');
     setShowPageModal(false);
-    
-    // ⭐ Focus the graph after adding a new page
+
     setTimeout(focusGraph, 100);
   };
 
   const renamePage = (pageId: string, newName: string) => {
     if (!newName.trim()) return;
-    setPages(pages.map(p => 
+    setPages(pages.map(p =>
       p.id === pageId ? { ...p, name: newName.trim() } : p
     ));
     setRenamePageId(null);
@@ -326,31 +292,28 @@ export default function CreateScreen() {
       Alert.alert('Cannot Delete', 'You must have at least one page.');
       return;
     }
-    
+
     Alert.alert(
       'Delete Page',
       'Are you sure you want to delete this page?',
       [
         { text: 'Cancel', style: 'cancel' },
-        { 
-          text: 'Delete', 
+        {
+          text: 'Delete',
           style: 'destructive',
           onPress: () => {
-            // Remove page from cache
             pageXmlCache.current.delete(pageId);
-            
+
             const newPages = pages.filter(p => p.id !== pageId);
             setPages(newPages);
-            
+
             if (activePageId === pageId) {
-              // Switch to the first available page
               const newActiveId = newPages[0]?.id || '';
               setActivePageId(newActiveId);
               const xml = pageXmlCache.current.get(newActiveId) || '';
               setDiagramXml(xml);
             }
-            
-            // ⭐ Focus the graph after deleting a page
+
             setTimeout(focusGraph, 100);
           }
         }
@@ -361,18 +324,17 @@ export default function CreateScreen() {
   const duplicatePage = (pageId: string) => {
     const page = pages.find(p => p.id === pageId);
     if (!page) return;
-    
+
     const newPage: Page = {
       id: generatePageId(),
       name: `${page.name} (Copy)`,
       xml: pageXmlCache.current.get(pageId) || '',
     };
-    
+
     setPages([...pages, newPage]);
     setActivePageId(newPage.id);
     setDiagramXml(newPage.xml);
-    
-    // ⭐ Focus the graph after duplicating a page
+
     setTimeout(focusGraph, 100);
   };
 
@@ -452,24 +414,334 @@ export default function CreateScreen() {
 
       graph.setSelectionCell(cell);
       console.log(`✅ Added "${shapeId}" as "${styleKey}" at (${x}, ${y})`);
-      
-      // ⭐ Focus the graph after adding a shape
+
       setTimeout(focusGraph, 50);
     } catch (e) {
       console.error('Error adding shape:', e);
     }
   };
 
+  // ─── EXPORT FUNCTIONS ──────────────────────────────────────────────────────
+
+  const renderDiagramToCanvas = (container: HTMLElement, scale: number = 2): Promise<HTMLCanvasElement> => {
+    return new Promise((resolve, reject) => {
+      try {
+        const rect = container.getBoundingClientRect();
+        const canvas = document.createElement('canvas');
+        canvas.width = rect.width * scale;
+        canvas.height = rect.height * scale;
+
+        const ctx = canvas.getContext('2d');
+        if (!ctx) {
+          reject(new Error('Could not create canvas context'));
+          return;
+        }
+
+        ctx.scale(scale, scale);
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, rect.width, rect.height);
+
+        const gridCanvas = container.querySelector('canvas');
+        if (gridCanvas) {
+          ctx.drawImage(gridCanvas, 0, 0);
+        }
+
+        const svgElements = container.querySelectorAll('svg');
+        const drawPromises: Promise<void>[] = [];
+
+        svgElements.forEach((svg: SVGSVGElement) => {
+          const promise = new Promise<void>((resolveDraw) => {
+            try {
+              const svgData = new XMLSerializer().serializeToString(svg);
+              const svgBlob = new Blob([svgData], { type: 'image/svg+xml;charset=utf-8' });
+              const url = URL.createObjectURL(svgBlob);
+
+              const img = new Image();
+              img.onload = () => {
+                ctx.drawImage(img, 0, 0);
+                URL.revokeObjectURL(url);
+                resolveDraw();
+              };
+              img.onerror = () => {
+                URL.revokeObjectURL(url);
+                resolveDraw();
+              };
+              img.src = url;
+            } catch (err) {
+              resolveDraw();
+            }
+          });
+          drawPromises.push(promise);
+        });
+
+        Promise.all(drawPromises).then(() => {
+          resolve(canvas);
+        }).catch((err) => {
+          reject(err);
+        });
+      } catch (err) {
+        reject(err);
+      }
+    });
+  };
+
+  const exportToSVG = (container: HTMLElement): string => {
+    const svgElements = container.querySelectorAll('svg');
+    if (svgElements.length === 0) return '';
+
+    const mainSvg = svgElements[0];
+    const svgData = new XMLSerializer().serializeToString(mainSvg);
+
+    return `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<svg xmlns="http://www.w3.org/2000/svg" 
+     xmlns:xlink="http://www.w3.org/1999/xlink" 
+     width="${mainSvg.getAttribute('width') || '800'}" 
+     height="${mainSvg.getAttribute('height') || '600'}"
+     viewBox="${mainSvg.getAttribute('viewBox') || '0 0 800 600'}">
+  ${svgData.replace(/^<svg[^>]*>/, '').replace(/<\/svg>$/, '')}
+</svg>`;
+  };
+
+  const downloadFile = (data: string | Blob, filename: string, mimeType: string) => {
+    const blob = typeof data === 'string' ? new Blob([data], { type: mimeType }) : data;
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.download = filename;
+    link.href = url;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  };
+
+  // ─── DOWNLOAD HANDLER ─────────────────────────────────────────────────────
+
+  const handleDownload = async (format: 'png' | 'svg' | 'pdf' | 'jpg') => {
+    setShowDownloadDropdown(false);
+
+    if (!graphInstance) {
+      Alert.alert('No Diagram', 'Please create a diagram first.');
+      return;
+    }
+
+    const container = graphInstance.container;
+    if (!container) {
+      Alert.alert('Error', 'Could not access diagram canvas.');
+      return;
+    }
+
+    setIsDownloading(true);
+
+    try {
+      const name = diagramName || 'diagram';
+
+      if (format === 'svg') {
+        const svgContent = exportToSVG(container);
+        if (!svgContent) {
+          Alert.alert('Error', 'Could not export SVG. The diagram may be empty.');
+          setIsDownloading(false);
+          return;
+        }
+        downloadFile(svgContent, `${name}.svg`, 'image/svg+xml;charset=utf-8');
+        Alert.alert('Success', 'SVG diagram downloaded successfully!');
+        setIsDownloading(false);
+        return;
+      }
+
+      const canvas = await renderDiagramToCanvas(container, format === 'jpg' ? 2 : 3);
+      const mimeType = format === 'jpg' ? 'image/jpeg' : 'image/png';
+      const extension = format === 'jpg' ? 'jpg' : 'png';
+
+      canvas.toBlob((blob) => {
+        if (blob) {
+          downloadFile(blob, `${name}.${extension}`, mimeType);
+          Alert.alert('Success', `${format.toUpperCase()} diagram downloaded successfully!`);
+        } else {
+          Alert.alert('Error', 'Failed to generate image.');
+        }
+        setIsDownloading(false);
+      }, mimeType, format === 'jpg' ? 0.92 : undefined);
+
+      if (format === 'pdf') {
+        const dataUrl = canvas.toDataURL('image/png');
+        const pdfHtml = `
+          <html>
+            <head>
+              <title>${name}</title>
+              <style>
+                body { margin: 0; padding: 20px; display: flex; justify-content: center; align-items: center; min-height: 100vh; background: white; font-family: system-ui, sans-serif; }
+                .container { text-align: center; }
+                h1 { font-size: 18px; color: #333; margin-bottom: 20px; }
+                img { max-width: 100%; max-height: 90vh; object-fit: contain; border: 1px solid #e2e8f0; border-radius: 8px; }
+                @media print {
+                  body { padding: 0; }
+                  h1 { display: none; }
+                  img { border: none; max-height: 100vh; }
+                }
+              </style>
+            </head>
+            <body>
+              <div class="container">
+                <h1>${name}</h1>
+                <img src="${dataUrl}" alt="Diagram" />
+                <script>
+                  window.onload = function() {
+                    setTimeout(function() {
+                      window.print();
+                    }, 800);
+                  };
+                <\/script>
+              </div>
+            </body>
+          </html>
+        `;
+
+        const printWindow = window.open('', '_blank');
+        if (printWindow) {
+          printWindow.document.write(pdfHtml);
+          printWindow.document.close();
+        } else {
+          downloadFile(pdfHtml, `${name}.pdf.html`, 'text/html');
+          Alert.alert(
+            'PDF Export',
+            'The PDF dialog will open. Please select "Save as PDF" in the print dialog.',
+            [{ text: 'OK' }]
+          );
+        }
+        setIsDownloading(false);
+      }
+    } catch (error) {
+      console.error('Download error:', error);
+      Alert.alert('Error', `Failed to download as ${format.toUpperCase()}. Please try again.`);
+      setIsDownloading(false);
+    }
+  };
+
   // ─── Toolbar actions ────────────────────────────────────────────────────────
 
   const handlePrint = () => {
-    if (!diagramXml) { Alert.alert('Empty Diagram', 'Nothing to print.'); return; }
-    Alert.alert('Print', 'Print functionality coming soon!');
+    if (!graphInstance) {
+      Alert.alert('No Diagram', 'Please create a diagram first.');
+      return;
+    }
+
+    const container = graphInstance.container;
+    if (!container) {
+      Alert.alert('Error', 'Could not access diagram canvas.');
+      return;
+    }
+
+    setIsPreparingPrint(true);
+
+    try {
+      const rect = container.getBoundingClientRect();
+      const canvas = document.createElement('canvas');
+      const scale = 2;
+      canvas.width = rect.width * scale;
+      canvas.height = rect.height * scale;
+
+      const ctx = canvas.getContext('2d');
+      if (!ctx) {
+        Alert.alert('Error', 'Could not create canvas context.');
+        setIsPreparingPrint(false);
+        return;
+      }
+
+      ctx.scale(scale, scale);
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, rect.width, rect.height);
+
+      const gridCanvas = container.querySelector('canvas');
+      if (gridCanvas) {
+        ctx.drawImage(gridCanvas, 0, 0);
+      }
+
+      const svgElements = container.querySelectorAll('svg');
+      const drawPromises: Promise<void>[] = [];
+
+      svgElements.forEach((svg: SVGSVGElement) => {
+        const promise = new Promise<void>((resolveDraw) => {
+          try {
+            const svgData = new XMLSerializer().serializeToString(svg);
+            const svgBlob = new Blob([svgData], { type: 'image/svg+xml;charset=utf-8' });
+            const url = URL.createObjectURL(svgBlob);
+
+            const img = new Image();
+            img.onload = () => {
+              ctx.drawImage(img, 0, 0);
+              URL.revokeObjectURL(url);
+              resolveDraw();
+            };
+            img.onerror = () => {
+              URL.revokeObjectURL(url);
+              resolveDraw();
+            };
+            img.src = url;
+          } catch (err) {
+            resolveDraw();
+          }
+        });
+        drawPromises.push(promise);
+      });
+
+      Promise.all(drawPromises).then(() => {
+        const dataUrl = canvas.toDataURL('image/png');
+        setPrintPreviewUrl(dataUrl);
+        setIsPreparingPrint(false);
+        setShowPrintModal(true);
+      });
+    } catch (error) {
+      console.error('Print error:', error);
+      Alert.alert('Error', 'Failed to prepare diagram for printing.');
+      setIsPreparingPrint(false);
+    }
   };
 
-  const handleDownload = () => {
-    if (!diagramXml) { Alert.alert('Empty Diagram', 'Nothing to download.'); return; }
-    Alert.alert('Download', 'Download functionality coming soon!');
+  const executePrint = () => {
+    if (!printPreviewUrl) return;
+
+    const size = PAPER_SIZES[printPaperSize] || PAPER_SIZES.Letter;
+    const pageSizeCss = printOrientation === 'landscape'
+      ? `${size.height} ${size.width}`
+      : `${size.width} ${size.height}`;
+
+    const printWindow = window.open('', '_blank');
+    if (printWindow) {
+      printWindow.document.write(`
+        <html>
+          <head>
+            <title>${diagramName || 'Diagram'}</title>
+            <style>
+              @page { size: ${pageSizeCss}; margin: 0.4in; }
+              body { margin: 0; display: flex; justify-content: center; align-items: center; min-height: 100vh; background: white; }
+              img { max-width: 100%; max-height: 100vh; object-fit: contain; }
+              @media print {
+                body { margin: 0; }
+                img { max-width: 100%; max-height: 100vh; }
+              }
+            </style>
+          </head>
+          <body>
+            <img src="${printPreviewUrl}" alt="Diagram" />
+            <script>
+              window.onload = function() {
+                setTimeout(function() {
+                  window.print();
+                }, 500);
+              };
+            <\/script>
+          </body>
+        </html>
+      `);
+      printWindow.document.close();
+    } else {
+      Alert.alert('Error', 'Could not open the print window. Please check your pop-up blocker.');
+    }
+
+    setShowPrintModal(false);
+    setShowPaperSizeDropdown(false);
+    setShowOrientationDropdown(false);
   };
 
   const handleUndo = () => {
@@ -483,7 +755,6 @@ export default function CreateScreen() {
         if (activePageId) {
           pageXmlCache.current.set(activePageId, xml);
         }
-        // ⭐ Focus the graph after undo
         setTimeout(focusGraph, 50);
       }
     } catch (e) { console.error('Undo error:', e); }
@@ -500,7 +771,6 @@ export default function CreateScreen() {
         if (activePageId) {
           pageXmlCache.current.set(activePageId, xml);
         }
-        // ⭐ Focus the graph after redo
         setTimeout(focusGraph, 50);
       }
     } catch (e) { console.error('Redo error:', e); }
@@ -509,33 +779,211 @@ export default function CreateScreen() {
   const toggleShapesPanel = () => {
     setShowShapesPanel(prev => !prev);
     if (activeTool !== 'shapes') setActiveTool('shapes');
-    
-    // ⭐ CRITICAL FIX: When closing the panel, focus the graph
-    // When opening the panel, we might not want to steal focus
     if (showShapesPanel) {
-      // We're about to close it - refocus the graph
       setTimeout(focusGraph, 100);
     }
   };
 
-  // ─── ⭐ Effect to refocus graph when panel state changes ──────────────────
-
   useEffect(() => {
-    // When the shapes panel is closed (showShapesPanel becomes false),
-    // refocus the graph
     if (!showShapesPanel && isGraphReady) {
       setTimeout(focusGraph, 150);
     }
   }, [showShapesPanel, isGraphReady, focusGraph]);
-
-  // ─── Format Bar Actions ────────────────────────────────────────────────────
 
   const toggleBold = () => setIsBold(!isBold);
   const toggleItalic = () => setIsItalic(!isItalic);
   const toggleUnderline = () => setIsUnderline(!isUnderline);
   const toggleStrikeThrough = () => setIsStrikeThrough(!isStrikeThrough);
 
-  // ─── Page Tab Component ────────────────────────────────────────────────────
+  interface PaperSizeDef {
+    label: string;
+    width: string;
+    height: string;
+  }
+
+  const PAPER_SIZES: Record<string, PaperSizeDef> = {
+    Letter: { label: 'Letter', width: '8.5in', height: '11in' },
+    Legal: { label: 'Legal', width: '8.5in', height: '14in' },
+    Tabloid: { label: 'Tabloid', width: '11in', height: '17in' },
+    Executive: { label: 'Executive', width: '7.25in', height: '10.5in' },
+    Statement: { label: 'Statement', width: '5.5in', height: '8.5in' },
+    A3: { label: 'A3', width: '297mm', height: '420mm' },
+    A4: { label: 'A4', width: '210mm', height: '297mm' },
+    A5: { label: 'A5', width: '148mm', height: '210mm' },
+    A6: { label: 'A6', width: '105mm', height: '148mm' },
+    B4: { label: 'B4 (JIS)', width: '257mm', height: '364mm' },
+    B5: { label: 'B5 (JIS)', width: '182mm', height: '257mm' },
+  };
+
+  const PrintModal = () => {
+    if (!showPrintModal) return null;
+
+    const paperKeys = Object.keys(PAPER_SIZES);
+
+    return (
+      <Modal
+        visible={showPrintModal}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setShowPrintModal(false)}
+      >
+        <Pressable
+          style={styles.printModalOverlay}
+          onPress={() => {
+            setShowPrintModal(false);
+            setShowPaperSizeDropdown(false);
+            setShowOrientationDropdown(false);
+          }}
+        >
+          <Pressable style={styles.printModalContainer} onPress={(e) => e.stopPropagation()}>
+            <View style={styles.printSettingsPanel}>
+              <Text style={styles.printModalTitle}>Print</Text>
+
+              <TouchableOpacity
+                style={styles.printMainButton}
+                onPress={executePrint}
+                activeOpacity={0.85}
+              >
+                <PrintIcon color="#ffffff" />
+                <Text style={styles.printMainButtonText}>Print</Text>
+              </TouchableOpacity>
+
+              <View style={styles.printCopiesRow}>
+                <Text style={styles.printFieldLabel}>Copies:</Text>
+                <TextInput
+                  style={styles.printCopiesInput}
+                  value={printCopies}
+                  onChangeText={(t) => setPrintCopies(t.replace(/[^0-9]/g, ''))}
+                  keyboardType="numeric"
+                />
+              </View>
+
+              <Text style={styles.printSectionLabel}>Printer</Text>
+              <View style={styles.printSelectBox}>
+                <Text style={styles.printSelectText}>Save as PDF</Text>
+              </View>
+
+              <Text style={styles.printSectionLabel}>Settings</Text>
+
+              <View style={styles.printPagesRow}>
+                <Text style={styles.printFieldLabel}>Pages:</Text>
+                <TextInput
+                  style={styles.printPagesInput}
+                  placeholder="All"
+                  placeholderTextColor="#94a3b8"
+                  value={printPageRange}
+                  onChangeText={setPrintPageRange}
+                />
+              </View>
+
+              <View style={{ position: 'relative' }}>
+                <TouchableOpacity
+                  style={styles.printSelectBox}
+                  onPress={() => {
+                    setShowOrientationDropdown(prev => !prev);
+                    setShowPaperSizeDropdown(false);
+                  }}
+                  activeOpacity={0.7}
+                >
+                  <Text style={styles.printSelectText}>
+                    {printOrientation === 'portrait' ? 'Portrait Orientation' : 'Landscape Orientation'}
+                  </Text>
+                  <Text style={styles.printSelectCaret}>▾</Text>
+                </TouchableOpacity>
+                {showOrientationDropdown && (
+                  <View style={styles.printOptionsList}>
+                    {(['portrait', 'landscape'] as const).map((opt) => (
+                      <TouchableOpacity
+                        key={opt}
+                        style={styles.printOptionItem}
+                        onPress={() => {
+                          setPrintOrientation(opt);
+                          setShowOrientationDropdown(false);
+                        }}
+                      >
+                        <Text style={styles.printOptionText}>
+                          {opt === 'portrait' ? 'Portrait Orientation' : 'Landscape Orientation'}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                )}
+              </View>
+
+              <View style={{ position: 'relative' }}>
+                <TouchableOpacity
+                  style={styles.printSelectBox}
+                  onPress={() => {
+                    setShowPaperSizeDropdown(prev => !prev);
+                    setShowOrientationDropdown(false);
+                  }}
+                  activeOpacity={0.7}
+                >
+                  <Text style={styles.printSelectText}>{PAPER_SIZES[printPaperSize].label}</Text>
+                  <Text style={styles.printSelectCaret}>▾</Text>
+                </TouchableOpacity>
+                {showPaperSizeDropdown && (
+                  <View style={[styles.printOptionsList, styles.printOptionsListScrollable]}>
+                    <ScrollView style={{ maxHeight: 220 }}>
+                      {paperKeys.map((key) => (
+                        <TouchableOpacity
+                          key={key}
+                          style={styles.printOptionItem}
+                          onPress={() => {
+                            setPrintPaperSize(key);
+                            setShowPaperSizeDropdown(false);
+                          }}
+                        >
+                          <Text style={styles.printOptionText}>{PAPER_SIZES[key].label}</Text>
+                          <Text style={styles.printOptionSubText}>
+                            {PAPER_SIZES[key].width} × {PAPER_SIZES[key].height}
+                          </Text>
+                        </TouchableOpacity>
+                      ))}
+                    </ScrollView>
+                  </View>
+                )}
+              </View>
+
+              <TouchableOpacity
+                style={styles.printCancelButton}
+                onPress={() => {
+                  setShowPrintModal(false);
+                  setShowPaperSizeDropdown(false);
+                  setShowOrientationDropdown(false);
+                }}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.printCancelButtonText}>Cancel</Text>
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.printPreviewPanel}>
+              <ScrollView contentContainerStyle={styles.printPreviewScrollContent}>
+                <View
+                  style={[
+                    styles.printPreviewPage,
+                    printOrientation === 'landscape' && styles.printPreviewPageLandscape,
+                  ]}
+                >
+                  {printPreviewUrl && Platform.OS === 'web' ? (
+                    <img
+                      src={printPreviewUrl}
+                      style={{
+                        maxWidth: '100%',
+                        maxHeight: '100%',
+                        objectFit: 'contain',
+                      }}
+                    />
+                  ) : null}
+                </View>
+              </ScrollView>
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
+    );
+  };
 
   const PageTab = ({ page, isActive }: { page: Page; isActive: boolean }) => {
     if (Platform.OS === 'web') {
@@ -616,31 +1064,45 @@ export default function CreateScreen() {
       <SafeAreaView style={styles.mobileContainer}>
         <StatusBar barStyle="dark-content" backgroundColor="#ffffff" />
 
+        {/* ─── TOP BAR ─────────────────────────────────────────────────────── */}
         <View style={styles.mobileTopBar}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.mobileBackBtn}>
-            <ICONS.Close color="#4a5568" />
-          </TouchableOpacity>
+          <View style={styles.mobileTopBarLeft}>
+            <TouchableOpacity
+              style={styles.mobileTopBarBtn}
+              onPress={() => router.back()}
+              activeOpacity={0.7}
+            >
+              <ICONS.Close color="#4a5568" />
+            </TouchableOpacity>
+          </View>
+
           <Text style={styles.mobileTitle} numberOfLines={1}>
             {diagramName}
           </Text>
+
           <View style={styles.mobileTopBarRight}>
             <TouchableOpacity
-              style={styles.mobileActionBtn}
+              style={[styles.mobileTopBarBtn, !isGraphReady && styles.mobileTopBarBtnDisabled]}
               onPress={handlePrint}
-              disabled={!isGraphReady}
+              disabled={!isGraphReady || isPreparingPrint}
             >
               <PrintIcon color={isGraphReady ? '#4a5568' : '#cbd5e1'} />
             </TouchableOpacity>
             <TouchableOpacity
-              style={styles.mobileActionBtn}
-              onPress={handleDownload}
-              disabled={!isGraphReady}
+              style={[styles.mobileTopBarBtn, !isGraphReady && styles.mobileTopBarBtnDisabled]}
+              onPress={() => setShowDownloadDropdown(prev => !prev)}
+              disabled={!isGraphReady || isDownloading}
             >
-              <DownloadIcon color={isGraphReady ? '#4a5568' : '#cbd5e1'} />
+              {isDownloading ? (
+                <View style={styles.downloadSpinner} />
+              ) : (
+                <DownloadIcon color={isGraphReady ? '#4a5568' : '#cbd5e1'} />
+              )}
             </TouchableOpacity>
           </View>
         </View>
 
+        {/* ─── CANVAS WITH FLOATING UNDO/REDO ────────────────────────────── */}
         <View style={styles.mobileCanvasContainer}>
           <DiagramCanvas
             key="diagram-canvas"
@@ -648,8 +1110,30 @@ export default function CreateScreen() {
             onChange={handleGraphChange}
             umlType={activeUmlType}
           />
+
+          {/* Floating Undo/Redo buttons */}
+          <View style={styles.floatingUndoRedoContainer}>
+            <TouchableOpacity
+              style={[styles.floatingUndoRedoBtn, !isGraphReady && styles.floatingUndoRedoBtnDisabled]}
+              onPress={handleUndo}
+              disabled={!isGraphReady}
+              activeOpacity={0.7}
+            >
+              <UndoIcon color={isGraphReady ? '#4a5568' : '#cbd5e1'} size={20} />
+            </TouchableOpacity>
+            
+            <TouchableOpacity
+              style={[styles.floatingUndoRedoBtn, !isGraphReady && styles.floatingUndoRedoBtnDisabled]}
+              onPress={handleRedo}
+              disabled={!isGraphReady}
+              activeOpacity={0.7}
+            >
+              <RedoIcon color={isGraphReady ? '#4a5568' : '#cbd5e1'} size={20} />
+            </TouchableOpacity>
+          </View>
         </View>
 
+        {/* ─── BOTTOM TOOLBAR ───────────────────────────────────────────── */}
         <View style={[styles.mobileBottomToolbar, { height: toolbarHeight }]}>
           <View style={styles.mobileBottomToolbarRow}>
             <View style={styles.mobileToolGroup}>
@@ -683,7 +1167,7 @@ export default function CreateScreen() {
 
             <View style={styles.mobileToolGroup}>
               <TouchableOpacity
-                style={styles.mobileBottomToolBtn}
+                style={[styles.mobileBottomToolBtn, !isGraphReady && styles.mobileTopBarBtnDisabled]}
                 onPress={handleZoomOut}
                 disabled={!isGraphReady}
               >
@@ -691,7 +1175,7 @@ export default function CreateScreen() {
               </TouchableOpacity>
               <Text style={styles.mobileZoomLabel}>{Math.round(zoomLevel)}%</Text>
               <TouchableOpacity
-                style={styles.mobileBottomToolBtn}
+                style={[styles.mobileBottomToolBtn, !isGraphReady && styles.mobileTopBarBtnDisabled]}
                 onPress={handleZoomIn}
                 disabled={!isGraphReady}
               >
@@ -709,6 +1193,21 @@ export default function CreateScreen() {
           isGraphReady={isGraphReady}
           toolbarHeight={toolbarHeight}
         />
+
+        {showDownloadDropdown && (
+          <>
+            <Pressable
+              style={styles.dropdownOverlay}
+              onPress={() => setShowDownloadDropdown(false)}
+            />
+            <DownloadDropdown
+              onSelectFormat={handleDownload}
+              style={{ top: 60, right: 16 }}
+            />
+          </>
+        )}
+
+        <PrintModal />
       </SafeAreaView>
     );
   }
@@ -720,8 +1219,6 @@ export default function CreateScreen() {
       <StatusBar barStyle="dark-content" />
 
       <View style={styles.container}>
-
-        {/* NAVBAR */}
         <View style={styles.navbar}>
           <View style={styles.navbarLeft}>
             <TouchableOpacity style={styles.navIconBtn} onPress={() => router.back()} activeOpacity={0.7}>
@@ -741,22 +1238,25 @@ export default function CreateScreen() {
               style={[styles.navIconBtn, styles.navBtnPrimary, !isGraphReady && styles.navBtnDisabled]}
               onPress={handlePrint}
               activeOpacity={0.7}
-              disabled={!isGraphReady}
+              disabled={!isGraphReady || isPreparingPrint}
             >
               <PrintIcon color={isGraphReady ? '#ffffff' : '#94a3b8'} />
             </TouchableOpacity>
             <TouchableOpacity
               style={[styles.navIconBtn, styles.navBtnPrimary, !isGraphReady && styles.navBtnDisabled]}
-              onPress={handleDownload}
+              onPress={() => setShowDownloadDropdown(prev => !prev)}
               activeOpacity={0.7}
-              disabled={!isGraphReady}
+              disabled={!isGraphReady || isDownloading}
             >
-              <DownloadIcon color={isGraphReady ? '#ffffff' : '#94a3b8'} />
+              {isDownloading ? (
+                <View style={styles.downloadSpinnerSmall} />
+              ) : (
+                <DownloadIcon color={isGraphReady ? '#ffffff' : '#94a3b8'} />
+              )}
             </TouchableOpacity>
           </View>
         </View>
 
-        {/* ─── FORMAT BAR ─── */}
         <View style={styles.formatBar}>
           <TouchableOpacity
             style={[styles.formatBtn, !isGraphReady && styles.formatBtnDisabled]}
@@ -764,7 +1264,7 @@ export default function CreateScreen() {
             disabled={!isGraphReady}
             activeOpacity={0.7}
           >
-            <UndoIcon color={isGraphReady ? '#4a5568' : '#cbd5e1'} />
+            <UndoIcon color={isGraphReady ? '#4a5568' : '#cbd5e1'} size={18} />
           </TouchableOpacity>
           <TouchableOpacity
             style={[styles.formatBtn, !isGraphReady && styles.formatBtnDisabled]}
@@ -772,7 +1272,7 @@ export default function CreateScreen() {
             disabled={!isGraphReady}
             activeOpacity={0.7}
           >
-            <RedoIcon color={isGraphReady ? '#4a5568' : '#cbd5e1'} />
+            <RedoIcon color={isGraphReady ? '#4a5568' : '#cbd5e1'} size={18} />
           </TouchableOpacity>
 
           <View style={styles.formatDivider} />
@@ -895,7 +1395,6 @@ export default function CreateScreen() {
           </TouchableOpacity>
         </View>
 
-        {/* BODY */}
         <View style={styles.body}>
           <View style={styles.canvasContainer}>
             <DiagramCanvas
@@ -911,7 +1410,6 @@ export default function CreateScreen() {
               style={[styles.railBtn, isPanelVisible && styles.railBtnActive]}
               onPress={() => {
                 setIsPanelVisible(prev => !prev);
-                // ⭐ When toggling panel visibility, refocus the graph
                 setTimeout(focusGraph, 100);
               }}
               activeOpacity={0.7}
@@ -930,7 +1428,6 @@ export default function CreateScreen() {
           )}
         </View>
 
-        {/* BOTTOM BAR */}
         <View style={styles.bottomBar}>
           <View style={styles.pageTabsRow}>
             {Platform.OS === 'web' ? (
@@ -960,7 +1457,7 @@ export default function CreateScreen() {
                 ))}
               </ScrollView>
             )}
-            
+
             <TouchableOpacity
               style={styles.pageTabAdd}
               onPress={() => setShowPageModal(true)}
@@ -969,7 +1466,7 @@ export default function CreateScreen() {
               <Text style={styles.pageTabAddText}>+</Text>
             </TouchableOpacity>
           </View>
-          
+
           <View style={styles.zoomRow}>
             <TouchableOpacity
               style={styles.zoomBtn}
@@ -991,7 +1488,6 @@ export default function CreateScreen() {
           </View>
         </View>
 
-        {/* ─── ADD PAGE MODAL ─────────────────────────────────────────────────── */}
         <Modal
           visible={showPageModal}
           transparent={true}
@@ -1008,7 +1504,7 @@ export default function CreateScreen() {
             >
               <Text style={styles.modalTitle}>Add New Page</Text>
               <Text style={styles.modalSubtitle}>Enter a name for the new page</Text>
-              
+
               <TextInput
                 style={styles.modalInput}
                 placeholder="Page name..."
@@ -1019,14 +1515,13 @@ export default function CreateScreen() {
                 onSubmitEditing={addNewPage}
                 returnKeyType="done"
               />
-              
+
               <View style={styles.modalButtons}>
                 <TouchableOpacity
                   style={[styles.modalButton, styles.modalCancelButton]}
                   onPress={() => {
                     setShowPageModal(false);
                     setNewPageName('');
-                    // ⭐ Refocus graph after modal closes
                     setTimeout(focusGraph, 100);
                   }}
                 >
@@ -1042,12 +1537,27 @@ export default function CreateScreen() {
             </Pressable>
           </Pressable>
         </Modal>
+
+        {showDownloadDropdown && (
+          <>
+            <Pressable
+              style={styles.dropdownOverlay}
+              onPress={() => setShowDownloadDropdown(false)}
+            />
+            <DownloadDropdown
+              onSelectFormat={handleDownload}
+              style={{ top: 52, right: 12 }}
+            />
+          </>
+        )}
+
+        <PrintModal />
       </View>
     </SafeAreaView>
   );
 }
 
-// ─── Print & Download Icons ──────────────────────────────────────────────────
+// ─── ICONS ────────────────────────────────────────────────────────────────────
 
 const PrintIcon = ({ color = '#4a5568' }: { color?: string }) => (
   <Svg width={20} height={20} viewBox="0 0 24 24" fill="none">
@@ -1066,14 +1576,64 @@ const DownloadIcon = ({ color = '#4a5568' }: { color?: string }) => (
   </Svg>
 );
 
+const PageIcon = ({ color = '#4a5568' }: { color?: string }) => (
+  <Svg width={14} height={14} viewBox="0 0 24 24" fill="none">
+    <Rect x="3" y="3" width="18" height="18" rx="2" stroke={color} strokeWidth={1.8} />
+    <Path d="M8 8h8M8 12h6M8 16h4" stroke={color} strokeWidth={1.8} strokeLinecap="round" />
+  </Svg>
+);
+
+const CloseTabIcon = ({ color = '#94a3b8' }: { color?: string }) => (
+  <Svg width={12} height={12} viewBox="0 0 24 24" fill="none">
+    <Path d="M18 6L6 18M6 6L18 18" stroke={color} strokeWidth={2} strokeLinecap="round" />
+  </Svg>
+);
+
+const BoldIcon = ({ color = '#4a5568' }: { color?: string }) => (
+  <Svg width={14} height={14} viewBox="0 0 24 24" fill="none">
+    <Path d="M6 4h8a4 4 0 0 1 4 4 4 4 0 0 1-4 4H6z" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+    <Path d="M6 12h9a4 4 0 0 1 4 4 4 4 0 0 1-4 4H6z" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+  </Svg>
+);
+
+const ItalicIcon = ({ color = '#4a5568' }: { color?: string }) => (
+  <Svg width={14} height={14} viewBox="0 0 24 24" fill="none">
+    <Path d="M19 4h-9M14 20H5M15 4L9 20" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+  </Svg>
+);
+
+const UnderlineIcon = ({ color = '#4a5568' }: { color?: string }) => (
+  <Svg width={14} height={14} viewBox="0 0 24 24" fill="none">
+    <Path d="M6 4v6a6 6 0 0 0 12 0V4" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+    <Path d="M4 20h16" stroke={color} strokeWidth={2} strokeLinecap="round" />
+  </Svg>
+);
+
+const StrikeThroughIcon = ({ color = '#4a5568' }: { color?: string }) => (
+  <Svg width={14} height={14} viewBox="0 0 24 24" fill="none">
+    <Path d="M6 16h12M8 12h8M10 8h4" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+  </Svg>
+);
+
+const FontColorIcon = ({ color = '#4a5568' }: { color?: string }) => (
+  <Svg width={14} height={14} viewBox="0 0 24 24" fill="none">
+    <Path d="M4 20L12 4L20 20" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+    <Path d="M8 14h8" stroke={color} strokeWidth={2} strokeLinecap="round" />
+    <Circle cx="12" cy="18" r="2" fill={color} />
+  </Svg>
+);
+
 // ─── STYLES ───────────────────────────────────────────────────────────────────
+
+const SHAPE_W = 120;
+const SHAPE_H = 60;
+const GRID = 10;
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#f8faff',
   },
-
   navbar: {
     height: 48,
     flexDirection: 'row',
@@ -1122,7 +1682,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
     minWidth: 180,
   },
-
   formatBar: {
     height: 40,
     flexDirection: 'row',
@@ -1159,7 +1718,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 4,
     fontWeight: '500',
   },
-
   body: {
     flex: 1,
     position: 'relative',
@@ -1174,7 +1732,6 @@ const styles = StyleSheet.create({
     backgroundColor: '#f0f2f5',
     zIndex: 1,
   },
-
   iconRail: {
     position: 'absolute',
     top: 0,
@@ -1199,7 +1756,6 @@ const styles = StyleSheet.create({
   railBtnActive: {
     backgroundColor: '#4c6fff',
   },
-
   shapesPanelWrapper: {
     position: 'absolute',
     top: 0,
@@ -1207,7 +1763,6 @@ const styles = StyleSheet.create({
     bottom: 0,
     zIndex: 4,
   },
-
   bottomBar: {
     height: 36,
     flexDirection: 'row',
@@ -1301,7 +1856,6 @@ const styles = StyleSheet.create({
     minWidth: 32,
     textAlign: 'center',
   },
-
   modalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.4)',
@@ -1365,7 +1919,277 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#ffffff',
   },
+  dropdownOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    zIndex: 998,
+  },
+  downloadDropdown: {
+    position: 'absolute',
+    width: 200,
+    backgroundColor: '#ffffff',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    paddingVertical: 6,
+    zIndex: 999,
+    ...(Platform.OS === 'web'
+      ? { boxShadow: '0 8px 24px rgba(15, 23, 42, 0.12)' }
+      : {
+          shadowColor: '#0f172a',
+          shadowOffset: { width: 0, height: 8 },
+          shadowOpacity: 0.12,
+          shadowRadius: 16,
+          elevation: 8,
+        }),
+  },
+  downloadDropdownItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    gap: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f1f5f9',
+  },
+  downloadDropdownItemLast: {
+    borderBottomWidth: 0,
+  },
+  downloadDropdownIcon: {
+    fontSize: 18,
+  },
+  downloadDropdownTextWrap: {
+    flex: 1,
+  },
+  downloadDropdownLabel: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#1a1f36',
+  },
+  downloadDropdownDescription: {
+    fontSize: 11,
+    color: '#94a3b8',
+    marginTop: 1,
+  },
+  downloadSpinner: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    borderWidth: 2,
+    borderColor: '#4c6fff',
+    borderTopColor: 'transparent',
+  },
+  downloadSpinnerSmall: {
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+    borderWidth: 2,
+    borderColor: '#ffffff',
+    borderTopColor: 'transparent',
+  },
+  printModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(15, 23, 42, 0.45)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  printModalContainer: {
+    flexDirection: 'row',
+    backgroundColor: '#f5f5f5',
+    borderRadius: 12,
+    overflow: 'hidden',
+    width: 860,
+    maxWidth: '95%',
+    height: 620,
+    maxHeight: '90%',
+    ...(Platform.OS === 'web'
+      ? { boxShadow: '0 20px 60px rgba(15, 23, 42, 0.35)' }
+      : {
+          shadowColor: '#0f172a',
+          shadowOffset: { width: 0, height: 10 },
+          shadowOpacity: 0.3,
+          shadowRadius: 24,
+          elevation: 12,
+        }),
+  },
+  printSettingsPanel: {
+    width: 260,
+    backgroundColor: '#f5f5f5',
+    paddingHorizontal: 20,
+    paddingTop: 20,
+    paddingBottom: 16,
+  },
+  printModalTitle: {
+    fontSize: 20,
+    fontWeight: '600',
+    color: '#1a1a1a',
+    marginBottom: 16,
+  },
+  printMainButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: '#4c6fff',
+    borderRadius: 8,
+    height: 90,
+    marginBottom: 16,
+  },
+  printMainButtonText: {
+    color: '#ffffff',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  printCopiesRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 16,
+  },
+  printFieldLabel: {
+    fontSize: 13,
+    color: '#1a1a1a',
+    fontWeight: '400',
+  },
+  printCopiesInput: {
+    width: 56,
+    height: 28,
+    borderWidth: 1,
+    borderColor: '#d1d5db',
+    borderRadius: 4,
+    paddingHorizontal: 8,
+    fontSize: 13,
+    color: '#1a1a1a',
+    backgroundColor: '#ffffff',
+    textAlign: 'left',
+  },
+  printSectionLabel: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#374151',
+    marginBottom: 8,
+  },
+  printSelectBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    height: 34,
+    borderWidth: 1,
+    borderColor: '#d1d5db',
+    borderRadius: 6,
+    paddingHorizontal: 10,
+    backgroundColor: '#ffffff',
+    marginBottom: 10,
+  },
+  printSelectText: {
+    fontSize: 13,
+    color: '#1a1a1a',
+  },
+  printSelectCaret: {
+    fontSize: 11,
+    color: '#6b7280',
+  },
+  printPagesRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 10,
+  },
+  printPagesInput: {
+    flex: 1,
+    height: 34,
+    borderWidth: 1,
+    borderColor: '#d1d5db',
+    borderRadius: 6,
+    paddingHorizontal: 10,
+    fontSize: 13,
+    color: '#1a1a1a',
+    backgroundColor: '#ffffff',
+  },
+  printOptionsList: {
+    position: 'absolute',
+    top: 36,
+    left: 0,
+    right: 0,
+    backgroundColor: '#ffffff',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    zIndex: 50,
+    ...(Platform.OS === 'web'
+      ? { boxShadow: '0 8px 20px rgba(15, 23, 42, 0.15)' }
+      : {
+          shadowColor: '#0f172a',
+          shadowOffset: { width: 0, height: 6 },
+          shadowOpacity: 0.15,
+          shadowRadius: 14,
+          elevation: 10,
+        }),
+  },
+  printOptionsListScrollable: {
+    maxHeight: 220,
+  },
+  printOptionItem: {
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f1f5f9',
+  },
+  printOptionText: {
+    fontSize: 13,
+    color: '#1a1a1a',
+  },
+  printOptionSubText: {
+    fontSize: 11,
+    color: '#94a3b8',
+    marginTop: 1,
+  },
+  printCancelButton: {
+    marginTop: 'auto',
+    alignSelf: 'flex-start',
+  },
+  printCancelButtonText: {
+    fontSize: 13,
+    color: '#4c6fff',
+    fontWeight: '600',
+  },
+  printPreviewPanel: {
+    flex: 1,
+    backgroundColor: '#e8e8e8',
+  },
+  printPreviewScrollContent: {
+    flexGrow: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 24,
+  },
+  printPreviewPage: {
+    width: 380,
+    height: 492,
+    backgroundColor: '#ffffff',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 16,
+    ...(Platform.OS === 'web'
+      ? { boxShadow: '0 4px 16px rgba(15, 23, 42, 0.15)' }
+      : {
+          shadowColor: '#0f172a',
+          shadowOffset: { width: 0, height: 4 },
+          shadowOpacity: 0.15,
+          shadowRadius: 10,
+          elevation: 4,
+        }),
+  },
+  printPreviewPageLandscape: {
+    width: 492,
+    height: 380,
+  },
 
+  // ─── MOBILE STYLES ─────────────────────────────────────────────────────────
   mobileContainer: {
     flex: 1,
     backgroundColor: '#f8faff',
@@ -1373,18 +2197,35 @@ const styles = StyleSheet.create({
   mobileTopBar: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
     backgroundColor: '#ffffff',
     borderBottomWidth: 1,
     borderBottomColor: '#eef2f5',
+    gap: 6,
+    minHeight: 50,
   },
-  mobileBackBtn: {
-    padding: 4,
+  mobileTopBarLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  mobileTopBarBtn: {
+    width: 34,
+    height: 34,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#f8fafc',
+    borderWidth: 1,
+    borderColor: '#eef2f6',
+  },
+  mobileTopBarBtnDisabled: {
+    opacity: 0.4,
   },
   mobileTitle: {
     flex: 1,
-    fontSize: 17,
+    fontSize: 15,
     fontWeight: '600',
     color: '#1a1f36',
     textAlign: 'center',
@@ -1394,18 +2235,41 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 4,
   },
-  mobileActionBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 8,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#f1f5f9',
-  },
   mobileCanvasContainer: {
     flex: 1,
     backgroundColor: '#f8faff',
   },
+
+  // ─── FLOATING UNDO/REDO BUTTONS ────────────────────────────────────────────
+  floatingUndoRedoContainer: {
+    position: 'absolute',
+    top: 12,
+    right: 12,
+    flexDirection: 'row',
+    gap: 8,
+    zIndex: 10,
+  },
+  floatingUndoRedoBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#ffffff',
+    alignItems: 'center',
+    justifyContent: 'center',
+    ...(Platform.OS === 'web'
+      ? { boxShadow: '0 2px 8px rgba(15, 23, 42, 0.12)' }
+      : {
+          shadowColor: '#0f172a',
+          shadowOffset: { width: 0, height: 2 },
+          shadowOpacity: 0.12,
+          shadowRadius: 6,
+          elevation: 4,
+        }),
+  },
+  floatingUndoRedoBtnDisabled: {
+    opacity: 0.4,
+  },
+
   mobileBottomToolbar: {
     backgroundColor: '#ffffff',
     borderTopWidth: 1,

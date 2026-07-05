@@ -1,4 +1,4 @@
-// components/shapes/ShapesBottomPanel.tsx - UPDATED with all new shapes
+// components/shapes/ShapesBottomPanel.tsx - Fixed 2-row, horizontally scrolling shape grid (no labels)
 
 import React, { useState, useRef, useEffect } from 'react';
 import {
@@ -73,6 +73,9 @@ export default function ShapesBottomPanel({
   const [expanded, setExpanded] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [lastTapped, setLastTapped] = useState<string | null>(null);
+  const [activePage, setActivePage] = useState(0);
+  const [gridContentWidth, setGridContentWidth] = useState(0);
+  const [gridContainerWidth, setGridContainerWidth] = useState(0);
 
   const slideAnim = useRef(new Animated.Value(0)).current;
   const currentHeightRef = useRef(0);
@@ -155,6 +158,7 @@ export default function ShapesBottomPanel({
   const handleTabChange = (tab: string) => {
     setActiveTab(tab);
     setSearchQuery('');
+    setActivePage(0);
     if (onUmlTypeChange) {
       onUmlTypeChange(tab);
     }
@@ -173,8 +177,21 @@ export default function ShapesBottomPanel({
   };
 
   const filteredShapes = getFilteredShapes();
-  const iconSize = 36;
-  const tileSize = 64;
+
+  // ─── Fixed 2-row, horizontally scrolling grid ───────────────────────────
+  const isSmallScreen = SCREEN_WIDTH < 380;
+  const isMediumScreen = SCREEN_WIDTH < 768;
+
+  // Icon sizes scale down slightly on small screens
+  const iconSize = isSmallScreen ? 26 : isMediumScreen ? 30 : 34;
+
+  const NUM_ROWS = 2;
+  const tileGap = 8;
+  // Fixed tile width (not percentage) since the row now scrolls horizontally
+  // rather than wrapping to fill the screen width.
+  const tileWidth = isSmallScreen ? 78 : isMediumScreen ? 88 : 96;
+  const tileHeight = 64;
+  const gridHeight = NUM_ROWS * tileHeight + (NUM_ROWS - 1) * tileGap;
 
   return (
     <Animated.View
@@ -228,12 +245,18 @@ export default function ShapesBottomPanel({
             placeholder="Search shapes..."
             placeholderTextColor="#94a3b8"
             value={searchQuery}
-            onChangeText={setSearchQuery}
+            onChangeText={(text) => {
+              setSearchQuery(text);
+              setActivePage(0);
+            }}
             clearButtonMode="while-editing"
           />
           {searchQuery.length > 0 && (
             <TouchableOpacity
-              onPress={() => setSearchQuery('')}
+              onPress={() => {
+                setSearchQuery('');
+                setActivePage(0);
+              }}
               style={styles.clearBtn}
             >
               <ClearIcon />
@@ -272,51 +295,84 @@ export default function ShapesBottomPanel({
         </ScrollView>
       </View>
 
-      <ScrollView
-        style={styles.shapesScroll}
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={styles.shapesContent}
-        scrollEventThrottle={16}
-      >
-        {filteredShapes.length > 0 ? (
-          <View style={styles.shapesGrid}>
-            {filteredShapes.map((shape) => {
-              const isTapped = lastTapped === shape.id;
-              return (
-                <TouchableOpacity
-                  key={shape.id}
-                  style={[
-                    styles.shapeTile,
-                    !isGraphReady && styles.shapeTileDisabled,
-                    isTapped && styles.shapeTileTapped,
-                    { width: tileSize, height: tileSize + 16 },
-                  ]}
-                  onPress={() => handleShapeTap(shape)}
-                  disabled={!isGraphReady}
-                  activeOpacity={0.65}
-                >
-                  <ShapePreview
-                    name={shape.svgComponent}
-                    label={shape.label}
-                    width={iconSize}
-                    height={iconSize * 0.6}
-                    selected={isTapped}
-                  />
-                </TouchableOpacity>
-              );
-            })}
-          </View>
-        ) : (
-          <View style={styles.noResults}>
-            <Text style={styles.noResultsText}>No shapes found</Text>
-            <Text style={styles.noResultsSubtext}>Try a different search term</Text>
-          </View>
-        )}
+      {filteredShapes.length > 0 ? (
+        <>
+          <ScrollView
+            horizontal
+            pagingEnabled
+            showsHorizontalScrollIndicator={false}
+            style={styles.shapesScroll}
+            contentContainerStyle={[
+              styles.shapesContent,
+              { height: gridHeight },
+            ]}
+            onLayout={(e) => setGridContainerWidth(e.nativeEvent.layout.width)}
+            onContentSizeChange={(w) => setGridContentWidth(w)}
+            scrollEventThrottle={16}
+            onScroll={(e) => {
+              if (!gridContainerWidth) return;
+              const offsetX = e.nativeEvent.contentOffset.x;
+              const page = Math.round(offsetX / gridContainerWidth);
+              if (page !== activePage) setActivePage(page);
+            }}
+          >
+            <View style={[styles.shapesGrid, { height: gridHeight }]}>
+              {filteredShapes.map((shape) => {
+                const isTapped = lastTapped === shape.id;
+                return (
+                  <TouchableOpacity
+                    key={shape.id}
+                    style={[
+                      styles.shapeTile,
+                      !isGraphReady && styles.shapeTileDisabled,
+                      isTapped && styles.shapeTileTapped,
+                      {
+                        width: tileWidth,
+                        height: tileHeight,
+                      },
+                    ]}
+                    onPress={() => handleShapeTap(shape)}
+                    disabled={!isGraphReady}
+                    activeOpacity={0.65}
+                  >
+                    <ShapePreview
+                      name={shape.svgComponent}
+                      width={iconSize}
+                      height={iconSize * 0.6}
+                      selected={isTapped}
+                    />
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          </ScrollView>
 
-        {!isGraphReady && (
-          <Text style={styles.notReadyHint}>Canvas is loading…</Text>
-        )}
-      </ScrollView>
+          {gridContainerWidth > 0 && gridContentWidth > gridContainerWidth && (
+            <View style={styles.dotsContainer}>
+              {Array.from({
+                length: Math.ceil(gridContentWidth / gridContainerWidth),
+              }).map((_, i) => (
+                <View
+                  key={i}
+                  style={[
+                    styles.dot,
+                    i === activePage && styles.dotActive,
+                  ]}
+                />
+              ))}
+            </View>
+          )}
+        </>
+      ) : (
+        <View style={styles.noResults}>
+          <Text style={styles.noResultsText}>No shapes found</Text>
+          <Text style={styles.noResultsSubtext}>Try a different search term</Text>
+        </View>
+      )}
+
+      {!isGraphReady && (
+        <Text style={styles.notReadyHint}>Canvas is loading…</Text>
+      )}
     </Animated.View>
   );
 }
@@ -384,7 +440,7 @@ const styles = StyleSheet.create({
     color: '#1a1f36',
     paddingVertical: 4,
     paddingHorizontal: 8,
-    ...Platform.select({ web: { outlineStyle: 'none' } }),
+    ...Platform.select({ web: { outlineStyle: 'none' as any } }),
   },
   clearBtn: {
     padding: 4,
@@ -426,13 +482,18 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   shapesContent: {
-    paddingHorizontal: 16,
-    paddingTop: 12,
-    paddingBottom: 20,
+    paddingLeft: 12,
+    paddingRight: 12,
+    paddingBottom: 8,
   },
+  // Column-wrap grid: items fill top-to-bottom (2 rows), then wrap into a
+  // new column to the right, producing a fixed 2-row grid that scrolls
+  // horizontally instead of vertically. `gap` (not margins) is used for
+  // spacing so RN's wrap-height calculation stays exact and predictable.
   shapesGrid: {
-    flexDirection: 'row',
+    flexDirection: 'column',
     flexWrap: 'wrap',
+    alignContent: 'flex-start',
     gap: 8,
   },
   shapeTile: {
@@ -442,6 +503,7 @@ const styles = StyleSheet.create({
     borderColor: '#e2e8f0',
     alignItems: 'center',
     justifyContent: 'center',
+    paddingVertical: 6,
     ...Platform.select({
       ios: {
         shadowColor: '#000',
@@ -460,6 +522,25 @@ const styles = StyleSheet.create({
   },
   shapeTileDisabled: {
     opacity: 0.4,
+  },
+  dotsContainer: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingTop: 4,
+    paddingBottom: 12,
+    gap: 6,
+  },
+  dot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#d1d5db',
+  },
+  dotActive: {
+    backgroundColor: '#1a1f36',
+    width: 6,
+    height: 6,
   },
   noResults: {
     padding: 32,

@@ -1,4 +1,4 @@
-// components/shapes/ShapeIcon.tsx - Updated with all new shapes
+// components/shapes/ShapeIcon.tsx - Updated with all new shapes (labels optional)
 
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
@@ -153,8 +153,6 @@ export interface ShapeIconProps {
   color?: string;
   fillColor?: string;
   strokeWidth?: number;
-  showLabel?: boolean;
-  label?: string;
 }
 
 const DEFAULT_SIZE = 48;
@@ -323,8 +321,6 @@ export const ShapeIcon: React.FC<ShapeIconProps> = ({
   color = '#1a1f36',
   fillColor = '#ffffff',
   strokeWidth = 2,
-  showLabel = false,
-  label = '',
 }) => {
   const ShapeComponent = componentMap[name];
 
@@ -333,7 +329,7 @@ export const ShapeIcon: React.FC<ShapeIconProps> = ({
     return (
       <View style={[styles.fallback, { width, height }]}>
         <Text style={[styles.fallbackText, { color }]}>
-          {label || name.substring(0, 6)}
+          {name.substring(0, 6)}
         </Text>
       </View>
     );
@@ -354,13 +350,14 @@ export const ShapeIcon: React.FC<ShapeIconProps> = ({
 
 export const ShapePreview: React.FC<{
   name: string;
-  label: string;
+  label?: string;
   width?: number;
   height?: number;
   color?: string;
   fillColor?: string;
   strokeWidth?: number;
   selected?: boolean;
+  showLabel?: boolean;
 }> = ({
   name,
   label,
@@ -370,6 +367,7 @@ export const ShapePreview: React.FC<{
   fillColor = '#ffffff',
   strokeWidth = 2,
   selected = false,
+  showLabel = true,
 }) => {
   return (
     <View style={[styles.previewContainer, selected && styles.previewSelected]}>
@@ -381,12 +379,14 @@ export const ShapePreview: React.FC<{
         fillColor={fillColor}
         strokeWidth={strokeWidth}
       />
-      <Text 
-        style={[styles.previewLabel, selected && styles.previewLabelSelected]}
-        numberOfLines={1}
-      >
-        {label}
-      </Text>
+      {showLabel && label && (
+        <Text 
+          style={[styles.previewLabel, selected && styles.previewLabelSelected]}
+          numberOfLines={1}
+        >
+          {label}
+        </Text>
+      )}
     </View>
   );
 };

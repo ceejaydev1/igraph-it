@@ -1,5 +1,5 @@
 // components/shapes/shapes/SequenceShapes.tsx
-// Sequence Diagram shapes
+// Sequence Diagram shapes - FIXED with clean, simple design for shape panel
 
 import React from 'react';
 import { Svg, Rect, Line, Polygon, Path, G, Text as SvgText } from 'react-native-svg';
@@ -142,89 +142,101 @@ export const UMLReturnMsgShape: React.FC<ShapeProps> = ({
 };
 
 // ─── 7. ALT Fragment ─────────────────────────────────────────────────────
+// Clean: Simple rectangle with "alt" text centered
 
 export const UMLAltShape: React.FC<ShapeProps> = ({
   width,
   height,
   color = '#1a1f36',
+  fillColor = '#ffffff',
   strokeWidth = 2,
 }) => {
   const cx = width / 2;
+  const cy = height / 2;
   return (
     <Svg width={width} height={height} viewBox={`0 0 ${width} ${height}`}>
-      <Rect x={4} y={4} width={width - 8} height={height - 8} fill="none" stroke={color} strokeWidth={strokeWidth} rx={2} />
-      <Path d={`M4,4 L30,4 L38,20 L38,35 L4,35 Z`} fill="none" stroke={color} strokeWidth={strokeWidth} />
-      <SvgText x={16} y={22} fontSize={10} fill={color} textAnchor="middle" fontWeight="600">alt</SvgText>
-      <Line x1={4} y1={height / 2} x2={width - 4} y2={height / 2} stroke={color} strokeWidth={1.5} strokeDasharray="6,4" />
+      <Rect x={4} y={4} width={width - 8} height={height - 8} fill={fillColor} stroke={color} strokeWidth={strokeWidth} rx={2} />
+      <SvgText x={cx} y={cy + 4} fontSize={12} fill={color} textAnchor="middle" fontWeight="700">alt</SvgText>
     </Svg>
   );
 };
 
 // ─── 8. OPT Fragment ─────────────────────────────────────────────────────
+// Clean: Simple rectangle with "opt" text centered
 
 export const UMLOptShape: React.FC<ShapeProps> = ({
   width,
   height,
   color = '#1a1f36',
+  fillColor = '#ffffff',
   strokeWidth = 2,
 }) => {
+  const cx = width / 2;
+  const cy = height / 2;
   return (
     <Svg width={width} height={height} viewBox={`0 0 ${width} ${height}`}>
-      <Rect x={4} y={4} width={width - 8} height={height - 8} fill="none" stroke={color} strokeWidth={strokeWidth} rx={2} />
-      <Path d={`M4,4 L30,4 L38,20 L38,35 L4,35 Z`} fill="none" stroke={color} strokeWidth={strokeWidth} />
-      <SvgText x={16} y={22} fontSize={10} fill={color} textAnchor="middle" fontWeight="600">opt</SvgText>
+      <Rect x={4} y={4} width={width - 8} height={height - 8} fill={fillColor} stroke={color} strokeWidth={strokeWidth} rx={2} />
+      <SvgText x={cx} y={cy + 4} fontSize={12} fill={color} textAnchor="middle" fontWeight="700">opt</SvgText>
     </Svg>
   );
 };
 
 // ─── 9. LOOP Fragment ────────────────────────────────────────────────────
+// Clean: Simple rectangle with "loop" text centered
 
 export const UMLLoopShape: React.FC<ShapeProps> = ({
   width,
   height,
   color = '#1a1f36',
+  fillColor = '#ffffff',
   strokeWidth = 2,
 }) => {
+  const cx = width / 2;
+  const cy = height / 2;
   return (
     <Svg width={width} height={height} viewBox={`0 0 ${width} ${height}`}>
-      <Rect x={4} y={4} width={width - 8} height={height - 8} fill="none" stroke={color} strokeWidth={strokeWidth} rx={2} />
-      <Path d={`M4,4 L35,4 L43,20 L43,35 L4,35 Z`} fill="none" stroke={color} strokeWidth={strokeWidth} />
-      <SvgText x={20} y={22} fontSize={10} fill={color} textAnchor="middle" fontWeight="600">loop</SvgText>
+      <Rect x={4} y={4} width={width - 8} height={height - 8} fill={fillColor} stroke={color} strokeWidth={strokeWidth} rx={2} />
+      <SvgText x={cx} y={cy + 4} fontSize={12} fill={color} textAnchor="middle" fontWeight="700">loop</SvgText>
     </Svg>
   );
 };
 
 // ─── 10. PAR Fragment ─────────────────────────────────────────────────────
+// Clean: Simple rectangle with "par" text centered
 
 export const UMLParShape: React.FC<ShapeProps> = ({
   width,
   height,
   color = '#1a1f36',
+  fillColor = '#ffffff',
   strokeWidth = 2,
 }) => {
+  const cx = width / 2;
+  const cy = height / 2;
   return (
     <Svg width={width} height={height} viewBox={`0 0 ${width} ${height}`}>
-      <Rect x={4} y={4} width={width - 8} height={height - 8} fill="none" stroke={color} strokeWidth={strokeWidth} rx={2} />
-      <Path d={`M4,4 L30,4 L38,20 L38,35 L4,35 Z`} fill="none" stroke={color} strokeWidth={strokeWidth} />
-      <SvgText x={16} y={22} fontSize={10} fill={color} textAnchor="middle" fontWeight="600">par</SvgText>
-      <Line x1={4} y1={height / 2} x2={width - 4} y2={height / 2} stroke={color} strokeWidth={1.5} strokeDasharray="6,4" />
+      <Rect x={4} y={4} width={width - 8} height={height - 8} fill={fillColor} stroke={color} strokeWidth={strokeWidth} rx={2} />
+      <SvgText x={cx} y={cy + 4} fontSize={12} fill={color} textAnchor="middle" fontWeight="700">par</SvgText>
     </Svg>
   );
 };
 
 // ─── 11. BREAK Fragment ──────────────────────────────────────────────────
+// Clean: Simple rectangle with "break" text centered
 
 export const UMLBreakShape: React.FC<ShapeProps> = ({
   width,
   height,
   color = '#1a1f36',
+  fillColor = '#ffffff',
   strokeWidth = 2,
 }) => {
+  const cx = width / 2;
+  const cy = height / 2;
   return (
     <Svg width={width} height={height} viewBox={`0 0 ${width} ${height}`}>
-      <Rect x={4} y={4} width={width - 8} height={height - 8} fill="none" stroke={color} strokeWidth={strokeWidth} rx={2} />
-      <Path d={`M4,4 L38,4 L46,20 L46,35 L4,35 Z`} fill="none" stroke={color} strokeWidth={strokeWidth} />
-      <SvgText x={22} y={22} fontSize={10} fill={color} textAnchor="middle" fontWeight="600">break</SvgText>
+      <Rect x={4} y={4} width={width - 8} height={height - 8} fill={fillColor} stroke={color} strokeWidth={strokeWidth} rx={2} />
+      <SvgText x={cx} y={cy + 4} fontSize={12} fill={color} textAnchor="middle" fontWeight="700">break</SvgText>
     </Svg>
   );
 };

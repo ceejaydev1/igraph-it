@@ -1,4 +1,4 @@
-// components/shapes/ShapesPanel.tsx — UPDATED with all new shape components
+// components/shapes/ShapesPanel.tsx — With hover tooltips for shape names
 
 import React, { useState, useMemo, useCallback, useRef, useEffect } from 'react';
 import {
@@ -90,7 +90,7 @@ const getShapeComponent = (svgComponentName: string): React.ComponentType<any> |
     'TriangleShape': shapeComponents.TriangleShape,
     'ParallelogramShape': shapeComponents.ParallelogramShape,
     'CylinderShape': shapeComponents.CylinderShape,
-    'NoteShape': shapeComponents.NoteShape,
+    'DocumentShape': shapeComponents.DocumentShape,
     'FolderShape': shapeComponents.FolderShape,
     'CloudShape': shapeComponents.CloudShape,
     'NoteStandaloneShape': shapeComponents.NoteStandaloneShape,
@@ -315,6 +315,7 @@ export default function ShapesPanel({
   const [searchQuery, setSearchQuery] = useState('');
   const [expandedCategory, setExpandedCategory] = useState<string>(activeDiagramType || 'Standard');
   const [selectedShape, setSelectedShape] = useState<string | null>(null);
+  const [hoveredShape, setHoveredShape] = useState<string | null>(null);
   
   // ─── Drag ghost state ───────────────────────────────────────────────────────
   const [dragGhost, setDragGhost] = useState<{ shape: ShapeDefinition; x: number; y: number } | null>(null);
@@ -439,6 +440,49 @@ export default function ShapesPanel({
   const activeColor = '#4c6fff';
   const activeBgColor = '#eef2ff';
 
+  // ─── Tooltip component for web ─────────────────────────────────────────────
+  const ShapeTooltip = ({ label, isVisible, x, y }: { label: string; isVisible: boolean; x: number; y: number }) => {
+    if (!isVisible || !label) return null;
+    
+    return (
+      <div
+        style={{
+          position: 'fixed',
+          left: x,
+          top: y - 30,
+          transform: 'translateX(-50%)',
+          backgroundColor: '#1a1f36',
+          color: '#ffffff',
+          padding: '4px 10px',
+          borderRadius: '6px',
+          fontSize: '11px',
+          fontWeight: '500',
+          pointerEvents: 'none',
+          zIndex: 1000,
+          whiteSpace: 'nowrap',
+          boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+          opacity: 1,
+          transition: 'opacity 0.15s ease',
+        }}
+      >
+        {label}
+        <div
+          style={{
+            position: 'absolute',
+            bottom: -6,
+            left: '50%',
+            transform: 'translateX(-50%)',
+            width: 0,
+            height: 0,
+            borderLeft: '6px solid transparent',
+            borderRight: '6px solid transparent',
+            borderTop: '6px solid #1a1f36',
+          }}
+        />
+      </div>
+    );
+  };
+
   return (
     <View style={[styles.panel, isDesktop && styles.panelDesktop]}>
       {/* Drag Ghost */}
@@ -522,6 +566,7 @@ export default function ShapesPanel({
                 <View style={styles.grid}>
                   {shapes.map((shape) => {
                     const isSelected = selectedShape === shape.id;
+                    const isHovered = hoveredShape === shape.id;
 
                     if (Platform.OS === 'web') {
                       return (
@@ -532,7 +577,12 @@ export default function ShapesPanel({
                           onDrag={handleDrag}
                           onDragEnd={handleDragEnd}
                           onClick={() => handleShapeSelect(shape)}
-                          title={shape.description || shape.label}
+                          onMouseEnter={(e) => {
+                            setHoveredShape(shape.id);
+                          }}
+                          onMouseLeave={() => {
+                            setHoveredShape(null);
+                          }}
                           style={{
                             width: tileSize,
                             height: tileSize + 20,
@@ -548,15 +598,52 @@ export default function ShapesPanel({
                             userSelect: 'none',
                             transition: 'all 0.15s ease',
                             transform: isSelected ? 'scale(0.95)' : 'scale(1)',
+                            position: 'relative',
                           }}
                         >
                           <ShapePreview
                             name={shape.svgComponent}
-                            label={shape.label}
                             width={iconWidth}
                             height={iconHeight}
                             selected={isSelected}
+                            showLabel={false}
                           />
+                          {/* Tooltip on hover */}
+                          {isHovered && (
+                            <div
+                              style={{
+                                position: 'absolute',
+                                bottom: -8,
+                                left: '50%',
+                                transform: 'translateX(-50%) translateY(100%)',
+                                backgroundColor: '#1a1f36',
+                                color: '#ffffff',
+                                padding: '4px 10px',
+                                borderRadius: '6px',
+                                fontSize: '11px',
+                                fontWeight: '500',
+                                pointerEvents: 'none',
+                                zIndex: 1000,
+                                whiteSpace: 'nowrap',
+                                boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+                              }}
+                            >
+                              {shape.label}
+                              <div
+                                style={{
+                                  position: 'absolute',
+                                  top: -6,
+                                  left: '50%',
+                                  transform: 'translateX(-50%)',
+                                  width: 0,
+                                  height: 0,
+                                  borderLeft: '6px solid transparent',
+                                  borderRight: '6px solid transparent',
+                                  borderBottom: '6px solid #1a1f36',
+                                }}
+                              />
+                            </div>
+                          )}
                         </div>
                       );
                     }
@@ -576,10 +663,10 @@ export default function ShapesPanel({
                       >
                         <ShapePreview
                           name={shape.svgComponent}
-                          label={shape.label}
                           width={iconWidth}
                           height={iconHeight}
                           selected={isSelected}
+                          showLabel={false}
                         />
                       </TouchableOpacity>
                     );
@@ -667,7 +754,6 @@ const styles = StyleSheet.create({
     color: '#1a1f36',
     paddingVertical: 4,
     paddingHorizontal: 8,
-    ...Platform.select({ web: { outlineStyle: 'none' } }),
   },
   clearBtn: {
     padding: 4,
