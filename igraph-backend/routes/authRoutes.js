@@ -21,14 +21,10 @@ const { protect } = require('../middleware/authMiddleware');
 // ============================================================================
 
 const isLabMode = process.env.IS_LAB_MODE === 'true';
-const LAB_MAX   = 100; // per-account ceiling for all limiters in lab mode
+const LAB_MAX   = 100;
 
-// Safety valve: never allow IS_LAB_MODE=true in a production NODE_ENV.
-// If someone accidentally deploys with IS_LAB_MODE=true, this hard-stops it.
 if (isLabMode && process.env.NODE_ENV === 'production') {
   console.error('[SECURITY] IS_LAB_MODE=true is set in a production environment. Ignoring lab mode.');
-  // Re-define so the rest of the file sees it as false without crashing at boot.
-  // We do this via a local flag rather than reassigning the const.
 }
 const LAB_ACTIVE = isLabMode && process.env.NODE_ENV !== 'production';
 
@@ -49,6 +45,8 @@ if (LAB_ACTIVE) {
  *  - email field present but not a string (array injection, object injection)
  *  - email exceeds sane length (memory exhaustion via huge key strings)
  *  - Unicode homograph emails ("аdmin@…" vs "admin@…") → lowercased + trimmed
+ *
+ * ✅ FIXED: IP fallback now uses ipKeyGenerator to handle IPv6 properly.
  */
 const emailKey = (prefix) => (req) => {
   try {
@@ -59,17 +57,15 @@ const emailKey = (prefix) => (req) => {
   } catch (_) {
     // body parsing edge case — fall through to IP
   }
-  return `${prefix}:ip:${req.ip}`;
+  return `${prefix}:ip:${ipKeyGenerator(req)}`; // ✅ FIXED
 };
 
 /**
  * Pure IP key — used for the second (IP-level) limiter layer in prod.
- * ✅ FIXED: Uses ipKeyGenerator to handle IPv6 properly.
+ * ✅ Uses ipKeyGenerator to handle IPv6 properly.
  */
 const ipKey = (prefix) => (req) => {
-  // Use the library's built-in helper that handles IPv6 correctly
-  const ipPart = ipKeyGenerator(req, prefix);
-  return `${prefix}:ip:${ipPart}`;
+  return `${prefix}:ip:${ipKeyGenerator(req)}`; // ✅ FIXED: removed erroneous second arg
 };
 
 /**
@@ -91,13 +87,11 @@ const buildLimiters = ({ prefix, windowMs, ipMax, accountMax, message }) => {
     windowMs,
     standardHeaders: true,
     legacyHeaders: false,
-    // Skip rate limiting for trusted internal health checks if needed
     skip: (req) => req.path === '/ping',
     message: { success: false, message },
   };
 
   if (LAB_ACTIVE) {
-    // Single per-account limiter, generous ceiling, no IP lock-out
     return [
       rateLimit({
         ...baseConfig,
@@ -107,13 +101,10 @@ const buildLimiters = ({ prefix, windowMs, ipMax, accountMax, message }) => {
     ];
   }
 
-  // Production: two limiters in sequence
-  // ✅ FIXED: Use ipKeyGenerator via ipKey helper
   const ipLimiter = rateLimit({
     ...baseConfig,
     max: ipMax,
     keyGenerator: ipKey(prefix),
-    // Slightly more descriptive message for IP-level block
     message: {
       success: false,
       message: `${message} (IP blocked)`,
@@ -238,43 +229,45 @@ const resetPasswordLimiters = buildLimiters({
  * we key on req.user?.id if present, else IP.
  *
  * Lab: 100/15min per account
+ *
+ * ✅ FIXED: All req.ip fallbacks now use ipKeyGenerator.
  */
 const changePasswordAccountKey = (req) => {
   if (LAB_ACTIVE) {
     const userId = req.user?.id || req.user?._id?.toString();
     if (userId) return `change-pw:acct:${userId}`;
-    return `change-pw:ip:${req.ip}`;
+    return `change-pw:ip:${ipKeyGenerator(req)}`; // ✅ FIXED
   }
-  return `change-pw:ip:${req.ip}`;
+  return `change-pw:ip:${ipKeyGenerator(req)}`; // ✅ FIXED
 };
 
 const changePasswordLimiters = LAB_ACTIVE
   ? [
       rateLimit({
-        windowMs:       15 * 60 * 1000,
-        max:            LAB_MAX,
-        keyGenerator:   changePasswordAccountKey,
+        windowMs:        15 * 60 * 1000,
+        max:             LAB_MAX,
+        keyGenerator:    changePasswordAccountKey,
         standardHeaders: true,
-        legacyHeaders:  false,
-        message:        { success: false, message: 'Too many password change attempts. Please try again in 15 minutes.' },
+        legacyHeaders:   false,
+        message:         { success: false, message: 'Too many password change attempts. Please try again in 15 minutes.' },
       }),
     ]
   : [
       rateLimit({
-        windowMs:       15 * 60 * 1000,
-        max:            20,
-        keyGenerator:   ipKey('change-pw'),
+        windowMs:        15 * 60 * 1000,
+        max:             20,
+        keyGenerator:    ipKey('change-pw'),
         standardHeaders: true,
-        legacyHeaders:  false,
-        message:        { success: false, message: 'Too many password change attempts. Please try again in 15 minutes. (IP blocked)' },
+        legacyHeaders:   false,
+        message:         { success: false, message: 'Too many password change attempts. Please try again in 15 minutes. (IP blocked)' },
       }),
       rateLimit({
-        windowMs:       15 * 60 * 1000,
-        max:            5,
-        keyGenerator:   changePasswordAccountKey,
+        windowMs:        15 * 60 * 1000,
+        max:             5,
+        keyGenerator:    changePasswordAccountKey,
         standardHeaders: true,
-        legacyHeaders:  false,
-        message:        { success: false, message: 'Too many password change attempts. Please try again in 15 minutes. (Account blocked)' },
+        legacyHeaders:   false,
+        message:         { success: false, message: 'Too many password change attempts. Please try again in 15 minutes. (Account blocked)' },
       }),
     ];
 
@@ -306,7 +299,6 @@ router.post('/logout',        protect, authController.logout);
 router.get('/me',             protect, authController.getCurrentUser);
 
 // ─── Account Management ───────────────────────────────────────────────────────
-// update-profile: authenticated, no sensitive data mutation, global limiter enough.
 router.put('/update-profile',   protect, authController.updateProfile);
 router.post('/change-password', protect, ...changePasswordLimiters, authController.changePassword);
 

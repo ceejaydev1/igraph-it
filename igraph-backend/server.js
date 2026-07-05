@@ -24,6 +24,7 @@ const allowedOrigins = [
   'https://igraph-it.vercel.app',
   'https://igraph-it.netlify.app',
   'https://igraph-backend.onrender.com',
+  'https://igraph-it-1b6y.vercel.app',
   
   // Local Development - ALL ports
   'http://localhost:3000',
