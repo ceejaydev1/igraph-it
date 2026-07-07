@@ -7,7 +7,7 @@ const rateLimit = require('express-rate-limit');
 const compression = require('compression');
 
 const authRoutes = require('./routes/authRoutes');
-const diagramRoutes = require('./routes/diagramRoutes'); // ✅ ADD THIS
+const diagramRoutes = require('./routes/diagramRoutes');
 
 const app = express();
 
@@ -17,10 +17,8 @@ const app = express();
 
 // ALLOWED ORIGINS - Add ALL your domains here
 const allowedOrigins = [
-  // Production - YOUR NEW DOMAIN
-  'https://igraphitv1.netlify.app',  // ⭐ ADDED THIS
-  
-  // Production - Other domains
+  // Production
+  'https://igraphitv1.netlify.app',
   'https://igraph-frontend.vercel.app',
   'https://igraph-it.vercel.app',
   'https://igraph-it.netlify.app',
@@ -59,14 +57,12 @@ const allowedOrigins = [
 // ✅ CORS with dynamic origin checking
 const corsOptions = {
   origin: function (origin, callback) {
-    // Allow requests with no origin (mobile apps, Postman, etc.)
     if (!origin) {
       return callback(null, true);
     }
 
     console.log(`🔍 Checking origin: ${origin}`);
     
-    // Check if origin is in allowed list
     const isAllowed = allowedOrigins.some(allowed => {
       if (allowed.includes('*')) {
         const pattern = allowed.replace(/\*/g, '.*');
@@ -76,10 +72,7 @@ const corsOptions = {
       return allowed === origin;
     });
     
-    // Allow any localhost for development
     const isLocal = /^https?:\/\/(localhost|127\.0\.0\.1|192\.168\.|10\.0\.0\.)/.test(origin);
-    
-    // ⭐ Allow any Netlify subdomain for production flexibility
     const isNetlify = /^https?:\/\/.*\.netlify\.app/.test(origin);
     
     if (isAllowed || isLocal || isNetlify) {
@@ -210,7 +203,7 @@ app.get('/', (req, res) => {
 });
 
 app.use('/api/auth', authRoutes);
-app.use('/api/diagrams', diagramRoutes); // ✅ ADD THIS
+app.use('/api/diagrams', diagramRoutes);
 
 app.use((req, res) => {
   res.status(404).json({

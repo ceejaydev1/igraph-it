@@ -1,4 +1,5 @@
 // igraph-backend/controllers/diagramController.js
+// ✅ ADDED: Rename diagram functionality
 
 const { db } = require('../config/firebase');
 const { v4: uuidv4 } = require('uuid');
@@ -13,10 +14,20 @@ const saveDiagram = async (req, res) => {
     const userId = req.user.uid;
     const { name, xml, previewImage, type, pages, activePageId } = req.body;
 
+    // Validate required fields
     if (!name || !xml) {
+      console.log('❌ Missing required fields:', { name: !!name, xml: !!xml });
       return res.status(400).json({
         success: false,
         message: 'Diagram name and XML content are required.',
+      });
+    }
+
+    // Validate XML is not empty
+    if (xml.trim().length === 0 || xml === '<mxGraphModel/>' || xml === '<root/>') {
+      return res.status(400).json({
+        success: false,
+        message: 'Diagram content is empty. Please add shapes to your diagram.',
       });
     }
 
@@ -36,9 +47,16 @@ const saveDiagram = async (req, res) => {
       updated_at: now,
     };
 
+    console.log(`📝 Saving diagram for user ${userId}:`, { 
+      name: name.trim(), 
+      type: type || 'General',
+      xmlLength: xml.length,
+      hasPreview: !!previewImage
+    });
+
     await db.collection(COLLECTION).doc(diagramId).set(diagramData);
 
-    console.log(`✅ Diagram "${name}" saved for user ${userId}`);
+    console.log(`✅ Diagram "${name}" saved successfully with ID: ${diagramId}`);
 
     res.status(201).json({
       success: true,
@@ -53,10 +71,11 @@ const saveDiagram = async (req, res) => {
       },
     });
   } catch (error) {
-    console.error('Save diagram error:', error);
+    console.error('❌ Save diagram error:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to save diagram. Please try again.',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined,
     });
   }
 };
@@ -67,6 +86,8 @@ const saveDiagram = async (req, res) => {
 const getSavedDiagrams = async (req, res) => {
   try {
     const userId = req.user.uid;
+
+    console.log(`📋 Fetching diagrams for user: ${userId}`);
 
     const snapshot = await db.collection(COLLECTION)
       .where('user_id', '==', userId)
@@ -86,15 +107,18 @@ const getSavedDiagrams = async (req, res) => {
       });
     });
 
+    console.log(`✅ Found ${diagrams.length} diagrams for user ${userId}`);
+
     res.status(200).json({
       success: true,
       data: diagrams,
     });
   } catch (error) {
-    console.error('Get saved diagrams error:', error);
+    console.error('❌ Get saved diagrams error:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to load saved diagrams.',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined,
     });
   }
 };
@@ -106,6 +130,8 @@ const getDiagram = async (req, res) => {
   try {
     const userId = req.user.uid;
     const diagramId = req.params.id;
+
+    console.log(`📋 Fetching diagram ${diagramId} for user ${userId}`);
 
     const doc = await db.collection(COLLECTION).doc(diagramId).get();
 
@@ -141,10 +167,81 @@ const getDiagram = async (req, res) => {
       },
     });
   } catch (error) {
-    console.error('Get diagram error:', error);
+    console.error('❌ Get diagram error:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to load diagram.',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined,
+    });
+  }
+};
+
+/**
+ * ✅ NEW: Rename a diagram
+ */
+const renameDiagram = async (req, res) => {
+  try {
+    const userId = req.user.uid;
+    const diagramId = req.params.id;
+    const { name } = req.body;
+
+    if (!name || name.trim().length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'Diagram name is required.',
+      });
+    }
+
+    if (name.trim().length > 100) {
+      return res.status(400).json({
+        success: false,
+        message: 'Diagram name must be less than 100 characters.',
+      });
+    }
+
+    const doc = await db.collection(COLLECTION).doc(diagramId).get();
+
+    if (!doc.exists) {
+      return res.status(404).json({
+        success: false,
+        message: 'Diagram not found.',
+      });
+    }
+
+    const data = doc.data();
+
+    // Check if the diagram belongs to the current user
+    if (data.user_id !== userId) {
+      return res.status(403).json({
+        success: false,
+        message: 'You do not have permission to rename this diagram.',
+      });
+    }
+
+    const now = new Date().toISOString();
+
+    await db.collection(COLLECTION).doc(diagramId).update({
+      name: name.trim(),
+      updated_at: now,
+    });
+
+    console.log(`📝 Diagram "${data.name}" renamed to "${name.trim()}" by user ${userId}`);
+
+    res.status(200).json({
+      success: true,
+      message: 'Diagram renamed successfully!',
+      data: {
+        id: diagramId,
+        name: name.trim(),
+        updated_at: now,
+      },
+    });
+  } catch (error) {
+    console.error('❌ Rename diagram error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to rename diagram. Please try again.',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined,
     });
   }
 };
@@ -168,7 +265,6 @@ const deleteDiagram = async (req, res) => {
 
     const data = doc.data();
 
-    // Check if the diagram belongs to the current user
     if (data.user_id !== userId) {
       return res.status(403).json({
         success: false,
@@ -178,15 +274,18 @@ const deleteDiagram = async (req, res) => {
 
     await db.collection(COLLECTION).doc(diagramId).delete();
 
+    console.log(`🗑️ Diagram "${data.name}" deleted by user ${userId}`);
+
     res.status(200).json({
       success: true,
       message: 'Diagram deleted successfully.',
     });
   } catch (error) {
-    console.error('Delete diagram error:', error);
+    console.error('❌ Delete diagram error:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to delete diagram.',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined,
     });
   }
 };
@@ -195,5 +294,6 @@ module.exports = {
   saveDiagram,
   getSavedDiagrams,
   getDiagram,
+  renameDiagram,  // ✅ NEW
   deleteDiagram,
 };
