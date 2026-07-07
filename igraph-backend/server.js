@@ -7,6 +7,7 @@ const rateLimit = require('express-rate-limit');
 const compression = require('compression');
 
 const authRoutes = require('./routes/authRoutes');
+const diagramRoutes = require('./routes/diagramRoutes'); // ✅ ADD THIS
 
 const app = express();
 
@@ -209,6 +210,7 @@ app.get('/', (req, res) => {
 });
 
 app.use('/api/auth', authRoutes);
+app.use('/api/diagrams', diagramRoutes); // ✅ ADD THIS
 
 app.use((req, res) => {
   res.status(404).json({
