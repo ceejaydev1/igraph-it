@@ -1,5 +1,5 @@
 // igraph-frontend/app/(tabs)/create.tsx
-// Updated mobile section - Floating Undo/Redo buttons
+// Updated with Properties Panel integration
 
 import React, { useState, useRef, useCallback, useEffect } from 'react';
 import {
@@ -22,6 +22,7 @@ import { Svg, Path, Rect, Circle } from 'react-native-svg';
 import DiagramCanvas from '@/components/DiagramCanvas';
 import ShapesPanel from '@/components/shapes/ShapesPanel';
 import ShapesBottomPanel from '../../components/shapes/ShapesBottomPanel';
+import PropertiesPanel from '@/components/properties-panel/PropertiesPanel';
 import { ICONS } from '../../constants/icons';
 import { COLORS, SPACING } from '@/constants/theme';
 import { IGRAPH_ID_STYLE_MAP } from '@/components/maxgraph-custom-shapes';
@@ -1426,6 +1427,13 @@ export default function CreateScreen() {
               />
             </View>
           )}
+
+          {/* ─── PROPERTIES PANEL ─────────────────────────────────────────── */}
+          {graphInstance && (
+            <View style={styles.propertiesPanelWrapper}>
+              <PropertiesPanel graph={graphInstance} />
+            </View>
+          )}
         </View>
 
         <View style={styles.bottomBar}>
@@ -1762,6 +1770,13 @@ const styles = StyleSheet.create({
     left: 36,
     bottom: 0,
     zIndex: 4,
+  },
+  propertiesPanelWrapper: {
+    position: 'absolute',
+    top: 0,
+    right: 0,
+    bottom: 0,
+    zIndex: 6,
   },
   bottomBar: {
     height: 36,

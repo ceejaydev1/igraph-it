@@ -1,5 +1,4 @@
-// components/shapes/shapes/BasicShapes.tsx
-// Full file with all standard shapes + updated flowchart shapes
+// components/shapes/shapes/BasicShapes.tsx - Fixed DocumentShape
 
 import React from 'react';
 import { Svg, Rect, Ellipse, Polygon, Circle, Line, G, Path } from 'react-native-svg';
@@ -210,7 +209,7 @@ export const CylinderShape: React.FC<ShapeProps> = ({
   );
 };
 
-// ─── Document (with wavy bottom) ──────────────────────────────────────────
+// ─── Document (paper shape with wavy bottom and text lines) ────────────────
 
 export const DocumentShape: React.FC<ShapeProps> = ({
   width,
@@ -220,23 +219,39 @@ export const DocumentShape: React.FC<ShapeProps> = ({
   strokeWidth = 2,
 }) => {
   const cx = width / 2;
+  // Paper/document shape with wavy bottom
   return (
     <Svg width={width} height={height} viewBox={`0 0 ${width} ${height}`}>
+      {/* Paper body with wavy bottom */}
       <Path
-        d={`M4,4 L${width - 4},4 L${width - 4},${height - 8} C${width * 0.75},${height - 18} ${width * 0.6},${height + 2} ${cx},${height - 8} C${width * 0.4},${height + 2} ${width * 0.25},${height - 18} 4,${height - 8} Z`}
+        d={`M4,4 L${width - 4},4 L${width - 4},${height - 10} 
+           C${width * 0.88},${height - 14} ${width * 0.78},${height - 6} ${width * 0.7},${height - 10} 
+           C${width * 0.6},${height - 14} ${width * 0.52},${height - 6} ${width * 0.44},${height - 10} 
+           C${width * 0.35},${height - 14} ${width * 0.25},${height - 6} ${width * 0.15},${height - 10} 
+           C${width * 0.08},${height - 14} ${width * 0.04},${height - 10} 4,${height - 10} Z`}
         fill={fillColor}
         stroke={color}
         strokeWidth={strokeWidth}
+        strokeLinejoin="round"
       />
-      <Rect
-        x={10}
-        y={10}
-        width={width - 24}
-        height={height - 20}
-        fill="none"
-        stroke={color}
-        strokeWidth={1}
-        opacity={0.3}
+      {/* Text lines inside the document */}
+      <Line
+        x1={width * 0.12}
+        y1={height * 0.3}
+        x2={width * 0.88}
+        y2={height * 0.3}
+        stroke="#D1D5DB"
+        strokeWidth={2}
+        strokeLinecap="round"
+      />
+      <Line
+        x1={width * 0.12}
+        y1={height * 0.46}
+        x2={width * 0.88}
+        y2={height * 0.46}
+        stroke="#D1D5DB"
+        strokeWidth={2}
+        strokeLinecap="round"
       />
     </Svg>
   );

@@ -1,4 +1,4 @@
-/* components/maxgraph-common.css - Force blue for selection, black for edges */
+/* components/maxgraph-common.css - Complete with rotate handle styles */
 
 /* ⭐ FORCE BLUE SELECTION HIGHLIGHT */
 .mxCellHighlight {
@@ -77,4 +77,114 @@ div.mxHandle:hover {
 .mxEdgeConnectionPoint {
   background: #4c6fff !important;
   border-color: #4c6fff !important;
+}
+
+/* ════════════════════════════════════════════════════════════════════════════
+   ⭐ ROTATE HANDLE STYLES - Draw.io style rotate button
+   ════════════════════════════════════════════════════════════════════════════ */
+
+.igraph-rotate-handle {
+  position: absolute;
+  border-radius: 50%;
+  background: #ffffff;
+  border: 2px solid #4c6fff;
+  cursor: pointer;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+  user-select: none;
+  -webkit-user-select: none;
+  pointer-events: all !important;
+}
+
+.igraph-rotate-handle:hover {
+  transform: scale(1.15);
+  box-shadow: 0 4px 16px rgba(76, 111, 255, 0.3);
+}
+
+.igraph-rotate-handle:active {
+  transform: scale(0.95);
+  box-shadow: 0 2px 4px rgba(76, 111, 255, 0.2);
+}
+
+.igraph-rotate-handle svg {
+  stroke: #4c6fff;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  pointer-events: none;
+  width: 12px;
+  height: 12px;
+}
+
+/* ─── Rotation angle display ──────────────────────────────────────────────── */
+
+.igraph-rotate-handle .rotation-angle {
+  position: absolute;
+  bottom: -22px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 9px;
+  color: #4c6fff;
+  font-weight: 600;
+  background: rgba(255, 255, 255, 0.95);
+  padding: 1px 6px;
+  border-radius: 4px;
+  white-space: nowrap;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+  pointer-events: none;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
+}
+
+.igraph-rotate-handle:hover .rotation-angle {
+  opacity: 1;
+}
+
+/* ─── Spinning animation for drag feedback ────────────────────────────────── */
+
+@keyframes rotateSpin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.igraph-rotate-handle.spinning svg {
+  animation: rotateSpin 0.6s linear infinite;
+}
+
+/* ─── Hide default handles when rotating ──────────────────────────────────── */
+
+.igraph-rotate-handle.spinning ~ .mxHandle,
+.igraph-rotate-handle.spinning ~ .mxConnectionPoint {
+  opacity: 0.5;
+  pointer-events: none;
+}
+
+/* ─── Selection box when rotated ──────────────────────────────────────────── */
+
+.mxCellSelection {
+  stroke: #4c6fff !important;
+  stroke-width: 1.5px !important;
+  stroke-dasharray: 4 4 !important;
+}
+
+/* ─── Support for rotated shapes ──────────────────────────────────────────── */
+
+.mxCellOverlay {
+  pointer-events: none;
+}
+
+/* ─── Rotate handle container to ensure it's always on top ───────────────── */
+
+.igraph-rotate-handle-container {
+  position: absolute;
+  pointer-events: none;
+  z-index: 100;
 }
