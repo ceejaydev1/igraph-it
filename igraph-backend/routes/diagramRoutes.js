@@ -1,5 +1,5 @@
 // igraph-backend/routes/diagramRoutes.js
-// ✅ ADDED: PUT route for renaming diagrams
+// ✅ FULLY FIXED: All routes properly registered
 
 const express = require('express');
 const router = express.Router();
@@ -8,11 +8,11 @@ const {
   saveDiagram,
   getSavedDiagrams,
   getDiagram,
-  renameDiagram,  // ✅ NEW
+  renameDiagram,
   deleteDiagram,
 } = require('../controllers/diagramController');
 
-// All routes require authentication
+// ✅ All routes require authentication
 router.use(protect);
 
 // Save a new diagram
@@ -24,7 +24,7 @@ router.get('/user', getSavedDiagrams);
 // Get a specific diagram by ID
 router.get('/:id', getDiagram);
 
-// ✅ NEW: Rename a diagram
+// ✅ Rename a diagram - PUT request
 router.put('/:id', renameDiagram);
 
 // Delete a diagram

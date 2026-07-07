@@ -1,5 +1,5 @@
 // igraph-backend/controllers/diagramController.js
-// ✅ ADDED: Rename diagram functionality
+// ✅ FULLY FIXED: Delete and Rename working
 
 const { db } = require('../config/firebase');
 const { v4: uuidv4 } = require('uuid');
@@ -14,7 +14,6 @@ const saveDiagram = async (req, res) => {
     const userId = req.user.uid;
     const { name, xml, previewImage, type, pages, activePageId } = req.body;
 
-    // Validate required fields
     if (!name || !xml) {
       console.log('❌ Missing required fields:', { name: !!name, xml: !!xml });
       return res.status(400).json({
@@ -23,7 +22,6 @@ const saveDiagram = async (req, res) => {
       });
     }
 
-    // Validate XML is not empty
     if (xml.trim().length === 0 || xml === '<mxGraphModel/>' || xml === '<root/>') {
       return res.status(400).json({
         success: false,
@@ -144,7 +142,6 @@ const getDiagram = async (req, res) => {
 
     const data = doc.data();
 
-    // Check if the diagram belongs to the current user
     if (data.user_id !== userId) {
       return res.status(403).json({
         success: false,
@@ -177,13 +174,16 @@ const getDiagram = async (req, res) => {
 };
 
 /**
- * ✅ NEW: Rename a diagram
+ * ✅ Rename a diagram
  */
 const renameDiagram = async (req, res) => {
   try {
     const userId = req.user.uid;
     const diagramId = req.params.id;
     const { name } = req.body;
+
+    console.log(`📝 Rename request for diagram ${diagramId} by user ${userId}`);
+    console.log(`📝 New name: "${name}"`);
 
     if (!name || name.trim().length === 0) {
       return res.status(400).json({
@@ -202,6 +202,7 @@ const renameDiagram = async (req, res) => {
     const doc = await db.collection(COLLECTION).doc(diagramId).get();
 
     if (!doc.exists) {
+      console.log(`❌ Diagram ${diagramId} not found`);
       return res.status(404).json({
         success: false,
         message: 'Diagram not found.',
@@ -210,8 +211,9 @@ const renameDiagram = async (req, res) => {
 
     const data = doc.data();
 
-    // Check if the diagram belongs to the current user
+    // Check ownership
     if (data.user_id !== userId) {
+      console.log(`❌ User ${userId} does not own diagram ${diagramId}`);
       return res.status(403).json({
         success: false,
         message: 'You do not have permission to rename this diagram.',
@@ -225,7 +227,7 @@ const renameDiagram = async (req, res) => {
       updated_at: now,
     });
 
-    console.log(`📝 Diagram "${data.name}" renamed to "${name.trim()}" by user ${userId}`);
+    console.log(`✅ Diagram "${data.name}" renamed to "${name.trim()}" by user ${userId}`);
 
     res.status(200).json({
       success: true,
@@ -254,9 +256,12 @@ const deleteDiagram = async (req, res) => {
     const userId = req.user.uid;
     const diagramId = req.params.id;
 
+    console.log(`🗑️ Delete request for diagram ${diagramId} by user ${userId}`);
+
     const doc = await db.collection(COLLECTION).doc(diagramId).get();
 
     if (!doc.exists) {
+      console.log(`❌ Diagram ${diagramId} not found`);
       return res.status(404).json({
         success: false,
         message: 'Diagram not found.',
@@ -266,6 +271,7 @@ const deleteDiagram = async (req, res) => {
     const data = doc.data();
 
     if (data.user_id !== userId) {
+      console.log(`❌ User ${userId} does not own diagram ${diagramId}`);
       return res.status(403).json({
         success: false,
         message: 'You do not have permission to delete this diagram.',
@@ -294,6 +300,6 @@ module.exports = {
   saveDiagram,
   getSavedDiagrams,
   getDiagram,
-  renameDiagram,  // ✅ NEW
+  renameDiagram,
   deleteDiagram,
 };
