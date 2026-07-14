@@ -1,7 +1,7 @@
-// PWA-FRIENDLY Service Worker v7 - Development + Production Ready
-// Date: 2026-06-03
+// PWA-FRIENDLY Service Worker v10 - Development + Production Ready
+// Date: 2026-07-15
 
-const CACHE_NAME = 'igraph-it-v7';
+const CACHE_NAME = 'igraph-it-v10';
 const STATIC_CACHE_URLS = [
   '/',
   '/index.html',

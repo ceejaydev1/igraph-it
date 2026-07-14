@@ -4,8 +4,8 @@
   "description": "Learn SDLC and Create UML Diagrams",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#eef0fb",
-  "theme_color": "#3b5bdb",
+  "background_color": "#ffffff",
+  "theme_color": "#ffffff",
   "orientation": "portrait-primary",
   "scope": "/",
 
@@ -14,13 +14,13 @@
       "src": "/icon-192.png",
       "sizes": "192x192",
       "type": "image/png",
-      "purpose": "any maskable"
+      "purpose": "any"
     },
     {
       "src": "/icon-512.png",
       "sizes": "512x512",
       "type": "image/png",
-      "purpose": "any maskable"
+      "purpose": "any"
     }
   ],
 

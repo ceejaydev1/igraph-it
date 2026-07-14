@@ -248,7 +248,7 @@ export default function RootLayout() {
       if (!existingTheme) {
         const meta = document.createElement('meta');
         meta.name = 'theme-color';
-        meta.content = '#3b5bdb';
+        meta.content = '#ffffff';
         document.head.appendChild(meta);
       }
 

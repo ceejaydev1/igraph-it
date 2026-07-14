@@ -292,7 +292,7 @@ export default function Navbar({
                       ]}
                     >
                       <View style={styles.navItemInner}>
-                        <Icon active={isActive} />
+                        <Icon active={isActive} color={isActive ? '#2563eb' : '#64748b'} />
                         <Text style={[
                           styles.navLabel,
                           isActive && styles.navLabelActive,

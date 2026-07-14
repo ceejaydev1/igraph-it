@@ -17,45 +17,28 @@ interface SplashScreenProps {
   progress?: number;
 }
 
-export default function CreativeSplashScreen({ 
-  onFinish, 
-  progress = 0 
+export default function CreativeSplashScreen({
+  onFinish,
+  progress = 0
 }: SplashScreenProps) {
-  const logoScale = useRef(new Animated.Value(0.8)).current;
-  const logoOpacity = useRef(new Animated.Value(0)).current;
-  const logoTranslateY = useRef(new Animated.Value(30)).current;
+  // The logo is rendered fully visible from the very first frame (no entrance
+  // animation of its own) because it needs to continue seamlessly from the
+  // OS/PWA launch icon that was already on screen — animating it in from
+  // hidden made it flicker (vanish, then pop back in with a jump). Only the
+  // dark backdrop and the extra content (title, progress bar) fade in
+  // around/after the already-visible logo.
   const titleOpacity = useRef(new Animated.Value(0)).current;
   const titleTranslateY = useRef(new Animated.Value(20)).current;
-  const fadeIn = useRef(new Animated.Value(0)).current;
+  const backdropFadeIn = useRef(new Animated.Value(0)).current;
   const animatedProgress = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     const entranceAnimation = Animated.sequence([
-      Animated.timing(fadeIn, {
+      Animated.timing(backdropFadeIn, {
         toValue: 1,
         duration: 400,
         useNativeDriver: true,
       }),
-      Animated.parallel([
-        Animated.spring(logoScale, {
-          toValue: 1,
-          friction: 7,
-          tension: 60,
-          useNativeDriver: true,
-        }),
-        Animated.timing(logoOpacity, {
-          toValue: 1,
-          duration: 500,
-          easing: Easing.out(Easing.ease),
-          useNativeDriver: true,
-        }),
-        Animated.timing(logoTranslateY, {
-          toValue: 0,
-          duration: 450,
-          easing: Easing.out(Easing.back(1.2)),
-          useNativeDriver: true,
-        }),
-      ]),
       Animated.delay(100),
       Animated.parallel([
         Animated.timing(titleOpacity, {
@@ -113,49 +96,45 @@ export default function CreativeSplashScreen({
   }));
 
   return (
-    <Animated.View style={[styles.container, { opacity: fadeIn }]}>
-      {/* Background orbs */}
-      <View style={styles.backgroundGradient}>
-        <View style={[styles.gradientOrb, styles.gradientOrb1]} />
-        <View style={[styles.gradientOrb, styles.gradientOrb2]} />
-        <View style={[styles.gradientOrb, styles.gradientOrb3]} />
-      </View>
+    <View style={styles.container}>
+      {/* Dark backdrop fades in on its own, behind the logo, so the logo
+          never has to disappear-and-reappear while it comes in. */}
+      <Animated.View
+        style={[StyleSheet.absoluteFill, styles.backdrop, { opacity: backdropFadeIn }]}
+        pointerEvents="none"
+      >
+        <View style={styles.backgroundGradient}>
+          <View style={[styles.gradientOrb, styles.gradientOrb1]} />
+          <View style={[styles.gradientOrb, styles.gradientOrb2]} />
+          <View style={[styles.gradientOrb, styles.gradientOrb3]} />
+        </View>
 
-      {/* Grid pattern */}
-      <View style={styles.gridPattern} pointerEvents="none">
-        {horizontalLines.map(({ key, top }) => (
-          <View
-            key={key}
-            style={[
-              styles.gridLineH,
-              { top },
-            ]}
-          />
-        ))}
-        {verticalLines.map(({ key, left }) => (
-          <View
-            key={key}
-            style={[
-              styles.gridLineV,
-              { left },
-            ]}
-          />
-        ))}
-      </View>
+        <View style={styles.gridPattern}>
+          {horizontalLines.map(({ key, top }) => (
+            <View
+              key={key}
+              style={[
+                styles.gridLineH,
+                { top },
+              ]}
+            />
+          ))}
+          {verticalLines.map(({ key, left }) => (
+            <View
+              key={key}
+              style={[
+                styles.gridLineV,
+                { left },
+              ]}
+            />
+          ))}
+        </View>
+      </Animated.View>
 
       <View style={styles.content}>
-        <Animated.Image
+        <Image
           source={require('../../assets/images/logo.png')}
-          style={[
-            styles.logo,
-            {
-              opacity: logoOpacity,
-              transform: [
-                { scale: logoScale },
-                { translateY: logoTranslateY },
-              ],
-            },
-          ]}
+          style={styles.logo}
           resizeMode="contain"
         />
 
@@ -174,7 +153,7 @@ export default function CreativeSplashScreen({
         <Animated.View
           style={[
             styles.loadingContainer,
-            { opacity: fadeIn },
+            { opacity: backdropFadeIn },
           ]}
         >
           <View style={styles.progressBarWrapper}>
@@ -190,16 +169,23 @@ export default function CreativeSplashScreen({
           </View>
         </Animated.View>
       </View>
-    </Animated.View>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    // Opaque and already dark from the first frame — no separate white
+    // stage before the splash. Without an opaque fill here the container
+    // would be transparent and the real screen mounted underneath
+    // (signin/home, light background) would show through.
     backgroundColor: '#0a0e27',
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  backdrop: {
+    backgroundColor: '#0a0e27',
   },
   backgroundGradient: {
     ...StyleSheet.absoluteFillObject,
