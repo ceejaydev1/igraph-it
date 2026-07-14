@@ -1,5 +1,3 @@
-// app/(auth)/verify-otp.tsx - Full updated file with cold-start fix + toast success
-
 import React, { useState, useRef, useEffect } from 'react';
 import {
   View,
@@ -689,10 +687,8 @@ const styles = StyleSheet.create({
   toastSuccess: { backgroundColor: '#10b981' },
   toastError: { backgroundColor: '#ef4444' },
   toastText: { color: '#ffffff', fontSize: 14, fontWeight: '600', marginLeft: 10, flex: 1 },
-  // Grid
   gridBackground: { ...StyleSheet.absoluteFillObject, width: '100%', height: '100%' },
   gridOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(255,255,255,0.10)' },
-  // Error Modal
   errorModalOverlay: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.5)', justifyContent: 'center', alignItems: 'center' },
   errorModalContainer: { 
     width: '85%', maxWidth: 340, backgroundColor: '#FFFFFF', borderRadius: 20, 

@@ -1,5 +1,3 @@
-// components/maxgraph-setup.ts
-
 import { Graph, CellState, HandleConfig } from '@maxgraph/core';
 import { UniversalVertexHandler } from './maxgraph-universal-handler';
 

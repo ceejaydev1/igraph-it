@@ -1,6 +1,3 @@
-// components/shapes/shapes/FDDShapes.tsx
-// Functional Decomposition Diagram shapes - EXACTLY matching canvas specifications
-
 import React from 'react';
 import { Svg, Rect, Ellipse, Polygon, Line, G, Path } from 'react-native-svg';
 

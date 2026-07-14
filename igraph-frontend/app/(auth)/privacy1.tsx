@@ -1,5 +1,3 @@
-// app/(tabs)/privacy.tsx
-
 import React, { useState, useRef } from 'react';
 import {
   View,
@@ -12,7 +10,7 @@ import {
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Svg, Path, Circle } from 'react-native-svg';
+import { Svg, Path } from 'react-native-svg';
 
 // ============================================================================
 // COLORS - Matching the app theme
@@ -52,6 +50,10 @@ const RADIUS = {
   xxl: 24,
   full: 999,
 };
+
+// Readable-width cap for the document pane on wide screens — matches the
+// ~65-75 character line length that's comfortable to read.
+const CONTENT_MAX_WIDTH = 720;
 
 // ============================================================================
 // ICONS
@@ -241,7 +243,7 @@ export default function PrivacyPage() {
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
   const scrollViewRef = useRef<ScrollView>(null);
-  
+
   const [activeTab, setActiveTab] = useState<'terms' | 'privacy'>('terms');
   const [showScrollTop, setShowScrollTop] = useState(false);
 
@@ -255,9 +257,8 @@ export default function PrivacyPage() {
   };
 
   const handleScroll = (event: any) => {
-    const { layoutMeasurement, contentOffset, contentSize } = event.nativeEvent;
-    const offsetY = contentOffset.y;
-    setShowScrollTop(offsetY > 300);
+    const { contentOffset } = event.nativeEvent;
+    setShowScrollTop(contentOffset.y > 300);
   };
 
   const scrollToTop = () => {
@@ -278,20 +279,16 @@ export default function PrivacyPage() {
 
   return (
     <View style={styles.container}>
-      {/* Header */}
+      {/* Header — flat, full-width (matches previous layout) */}
       <View style={[styles.header, { paddingTop: insets.top + SPACING.sm }]}>
-        <TouchableOpacity
-          onPress={handleBackPress}
-          style={styles.backButton}
-          activeOpacity={0.6}
-        >
+        <TouchableOpacity onPress={handleBackPress} style={styles.backButton} activeOpacity={0.6}>
           <BackIcon />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Privacy</Text>
         <View style={styles.headerSpacer} />
       </View>
 
-      {/* Tab Bar */}
+      {/* Tab Bar — flat, full-width (matches previous layout) */}
       <View style={styles.tabBar}>
         <TouchableOpacity
           style={[styles.tab, activeTab === 'terms' && styles.activeTab]}
@@ -311,27 +308,41 @@ export default function PrivacyPage() {
         </TouchableOpacity>
       </View>
 
-      {/* Content */}
+      {/* Content — capped + centered so paragraph lines stay a comfortable
+          reading length on wide screens instead of stretching edge to edge */}
       <ScrollView
         ref={scrollViewRef}
         showsVerticalScrollIndicator={false}
         onScroll={handleScroll}
         scrollEventThrottle={16}
         contentContainerStyle={[
-          styles.scrollContent,
+          styles.scrollContentOuter,
           { paddingBottom: isMobile ? SPACING.xxl : SPACING.xxxl },
         ]}
       >
-        {activeTab === 'terms' ? <TermsContent /> : <PrivacyContent />}
+        <View style={[styles.scrollContentInner, isDesktop && { maxWidth: CONTENT_MAX_WIDTH }]}>
+          {activeTab === 'terms' ? <TermsContent /> : <PrivacyContent />}
+        </View>
       </ScrollView>
 
-      {/* Scroll to Top Button */}
+      {/* Scroll to Top Button — outer wrapper spans full width and centers its
+          child; the inner box carries the maxWidth/padding and right-aligns
+          the button within it. This mirrors the header/tab-bar pattern above
+          instead of fighting absolute left/right insets against a maxWidth,
+          which is what caused the button to hug the left edge on desktop. */}
       {showScrollTop && (
-        <TouchableOpacity style={styles.scrollTopButton} onPress={scrollToTop}>
-          <Svg width={24} height={24} viewBox="0 0 24 24" fill="none">
-            <Path d="M12 19V5M5 12l7-7 7 7" stroke="#ffffff" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
-          </Svg>
-        </TouchableOpacity>
+        <View pointerEvents="box-none" style={styles.scrollTopOuter}>
+          <View
+            pointerEvents="box-none"
+            style={[styles.scrollTopInner, isDesktop && { maxWidth: CONTENT_MAX_WIDTH }]}
+          >
+            <TouchableOpacity style={styles.scrollTopButton} onPress={scrollToTop} activeOpacity={0.85}>
+              <Svg width={24} height={24} viewBox="0 0 24 24" fill="none">
+                <Path d="M12 19V5M5 12l7-7 7 7" stroke="#ffffff" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+              </Svg>
+            </TouchableOpacity>
+          </View>
+        </View>
       )}
     </View>
   );
@@ -414,10 +425,14 @@ const styles = StyleSheet.create({
   },
 
   // Scroll Content
-  scrollContent: {
+  scrollContentOuter: {
     flexGrow: 1,
+    alignItems: 'center',
     paddingHorizontal: SPACING.xl,
     paddingTop: SPACING.lg,
+  },
+  scrollContentInner: {
+    width: '100%',
   },
 
   // Tab Content
@@ -455,10 +470,25 @@ const styles = StyleSheet.create({
   },
 
   // Scroll to Top Button
-  scrollTopButton: {
+  // Outer: absolutely positioned, spans full width, centers its child.
+  // Inner: normal-flow width/maxWidth box (no left/right insets), so it
+  // centers correctly via the outer's alignItems and shrinks cleanly on
+  // desktop. The button sits flush to the inner's right edge, lining up
+  // with the back button and tab-bar right edge above.
+  scrollTopOuter: {
     position: 'absolute',
-    bottom: SPACING.xxxl,
-    right: SPACING.xl,
+    bottom: 0,
+    left: 0,
+    right: 0,
+    alignItems: 'center',
+    paddingBottom: SPACING.xxxl,
+  },
+  scrollTopInner: {
+    width: '100%',
+    alignItems: 'flex-end',
+    paddingHorizontal: SPACING.xl,
+  },
+  scrollTopButton: {
     backgroundColor: COLORS.primary,
     width: 48,
     height: 48,

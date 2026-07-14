@@ -1,5 +1,3 @@
-// components/shapes/shapes/BasicShapes.tsx - Fixed DocumentShape
-
 import React from 'react';
 import { Svg, Rect, Ellipse, Polygon, Circle, Line, G, Path } from 'react-native-svg';
 

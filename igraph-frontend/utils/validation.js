@@ -1,5 +1,3 @@
-// utils/validation.js
-
 /**
  * Password validation utility
  * @param {string} password - The password to validate

@@ -1,9 +1,5 @@
-// components/shapes/ShapeIcon.tsx - Updated with all new shapes (labels optional)
-
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
-
-// Import all shape components
 import {
   RectShape,
   RoundedRectShape,

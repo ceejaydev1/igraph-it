@@ -1,5 +1,3 @@
-// app/(auth)/reset-password.tsx
-
 import React, { useState, useRef, useEffect } from 'react';
 import {
   View,
@@ -21,8 +19,6 @@ import { Svg, Circle, Rect, Path, Text as SvgText, Defs, Pattern } from 'react-n
 import * as authService from '../../services/authService';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
-
-// ─── PASSWORD HELPERS ────────────────────────────────────────────────────────
 
 const SPECIAL_CHARS_REGEX = /[!@#$%^&*(),.?":{}|<>]/;
 
@@ -72,8 +68,6 @@ const getStrengthLabel = (pwd: string): string => {
   return 'Very weak';
 };
 
-// ─── PASSWORD STRENGTH INDICATOR ─────────────────────────────────────────────
-
 const PasswordStrengthIndicator = ({ password }: { password: string }) => {
   if (!password) return null;
 
@@ -95,8 +89,6 @@ const PasswordStrengthIndicator = ({ password }: { password: string }) => {
     </View>
   );
 };
-
-// ─── CUSTOM TOAST ─────────────────────────────────────────────────────────────
 
 const CustomToast = ({
   visible,
@@ -188,8 +180,6 @@ const CustomToast = ({
   );
 };
 
-// ─── DIAGRAM BACKGROUND ───────────────────────────────────────────────────────
-
 const DiagramBackground = () => (
   <View style={StyleSheet.absoluteFillObject} pointerEvents="none">
     <Image
@@ -214,8 +204,6 @@ const DiagramBackground = () => (
   </View>
 );
 
-// ─── ICONS ────────────────────────────────────────────────────────────────────
-
 const BackIcon = () => (
   <Svg width={20} height={20} viewBox="0 0 24 24" fill="none">
     <Path d="M19 12H5M5 12l7 7M5 12l7-7" stroke="#4a5568" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" />
@@ -238,8 +226,6 @@ const EyeIcon = ({ visible }: { visible: boolean }) => (
     )}
   </Svg>
 );
-
-// ─── ERROR POPUP MODAL ────────────────────────────────────────────────────────
 
 const ErrorPopupModal = ({
   visible,
@@ -296,15 +282,11 @@ const ErrorPopupModal = ({
   );
 };
 
-// ─── HELPER ───────────────────────────────────────────────────────────────────
-
 const getOutlineColor = (isFocused: boolean, hasError: string) => {
   if (hasError) return '#ef4444';
   if (isFocused) return '#4c6fff';
   return '#dde3fa';
 };
-
-// ─── MAIN COMPONENT ───────────────────────────────────────────────────────────
 
 export default function ResetPassword() {
   const router = useRouter();
@@ -352,8 +334,6 @@ export default function ResetPassword() {
     setShowErrorModal(true);
   };
 
-  // ─── Validation ───────────────────────────────────────────────────────────
-
   const validate = () => {
     const newErrors = { newPassword: '', confirmPassword: '' };
     let isValid = true;
@@ -379,8 +359,6 @@ export default function ResetPassword() {
     return isValid;
   };
 
-  // ─── Submit ───────────────────────────────────────────────────────────────
-
   const handleReset = async () => {
     if (!validate()) return;
 
@@ -403,8 +381,6 @@ export default function ResetPassword() {
       setLoading(false);
     }
   };
-
-  // ─── Render ───────────────────────────────────────────────────────────────
 
   return (
     <>
@@ -600,8 +576,6 @@ export default function ResetPassword() {
     </>
   );
 }
-
-// ─── STYLES ──────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
   flex: {

@@ -1,5 +1,3 @@
-// components/properties-panel/ArrangeTab.tsx
-
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { Geometry } from '@maxgraph/core';

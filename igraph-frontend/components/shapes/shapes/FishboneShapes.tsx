@@ -1,6 +1,3 @@
-// components/shapes/shapes/FishboneShapes.tsx
-// Fishbone Diagram shapes
-
 import React from 'react';
 import { Svg, Line, Polygon, Rect, Ellipse, Path } from 'react-native-svg';
 

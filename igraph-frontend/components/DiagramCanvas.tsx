@@ -1,5 +1,3 @@
-// components/DiagramCanvas.tsx — COMPLETE FIXED VERSION
-
 import React, { useEffect, useRef, useCallback, useState } from 'react';
 import { View, StyleSheet, Platform, Text } from 'react-native';
 import './maxgraph-common.css';
@@ -175,6 +173,302 @@ interface DiagramCanvasProps {
   onSelectionChange?: (cell: any) => void;
   umlType?: string;
 }
+
+// ════════════════════════════════════════════════════════════════════════════
+// ⭐ SHAPE STYLE DEFINITIONS - Match the panel previews exactly
+// ════════════════════════════════════════════════════════════════════════════
+
+function getShapeStyle(styleKey: string): CellStateStyle {
+  // Base style with default values
+  const base: CellStateStyle = {
+    shape: styleKey,
+    fillColor: '#ffffff',
+    strokeColor: BLACK,
+    strokeWidth: 2,
+    fontColor: BLACK,
+    fontSize: 12,
+    align: 'center' as AlignValue,
+    verticalAlign: 'middle' as VAlignValue,
+    whiteSpace: 'wrap' as WhiteSpaceValue,
+  };
+
+  // Special styles for specific shapes (match what's in maxgraph-custom-shapes.ts)
+  const specialStyles: Record<string, Partial<CellStateStyle>> = {
+    // ERD Shapes
+    'igraph.erdRelationship': {
+      shape: 'igraph.erdRelationship',
+      fillColor: '#ffffff',
+      strokeColor: BLACK,
+      strokeWidth: 2,
+    },
+    'igraph.erdIdentifyingRelationship': {
+      shape: 'igraph.erdIdentifyingRelationship',
+      fillColor: '#ffffff',
+      strokeColor: BLACK,
+      strokeWidth: 2,
+    },
+    'igraph.erdAttribute': {
+      shape: 'igraph.erdAttribute',
+      fillColor: '#ffffff',
+      strokeColor: BLACK,
+      strokeWidth: 2,
+    },
+    'igraph.erdMultivaluedAttribute': {
+      shape: 'igraph.erdMultivaluedAttribute',
+      fillColor: '#ffffff',
+      strokeColor: BLACK,
+      strokeWidth: 2,
+    },
+    'igraph.erdDerivedAttribute': {
+      shape: 'igraph.erdDerivedAttribute',
+      fillColor: '#ffffff',
+      strokeColor: BLACK,
+      strokeWidth: 2,
+    },
+    'igraph.erdEntity': {
+      shape: 'igraph.erdEntity',
+      fillColor: '#ffffff',
+      strokeColor: BLACK,
+      strokeWidth: 2,
+    },
+    'igraph.erdWeakEntity': {
+      shape: 'igraph.erdWeakEntity',
+      fillColor: '#ffffff',
+      strokeColor: BLACK,
+      strokeWidth: 2,
+    },
+
+    // Fishbone Shapes
+    'igraph.fishboneArrow': {
+      shape: 'igraph.fishboneArrow',
+      fillColor: BLACK,
+      strokeColor: BLACK,
+      strokeWidth: 2,
+    },
+    'igraph.fishboneSpine': {
+      shape: 'igraph.fishboneSpine',
+      fillColor: 'transparent',
+      strokeColor: BLACK,
+      strokeWidth: 2,
+    },
+    'igraph.fishboneHead': {
+      shape: 'igraph.fishboneHead',
+      fillColor: '#ffffff',
+      strokeColor: BLACK,
+      strokeWidth: 2,
+    },
+    'igraph.fishboneProblem': {
+      shape: 'igraph.fishboneProblem',
+      fillColor: 'transparent',
+      strokeColor: BLACK,
+      strokeWidth: 2,
+    },
+    'igraph.fishboneCategory': {
+      shape: 'igraph.fishboneCategory',
+      fillColor: '#ffffff',
+      strokeColor: BLACK,
+      strokeWidth: 2,
+    },
+    'igraph.fishboneBubble': {
+      shape: 'igraph.fishboneBubble',
+      fillColor: '#ffffff',
+      strokeColor: BLACK,
+      strokeWidth: 2,
+    },
+    'igraph.fishboneNote': {
+      shape: 'igraph.fishboneNote',
+      fillColor: '#fef9c3',
+      strokeColor: BLACK,
+      strokeWidth: 2,
+    },
+
+    // Use Case Shapes
+    'igraph.umlUseCase': {
+      shape: 'igraph.umlUseCase',
+      fillColor: '#ffffff',
+      strokeColor: BLACK,
+      strokeWidth: 2,
+    },
+    'igraph.ucActor': {
+      shape: 'igraph.ucActor',
+      fillColor: 'transparent',
+      strokeColor: BLACK,
+      strokeWidth: 2,
+    },
+    'igraph.umlSystemBoundary': {
+      shape: 'igraph.umlSystemBoundary',
+      fillColor: 'transparent',
+      strokeColor: BLACK,
+      strokeWidth: 2,
+    },
+    'igraph.umlAssociation': {
+      shape: 'igraph.umlAssociation',
+      fillColor: 'transparent',
+      strokeColor: BLACK,
+      strokeWidth: 2,
+    },
+    'igraph.umlNote': {
+      shape: 'igraph.umlNote',
+      fillColor: '#fef9c3',
+      strokeColor: BLACK,
+      strokeWidth: 2,
+    },
+
+    // Standard Shapes
+'igraph.ellipse': {
+  shape: 'igraph.ellipse',
+  fillColor: '#ffffff',
+  strokeColor: BLACK,
+  strokeWidth: 2,
+},
+    'igraph.noteStandalone': {
+      shape: 'igraph.noteStandalone',
+      fillColor: '#fef9c3',
+      strokeColor: BLACK,
+      strokeWidth: 2,
+    },
+    'igraph.actor': {
+      shape: 'igraph.actor',
+      fillColor: 'transparent',
+      strokeColor: BLACK,
+      strokeWidth: 2,
+    },
+    'igraph.hexagon': {
+      shape: 'igraph.hexagon',
+      fillColor: '#ffffff',
+      strokeColor: BLACK,
+      strokeWidth: 2,
+    },
+
+    // Activity Shapes
+    'igraph.umlActivity': {
+      shape: 'igraph.umlActivity',
+      fillColor: '#ffffff',
+      strokeColor: BLACK,
+      strokeWidth: 2,
+    },
+    'igraph.umlDecision': {
+      shape: 'igraph.umlDecision',
+      fillColor: '#ffffff',
+      strokeColor: BLACK,
+      strokeWidth: 2,
+    },
+    'igraph.umlInitialNode': {
+      shape: 'igraph.umlInitialNode',
+      fillColor: BLACK,
+      strokeColor: BLACK,
+      strokeWidth: 0,
+    },
+    'igraph.umlMerge': {
+      shape: 'igraph.umlMerge',
+      fillColor: BLACK,
+      strokeColor: BLACK,
+      strokeWidth: 0,
+    },
+    'igraph.umlFork': {
+      shape: 'igraph.umlFork',
+      fillColor: BLACK,
+      strokeColor: BLACK,
+      strokeWidth: 0,
+    },
+
+    // DFD Shapes
+    'igraph.dfdProcess': {
+      shape: 'igraph.dfdProcess',
+      fillColor: '#ffffff',
+      strokeColor: BLACK,
+      strokeWidth: 2,
+    },
+    'igraph.dfdDataFlow': {
+      shape: 'igraph.dfdDataFlow',
+      fillColor: 'transparent',
+      strokeColor: BLACK,
+      strokeWidth: 2,
+    },
+    'igraph.dfdDataStore': {
+      shape: 'igraph.dfdDataStore',
+      fillColor: 'transparent',
+      strokeColor: BLACK,
+      strokeWidth: 2,
+    },
+    'igraph.dfdExternalEntity': {
+      shape: 'igraph.dfdExternalEntity',
+      fillColor: '#ffffff',
+      strokeColor: BLACK,
+      strokeWidth: 2,
+    },
+    'igraph.dfdNote': {
+      shape: 'igraph.dfdNote',
+      fillColor: '#fef9c3',
+      strokeColor: BLACK,
+      strokeWidth: 2,
+    },
+
+    // FDD Shapes
+    'igraph.fdd.function': {
+      shape: 'igraph.fdd.function',
+      fillColor: '#DCEAF7',
+      strokeColor: '#4A78A8',
+      strokeWidth: 2,
+    },
+    'igraph.fdd.input': {
+      shape: 'igraph.fdd.input',
+      fillColor: '#DCEFD2',
+      strokeColor: '#5A9E4B',
+      strokeWidth: 2,
+    },
+    'igraph.fdd.output': {
+      shape: 'igraph.fdd.output',
+      fillColor: '#FBE8B8',
+      strokeColor: '#F39C12',
+      strokeWidth: 2,
+    },
+    'igraph.fdd.control': {
+      shape: 'igraph.fdd.control',
+      fillColor: 'transparent',
+      strokeColor: BLACK,
+      strokeWidth: 2,
+    },
+    'igraph.fdd.mechanism': {
+      shape: 'igraph.fdd.mechanism',
+      fillColor: 'transparent',
+      strokeColor: BLACK,
+      strokeWidth: 2,
+    },
+    'igraph.fdd.interface': {
+      shape: 'igraph.fdd.interface',
+      fillColor: 'transparent',
+      strokeColor: BLACK,
+      strokeWidth: 2,
+    },
+    'igraph.fdd.boundary': {
+      shape: 'igraph.fdd.boundary',
+      fillColor: 'transparent',
+      strokeColor: '#666666',
+      strokeWidth: 2,
+    },
+    'igraph.fdd.note': {
+      shape: 'igraph.fdd.note',
+      fillColor: '#FFF4CC',
+      strokeColor: '#B7950B',
+      strokeWidth: 2,
+    },
+    'igraph.fdd.externalEntity': {
+      shape: 'igraph.fdd.externalEntity',
+      fillColor: '#F4F4F4',
+      strokeColor: '#8E8E8E',
+      strokeWidth: 2,
+    },
+  };
+
+  // Merge base with special style if it exists
+  const special = specialStyles[styleKey] || {};
+  return { ...base, ...special };
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// ⭐ MAIN WEBCANVAS COMPONENT
+// ════════════════════════════════════════════════════════════════════════════
 
 const WebCanvas = ({ onReady, onChange, onSelectionChange, umlType = 'flowchart' }: DiagramCanvasProps) => {
   const wrapperRef = useRef<HTMLDivElement>(null);
@@ -773,6 +1067,10 @@ const WebCanvas = ({ onReady, onChange, onSelectionChange, umlType = 'flowchart'
     console.log('✅ Registered igraph stylesheet entries');
   }, []);
 
+  // ════════════════════════════════════════════════════════════════════════════
+  // ⭐ FIXED: Handle drop with proper shape styles
+  // ════════════════════════════════════════════════════════════════════════════
+
   const handleDrop = useCallback((e: DragEvent) => {
     e.preventDefault();
     setIsDragOver(false);
@@ -791,11 +1089,12 @@ const WebCanvas = ({ onReady, onChange, onSelectionChange, umlType = 'flowchart'
     const cy = Math.round((y - dropH / 2) / GRID_SIZE) * GRID_SIZE;
 
     try {
-      const styleObject: CellStateStyle = {
-        shape: styleKey,
-        fillColor: '#ffffff',
-        strokeColor: BLACK,
-        strokeWidth: 2,
+      // ⭐ CRITICAL FIX: Use getShapeStyle to get the proper style
+      const styleObject = getShapeStyle(styleKey);
+      
+      // Add text properties
+      const fullStyle: CellStateStyle = {
+        ...styleObject,
         fontColor: BLACK,
         fontSize: 12,
         align: 'center' as AlignValue,
@@ -811,7 +1110,7 @@ const WebCanvas = ({ onReady, onChange, onSelectionChange, umlType = 'flowchart'
         cy,
         dropW,
         dropH,
-        styleObject,
+        fullStyle,
       );
 
       graph.clearSelection();
@@ -837,7 +1136,6 @@ const WebCanvas = ({ onReady, onChange, onSelectionChange, umlType = 'flowchart'
     let arrowDivs: HTMLDivElement[] = [];
     let currentArrowCell: any = null;
 
-    // ─── Create SVG chevron/triangle arrow ────────────────────────────────────
     function createArrowSVG(direction: 'up' | 'down' | 'left' | 'right', size: number = 16): string {
       const half = size / 2;
       let points: string;
@@ -876,11 +1174,10 @@ const WebCanvas = ({ onReady, onChange, onSelectionChange, umlType = 'flowchart'
       const w = geo.width * scale;
       const h = geo.height * scale;
 
-      // ─── Draw.io style: smaller, positioned 10-15px outside selection box ──
       const spacing = 14;
       const arrowSize = 14;
-      const restColor = '#a8c5ff'; // light blue at rest
-      const hoverColor = '#4c6fff'; // dark blue on hover
+      const restColor = '#a8c5ff';
+      const hoverColor = '#4c6fff';
 
       const directions: { dx: number; dy: number; label: 'up' | 'down' | 'left' | 'right' }[] = [
         { dx: 0, dy: -1, label: 'up' },
@@ -909,10 +1206,8 @@ const WebCanvas = ({ onReady, onChange, onSelectionChange, umlType = 'flowchart'
         div.style.transition = 'color 0.15s ease, transform 0.15s ease';
         div.style.userSelect = 'none';
 
-        // ─── SVG arrow (no background circle) ──────────────────────────────────
         div.innerHTML = createArrowSVG(dir.label, arrowSize);
 
-        // ─── Hover: darken to full BLUE and scale up ──────────────────────────
         div.addEventListener('mouseenter', () => {
           div.style.color = hoverColor;
           div.style.transform = 'scale(1.25)';
@@ -922,7 +1217,6 @@ const WebCanvas = ({ onReady, onChange, onSelectionChange, umlType = 'flowchart'
           div.style.transform = 'scale(1)';
         });
 
-        // ─── Click: create new connected shape ─────────────────────────────────
         div.addEventListener('click', (e) => {
           e.stopPropagation();
           e.preventDefault();
@@ -936,7 +1230,8 @@ const WebCanvas = ({ onReady, onChange, onSelectionChange, umlType = 'flowchart'
           const roundedX = Math.round(newX / GRID_SIZE) * GRID_SIZE;
           const roundedY = Math.round(newY / GRID_SIZE) * GRID_SIZE;
 
-          let shapeStyle: CellStateStyle = {
+          // Use the same style as the original cell
+          const shapeStyle: CellStateStyle = {
             shape: styleObj.shape || 'igraph.rectangle',
             fillColor: styleObj.fillColor || '#ffffff',
             strokeColor: styleObj.strokeColor || BLACK,
@@ -995,7 +1290,6 @@ const WebCanvas = ({ onReady, onChange, onSelectionChange, umlType = 'flowchart'
       currentArrowCell = null;
     }
 
-    // ─── Listen for selection changes ──────────────────────────────────────
     const selectionHandler = () => {
       const selection = graph.getSelectionCells();
       const selected = selection.length === 1 ? selection[0] : null;
@@ -1032,7 +1326,7 @@ const WebCanvas = ({ onReady, onChange, onSelectionChange, umlType = 'flowchart'
   }, [handleSelectionChange]);
 
   // ════════════════════════════════════════════════════════════════════════════
-  // ⭐ DRAW.IO STYLE: HOVER CONNECTION POINTS (X marks + 4 arrows on HOVER)
+  // ⭐ DRAW.IO STYLE: HOVER CONNECTION POINTS
   // ════════════════════════════════════════════════════════════════════════════
 
   const setupHoverUI = useCallback((graph: Graph) => {
@@ -1263,7 +1557,7 @@ const WebCanvas = ({ onReady, onChange, onSelectionChange, umlType = 'flowchart'
       lastHoveredCell = null;
     });
 
-    console.log('✅ Draw.io style hover UI (X points + hover arrows) enabled');
+    console.log('✅ Draw.io style hover UI enabled');
   }, []);
 
   // ─── INIT GRAPH ────────────────────────────────────────────────────────────

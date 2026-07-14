@@ -1,6 +1,3 @@
-// components/shapes/shapes/index.ts
-// Export all shape components
-
 // ─── Basic Shapes ──────────────────────────────────────────────────────────
 export {
   RectShape,
@@ -170,12 +167,3 @@ export {
   UMLMultiplicityRangeShape,
   UMLMultiplicityNShape,
 } from './ClassShapes';
-
-// ─── Shared UML Shapes (re-exported from UseCaseShapes) ──────────────────
-// Note: These are already exported above from UseCaseShapes.
-// DO NOT re-export them again here to avoid duplicate identifiers.
-// The following shapes are already available from UseCaseShapes:
-// - UMLNoteShape
-// - UMLNoteConnectorShape
-// - UMLAssociationShape
-// - UMLGeneralizationShape

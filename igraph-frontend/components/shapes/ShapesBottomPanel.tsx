@@ -1,5 +1,3 @@
-// components/shapes/ShapesBottomPanel.tsx - No extra padding, shapes fill tiles
-
 import React, { useState, useRef, useEffect } from 'react';
 import {
   View,

@@ -36,15 +36,13 @@ import * as authService from '@/services/authService';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
-// ─── FIREBASE SETUP ───────────────────────────────────────────────────────────
-
 const firebaseConfig = {
-  apiKey: process.env.EXPO_PUBLIC_FIREBASE_API_KEY || "AIzaSyCyM0zjlTQ6cCuAf3CGWbxLnUUle_z88F8",
-  authDomain: process.env.EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN || "igraph-it.firebaseapp.com",
-  projectId: process.env.EXPO_PUBLIC_FIREBASE_PROJECT_ID || "igraph-it",
-  storageBucket: process.env.EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET || "igraph-it.firebasestorage.app",
-  messagingSenderId: process.env.EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID || "513560698622",
-  appId: process.env.EXPO_PUBLIC_FIREBASE_APP_ID || "1:513560698622:web:71e12cbf9a1bb95dab0faf"
+  apiKey: process.env.EXPO_PUBLIC_FIREBASE_API_KEY,
+  authDomain: process.env.EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN,
+  projectId: process.env.EXPO_PUBLIC_FIREBASE_PROJECT_ID,
+  storageBucket: process.env.EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: process.env.EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
+  appId: process.env.EXPO_PUBLIC_FIREBASE_APP_ID
 };
 
 let firebaseApp: FirebaseApp | undefined;
@@ -65,15 +63,11 @@ if (Platform.OS === 'web' && auth) {
 
 WebBrowser.maybeCompleteAuthSession();
 
-// ─── HELPER FUNCTIONS ─────────────────────────────────────────────────────────
-
 const getOutlineColor = (isFocused: boolean, hasError: string) => {
   if (hasError) return '#ef4444';
   if (isFocused) return '#4c6fff';
   return '#dde3fa';
 };
-
-// ─── RESPONSIVE LOGO SIZE (ported from signin.tsx) ───────────────────────────
 
 const getResponsiveLogoSize = (windowWidth: number, windowHeight: number): number => {
   if (windowHeight < 680) {
@@ -95,8 +89,6 @@ const getResponsiveLogoSize = (windowWidth: number, windowHeight: number): numbe
   if (Platform.OS === 'android') return 42;
   return 44;
 };
-
-// ─── ANIMATED LOGO (ported from signin.tsx) ──────────────────────────────────
 
 const AnimatedLogo = ({
   size,
@@ -207,8 +199,6 @@ const AnimatedLogo = ({
   );
 };
 
-// ─── ICONS ────────────────────────────────────────────────────────────────────
-
 const GoogleIcon = () => (
   <Svg width={18} height={18} viewBox="0 0 24 24">
     <Path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4" />
@@ -241,8 +231,6 @@ const EmailIcon = () => (
     <Path d="M22 6l-10 7L2 6" stroke="#ffffff" strokeWidth={1.5} fill="none"/>
   </Svg>
 );
-
-// ─── ERROR POPUP MODAL ────────────────────────────────────────────────────────
 
 const ErrorPopupModal = ({
   visible,
@@ -290,8 +278,6 @@ const ErrorPopupModal = ({
     </Modal>
   );
 };
-
-// ─── SUCCESS MODAL ────────────────────────────────────────────────────
 
 const SuccessModal = ({
   visible,
@@ -346,8 +332,6 @@ const SuccessModal = ({
     </Modal>
   );
 };
-
-// ─── CUSTOM TOAST ─────────────────────────────────────────────────────────────
 
 const CustomToast = ({
   visible,
@@ -439,8 +423,6 @@ const CustomToast = ({
   );
 };
 
-// ─── BACKGROUND ───────────────────────────────────────────────────────────────
-
 const DiagramBackground = () => (
   <View style={StyleSheet.absoluteFillObject} pointerEvents="none">
     <Svg width="100%" height="100%" viewBox={`0 0 ${SCREEN_WIDTH} ${SCREEN_HEIGHT}`} preserveAspectRatio="xMidYMid slice" style={StyleSheet.absoluteFillObject}>
@@ -511,8 +493,6 @@ const DiagramBackground = () => (
   </View>
 );
 
-// ─── PASSWORD STRENGTH HELPERS ────────────────────────────────────
-
 const SPECIAL_CHARS_REGEX = /[!@#$%^&*(),.?":{}|<>]/;
 
 const getStrengthPercentage = (pwd: string): number => {
@@ -541,8 +521,6 @@ const getStrengthLabel = (pwd: string): string => {
   return 'Very weak';
 };
 
-// ─── COMPACT PASSWORD STRENGTH INDICATOR ────────────────────────────────────
-
 const CompactPasswordStrength = ({ password }: { password: string }) => {
   if (!password) return null;
   return (
@@ -558,8 +536,6 @@ const CompactPasswordStrength = ({ password }: { password: string }) => {
     </View>
   );
 };
-
-// ─── MAIN COMPONENT ───────────────────────────────────────────────────────────
 
 export default function SignUp() {
   const router = useRouter();
@@ -603,7 +579,6 @@ export default function SignUp() {
   const [inlinePasswordError, setInlinePasswordError] = useState('');
   const [emailInlineError, setEmailInlineError] = useState('');
 
-  // Custom toast state
   const [toastVisible, setToastVisible] = useState(false);
   const [toastMessage, setToastMessage] = useState('');
   const [toastIsError, setToastIsError] = useState(false);
@@ -625,7 +600,6 @@ export default function SignUp() {
 
   const isAnyInputFocused = fullNameFocused || emailFocused || passwordFocused || confirmPasswordFocused;
 
-  // Card entrance animation
   const cardOpacity = useRef(new Animated.Value(0)).current;
   const cardTranslateY = useRef(new Animated.Value(20)).current;
   const [isAnimatingOut, setIsAnimatingOut] = useState(false);
@@ -633,17 +607,15 @@ export default function SignUp() {
   const emailRef = useRef<TextInput>(null);
   const passwordRef = useRef<TextInput>(null);
   const confirmPasswordRef = useRef<TextInput>(null);
+  const googleSignInInProgress = useRef(false);
 
   useEffect(() => {
-    // Only animate entrance if not coming from signin (no prefilledEmail means fresh load)
     const hasPrefilledEmail = params.prefilledEmail !== undefined;
     
     if (hasPrefilledEmail) {
-      // Coming from signin - skip entrance animation, set directly
       cardOpacity.setValue(1);
       cardTranslateY.setValue(0);
     } else {
-      // Fresh load - animate entrance
       Animated.parallel([
         Animated.timing(cardOpacity, {
           toValue: 1,
@@ -678,8 +650,6 @@ export default function SignUp() {
     handleRedirectResult();
   }, []);
 
-  // ── Handlers ──────────────────────────────────────────────────────────────
-
   const handleToggleAgreement = useCallback(() => {
     setAgreed((prev) => !prev);
     if (errors.agreed) setErrors((prev) => ({ ...prev, agreed: '' }));
@@ -705,7 +675,6 @@ export default function SignUp() {
     setShowSuccessModal(true);
   };
 
-  // Smooth navigation to sign in
   const navigateToSignIn = useCallback(() => {
     if (isAnimatingOut) return;
     setIsAnimatingOut(true);
@@ -730,8 +699,6 @@ export default function SignUp() {
     });
   }, [cardOpacity, cardTranslateY, router, email, isAnimatingOut]);
 
-  // ── Password Validation Helpers ──────────────────────────────────────────
-
   const isPasswordValid = (pwd: string) => {
     return pwd.length >= 8 &&
            /[A-Z]/.test(pwd) &&
@@ -755,8 +722,6 @@ export default function SignUp() {
     return password === confirmPassword;
   };
 
-  // ── Form Validation ──────────────────────────────────────────────────────
-
   const validate = () => {
     const newErrors = { fullName: '', email: '', password: '', confirmPassword: '', agreed: '' };
     let isValid = true;
@@ -778,8 +743,6 @@ export default function SignUp() {
     return isValid;
   };
 
-  // ─── GOOGLE SIGN-IN ───
-
   const handleGoogleSignIn = async () => {
     setEmailInlineError('');
 
@@ -795,7 +758,38 @@ export default function SignUp() {
       return;
     }
 
-    setLoading(true);
+    if (googleSignInInProgress.current) return;
+    googleSignInInProgress.current = true;
+    authService.pingBackend?.(); // Wake up free-tier backend while the user picks an account
+
+    // Native uses a full-page redirect, so show loading immediately since we're
+    // navigating away. Web uses a popup — no spinner while it's open (the user
+    // is still choosing/cancelling); only show loading once an account is picked.
+    if (Platform.OS !== 'web') {
+      setLoading(true);
+    }
+
+    // Firebase can take several seconds to reject signInWithPopup after the user
+    // manually closes it (it polls for closure rather than detecting it instantly).
+    // Closing the popup hands focus back to this window almost immediately, so use
+    // that as a fast signal to unblock the button instead of waiting on Firebase.
+    let settled = false;
+    let unstickTimer: ReturnType<typeof setTimeout> | undefined;
+    const handleWindowFocus = () => {
+      unstickTimer = setTimeout(() => {
+        if (!settled) googleSignInInProgress.current = false;
+      }, 300);
+    };
+    if (Platform.OS === 'web') {
+      window.addEventListener('focus', handleWindowFocus);
+    }
+    const stopWatchingFocus = () => {
+      settled = true;
+      clearTimeout(unstickTimer);
+      if (Platform.OS === 'web') {
+        window.removeEventListener('focus', handleWindowFocus);
+      }
+    };
 
     try {
       const provider = new GoogleAuthProvider();
@@ -805,15 +799,18 @@ export default function SignUp() {
 
       if (Platform.OS === 'web') {
         const result = await signInWithPopup(auth, provider);
+        stopWatchingFocus();
+        setLoading(true);
         await handleGoogleSignInResult(result);
       } else {
         await signInWithRedirect(auth, provider);
       }
     } catch (error: any) {
+      stopWatchingFocus();
       console.error('Google Sign-In error:', error);
       setLoading(false);
-      if (error.code === 'auth/popup-closed-by-user') {
-        // Do nothing
+      if (error.code === 'auth/popup-closed-by-user' || error.code === 'auth/cancelled-popup-request') {
+        // User cancelled, or this attempt was superseded by a fresh click — no spinner, nothing to show
       } else if (error.code === 'auth/popup-blocked') {
         showErrorPopup('Popup Blocked', 'Please allow popups for this website to sign in with Google.', undefined, 'OK');
       } else if (error.code === 'auth/network-request-failed') {
@@ -821,6 +818,8 @@ export default function SignUp() {
       } else {
         showErrorPopup('Google Sign In Failed', error.message || 'Something went wrong. Please try again.', undefined, 'OK');
       }
+    } finally {
+      googleSignInInProgress.current = false;
     }
   };
 
@@ -850,19 +849,20 @@ export default function SignUp() {
       console.error('Error handling Google sign-in result:', error);
       if (error.response?.status === 409) {
         setEmailInlineError('An account with this email already exists.');
+      } else if (error.code === 'ECONNABORTED' || error.message?.toLowerCase().includes('timeout')) {
+        showErrorPopup('Server Waking Up', 'Our server is starting up after being idle. Please try signing up with Google again in a few seconds.');
       } else {
         showErrorPopup('Sign Up Failed', error.message || 'Something went wrong');
       }
     } finally {
       setLoading(false);
+      googleSignInInProgress.current = false;
     }
   };
 
   const handleGoogleSignUp = async () => {
     await handleGoogleSignIn();
   };
-
-  // ── Email/Password Sign Up ─────────────────────────────────────────
 
   const handleSignUp = async () => {
     setEmailInlineError('');
@@ -912,8 +912,6 @@ export default function SignUp() {
       setLoading(false);
     }
   };
-
-  // ── Render ─────────────────────────────────────────────────────────────────
 
   return (
     <>
@@ -970,7 +968,6 @@ export default function SignUp() {
 
               <Text style={[styles.heading, isSmallScreen && { fontSize: 20 }]}>Sign Up</Text>
 
-              {/* Full Name */}
               <View style={styles.formGroup}>
                 <Text style={styles.label}>Full Name</Text>
                 <View style={[styles.inputWrap, fullNameFocused && styles.inputWrapFocused, errors.fullName ? styles.inputError : null]}>
@@ -994,7 +991,6 @@ export default function SignUp() {
                 {errors.fullName ? <Text style={styles.fieldError}>{errors.fullName}</Text> : null}
               </View>
 
-              {/* Email */}
               <View style={styles.formGroup}>
                 <Text style={styles.label}>Email</Text>
                 <View style={[styles.inputWrap, emailFocused && styles.inputWrapFocused, (errors.email || emailInlineError) ? styles.inputError : null]}>
@@ -1024,7 +1020,6 @@ export default function SignUp() {
                 {emailInlineError ? <Text style={styles.fieldError}>{emailInlineError}</Text> : null}
               </View>
 
-              {/* Password */}
               <View style={styles.formGroup}>
                 <Text style={styles.label}>Password</Text>
                 <View style={[styles.inputWrap, passwordFocused && styles.inputWrapFocused, errors.password ? styles.inputError : null]}>
@@ -1069,7 +1064,6 @@ export default function SignUp() {
                 {errors.password ? <Text style={styles.fieldError}>{errors.password}</Text> : null}
               </View>
 
-              {/* Confirm Password */}
               <View style={styles.formGroup}>
                 <Text style={styles.label}>Confirm Password</Text>
                 <View style={[styles.inputWrap, confirmPasswordFocused && styles.inputWrapFocused, errors.confirmPassword ? styles.inputError : null]}>
@@ -1107,7 +1101,6 @@ export default function SignUp() {
                 {errors.confirmPassword ? <Text style={styles.fieldError}>{errors.confirmPassword}</Text> : null}
               </View>
 
-              {/* Sign Up Button */}
               <TouchableOpacity style={[styles.btnCreate, loading && styles.btnDisabled]} onPress={handleSignUp} activeOpacity={0.85} disabled={loading}>
                 {loading ? (
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
@@ -1119,7 +1112,6 @@ export default function SignUp() {
                 )}
               </TouchableOpacity>
 
-              {/* Divider + Google — web only */}
               {Platform.OS === 'web' && (
                 <>
                   <View style={styles.divider}>
@@ -1134,7 +1126,6 @@ export default function SignUp() {
                 </>
               )}
 
-              {/* ── Terms Checkbox ── */}
               <View style={styles.termsWrap}>
                 <TouchableOpacity onPress={handleToggleAgreement} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
                   <View style={[styles.customCheckbox, agreed && styles.customCheckboxChecked, errors.agreed ? styles.customCheckboxError : null]}>
@@ -1154,7 +1145,6 @@ export default function SignUp() {
               </View>
               {errors.agreed ? <Text style={styles.fieldError}>{errors.agreed}</Text> : null}
 
-              {/* Sign In link */}
               <View style={styles.signinWrap}>
                 <Text style={styles.signinText}>Have an account? </Text>
                 <TouchableOpacity onPress={navigateToSignIn}>
@@ -1168,8 +1158,6 @@ export default function SignUp() {
     </>
   );
 }
-
-// ─── STYLES ─────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
   flex: { flex: 1, backgroundColor: '#eef2ff' },

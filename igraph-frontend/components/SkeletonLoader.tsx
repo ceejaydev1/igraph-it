@@ -1,6 +1,3 @@
-// components/SkeletonLoader.tsx
-// Complete skeleton loading components for iGraph IT
-
 import React, { useEffect, useRef } from 'react';
 import {
   View,

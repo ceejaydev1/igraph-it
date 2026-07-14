@@ -1,5 +1,13 @@
 # Learn more https://docs.github.com/en/get-started/getting-started-with-git/ignoring-files
 
+# Environment Variables
+.env
+.env.local
+.env.production
+.env.development
+.env.*.local
+!.env.example
+
 # dependencies
 node_modules/
 
@@ -30,9 +38,6 @@ yarn-error.*
 .DS_Store
 *.pem
 
-# local env files
-.env*.local
-
 # typescript
 *.tsbuildinfo
 
@@ -42,4 +47,13 @@ app-example
 /ios
 /android
 .vercel
-.env
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Logs
+logs/
+*.log

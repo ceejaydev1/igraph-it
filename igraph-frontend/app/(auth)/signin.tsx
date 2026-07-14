@@ -148,7 +148,7 @@ const AnimatedLogo = ({
   const rotate = rotateAnim.interpolate({ inputRange: [0, 1], outputRange: ['-13deg', '-8deg'] });
   const opacity = entranceAnim.interpolate({ inputRange: [0, 0.5, 1], outputRange: [0, 0.5, 1] });
   const finalSize = size || 44;
-  
+
   const padding = finalSize * 0.25;
   const containerSize = finalSize + (padding * 2);
   const borderRadius = containerSize * 0.22;
@@ -156,9 +156,9 @@ const AnimatedLogo = ({
   return (
     <Animated.View
       style={[
-        styles.logoWrapper, 
-        { 
-          opacity, 
+        styles.logoWrapper,
+        {
+          opacity,
           transform: [{ scale }, { scale: pulseAnim }, { rotate }],
           width: containerSize,
           height: containerSize,
@@ -177,9 +177,9 @@ const AnimatedLogo = ({
       <Image
         source={require('../../assets/images/logo.png')}
         style={[
-          styles.logo, 
-          { 
-            width: finalSize, 
+          styles.logo,
+          {
+            width: finalSize,
             height: finalSize,
             borderRadius: finalSize * 0.22,
           }
@@ -454,12 +454,11 @@ export default function SignIn() {
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(false);
-  const [agreed, setAgreed] = useState(false);
   const [loading, setLoading] = useState(false);
   const [emailFocused, setEmailFocused] = useState(false);
   const [passwordFocused, setPasswordFocused] = useState(false);
   const [showSuccessAnimation, setShowSuccessAnimation] = useState(false);
-  const [errors, setErrors] = useState({ email: '', password: '', terms: '' });
+  const [errors, setErrors] = useState({ email: '', password: '' });
   const [showErrorModal, setShowErrorModal] = useState(false);
   const [errorModalData, setErrorModalData] = useState({
     title: '',
@@ -468,20 +467,21 @@ export default function SignIn() {
     actionButtonText: '',
     actionIcon: undefined as React.ReactNode | undefined,
   });
-  
+
   // Card entrance animation
   const cardOpacity = useRef(new Animated.Value(0)).current;
   const cardTranslateY = useRef(new Animated.Value(20)).current;
   const [isAnimatingOut, setIsAnimatingOut] = useState(false);
 
   const passwordRef = useRef<TextInput>(null);
+  const googleSignInInProgress = useRef(false);
   const logoSize = getResponsiveLogoSize(windowWidth, windowHeight);
   const isSmallScreen = windowHeight < 680;
 
   useEffect(() => {
     // Only animate entrance if not coming from signup (no prefilledEmail means fresh load)
     const hasPrefilledEmail = params.prefilledEmail !== undefined;
-    
+
     if (hasPrefilledEmail) {
       // Coming from signup - skip entrance animation, set directly
       cardOpacity.setValue(1);
@@ -560,11 +560,6 @@ export default function SignIn() {
   }, [router]);
 
   //HANDLERS
-  const handleToggleAgreement = useCallback(() => {
-    setAgreed((prev) => !prev);
-    if (errors.terms) setErrors((prev) => ({ ...prev, terms: '' }));
-  }, [errors.terms]);
-
   const openPrivacyPage = useCallback(() => {
     router.push('/(auth)/privacy1');
   }, [router]);
@@ -589,7 +584,7 @@ export default function SignIn() {
   const navigateToSignUp = useCallback(() => {
     if (isAnimatingOut) return;
     setIsAnimatingOut(true);
-    
+
     Animated.parallel([
       Animated.timing(cardOpacity, {
         toValue: 0,
@@ -612,19 +607,35 @@ export default function SignIn() {
 
   //GOOGLE SIGN IN
   const handleFirebaseGoogleSignIn = async () => {
-    if (!agreed) {
-      setErrors((prev) => ({
-        ...prev,
-        terms: 'You must agree to the Terms and Privacy Policy before continuing',
-      }));
-      return;
-    }
     if (!auth) {
       showErrorPopup('Error', 'Firebase auth not available on this platform');
       return;
     }
 
-    setLoading(true);
+    if (googleSignInInProgress.current) return;
+    googleSignInInProgress.current = true;
+    authService.pingBackend?.(); // Wake up free-tier backend while the user picks an account
+
+    // No spinner while the popup is open — the user is still choosing/cancelling.
+    // Only show loading once an account is actually selected (result resolves).
+    //
+    // Firebase can take several seconds to reject signInWithPopup after the user
+    // manually closes it (it polls for closure rather than detecting it instantly).
+    // Closing the popup hands focus back to this window almost immediately, so use
+    // that as a fast signal to unblock the button instead of waiting on Firebase.
+    let settled = false;
+    let unstickTimer: ReturnType<typeof setTimeout> | undefined;
+    const handleWindowFocus = () => {
+      unstickTimer = setTimeout(() => {
+        if (!settled) googleSignInInProgress.current = false;
+      }, 300);
+    };
+    window.addEventListener('focus', handleWindowFocus);
+    const stopWatchingFocus = () => {
+      settled = true;
+      clearTimeout(unstickTimer);
+      window.removeEventListener('focus', handleWindowFocus);
+    };
 
     try {
       const provider = new GoogleAuthProvider();
@@ -633,6 +644,8 @@ export default function SignIn() {
       provider.setCustomParameters({ prompt: 'select_account' });
 
       const result = await signInWithPopup(auth, provider);
+      stopWatchingFocus();
+      setLoading(true);
       const idToken = await result.user.getIdToken();
       const apiResult = await authService.googleAuth(idToken);
 
@@ -642,7 +655,7 @@ export default function SignIn() {
       } else {
         await auth.signOut();
         const msg = apiResult.message || '';
-        if (msg.toLowerCase().includes('already registered') || 
+        if (msg.toLowerCase().includes('already registered') ||
             msg.toLowerCase().includes('already exists') ||
             msg.toLowerCase().includes('email/password')) {
           const googleEmail = result.user.email || '';
@@ -659,6 +672,7 @@ export default function SignIn() {
         }
       }
     } catch (error: any) {
+      stopWatchingFocus();
       console.error('Google Sign-In error:', error);
       if (error.response?.status === 409) {
         const errorMsg = error.response?.data?.message || '';
@@ -669,33 +683,35 @@ export default function SignIn() {
           'Sign In with Email/Password',
           <EmailIcon />
         );
-      } else if (error.code === 'auth/popup-closed-by-user') {
-        // User cancelled
+      } else if (error.code === 'auth/popup-closed-by-user' || error.code === 'auth/cancelled-popup-request') {
+        // User cancelled, or this attempt was superseded by a fresh click — no spinner, nothing to show
       } else if (error.code === 'auth/popup-blocked') {
         showErrorPopup('Popup Blocked', 'Please allow popups for this website to sign in with Google.', undefined, 'OK');
       } else if (error.code === 'auth/network-request-failed') {
         showErrorPopup('Network Error', 'Unable to reach Google servers. Please check your internet connection.', undefined, 'OK');
       } else if (error.code === 'auth/internal-error' || error.message?.includes('Failed to fetch')) {
         showErrorPopup('Google Sign In Unavailable', 'Google Sign-In is currently unavailable. Please use email/password to sign in instead.', undefined, 'OK');
+      } else if (error.code === 'ECONNABORTED' || error.message?.toLowerCase().includes('timeout')) {
+        showErrorPopup('Server Waking Up', 'Our server is starting up after being idle. Please try signing in with Google again in a few seconds.', undefined, 'OK');
       } else {
         showErrorPopup('Google Sign In Failed', error.message || 'Something went wrong. Please try again.', undefined, 'OK');
       }
     } finally {
+      googleSignInInProgress.current = false;
       setLoading(false);
     }
   };
 
   //EMAIL & PASSWORD SIGNIN
   const handleSignIn = async () => {
-    const newErrors = { email: '', password: '', terms: '' };
+    const newErrors = { email: '', password: '' };
 
     if (!email) newErrors.email = 'Email is required';
     if (!password) newErrors.password = 'Password is required';
-    if (!agreed) newErrors.terms = 'You must agree to the Terms and Privacy Policy';
 
     setErrors(newErrors);
 
-    if (newErrors.email || newErrors.password || newErrors.terms) return;
+    if (newErrors.email || newErrors.password) return;
 
     setLoading(true);
     const startTime = Date.now();
@@ -754,17 +770,17 @@ export default function SignIn() {
 
   return (
     <>
-      <Stack.Screen options={{ 
+      <Stack.Screen options={{
         headerShown: false,
         animation: 'none',
       }} />
 
-      <ErrorPopupModal 
-        visible={showErrorModal} 
-        title={errorModalData.title} 
-        message={errorModalData.message} 
-        onClose={() => setShowErrorModal(false)} 
-        onAction={errorModalData.onAction} 
+      <ErrorPopupModal
+        visible={showErrorModal}
+        title={errorModalData.title}
+        message={errorModalData.message}
+        onClose={() => setShowErrorModal(false)}
+        onAction={errorModalData.onAction}
         actionButtonText={errorModalData.actionButtonText}
         actionIcon={errorModalData.actionIcon}
       />
@@ -772,13 +788,13 @@ export default function SignIn() {
       <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined} keyboardVerticalOffset={Platform.OS === 'ios' ? 64 : 0}>
         <DiagramBackground />
 
-        <ScrollView 
-          contentContainerStyle={styles.scrollContent} 
-          keyboardShouldPersistTaps="handled" 
-          showsVerticalScrollIndicator={false} 
+        <ScrollView
+          contentContainerStyle={styles.scrollContent}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
           bounces={false}
-          automaticallyAdjustKeyboardInsets={true} 
-          keyboardDismissMode="interactive" 
+          automaticallyAdjustKeyboardInsets={true}
+          keyboardDismissMode="interactive"
           contentInsetAdjustmentBehavior="always"
         >
           <View style={styles.cardOuter}>
@@ -856,7 +872,7 @@ export default function SignIn() {
                   </TouchableOpacity>
                 </View>
                 {errors.password ? <Text style={styles.errorText}>{errors.password}</Text> : null}
-                
+
                 <View style={styles.optionsRow}>
                   <TouchableOpacity style={styles.rememberMeRow} onPress={() => setRememberMe(!rememberMe)}>
                     <View style={[styles.checkbox, rememberMe && styles.checkboxChecked]}>
@@ -898,30 +914,22 @@ export default function SignIn() {
                 </TouchableOpacity>
               ) : null}
 
-              <View style={styles.termsWrap}>
-                <TouchableOpacity onPress={handleToggleAgreement} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                  <View style={[styles.customCheckbox, agreed && styles.customCheckboxChecked, errors.terms && styles.customCheckboxError]}>
-                    {agreed && (
-                      <Svg width={9} height={9} viewBox="0 0 10 10">
-                        <Path d="M2 5l2.5 2.5L8 3" stroke="white" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" fill="none" />
-                      </Svg>
-                    )}
-                  </View>
+              <View style={styles.signupWrap}>
+                <Text style={styles.signupText}>New here? </Text>
+                <TouchableOpacity onPress={navigateToSignUp}>
+                  <Text style={styles.signupLink}>Sign Up</Text>
                 </TouchableOpacity>
+              </View>
+
+              <View style={styles.footerDivider} />
+
+              <View style={styles.termsWrap}>
                 <Text style={styles.termsText}>
                   By signing in, you agree to the{' '}
                   <Text style={styles.termsLink} onPress={openPrivacyPage}>Terms and Condition</Text>
                   {' & '}
                   <Text style={styles.termsLink} onPress={openPrivacyPage}>Privacy Policy</Text>
                 </Text>
-              </View>
-              {errors.terms ? <Text style={styles.errorText}>{errors.terms}</Text> : null}
-
-              <View style={styles.signupWrap}>
-                <Text style={styles.signupText}>New here? </Text>
-                <TouchableOpacity onPress={navigateToSignUp}>
-                  <Text style={styles.signupLink}>Sign Up</Text>
-                </TouchableOpacity>
               </View>
             </Animated.View>
           </View>
@@ -932,61 +940,372 @@ export default function SignIn() {
 }
 
 const styles = StyleSheet.create({
-  flex: { flex: 1, backgroundColor: '#eef2ff' },
-  splashContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#eef2ff' },
-  gridBackground: { ...StyleSheet.absoluteFillObject, width: '100%', height: '100%' },
-  gridOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(255,255,255,0.10)' },
-  scrollContent: { flexGrow: 1, justifyContent: 'center', alignItems: 'center', paddingVertical: 20, paddingHorizontal: 12, minHeight: SCREEN_HEIGHT },
-  cardOuter: { width: '100%', maxWidth: 400, minWidth: 300, alignItems: 'center' },
-  card: { backgroundColor: '#ffffff', borderRadius: 20, paddingHorizontal: 24, paddingVertical: 20, paddingTop: 44, width: '100%', position: 'relative', shadowColor: '#1e293b', shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.06, shadowRadius: 20, elevation: 8, marginTop: 0, borderColor: '#f1f5ff' },
-  connectorTop: { position: 'absolute', top: -4, alignSelf: 'center', width: 8, height: 8, borderRadius: 4, backgroundColor: '#ffffff', borderWidth: 1.5, borderColor: '#c7d2fe' },
-  connectorBottom: { position: 'absolute', bottom: -4, alignSelf: 'center', width: 8, height: 8, borderRadius: 4, backgroundColor: '#ffffff', borderWidth: 1.5, borderColor: '#c7d2fe' },
-  connectorLeft: { position: 'absolute', left: -4, top: '50%', transform: [{ translateY: -4 }], width: 8, height: 8, borderRadius: 4, backgroundColor: '#ffffff', borderWidth: 1.5, borderColor: '#c7d2fe' },
-  connectorRight: { position: 'absolute', right: -4, top: '50%', transform: [{ translateY: -4 }], width: 8, height: 8, borderRadius: 4, backgroundColor: '#ffffff', borderWidth: 1.5, borderColor: '#c7d2fe' },
-  logoWrap: { alignItems: 'center', justifyContent: 'center', marginBottom: -36, zIndex: 10 },
-  logoWrapper: { alignItems: 'center', justifyContent: 'center', backgroundColor: '#eef2ff', borderWidth: 2.5, borderColor: '#3b5bdb', shadowColor: '#3b5bdb', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.15, shadowRadius: 8, elevation: 5 },
-  logo: { backgroundColor: 'transparent' },
-  heading: { fontSize: 24, fontWeight: '800', color: '#0f172a', textAlign: 'center', marginBottom: 2 },
-  subtitle: { fontSize: 13, color: '#64748b', marginBottom: 16, textAlign: 'center' },
-  formGroup: { marginBottom: 12 },
-  label: { fontSize: 12, fontWeight: '600', color: '#334155', marginBottom: 4 },
-  inputWrap: { borderWidth: 1, borderColor: '#dde3fa', borderRadius: 10, backgroundColor: '#ffffff', minHeight: 38, justifyContent: 'center' },
-  inputWrapFocused: { backgroundColor: '#ffffff', shadowColor: '#3b5bdb', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.12, shadowRadius: 8, elevation: 3 },
-  input: { flex: 1, paddingHorizontal: 12, paddingVertical: Platform.OS === 'ios' ? 10 : 9, fontSize: 14, color: '#1a1f36', backgroundColor: 'transparent', minHeight: 40, textAlignVertical: 'center' },
-  inputWithIcon: { paddingRight: 40 },
-  eyeBtn: { position: 'absolute', right: 8, padding: 12 },
-  optionsRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 4, marginBottom: 0 },
-  rememberMeRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  checkbox: { width: 16, height: 16, borderRadius: 4, borderWidth: 2, borderColor: '#8896b3', alignItems: 'center', justifyContent: 'center' },
-  checkboxChecked: { backgroundColor: '#3b5bdb', borderColor: '#3b5bdb' },
-  rememberMeText: { fontSize: 12, color: '#4a5568' },
-  forgotWrap: { alignItems: 'flex-end' },
-  forgotText: { fontSize: 12, color: '#8896b3', fontWeight: '500' },
-  inputError: { borderColor: '#e11d48' },
-  errorText: { fontSize: 11, color: '#e11d48', marginTop: 4, marginLeft: 4, fontWeight: '500' },
-  btnSignIn: { backgroundColor: '#3b5bdb', borderRadius: 10, borderWidth: 1, borderColor: '#2f49c7', paddingVertical: 10, alignItems: 'center', marginTop: 2, shadowColor: '#3b5bdb', shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.2, shadowRadius: 12, elevation: 6 },
-  btnDisabled: { opacity: 0.75 },
-  btnSignInText: { color: '#ffffff', fontSize: 14, fontWeight: '700', letterSpacing: 0.3 },
-  divider: { flexDirection: 'row', alignItems: 'center', marginVertical: 6 },
-  line: { flex: 1, height: 1, backgroundColor: '#e5e9f5' },
-  orText: { marginHorizontal: 10, fontSize: 11, color: '#8896b3', fontWeight: '600' },
-  btnGoogle: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, borderWidth: 1, borderColor: '#e5e7eb', borderRadius: 10, paddingVertical: 9, marginTop: 2, backgroundColor: '#ffffff' },
-  btnGoogleText: { fontSize: 13, fontWeight: '500', color: '#1a1f36', marginLeft: 6 },
-  termsWrap: { flexDirection: 'row', alignItems: 'flex-start', gap: 8, marginTop: 12, paddingHorizontal: 2 },
-  customCheckbox: { width: 16, height: 16, borderRadius: 4, borderWidth: 2, borderColor: '#8896b3', alignItems: 'center', justifyContent: 'center', marginTop: 1, flexShrink: 0 },
-  customCheckboxChecked: { borderColor: '#3b5bdb', backgroundColor: '#3b5bdb' },
-  customCheckboxError: { borderColor: '#e11d48' },
-  termsText: { fontSize: 12, color: '#4a5568', flex: 1, lineHeight: 17 },
-  termsLink: { fontWeight: '700', color: '#3b5bdb' },
-  signupWrap: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', marginTop: 12 },
-  signupText: { fontSize: 12, color: '#64748b' },
-  signupLink: { fontSize: 12, fontWeight: '700', color: '#3b5bdb' },
-  errorModalOverlay: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.5)', justifyContent: 'center', alignItems: 'center' },
-  errorModalContainer: { width: '85%', maxWidth: 320, backgroundColor: '#FFFFFF', borderRadius: 20, padding: 22, alignItems: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.15, shadowRadius: 12, elevation: 8 },
-  errorModalIconWrapper: { marginBottom: 14 },
-  errorModalIconCircle: { width: 56, height: 56, borderRadius: 28, backgroundColor: '#f0f4ff', justifyContent: 'center', alignItems: 'center' },
-  errorModalTitle: { fontSize: 18, fontWeight: '700', color: '#1e293b', textAlign: 'center', marginBottom: 8 },
-  errorModalMessage: { fontSize: 13, color: '#64748b', textAlign: 'center', lineHeight: 19, marginBottom: 20 },
-  errorModalButtonPrimary: { width: '100%', paddingVertical: 11, borderRadius: 10, alignItems: 'center', backgroundColor: '#3b5bdb', flexDirection: 'row', justifyContent: 'center' },
-  errorModalButtonTextPrimary: { color: '#ffffff', fontSize: 15, fontWeight: '600' },
+  flex: {
+    flex: 1,
+    backgroundColor: '#eef2ff',
+  },
+  splashContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#eef2ff',
+  },
+  gridBackground: {
+    ...StyleSheet.absoluteFillObject,
+    width: '100%',
+    height: '100%',
+  },
+  gridOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(255,255,255,0.10)',
+  },
+  scrollContent: {
+    flexGrow: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 20,
+    paddingHorizontal: 12,
+    minHeight: SCREEN_HEIGHT,
+  },
+  cardOuter: {
+    width: '100%',
+    maxWidth: 400,
+    minWidth: 300,
+    alignItems: 'center',
+  },
+  card: {
+    backgroundColor: '#ffffff',
+    borderRadius: 20,
+    paddingHorizontal: 24,
+    paddingVertical: 20,
+    paddingTop: 44,
+    width: '100%',
+    position: 'relative',
+    shadowColor: '#1e293b',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.06,
+    shadowRadius: 20,
+    elevation: 8,
+    marginTop: 0,
+    borderColor: '#f1f5ff',
+  },
+  connectorTop: {
+    position: 'absolute',
+    top: -4,
+    alignSelf: 'center',
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#ffffff',
+    borderWidth: 1.5,
+    borderColor: '#c7d2fe',
+  },
+  connectorBottom: {
+    position: 'absolute',
+    bottom: -4,
+    alignSelf: 'center',
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#ffffff',
+    borderWidth: 1.5,
+    borderColor: '#c7d2fe',
+  },
+  connectorLeft: {
+    position: 'absolute',
+    left: -4,
+    top: '50%',
+    transform: [{ translateY: -4 }],
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#ffffff',
+    borderWidth: 1.5,
+    borderColor: '#c7d2fe',
+  },
+  connectorRight: {
+    position: 'absolute',
+    right: -4,
+    top: '50%',
+    transform: [{ translateY: -4 }],
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#ffffff',
+    borderWidth: 1.5,
+    borderColor: '#c7d2fe',
+  },
+  logoWrap: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: -36,
+    zIndex: 10,
+  },
+  logoWrapper: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#eef2ff',
+    borderWidth: 2.5,
+    borderColor: '#3b5bdb',
+    shadowColor: '#3b5bdb',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+    elevation: 5,
+  },
+  logo: {
+    backgroundColor: 'transparent',
+  },
+  heading: {
+    fontSize: 24,
+    fontWeight: '800',
+    color: '#0f172a',
+    textAlign: 'center',
+    marginBottom: 2,
+  },
+  subtitle: {
+    fontSize: 13,
+    color: '#64748b',
+    marginBottom: 16,
+    textAlign: 'center',
+  },
+  formGroup: {
+    marginBottom: 12,
+  },
+  label: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#334155',
+    marginBottom: 4,
+  },
+  inputWrap: {
+    borderWidth: 1,
+    borderColor: '#dde3fa',
+    borderRadius: 10,
+    backgroundColor: '#ffffff',
+    minHeight: 38,
+    justifyContent: 'center',
+  },
+  inputWrapFocused: {
+    backgroundColor: '#ffffff',
+    shadowColor: '#3b5bdb',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.12,
+    shadowRadius: 8,
+    elevation: 3,
+  },
+  input: {
+    flex: 1,
+    paddingHorizontal: 12,
+    paddingVertical: Platform.OS === 'ios' ? 10 : 9,
+    fontSize: 14,
+    color: '#1a1f36',
+    backgroundColor: 'transparent',
+    minHeight: 40,
+    textAlignVertical: 'center',
+  },
+  inputWithIcon: {
+    paddingRight: 40,
+  },
+  eyeBtn: {
+    position: 'absolute',
+    right: 8,
+    padding: 12,
+  },
+  optionsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: 4,
+    marginBottom: 0,
+  },
+  rememberMeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  checkbox: {
+    width: 16,
+    height: 16,
+    borderRadius: 4,
+    borderWidth: 2,
+    borderColor: '#8896b3',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  checkboxChecked: {
+    backgroundColor: '#3b5bdb',
+    borderColor: '#3b5bdb',
+  },
+  rememberMeText: {
+    fontSize: 12,
+    color: '#4a5568',
+  },
+  forgotWrap: {
+    alignItems: 'flex-end',
+  },
+  forgotText: {
+    fontSize: 12,
+    color: '#8896b3',
+    fontWeight: '500',
+  },
+  inputError: {
+    borderColor: '#e11d48',
+  },
+  errorText: {
+    fontSize: 11,
+    color: '#e11d48',
+    marginTop: 4,
+    marginLeft: 4,
+    fontWeight: '500',
+  },
+  btnSignIn: {
+    backgroundColor: '#3b5bdb',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#2f49c7',
+    paddingVertical: 10,
+    alignItems: 'center',
+    marginTop: 2,
+    shadowColor: '#3b5bdb',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.2,
+    shadowRadius: 12,
+    elevation: 6,
+  },
+  btnDisabled: {
+    opacity: 0.75,
+  },
+  btnSignInText: {
+    color: '#ffffff',
+    fontSize: 14,
+    fontWeight: '700',
+    letterSpacing: 0.3,
+  },
+  divider: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginVertical: 6,
+  },
+  line: {
+    flex: 1,
+    height: 1,
+    backgroundColor: '#e5e9f5',
+  },
+  orText: {
+    marginHorizontal: 10,
+    fontSize: 11,
+    color: '#8896b3',
+    fontWeight: '600',
+  },
+  btnGoogle: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    borderRadius: 10,
+    paddingVertical: 9,
+    marginTop: 2,
+    backgroundColor: '#ffffff',
+  },
+  btnGoogleText: {
+    fontSize: 13,
+    fontWeight: '500',
+    color: '#1a1f36',
+    marginLeft: 6,
+  },
+  footerDivider: {
+    height: 1,
+    backgroundColor: '#e5e9f5',
+    marginTop: 14,
+    marginBottom: 10,
+  },
+  termsWrap: {
+    paddingHorizontal: 2,
+  },
+  termsText: {
+    fontSize: 12,
+    color: '#4a5568',
+    lineHeight: 17,
+    textAlign: 'center',
+  },
+  termsLink: {
+    fontWeight: '700',
+    color: '#3b5bdb',
+  },
+  signupWrap: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginTop: 12,
+  },
+  signupText: {
+    fontSize: 12,
+    color: '#64748b',
+  },
+  signupLink: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#3b5bdb',
+  },
+  errorModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  errorModalContainer: {
+    width: '85%',
+    maxWidth: 320,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
+    padding: 22,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+    elevation: 8,
+  },
+  errorModalIconWrapper: {
+    marginBottom: 14,
+  },
+  errorModalIconCircle: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: '#f0f4ff',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  errorModalTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#1e293b',
+    textAlign: 'center',
+    marginBottom: 8,
+  },
+  errorModalMessage: {
+    fontSize: 13,
+    color: '#64748b',
+    textAlign: 'center',
+    lineHeight: 19,
+    marginBottom: 20,
+  },
+  errorModalButtonPrimary: {
+    width: '100%',
+    paddingVertical: 11,
+    borderRadius: 10,
+    alignItems: 'center',
+    backgroundColor: '#3b5bdb',
+    flexDirection: 'row',
+    justifyContent: 'center',
+  },
+  errorModalButtonTextPrimary: {
+    color: '#ffffff',
+    fontSize: 15,
+    fontWeight: '600',
+  },
 });

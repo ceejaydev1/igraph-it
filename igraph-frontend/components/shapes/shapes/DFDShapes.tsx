@@ -1,6 +1,3 @@
-// components/shapes/shapes/DFDShapes.tsx
-// Data Flow Diagram shapes
-
 import React from 'react';
 import { Svg, Circle, Ellipse, Rect, Line, Polygon, Path, G } from 'react-native-svg';
 

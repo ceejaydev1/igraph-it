@@ -1,5 +1,3 @@
-// components/maxgraph-universal-handler.ts
-
 import {
   VertexHandler,
   VertexHandlerConfig,

@@ -1,8 +1,3 @@
-/**
- * iGraph IT Theme Constants
- * Design system with colors, typography, spacing, and shadows
- */
-
 import { Platform } from 'react-native';
 
 // ─── COLORS ──────────────────────────────────────────────────────────────────

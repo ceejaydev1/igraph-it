@@ -1,5 +1,3 @@
-// components/shapes/ShapesPanel.tsx — With hover tooltips for shape names
-
 import React, { useState, useMemo, useCallback, useRef, useEffect } from 'react';
 import {
   View,
@@ -551,7 +549,7 @@ export default function ShapesPanel({
                 <View style={styles.categoryHeaderLeft}>
                   <View style={[styles.categoryDot, isActive && styles.categoryDotActive]} />
                   <Text style={[styles.categoryTitle, isActive && styles.categoryTitleActive]}>
-                    {category === 'Standard' ? '⭐ Standard' : category}
+                    {category === 'Standard' ? 'Standard' : category}
                   </Text>
                 </View>
                 {searchQuery.length === 0 && (

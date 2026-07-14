@@ -1,6 +1,3 @@
-// components/shapes/shapes/UMLShapes.tsx
-// UML specific shapes (Actor, Lifeline, ClassBox, etc.)
-
 import React from 'react';
 import { Svg, Rect, Ellipse, Polygon, Circle, Line, G, Path } from 'react-native-svg';
 

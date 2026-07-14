@@ -1,5 +1,3 @@
-// app/_layout.tsx
-
 import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
@@ -286,18 +284,9 @@ export default function RootLayout() {
     }
   }, []);
 
-  if (showSplash) {
-    return (
-      <Animated.View style={{ flex: 1, opacity: fadeAnim }}>
-        <CreativeSplashScreen
-          onFinish={() => {}}
-          progress={loadingProgress}
-        />
-      </Animated.View>
-    );
-  }
-
-  // When splash ends, navigate directly - NO LOADING SPINNER
+  // The app (Stack) stays mounted underneath at all times so the splash
+  // fades directly into the already-rendered destination screen instead of
+  // fading into an empty root background (which caused a black flash).
   return (
     <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
       <View style={styles.flex}>
@@ -319,6 +308,18 @@ export default function RootLayout() {
         </Stack>
 
         <StatusBar style="auto" />
+
+        {showSplash && (
+          <Animated.View
+            style={[styles.splashOverlay, { opacity: fadeAnim }]}
+            pointerEvents="auto"
+          >
+            <CreativeSplashScreen
+              onFinish={() => {}}
+              progress={loadingProgress}
+            />
+          </Animated.View>
+        )}
       </View>
     </ThemeProvider>
   );
@@ -327,5 +328,9 @@ export default function RootLayout() {
 const styles = StyleSheet.create({
   flex: {
     flex: 1,
+  },
+  splashOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 1000,
   },
 });

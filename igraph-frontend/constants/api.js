@@ -1,7 +1,3 @@
-// constants/api.js
-// Professional API configuration with fallbacks
-
-// Get the API URL from environment or use default
 const getApiUrl = () => {
   // Check environment variable first
   if (process.env.EXPO_PUBLIC_API_URL) {

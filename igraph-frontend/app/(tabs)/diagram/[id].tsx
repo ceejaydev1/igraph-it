@@ -1,5 +1,3 @@
-// igraph-frontend/app/(tabs)/diagram/[id].tsx
-
 import React, { useState, useRef, useEffect } from 'react';
 import {
   View,
@@ -175,11 +173,11 @@ const PlayIcon: React.FC = () => (
 );
 
 const CheckIcon: React.FC<IconProps> = ({ color }) => (
-  <Svg width={14} height={14} viewBox="0 0 24 24" fill="none">
+  <Svg width={12} height={12} viewBox="0 0 24 24" fill="none">
     <Path
       d="M20 6L9 17L4 12"
       stroke={color}
-      strokeWidth={2.5}
+      strokeWidth={3}
       strokeLinecap="round"
       strokeLinejoin="round"
     />
@@ -348,7 +346,28 @@ const videoStyles = StyleSheet.create({
   },
 });
 
+// ─── Shared Card Shell ────────────────────────────────────────────────────────
+// One quiet container recipe reused underneath every content block below, so
+// the *content type* (section / step / key point) is what visually differs —
+// not three copies of the same "white card + shadow" box.
+
+const cardShell = {
+  backgroundColor: '#ffffff',
+  borderRadius: 12,
+  padding: 20,
+  marginBottom: 16,
+  borderWidth: 1,
+  borderColor: '#eef1f6',
+  shadowColor: '#0F172A',
+  shadowOffset: { width: 0, height: 1 },
+  shadowOpacity: 0.03,
+  shadowRadius: 6,
+  elevation: 1,
+} as const;
+
 // ─── Section Card Component ──────────────────────────────────────────────────
+// Marker is a small square "node" rather than a full-height colored bar —
+// a nod to the diagram nodes this app is actually about, used with restraint.
 
 interface SectionCardProps {
   heading: string;
@@ -357,35 +376,45 @@ interface SectionCardProps {
 }
 
 const SectionCard: React.FC<SectionCardProps> = ({ heading, body, color }) => (
-  <View style={[sectionStyles.card, { borderLeftColor: color }]}>
-    <Text style={[sectionStyles.heading, { color }]}>{heading}</Text>
+  <View style={sectionStyles.card}>
+    <View style={sectionStyles.markerRow}>
+      <View style={[sectionStyles.node, { borderColor: color }]}>
+        <View style={[sectionStyles.nodeDot, { backgroundColor: color }]} />
+      </View>
+      <Text style={[sectionStyles.heading, { color }]}>{heading}</Text>
+    </View>
     <Text style={sectionStyles.body}>{body}</Text>
   </View>
 );
 
 const sectionStyles = StyleSheet.create({
   card: {
-    backgroundColor: '#ffffff',
-    borderRadius: 16,
-    padding: 20,
-    borderLeftWidth: 4,
-    marginBottom: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.04,
-    shadowRadius: 8,
-    elevation: 2,
-    borderTopWidth: 1,
-    borderRightWidth: 1,
-    borderBottomWidth: 1,
-    borderColor: '#f0f2f8',
+    ...cardShell,
+  },
+  markerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginBottom: 10,
+  },
+  node: {
+    width: 16,
+    height: 16,
+    borderRadius: 4,
+    borderWidth: 1.5,
+    justifyContent: 'center',
+    alignItems: 'center',
+    flexShrink: 0,
+  },
+  nodeDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 1.5,
   },
   heading: {
-    fontSize: 14,
-    fontWeight: '800',
-    marginBottom: 10,
-    textTransform: 'uppercase',
-    letterSpacing: 0.8,
+    fontSize: 13,
+    fontWeight: '700',
+    letterSpacing: 0.2,
   },
   body: {
     fontSize: 15,
@@ -395,6 +424,8 @@ const sectionStyles = StyleSheet.create({
 });
 
 // ─── Steps List Component ────────────────────────────────────────────────────
+// Same node motif as SectionCard, but chained with a connecting line — since
+// steps are genuinely sequential, the line is information, not decoration.
 
 interface StepsListProps {
   steps: string[];
@@ -406,8 +437,13 @@ const StepsList: React.FC<StepsListProps> = ({ steps, color }) => (
     <Text style={[stepsStyles.title, { color }]}>Step-by-Step Process</Text>
     {steps.map((step, index) => (
       <View key={index} style={stepsStyles.stepRow}>
-        <View style={[stepsStyles.stepNumber, { backgroundColor: color }]}>
-          <Text style={stepsStyles.stepNumberText}>{index + 1}</Text>
+        <View style={stepsStyles.stepMarkerCol}>
+          <View style={[stepsStyles.stepNode, { borderColor: color }]}>
+            <Text style={[stepsStyles.stepNumberText, { color }]}>{index + 1}</Text>
+          </View>
+          {index < steps.length - 1 && (
+            <View style={[stepsStyles.connector, { backgroundColor: `${color}30` }]} />
+          )}
         </View>
         <Text style={stepsStyles.stepText}>{step}</Text>
       </View>
@@ -417,54 +453,55 @@ const StepsList: React.FC<StepsListProps> = ({ steps, color }) => (
 
 const stepsStyles = StyleSheet.create({
   container: {
-    backgroundColor: '#ffffff',
-    borderRadius: 16,
-    padding: 20,
-    marginBottom: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.04,
-    shadowRadius: 8,
-    elevation: 2,
-    borderWidth: 1,
-    borderColor: '#f0f2f8',
+    ...cardShell,
   },
   title: {
-    fontSize: 14,
-    fontWeight: '800',
-    marginBottom: 16,
-    textTransform: 'uppercase',
-    letterSpacing: 0.8,
+    fontSize: 13,
+    fontWeight: '700',
+    letterSpacing: 0.2,
+    marginBottom: 18,
   },
   stepRow: {
     flexDirection: 'row',
     alignItems: 'flex-start',
     gap: 14,
-    marginBottom: 12,
   },
-  stepNumber: {
-    width: 26,
-    height: 26,
-    borderRadius: 13,
-    justifyContent: 'center',
+  stepMarkerCol: {
     alignItems: 'center',
     flexShrink: 0,
-    marginTop: 1,
+  },
+  stepNode: {
+    width: 24,
+    height: 24,
+    borderRadius: 6,
+    borderWidth: 1.5,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#ffffff',
+  },
+  connector: {
+    width: 1.5,
+    flex: 1,
+    minHeight: 18,
+    marginVertical: 4,
   },
   stepNumberText: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '700',
-    color: '#ffffff',
   },
   stepText: {
     flex: 1,
     fontSize: 15,
     color: '#334155',
     lineHeight: 24,
+    paddingBottom: 18,
   },
 });
 
 // ─── Key Points Component ────────────────────────────────────────────────────
+// Deliberately the odd one out: no node/sequence marker, because these points
+// aren't ordered. A plain hairline check keeps it visually distinct from the
+// sequential blocks above instead of repeating their motif by default.
 
 interface KeyPointsProps {
   points: string[];
@@ -476,7 +513,7 @@ const KeyPoints: React.FC<KeyPointsProps> = ({ points, color }) => (
     <Text style={[keyPointsStyles.title, { color }]}>Key Points to Remember</Text>
     {points.map((point, index) => (
       <View key={index} style={keyPointsStyles.row}>
-        <View style={[keyPointsStyles.icon, { backgroundColor: `${color}15` }]}>
+        <View style={[keyPointsStyles.icon, { borderColor: color }]}>
           <CheckIcon color={color} />
         </View>
         <Text style={keyPointsStyles.text}>{point}</Text>
@@ -487,35 +524,26 @@ const KeyPoints: React.FC<KeyPointsProps> = ({ points, color }) => (
 
 const keyPointsStyles = StyleSheet.create({
   container: {
-    backgroundColor: '#ffffff',
-    borderRadius: 16,
-    padding: 20,
-    marginBottom: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.04,
-    shadowRadius: 8,
-    elevation: 2,
-    borderWidth: 1,
-    borderColor: '#f0f2f8',
+    ...cardShell,
   },
   title: {
-    fontSize: 14,
-    fontWeight: '800',
+    fontSize: 13,
+    fontWeight: '700',
+    letterSpacing: 0.2,
     marginBottom: 16,
-    textTransform: 'uppercase',
-    letterSpacing: 0.8,
   },
   row: {
     flexDirection: 'row',
     alignItems: 'flex-start',
     gap: 12,
-    marginBottom: 10,
+    marginBottom: 12,
   },
   icon: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    borderWidth: 1.5,
+    backgroundColor: '#ffffff',
     justifyContent: 'center',
     alignItems: 'center',
     flexShrink: 0,
@@ -562,7 +590,7 @@ const SDLCFeedbackForm: React.FC<FeedbackFormProps> = ({ color }) => {
         What did you learn in this SDLC?
       </Text>
       <TextInput
-        style={[feedbackStyles.input, { borderColor: `${color}30` }]}
+        style={[feedbackStyles.input, { borderColor: '#e2e8f0' }]}
         placeholder="Share your learning experience..."
         placeholderTextColor="#94a3b8"
         multiline
@@ -584,27 +612,17 @@ const SDLCFeedbackForm: React.FC<FeedbackFormProps> = ({ color }) => {
 
 const feedbackStyles = StyleSheet.create({
   container: {
-    backgroundColor: '#ffffff',
-    borderRadius: 16,
-    padding: 20,
-    marginBottom: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.04,
-    shadowRadius: 8,
-    elevation: 2,
-    borderWidth: 1,
-    borderColor: '#f0f2f8',
+    ...cardShell,
     gap: 16,
   },
   title: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '700',
-    letterSpacing: 0.3,
+    letterSpacing: 0.1,
   },
   input: {
     borderWidth: 1,
-    borderRadius: 12,
+    borderRadius: 10,
     padding: 16,
     fontSize: 15,
     color: '#334155',
@@ -613,20 +631,15 @@ const feedbackStyles = StyleSheet.create({
   },
   submitButton: {
     paddingVertical: 14,
-    borderRadius: 12,
+    borderRadius: 10,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
   },
   submitButtonText: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '700',
     color: '#ffffff',
-    letterSpacing: 0.5,
+    letterSpacing: 0.3,
   },
 });
 

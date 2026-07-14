@@ -1,6 +1,3 @@
-// components/shapes/shapes/SchematicShapes.tsx
-// Electronic schematic diagram shapes - UPDATED with all shapes
-
 import React from 'react';
 import { Svg, Rect, Ellipse, Polygon, Circle, Line, G, Path, Text as SvgText } from 'react-native-svg';
 

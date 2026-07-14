@@ -1,6 +1,3 @@
-// igraph-frontend/app/(tabs)/create.tsx
-// Updated with Properties Panel integration
-
 import React, { useState, useRef, useCallback, useEffect } from 'react';
 import {
   View,
@@ -26,8 +23,8 @@ import PropertiesPanel from '@/components/properties-panel/PropertiesPanel';
 import { ICONS } from '../../constants/icons';
 import { COLORS, SPACING } from '@/constants/theme';
 import { IGRAPH_ID_STYLE_MAP } from '@/components/maxgraph-custom-shapes';
-
-// ─── UNDO/REDO ICONS ─────────────────────────────────────────────────────
+import * as authService from '../../services/authService';
+import { useSave } from '../../contexts/SaveContext';
 
 const UndoIcon = ({ color = '#4a5568', size = 20 }: { color?: string; size?: number }) => (
   <Svg width={size} height={size} viewBox="0 0 24 24" fill={color}>
@@ -38,6 +35,34 @@ const UndoIcon = ({ color = '#4a5568', size = 20 }: { color?: string; size?: num
 const RedoIcon = ({ color = '#4a5568', size = 20 }: { color?: string; size?: number }) => (
   <Svg width={size} height={size} viewBox="0 0 24 24" fill={color}>
     <Path d="M14.59 7H9a7 7 0 100 14h1v-2H9a5 5 0 010-10h5.59l-2.3 2.29L13.71 13 19 7.71 13.71 2.4l-1.42 1.42L14.59 7z"/>
+  </Svg>
+);
+
+//SAVE ICON 
+
+const SaveIcon = ({ color = '#4a5568' }: { color?: string }) => (
+  <Svg width={20} height={20} viewBox="0 0 24 24" fill="none">
+    <Path
+      d="M19 21H5C4.46957 21 3.96086 20.7893 3.58579 20.4142C3.21071 20.0391 3 19.5304 3 19V5C3 4.46957 3.21071 3.96086 3.58579 3.58579C3.21071 3.96086 4.46957 3 5 3H16L21 8V19C21 19.5304 20.7893 20.0391 20.4142 20.4142C20.0391 20.7893 19.5304 21 19 21Z"
+      stroke={color}
+      strokeWidth={1.8}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+    <Path
+      d="M17 21V13H7V21"
+      stroke={color}
+      strokeWidth={1.8}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+    <Path
+      d="M7 3V8H15"
+      stroke={color}
+      strokeWidth={1.8}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
   </Svg>
 );
 
@@ -131,6 +156,12 @@ export default function CreateScreen() {
   const [activeTool, setActiveTool] = useState<'shapes' | 'text' | 'draw' | 'comment'>('shapes');
   const [activeUmlType, setActiveUmlType] = useState('Functional Decomposition Diagram');
 
+  // ─── ✅ FIX: Use ref to store diagramXml without causing re-renders ───────
+  const diagramXmlRef = useRef<string>('');
+
+  // ─── Save state ──────────────────────────────────────────────────────────────
+  const [isSaving, setIsSaving] = useState(false);
+
   // ─── Download state ──────────────────────────────────────────────────────────
   const [showDownloadDropdown, setShowDownloadDropdown] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
@@ -163,13 +194,18 @@ export default function CreateScreen() {
   // ─── Page XML cache ─────────────────────────────────────────────────────────
   const pageXmlCache = useRef<Map<string, string>>(new Map());
 
-  // ─── Format Bar State ──────────────────────────────────────────────────────
-  const [selectedFont, setSelectedFont] = useState('Inter');
-  const [selectedFontSize, setSelectedFontSize] = useState('10');
-  const [isBold, setIsBold] = useState(false);
-  const [isItalic, setIsItalic] = useState(false);
-  const [isUnderline, setIsUnderline] = useState(false);
-  const [isStrikeThrough, setIsStrikeThrough] = useState(false);
+  // ─── SaveContext integration ──────────────────────────────────────────────
+  const { setSaveHandler, setIsSaving: setContextIsSaving } = useSave();
+
+  // ─── Debug: Log when component mounts ──────────────────────────────────────
+  useEffect(() => {
+    console.log('🔍 create.tsx mounted, setSaveHandler available:', !!setSaveHandler);
+  }, [setSaveHandler]);
+
+  // ─── ✅ FIX: Update ref whenever diagramXml changes ──────────────────────
+  useEffect(() => {
+    diagramXmlRef.current = diagramXml;
+  }, [diagramXml]);
 
   const getZoomIndex = (current: number): number => {
     let closest = 0;
@@ -189,15 +225,21 @@ export default function CreateScreen() {
   // ─── Graph callbacks ────────────────────────────────────────────────────────
 
   const handleGraphReady = (graph: any) => {
+    console.log('🟢 Graph ready, setting graphInstance');
     setGraphInstance(graph);
     setIsGraphReady(true);
     if (graph) {
-      const scale = graph.getView().getScale();
-      setZoomLevel(Math.round(scale * 100));
+      try {
+        const scale = graph.getView().getScale();
+        setZoomLevel(Math.round(scale * 100));
+      } catch (e) {
+        console.warn('Could not get scale:', e);
+      }
     }
   };
 
   const handleGraphChange = (xml: string) => {
+    console.log('🔄 Graph changed, XML length:', xml?.length || 0);
     setDiagramXml(xml);
     if (activePageId) {
       pageXmlCache.current.set(activePageId, xml);
@@ -239,7 +281,6 @@ export default function CreateScreen() {
 
     if (graphInstance && pageXml) {
       try {
-        const model = graphInstance.getModel();
         console.log(`📄 Switched to page: ${pageId}`);
       } catch (e) {
         console.error('Error loading page:', e);
@@ -266,9 +307,11 @@ export default function CreateScreen() {
     setDiagramXml('');
     if (graphInstance) {
       try {
-        const model = graphInstance.getModel();
-        model.clear();
-        graphInstance.clearSelection();
+        const model = graphInstance.getDataModel ? graphInstance.getDataModel() : graphInstance.model;
+        if (model) {
+          model.clear();
+          graphInstance.clearSelection();
+        }
       } catch (e) {
         console.error('Error clearing graph for new page:', e);
       }
@@ -389,8 +432,8 @@ export default function CreateScreen() {
       const centerX = (containerW / 2) / scale - translate.x;
       const centerY = (containerH / 2) / scale - translate.y;
 
-      const x = Math.round((centerX - SHAPE_W / 2) / GRID) * GRID;
-      const y = Math.round((centerY - SHAPE_H / 2) / GRID) * GRID;
+      const x = Math.round((centerX - 120 / 2) / 10) * 10;
+      const y = Math.round((centerY - 60 / 2) / 10) * 10;
 
       const styleKey = IGRAPH_ID_STYLE_MAP[shapeId] ?? 'igraph.rectangle';
 
@@ -409,7 +452,7 @@ export default function CreateScreen() {
       const cell = graph.insertVertex(
         null, null, '',
         x, y,
-        SHAPE_W, SHAPE_H,
+        120, 60,
         styleObject,
       );
 
@@ -515,6 +558,197 @@ export default function CreateScreen() {
     document.body.removeChild(link);
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   };
+
+  // ─── ✅ FIXED: SAVE FUNCTION - Uses ref for XML, stable dependencies ──────
+
+  const handleSaveDiagram = useCallback(async () => {
+    console.log('🟢 SAVE BUTTON CLICKED - handleSaveDiagram called');
+    
+    if (!graphInstance) {
+      console.log('❌ No graphInstance');
+      Alert.alert('No Diagram', 'Please create a diagram first.');
+      return;
+    }
+
+    const container = graphInstance.container;
+    if (!container) {
+      console.log('❌ No container');
+      Alert.alert('Error', 'Could not access diagram canvas.');
+      return;
+    }
+
+    // Check if user is authenticated
+    console.log('🔑 Checking authentication...');
+    const token = await authService.getAccessToken();
+    console.log('🔑 Token:', token ? `Present (${token.substring(0, 20)}...)` : 'MISSING');
+    
+    if (!token) {
+      console.log('❌ No token found');
+      Alert.alert(
+        'Sign In Required',
+        'Please sign in to save your diagram.',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Sign In', onPress: () => router.push('/(auth)/signin') }
+        ]
+      );
+      return;
+    }
+
+    console.log('📤 Starting save process...');
+    setIsSaving(true);
+    setContextIsSaving(true);
+
+    try {
+      // ✅ FIX: Use the ref instead of state to prevent recreating the function
+      const xml = diagramXmlRef.current;
+      
+      console.log('📄 XML length:', xml?.length || 0);
+      console.log('📄 XML preview:', xml?.substring(0, 200) || 'EMPTY');
+
+      // Check if the diagram has actual content
+      const isEmptyXml = !xml || 
+        xml.trim().length === 0 || 
+        xml === '<mxGraphModel/>' || 
+        xml === '<root/>' ||
+        xml === '<mxGraphModel><root><mxCell id="0"/><mxCell id="1" parent="0"/></mxGraphModel>';
+      
+      if (isEmptyXml) {
+        console.log('❌ Empty diagram content - no shapes added yet');
+        Alert.alert('Empty Diagram', 'Please add some content to your diagram before saving.');
+        setIsSaving(false);
+        setContextIsSaving(false);
+        return;
+      }
+
+      // Generate a preview image
+      console.log('🖼️ Generating preview image...');
+      let imageDataUrl = '';
+      try {
+        const canvas = await renderDiagramToCanvas(container, 0.5);
+        imageDataUrl = canvas.toDataURL('image/png');
+        console.log('🖼️ Preview generated, size:', (imageDataUrl.length / 1024).toFixed(1), 'KB');
+      } catch (renderError) {
+        console.warn('⚠️ Could not generate preview image:', renderError);
+        // Continue without preview - it's optional
+      }
+
+      // Prepare the save payload
+      const payload = {
+        name: diagramName || 'Untitled Diagram',
+        xml: xml,
+        previewImage: imageDataUrl,
+        type: activeUmlType || 'General',
+        pages: pages.map(p => ({
+          id: p.id,
+          name: p.name,
+          xml: pageXmlCache.current.get(p.id) || ''
+        })),
+        activePageId: activePageId
+      };
+
+      const API_URL = process.env.EXPO_PUBLIC_API_URL || 'https://igraph-backend.onrender.com';
+      const url = `${API_URL}/api/diagrams/save`;
+      
+      console.log(`📤 Sending POST to: ${url}`);
+      console.log('📤 Payload:', { 
+        name: payload.name, 
+        type: payload.type, 
+        xmlLength: payload.xml.length,
+        pagesCount: payload.pages.length,
+        hasPreview: !!payload.previewImage
+      });
+
+      // Send to backend
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify(payload)
+      });
+
+      console.log('📥 Response status:', response.status);
+      
+      // Check if response is OK before parsing JSON
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('❌ Server error response:', errorText);
+        throw new Error(`Server error: ${response.status} - ${errorText || response.statusText}`);
+      }
+      
+      const result = await response.json();
+      console.log('📥 Response data:', result);
+
+      if (result.success) {
+        console.log('✅ Diagram saved successfully!');
+        Alert.alert(
+          '✅ Diagram Saved!',
+          `"${diagramName}" has been saved to your diagrams.`,
+          [
+            { 
+              text: 'View Saved', 
+              onPress: () => {
+                router.push('/(tabs)/savedDiagrams');
+              }
+            },
+            { text: 'Continue Editing', style: 'cancel' }
+          ]
+        );
+      } else {
+        console.log('❌ Save failed:', result.message);
+        Alert.alert('Error', result.message || 'Failed to save diagram. Please try again.');
+      }
+    } catch (error: any) {
+      console.error('❌ Save diagram error:', error);
+      console.error('❌ Error stack:', error.stack);
+      
+      if (error.message?.includes('Network') || error.message?.includes('fetch') || error.message?.includes('Failed to fetch')) {
+        Alert.alert('Network Error', 'Could not connect to server. Please check your internet connection and make sure the backend is running.');
+      } else if (error.message?.includes('JSON')) {
+        Alert.alert('Server Error', 'The server returned an invalid response. Please try again.');
+      } else {
+        Alert.alert('Error', error.message || 'Failed to save diagram. Please try again.');
+      }
+    } finally {
+      console.log('🔚 Save process finished');
+      setIsSaving(false);
+      setContextIsSaving(false);
+    }
+  }, [graphInstance, diagramName, activeUmlType, pages, activePageId, router, setContextIsSaving]);
+
+  // ─── ✅ FIXED: Register save handler with context - Stable registration ──
+
+  // Use ref to track the current handler to prevent re-registration loops
+  const saveHandlerRef = useRef<(() => Promise<void>) | null>(null);
+
+  // Register save handler with context
+  useEffect(() => {
+    console.log('🔄 Registering save handler...');
+    const handler = handleSaveDiagram;
+    
+    // Only register if the handler has changed
+    if (saveHandlerRef.current !== handler) {
+      saveHandlerRef.current = handler;
+      setSaveHandler(handler);
+    }
+    
+    return () => {
+      // Only unregister if we're the ones who registered
+      if (saveHandlerRef.current === handler) {
+        console.log('🔄 Unregistering save handler');
+        saveHandlerRef.current = null;
+        setSaveHandler(null);
+      }
+    };
+  }, [handleSaveDiagram, setSaveHandler]);
+
+  // ─── Sync saving state with context ──────────────────────────────────────
+
+  useEffect(() => {
+    setContextIsSaving(isSaving);
+  }, [isSaving, setContextIsSaving]);
 
   // ─── DOWNLOAD HANDLER ─────────────────────────────────────────────────────
 
@@ -751,14 +985,11 @@ export default function CreateScreen() {
       const um = graphInstance.undoManager;
       if (um && um.canUndo()) {
         um.undo();
-        const xml = graphInstance.getModel().getXml();
-        setDiagramXml(xml);
-        if (activePageId) {
-          pageXmlCache.current.set(activePageId, xml);
-        }
         setTimeout(focusGraph, 50);
       }
-    } catch (e) { console.error('Undo error:', e); }
+    } catch (e) { 
+      console.error('Undo error:', e); 
+    }
   };
 
   const handleRedo = () => {
@@ -767,14 +998,11 @@ export default function CreateScreen() {
       const um = graphInstance.undoManager;
       if (um && um.canRedo()) {
         um.redo();
-        const xml = graphInstance.getModel().getXml();
-        setDiagramXml(xml);
-        if (activePageId) {
-          pageXmlCache.current.set(activePageId, xml);
-        }
         setTimeout(focusGraph, 50);
       }
-    } catch (e) { console.error('Redo error:', e); }
+    } catch (e) { 
+      console.error('Redo error:', e); 
+    }
   };
 
   const toggleShapesPanel = () => {
@@ -790,11 +1018,6 @@ export default function CreateScreen() {
       setTimeout(focusGraph, 150);
     }
   }, [showShapesPanel, isGraphReady, focusGraph]);
-
-  const toggleBold = () => setIsBold(!isBold);
-  const toggleItalic = () => setIsItalic(!isItalic);
-  const toggleUnderline = () => setIsUnderline(!isUnderline);
-  const toggleStrikeThrough = () => setIsStrikeThrough(!isStrikeThrough);
 
   interface PaperSizeDef {
     label: string;
@@ -1077,15 +1300,36 @@ export default function CreateScreen() {
             </TouchableOpacity>
           </View>
 
-          <Text style={styles.mobileTitle} numberOfLines={1}>
-            {diagramName}
-          </Text>
+          <TextInput
+            style={styles.mobileTitle}
+            value={diagramName}
+            onChangeText={setDiagramName}
+            placeholder="Diagram Name"
+            placeholderTextColor="#94a3b8"
+            numberOfLines={1}
+            maxLength={50}
+          />
 
           <View style={styles.mobileTopBarRight}>
+            {/* ─── SAVE BUTTON ─────────────────────────────────────────────── */}
+            <TouchableOpacity
+              style={[styles.mobileTopBarBtn, !isGraphReady && styles.mobileTopBarBtnDisabled]}
+              onPress={handleSaveDiagram}
+              disabled={!isGraphReady || isSaving}
+              activeOpacity={0.7}
+            >
+              {isSaving ? (
+                <View style={styles.saveSpinner} />
+              ) : (
+                <SaveIcon color={isGraphReady ? '#10b981' : '#cbd5e1'} />
+              )}
+            </TouchableOpacity>
+            
             <TouchableOpacity
               style={[styles.mobileTopBarBtn, !isGraphReady && styles.mobileTopBarBtnDisabled]}
               onPress={handlePrint}
               disabled={!isGraphReady || isPreparingPrint}
+              activeOpacity={0.7}
             >
               <PrintIcon color={isGraphReady ? '#4a5568' : '#cbd5e1'} />
             </TouchableOpacity>
@@ -1093,6 +1337,7 @@ export default function CreateScreen() {
               style={[styles.mobileTopBarBtn, !isGraphReady && styles.mobileTopBarBtnDisabled]}
               onPress={() => setShowDownloadDropdown(prev => !prev)}
               disabled={!isGraphReady || isDownloading}
+              activeOpacity={0.7}
             >
               {isDownloading ? (
                 <View style={styles.downloadSpinner} />
@@ -1235,6 +1480,20 @@ export default function CreateScreen() {
             />
           </View>
           <View style={styles.navbarRight}>
+            {/* ─── SAVE BUTTON ─────────────────────────────────────────────── */}
+            <TouchableOpacity
+              style={[styles.navIconBtn, styles.navBtnSuccess, !isGraphReady && styles.navBtnDisabled]}
+              onPress={handleSaveDiagram}
+              activeOpacity={0.7}
+              disabled={!isGraphReady || isSaving}
+            >
+              {isSaving ? (
+                <View style={styles.saveSpinnerSmall} />
+              ) : (
+                <SaveIcon color={isGraphReady ? '#ffffff' : '#94a3b8'} />
+              )}
+            </TouchableOpacity>
+
             <TouchableOpacity
               style={[styles.navIconBtn, styles.navBtnPrimary, !isGraphReady && styles.navBtnDisabled]}
               onPress={handlePrint}
@@ -1243,6 +1502,7 @@ export default function CreateScreen() {
             >
               <PrintIcon color={isGraphReady ? '#ffffff' : '#94a3b8'} />
             </TouchableOpacity>
+
             <TouchableOpacity
               style={[styles.navIconBtn, styles.navBtnPrimary, !isGraphReady && styles.navBtnDisabled]}
               onPress={() => setShowDownloadDropdown(prev => !prev)}
@@ -1258,6 +1518,7 @@ export default function CreateScreen() {
           </View>
         </View>
 
+        {/* ─── FORMAT BAR - UNDO/REDO ONLY ───────────────────────────────── */}
         <View style={styles.formatBar}>
           <TouchableOpacity
             style={[styles.formatBtn, !isGraphReady && styles.formatBtnDisabled]}
@@ -1274,125 +1535,6 @@ export default function CreateScreen() {
             activeOpacity={0.7}
           >
             <RedoIcon color={isGraphReady ? '#4a5568' : '#cbd5e1'} size={18} />
-          </TouchableOpacity>
-
-          <View style={styles.formatDivider} />
-
-          {Platform.OS === 'web' ? (
-            <>
-              <select
-                style={{
-                  fontSize: '11px',
-                  color: '#1a1f36',
-                  backgroundColor: 'transparent',
-                  border: 'none',
-                  padding: '2px 4px',
-                  borderRadius: '4px',
-                  height: '28px',
-                  minWidth: '40px',
-                  maxWidth: '80px',
-                  outline: 'none',
-                  fontFamily: 'inherit',
-                }}
-                value={selectedFont}
-                onChange={(e) => setSelectedFont(e.target.value)}
-                disabled={!isGraphReady}
-              >
-                <option value="Inter">Inter</option>
-                <option value="Arial">Arial</option>
-                <option value="Helvetica">Helvetica</option>
-                <option value="Georgia">Georgia</option>
-                <option value="Times New Roman">Times New Roman</option>
-                <option value="Courier New">Courier New</option>
-                <option value="Verdana">Verdana</option>
-              </select>
-
-              <select
-                style={{
-                  fontSize: '11px',
-                  color: '#1a1f36',
-                  backgroundColor: 'transparent',
-                  border: 'none',
-                  padding: '2px 4px',
-                  borderRadius: '4px',
-                  height: '28px',
-                  minWidth: '30px',
-                  maxWidth: '50px',
-                  outline: 'none',
-                  fontFamily: 'inherit',
-                }}
-                value={selectedFontSize}
-                onChange={(e) => setSelectedFontSize(e.target.value)}
-                disabled={!isGraphReady}
-              >
-                <option value="8">8</option>
-                <option value="10">10</option>
-                <option value="12">12</option>
-                <option value="14">14</option>
-                <option value="16">16</option>
-                <option value="18">18</option>
-                <option value="20">20</option>
-                <option value="24">24</option>
-                <option value="28">28</option>
-                <option value="32">32</option>
-                <option value="36">36</option>
-                <option value="48">48</option>
-                <option value="72">72</option>
-              </select>
-            </>
-          ) : (
-            <>
-              <Text style={styles.formatLabel}>Inter</Text>
-              <Text style={styles.formatLabel}>{selectedFontSize}pt</Text>
-            </>
-          )}
-
-          <View style={styles.formatDivider} />
-
-          <TouchableOpacity
-            style={[styles.formatBtn, isBold && styles.formatBtnActive]}
-            onPress={toggleBold}
-            disabled={!isGraphReady}
-            activeOpacity={0.7}
-          >
-            <BoldIcon color={isBold ? '#4c6fff' : (isGraphReady ? '#4a5568' : '#cbd5e1')} />
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[styles.formatBtn, isItalic && styles.formatBtnActive]}
-            onPress={toggleItalic}
-            disabled={!isGraphReady}
-            activeOpacity={0.7}
-          >
-            <ItalicIcon color={isItalic ? '#4c6fff' : (isGraphReady ? '#4a5568' : '#cbd5e1')} />
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[styles.formatBtn, isUnderline && styles.formatBtnActive]}
-            onPress={toggleUnderline}
-            disabled={!isGraphReady}
-            activeOpacity={0.7}
-          >
-            <UnderlineIcon color={isUnderline ? '#4c6fff' : (isGraphReady ? '#4a5568' : '#cbd5e1')} />
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[styles.formatBtn, isStrikeThrough && styles.formatBtnActive]}
-            onPress={toggleStrikeThrough}
-            disabled={!isGraphReady}
-            activeOpacity={0.7}
-          >
-            <StrikeThroughIcon color={isStrikeThrough ? '#4c6fff' : (isGraphReady ? '#4a5568' : '#cbd5e1')} />
-          </TouchableOpacity>
-
-          <View style={styles.formatDivider} />
-
-          <TouchableOpacity
-            style={[styles.formatBtn, !isGraphReady && styles.formatBtnDisabled]}
-            disabled={!isGraphReady}
-            activeOpacity={0.7}
-          >
-            <FontColorIcon color={isGraphReady ? '#4a5568' : '#cbd5e1'} />
           </TouchableOpacity>
         </View>
 
@@ -1571,7 +1713,7 @@ const PrintIcon = ({ color = '#4a5568' }: { color?: string }) => (
   <Svg width={20} height={20} viewBox="0 0 24 24" fill="none">
     <Path d="M6 9V3H18V9" stroke={color} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" />
     <Path d="M6 21H18V15H6V21Z" stroke={color} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" />
-    <Path d="M6 15H4C3.46957 15 2.96086 14.7893 2.58579 14.4142C2.21071 14.0391 2 13.5304 2 13V11C2 10.4696 2.21071 9.96086 2.58579 9.58579C2.96086 9.21071 3.46957 9 4 9H20C20.5304 9 21.0391 9.21071 21.4142 9.58579C21.7893 9.96086 22 10.4696 22 11V13C22 13.5304 21.7893 14.0391 21.4142 14.4142C21.0391 14.7893 20.5304 15 20 15H18" stroke={color} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" />
+    <Path d="M6 15H4C3.46957 15 3.96086 14.7893 3.58579 14.4142C3.21071 14.0391 3 13.5304 3 13V11C3 10.4696 3.21071 9.96086 3.58579 9.58579C3.96086 9.21071 4.46957 9 4 9H20C20.5304 9 21.0391 9.21071 21.4142 9.58579C21.7893 9.96086 22 10.4696 22 11V13C22 13.5304 21.7893 14.0391 21.4142 14.4142C21.0391 14.7893 20.5304 15 20 15H18" stroke={color} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" />
     <Path d="M17 13H7" stroke={color} strokeWidth={1.8} strokeLinecap="round" />
   </Svg>
 );
@@ -1597,45 +1739,7 @@ const CloseTabIcon = ({ color = '#94a3b8' }: { color?: string }) => (
   </Svg>
 );
 
-const BoldIcon = ({ color = '#4a5568' }: { color?: string }) => (
-  <Svg width={14} height={14} viewBox="0 0 24 24" fill="none">
-    <Path d="M6 4h8a4 4 0 0 1 4 4 4 4 0 0 1-4 4H6z" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
-    <Path d="M6 12h9a4 4 0 0 1 4 4 4 4 0 0 1-4 4H6z" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
-  </Svg>
-);
-
-const ItalicIcon = ({ color = '#4a5568' }: { color?: string }) => (
-  <Svg width={14} height={14} viewBox="0 0 24 24" fill="none">
-    <Path d="M19 4h-9M14 20H5M15 4L9 20" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
-  </Svg>
-);
-
-const UnderlineIcon = ({ color = '#4a5568' }: { color?: string }) => (
-  <Svg width={14} height={14} viewBox="0 0 24 24" fill="none">
-    <Path d="M6 4v6a6 6 0 0 0 12 0V4" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
-    <Path d="M4 20h16" stroke={color} strokeWidth={2} strokeLinecap="round" />
-  </Svg>
-);
-
-const StrikeThroughIcon = ({ color = '#4a5568' }: { color?: string }) => (
-  <Svg width={14} height={14} viewBox="0 0 24 24" fill="none">
-    <Path d="M6 16h12M8 12h8M10 8h4" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
-  </Svg>
-);
-
-const FontColorIcon = ({ color = '#4a5568' }: { color?: string }) => (
-  <Svg width={14} height={14} viewBox="0 0 24 24" fill="none">
-    <Path d="M4 20L12 4L20 20" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
-    <Path d="M8 14h8" stroke={color} strokeWidth={2} strokeLinecap="round" />
-    <Circle cx="12" cy="18" r="2" fill={color} />
-  </Svg>
-);
-
 // ─── STYLES ───────────────────────────────────────────────────────────────────
-
-const SHAPE_W = 120;
-const SHAPE_H = 60;
-const GRID = 10;
 
 const styles = StyleSheet.create({
   container: {
@@ -1668,12 +1772,14 @@ const styles = StyleSheet.create({
     width: 34,
     height: 34,
     borderRadius: 7,
-    backgroundColor: '#f1f5f9',
     alignItems: 'center',
     justifyContent: 'center',
   },
   navBtnPrimary: {
     backgroundColor: '#4c6fff',
+  },
+  navBtnSuccess: {
+    backgroundColor: '#10b981',
   },
   navBtnDisabled: {
     opacity: 0.45,
@@ -1713,18 +1819,6 @@ const styles = StyleSheet.create({
   },
   formatBtnDisabled: {
     opacity: 0.4,
-  },
-  formatDivider: {
-    width: 1,
-    height: 20,
-    backgroundColor: '#e2e8f0',
-    marginHorizontal: 4,
-  },
-  formatLabel: {
-    fontSize: 11,
-    color: '#4a5568',
-    paddingHorizontal: 4,
-    fontWeight: '500',
   },
   body: {
     flex: 1,
@@ -1997,7 +2091,23 @@ const styles = StyleSheet.create({
     borderColor: '#4c6fff',
     borderTopColor: 'transparent',
   },
+  saveSpinner: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    borderWidth: 2,
+    borderColor: '#10b981',
+    borderTopColor: 'transparent',
+  },
   downloadSpinnerSmall: {
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+    borderWidth: 2,
+    borderColor: '#ffffff',
+    borderTopColor: 'transparent',
+  },
+  saveSpinnerSmall: {
     width: 16,
     height: 16,
     borderRadius: 8,
@@ -2224,6 +2334,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
+    flexShrink: 0, // ✅ FIX: never let the back button get squeezed
   },
   mobileTopBarBtn: {
     width: 34,
@@ -2234,21 +2345,32 @@ const styles = StyleSheet.create({
     backgroundColor: '#f8fafc',
     borderWidth: 1,
     borderColor: '#eef2f6',
+    flexShrink: 0, // ✅ FIX: fixed-size icon buttons must never shrink to 0 width
   },
   mobileTopBarBtnDisabled: {
     opacity: 0.4,
   },
   mobileTitle: {
     flex: 1,
+    minWidth: 0, // ✅ FIX: THE ACTUAL BUG. On web, flex items default to
+                 // min-width: auto, so this TextInput refused to shrink below
+                 // its text content width and pushed the Save/Print/Download
+                 // buttons (mobileTopBarRight) off the visible row on narrow
+                 // phones — Download, being last, disappeared first.
     fontSize: 15,
     fontWeight: '600',
     color: '#1a1f36',
     textAlign: 'center',
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+    borderRadius: 6,
+    backgroundColor: 'transparent',
   },
   mobileTopBarRight: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
+    flexShrink: 0, // ✅ FIX: never let this button group get squeezed to 0
   },
   mobileCanvasContainer: {
     flex: 1,

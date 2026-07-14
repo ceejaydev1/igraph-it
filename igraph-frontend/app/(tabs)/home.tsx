@@ -1,5 +1,3 @@
-// igraph-frontend/app/(tabs)/home.tsx
-
 import React, { useState, useCallback, useMemo, useRef, useEffect } from 'react';
 import { 
   View, 
@@ -553,7 +551,12 @@ export default function Home() {
         showsVerticalScrollIndicator={false}
         contentContainerStyle={[
           styles.scrollContent,
-          { paddingHorizontal: layout.containerPadding }
+          {
+            paddingHorizontal: layout.containerPadding,
+            // Extra clearance on mobile/tablet so the last row isn't hidden
+            // behind the floating docked bottom navbar (Navbar.tsx).
+            paddingBottom: layout.isDesktop ? 32 : 120,
+          }
         ]}
         keyboardShouldPersistTaps="handled"
         numColumns={layout.numColumns}

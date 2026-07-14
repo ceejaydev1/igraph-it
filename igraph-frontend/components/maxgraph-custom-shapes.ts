@@ -1,6 +1,3 @@
-// components/maxgraph-custom-shapes.ts
-// Registers custom shapes with maxGraph so the canvas matches the panel previews.
-
 import {
   Shape,
   AbstractCanvas2D,
@@ -12,8 +9,6 @@ import {
 // ════════════════════════════════════════════════════════════════════════════
 
 // ─── 1. FUNCTION SHAPE ─────────────────────────────────────────────────────
-// Rounded Rectangle with #DCEAF7 fill, #4A78A8 border
-
 class FDD_FunctionShapeCanvas extends Shape {
   paintBackground(c: AbstractCanvas2D, x: number, y: number, w: number, h: number) {
     const r = Math.min(w, h) * 0.08;
@@ -26,21 +21,15 @@ class FDD_FunctionShapeCanvas extends Shape {
 }
 
 // ─── 2. INPUT SHAPE ──────────────────────────────────────────────────────
-// Rounded Rectangle #DCEFD2 / #5A9E4B with right arrow
-
 class FDD_InputShapeCanvas extends Shape {
   paintBackground(c: AbstractCanvas2D, x: number, y: number, w: number, h: number) {
     const r = Math.min(w, h) * 0.08;
     const cy = y + h / 2;
-    
-    // Main rectangle
     c.setFillColor('#DCEFD2');
     c.setStrokeColor('#5A9E4B');
     c.setStrokeWidth(2);
     c.roundrect(x + 1, y + 1, w - 2, h - 2, r, r);
     c.fillAndStroke();
-    
-    // Right arrow indicator
     c.setFillColor('#5A9E4B');
     c.setStrokeColor('#5A9E4B');
     c.begin();
@@ -53,21 +42,15 @@ class FDD_InputShapeCanvas extends Shape {
 }
 
 // ─── 3. OUTPUT SHAPE ─────────────────────────────────────────────────────
-// Rounded Rectangle #FBE8B8 / #F39C12 with left arrow
-
 class FDD_OutputShapeCanvas extends Shape {
   paintBackground(c: AbstractCanvas2D, x: number, y: number, w: number, h: number) {
     const r = Math.min(w, h) * 0.08;
     const cy = y + h / 2;
-    
-    // Main rectangle
     c.setFillColor('#FBE8B8');
     c.setStrokeColor('#F39C12');
     c.setStrokeWidth(2);
     c.roundrect(x + 1, y + 1, w - 2, h - 2, r, r);
     c.fillAndStroke();
-    
-    // Left arrow indicator
     c.setFillColor('#F39C12');
     c.setStrokeColor('#F39C12');
     c.begin();
@@ -80,22 +63,16 @@ class FDD_OutputShapeCanvas extends Shape {
 }
 
 // ─── 4. CONTROL CONNECTOR ──────────────────────────────────────────────
-// Solid arrow Left → Right
-
 class FDD_ControlShapeCanvas extends Shape {
   paintBackground(c: AbstractCanvas2D, x: number, y: number, w: number, h: number) {
     const cy = y + h / 2;
     c.setStrokeColor('#000000');
     c.setStrokeWidth(2);
     c.setFillColor('#000000');
-    
-    // Line
     c.begin();
     c.moveTo(x + 2, cy);
     c.lineTo(x + w - 12, cy);
     c.stroke();
-    
-    // Arrow head
     c.begin();
     c.moveTo(x + w - 2, cy);
     c.lineTo(x + w - 12, cy - 6);
@@ -105,17 +82,13 @@ class FDD_ControlShapeCanvas extends Shape {
   }
 }
 
-// ─── 5. MECHANISM (ENABLER) CONNECTOR ──────────────────────────────────
-// Dashed arrow (8 4) Left → Right
-
+// ─── 5. MECHANISM ──────────────────────────────────────────────────────
 class FDD_MechanismShapeCanvas extends Shape {
   paintBackground(c: AbstractCanvas2D, x: number, y: number, w: number, h: number) {
     const cy = y + h / 2;
     c.setStrokeColor('#000000');
     c.setStrokeWidth(2);
     c.setFillColor('#000000');
-    
-    // Dashed line
     c.setDashed(true);
     c.setDashPattern('8 4');
     c.begin();
@@ -123,8 +96,6 @@ class FDD_MechanismShapeCanvas extends Shape {
     c.lineTo(x + w - 12, cy);
     c.stroke();
     c.setDashed(false);
-    
-    // Arrow head
     c.begin();
     c.moveTo(x + w - 2, cy);
     c.lineTo(x + w - 12, cy - 6);
@@ -135,35 +106,26 @@ class FDD_MechanismShapeCanvas extends Shape {
 }
 
 // ─── 6. INTERFACE CONNECTOR ─────────────────────────────────────────────
-// Double-ended arrow
-
 class FDD_InterfaceShapeCanvas extends Shape {
   paintBackground(c: AbstractCanvas2D, x: number, y: number, w: number, h: number) {
     const cy = y + h / 2;
     const arrowSize = 6;
     const arrowWidth = 12;
-    
     c.setStrokeColor('#000000');
     c.setStrokeWidth(2);
     c.setFillColor('#000000');
-    
-    // Left arrow head (pointing left)
     c.begin();
     c.moveTo(x + 2, cy);
     c.lineTo(x + arrowWidth, cy - arrowSize);
     c.lineTo(x + arrowWidth, cy + arrowSize);
     c.close();
     c.fillAndStroke();
-    
-    // Right arrow head (pointing right)
     c.begin();
     c.moveTo(x + w - 2, cy);
     c.lineTo(x + w - arrowWidth, cy - arrowSize);
     c.lineTo(x + w - arrowWidth, cy + arrowSize);
     c.close();
     c.fillAndStroke();
-    
-    // Connecting line
     c.begin();
     c.moveTo(x + arrowWidth, cy);
     c.lineTo(x + w - arrowWidth, cy);
@@ -171,9 +133,7 @@ class FDD_InterfaceShapeCanvas extends Shape {
   }
 }
 
-// ─── 7. BOUNDARY SHAPE ──────────────────────────────────────────────────
-// Dashed rounded rectangle
-
+// ─── 7. BOUNDARY ──────────────────────────────────────────────────────
 class FDD_BoundaryShapeCanvas extends Shape {
   paintBackground(c: AbstractCanvas2D, x: number, y: number, w: number, h: number) {
     const r = Math.min(w, h) * 0.06;
@@ -188,17 +148,13 @@ class FDD_BoundaryShapeCanvas extends Shape {
   }
 }
 
-// ─── 8. NOTE / COMMENT SHAPE ────────────────────────────────────────────
-// Document with folded corner
-
+// ─── 8. NOTE ──────────────────────────────────────────────────────────────
 class FDD_NoteShapeCanvas extends Shape {
   paintBackground(c: AbstractCanvas2D, x: number, y: number, w: number, h: number) {
     const fold = Math.min(w, h) * 0.18;
     c.setFillColor('#FFF4CC');
     c.setStrokeColor('#B7950B');
     c.setStrokeWidth(2);
-    
-    // Main body with folded corner
     c.begin();
     c.moveTo(x + 1, y + 1);
     c.lineTo(x + w - fold - 1, y + 1);
@@ -207,14 +163,10 @@ class FDD_NoteShapeCanvas extends Shape {
     c.lineTo(x + 1, y + h - 1);
     c.close();
     c.fillAndStroke();
-    
-    // Fold line - vertical
     c.begin();
     c.moveTo(x + w - fold - 1, y + 1);
     c.lineTo(x + w - fold - 1, y + fold + 1);
     c.stroke();
-    
-    // Fold line - horizontal
     c.begin();
     c.moveTo(x + w - fold - 1, y + fold + 1);
     c.lineTo(x + w - 1, y + fold + 1);
@@ -222,9 +174,7 @@ class FDD_NoteShapeCanvas extends Shape {
   }
 }
 
-// ─── 9. EXTERNAL ENTITY SHAPE ───────────────────────────────────────────
-// Ellipse
-
+// ─── 9. EXTERNAL ENTITY ───────────────────────────────────────────
 class FDD_ExternalEntityShapeCanvas extends Shape {
   paintBackground(c: AbstractCanvas2D, x: number, y: number, w: number, h: number) {
     c.setFillColor('#F4F4F4');
@@ -513,6 +463,7 @@ class FishboneTertiaryShapeCanvas extends Shape {
   }
 }
 
+// FIXED: Fishbone Arrow - matches SVG preview
 class FishboneArrowShapeCanvas extends Shape {
   paintBackground(c: AbstractCanvas2D, x: number, y: number, w: number, h: number) {
     const cy = y + h / 2;
@@ -894,22 +845,18 @@ class SchematicSwitchShapeCanvas extends Shape {
     c.setStrokeColor('#1a1f36');
     c.setStrokeWidth(2);
     c.setFillColor('#1a1f36');
-    // Left connection
     c.begin();
     c.moveTo(x + 2, cy);
     c.lineTo(x + w * 0.2, cy);
     c.stroke();
-    // Right connection
     c.begin();
     c.moveTo(x + w * 0.8, cy);
     c.lineTo(x + w - 2, cy);
     c.stroke();
-    // Switch arm (angled)
     c.begin();
     c.moveTo(x + w * 0.25, cy);
     c.lineTo(x + w * 0.6, y + h * 0.2);
     c.stroke();
-    // Connection dots
     c.ellipse(x + w * 0.2 - 3, cy - 3, 6, 6);
     c.fill();
     c.ellipse(x + w * 0.8 - 3, cy - 3, 6, 6);
@@ -974,7 +921,6 @@ class SchematicNoConnectionShapeCanvas extends Shape {
 }
 
 // ─── Schematic IC Shape ──────────────────────────────────────────────────────
-
 class SchematicICShapeCanvas extends Shape {
   paintBackground(c: AbstractCanvas2D, x: number, y: number, w: number, h: number) {
     const cx = x + w / 2;
@@ -984,7 +930,6 @@ class SchematicICShapeCanvas extends Shape {
     c.setStrokeWidth(2);
     c.rect(x + 2, y + 2, w - 4, h - 4);
     c.fillAndStroke();
-    // IC pins
     const pinCount = 8;
     const pinSpacing = (w - 12) / (pinCount - 1);
     for (let i = 0; i < pinCount; i++) {
@@ -998,7 +943,6 @@ class SchematicICShapeCanvas extends Shape {
       c.lineTo(px, y + h + 4);
       c.stroke();
     }
-    // Notch
     c.begin();
     c.moveTo(cx - 8, y + 2);
     c.lineTo(cx + 8, y + 2);
@@ -1007,7 +951,6 @@ class SchematicICShapeCanvas extends Shape {
 }
 
 // ─── Schematic OpAmp Shape ──────────────────────────────────────────────────
-
 class SchematicOpAmpShapeCanvas extends Shape {
   paintBackground(c: AbstractCanvas2D, x: number, y: number, w: number, h: number) {
     const cx = x + w / 2;
@@ -1015,14 +958,12 @@ class SchematicOpAmpShapeCanvas extends Shape {
     c.setFillColor('#ffffff');
     c.setStrokeColor('#1a1f36');
     c.setStrokeWidth(2);
-    // Triangle body
     c.begin();
     c.moveTo(x + 2, cy);
     c.lineTo(cx + 2, y + 2);
     c.lineTo(cx + 2, y + h - 2);
     c.close();
     c.fillAndStroke();
-    // Input pins
     c.begin();
     c.moveTo(x + 2, cy - 10);
     c.lineTo(x - 6, cy - 10);
@@ -1031,19 +972,16 @@ class SchematicOpAmpShapeCanvas extends Shape {
     c.moveTo(x + 2, cy + 10);
     c.lineTo(x - 6, cy + 10);
     c.stroke();
-    // Output pin
     c.begin();
     c.moveTo(cx + 2, cy);
     c.lineTo(x + w - 2, cy);
     c.stroke();
-    // +/- labels
     c.text(x - 2, cy - 10, 0, 0, '-', 'right', 'middle', false, '', 'hidden', false, 0, '');
     c.text(x - 2, cy + 10, 0, 0, '+', 'right', 'middle', false, '', 'hidden', false, 0, '');
   }
 }
 
 // ─── Schematic Transformer Shape ────────────────────────────────────────────
-
 class SchematicTransformerShapeCanvas extends Shape {
   paintBackground(c: AbstractCanvas2D, x: number, y: number, w: number, h: number) {
     const cx = x + w / 2;
@@ -1054,7 +992,6 @@ class SchematicTransformerShapeCanvas extends Shape {
     const y2 = y + h * 0.85;
     c.setStrokeColor('#1a1f36');
     c.setStrokeWidth(2);
-    // Primary coil (top)
     c.begin();
     c.moveTo(x + 4, y1);
     for (let i = 0; i < coils; i++) {
@@ -1064,7 +1001,6 @@ class SchematicTransformerShapeCanvas extends Shape {
       c.quadTo(mid, y1 - (h * 0.08), x2, y1);
     }
     c.stroke();
-    // Secondary coil (bottom)
     c.begin();
     c.moveTo(x + 4, y2);
     for (let i = 0; i < coils; i++) {
@@ -1074,12 +1010,10 @@ class SchematicTransformerShapeCanvas extends Shape {
       c.quadTo(mid, y2 + (h * 0.08), x2, y2);
     }
     c.stroke();
-    // Center line
     c.begin();
     c.moveTo(cx, y1 + 6);
     c.lineTo(cx, y2 - 6);
     c.stroke();
-    // Input/output wires
     c.begin();
     c.moveTo(cx - 2, y1 - 4);
     c.lineTo(cx - 2, y + 2);
@@ -1142,7 +1076,7 @@ class UMLExtendShapeCanvas extends Shape {
 }
 
 // ════════════════════════════════════════════════════════════════════════════
-// ACTIVITY SHAPES - FIXED: Using fill() for solid shapes
+// ACTIVITY SHAPES
 // ════════════════════════════════════════════════════════════════════════════
 
 class UMLInitialNodeShapeCanvas extends Shape {
@@ -1369,11 +1303,12 @@ class CircleShapeCanvas extends Shape {
 }
 
 class EllipseShapeCanvas extends Shape {
-  paintBackground(c: AbstractCanvas2D, x: number, y: number, w: number, h: number) {
+
+    paintBackground(c: AbstractCanvas2D, x: number, y: number, w: number, h: number) {
     c.setFillColor('#ffffff');
     c.setStrokeColor('#1a1f36');
     c.setStrokeWidth(2);
-    c.ellipse(x + 2, y + 2, w - 4, h - 4);
+    c.ellipse(x + 1, y + 1, w - 2, h - 2);
     c.fillAndStroke();
   }
 }
@@ -1525,6 +1460,7 @@ class CloudShapeCanvas extends Shape {
   }
 }
 
+// FIXED: Note Standalone - matches SVG preview
 class NoteStandaloneShapeCanvas extends Shape {
   paintBackground(c: AbstractCanvas2D, x: number, y: number, w: number, h: number) {
     const fold = Math.min(w, h) * 0.2;
@@ -1547,6 +1483,7 @@ class NoteStandaloneShapeCanvas extends Shape {
   }
 }
 
+// FIXED: Actor - matches SVG preview
 class ActorShapeCanvas extends Shape {
   paintBackground(c: AbstractCanvas2D, x: number, y: number, w: number, h: number) {
     const cx = x + w / 2;
@@ -1690,6 +1627,28 @@ class PentagonShapeCanvas extends Shape {
   }
 }
 
+// FIXED: Hexagon (Preparation) - matches SVG preview
+class HexagonShapeCanvas extends Shape {
+  paintBackground(c: AbstractCanvas2D, x: number, y: number, w: number, h: number) {
+    const cx = x + w / 2;
+    const cy = y + h / 2;
+    const hw = w / 2;
+    const hh = h / 2;
+    c.setFillColor('#ffffff');
+    c.setStrokeColor('#1a1f36');
+    c.setStrokeWidth(2);
+    c.begin();
+    c.moveTo(cx - hw, cy);
+    c.lineTo(cx - hw * 0.5, cy - hh);
+    c.lineTo(cx + hw * 0.5, cy - hh);
+    c.lineTo(cx + hw, cy);
+    c.lineTo(cx + hw * 0.5, cy + hh);
+    c.lineTo(cx - hw * 0.5, cy + hh);
+    c.close();
+    c.fillAndStroke();
+  }
+}
+
 class TrapezoidShapeCanvas extends Shape {
   paintBackground(c: AbstractCanvas2D, x: number, y: number, w: number, h: number) {
     c.setFillColor('#ffffff');
@@ -1720,27 +1679,6 @@ class DShapeCanvas extends Shape {
       y + h
     );
     c.lineTo(x, y + h);
-    c.close();
-    c.fillAndStroke();
-  }
-}
-
-class HexagonShapeCanvas extends Shape {
-  paintBackground(c: AbstractCanvas2D, x: number, y: number, w: number, h: number) {
-    const cx = x + w / 2;
-    const cy = y + h / 2;
-    const hw = w / 2;
-    const hh = h / 2;
-    c.setFillColor('#ffffff');
-    c.setStrokeColor('#1a1f36');
-    c.setStrokeWidth(2);
-    c.begin();
-    c.moveTo(cx - hw, cy);
-    c.lineTo(cx - hw * 0.5, cy - hh);
-    c.lineTo(cx + hw * 0.5, cy - hh);
-    c.lineTo(cx + hw, cy);
-    c.lineTo(cx + hw * 0.5, cy + hh);
-    c.lineTo(cx - hw * 0.5, cy + hh);
     c.close();
     c.fillAndStroke();
   }
@@ -1943,71 +1881,52 @@ class WeakEntityShape extends Shape {
   }
 }
 
-class AttributeShape extends Shape {
+// FIXED: ERD Attribute - matches SVG preview (ellipse)
+class ERDAttributeShapeCanvas extends Shape {
   paintBackground(c: AbstractCanvas2D, x: number, y: number, w: number, h: number) {
+    const cx = x + w / 2;
+    const cy = y + h / 2;
     c.setFillColor('#ffffff');
     c.setStrokeColor('#1a1f36');
     c.setStrokeWidth(2);
-    c.ellipse(x + 2, y + 2, w - 4, h - 4);
+    c.ellipse(cx - w / 2 + 2, cy - h / 2 + 2, w - 4, h - 4);
     c.fillAndStroke();
   }
 }
 
-class PrimaryKeyShape extends Shape {
+// FIXED: ERD Multivalued Attribute - matches SVG preview (double ellipse)
+class ERDMultivaluedAttributeShapeCanvas extends Shape {
   paintBackground(c: AbstractCanvas2D, x: number, y: number, w: number, h: number) {
+    const cx = x + w / 2;
+    const cy = y + h / 2;
     c.setFillColor('#ffffff');
     c.setStrokeColor('#1a1f36');
     c.setStrokeWidth(2);
-    c.ellipse(x + 2, y + 2, w - 4, h - 4);
+    c.ellipse(cx - w / 2 + 2, cy - h / 2 + 2, w - 4, h - 4);
     c.fillAndStroke();
-    c.begin();
-    c.moveTo(x + w * 0.2, y + h - 5);
-    c.lineTo(x + w * 0.8, y + h - 5);
+    const inset = 6;
+    c.ellipse(cx - w / 2 + 2 + inset, cy - h / 2 + 2 + inset, w - 4 - inset * 2, h - 4 - inset * 2);
     c.stroke();
   }
 }
 
-class DerivedAttrShape extends Shape {
+// FIXED: ERD Derived Attribute - matches SVG preview (dashed ellipse)
+class ERDDerivedAttributeShapeCanvas extends Shape {
   paintBackground(c: AbstractCanvas2D, x: number, y: number, w: number, h: number) {
+    const cx = x + w / 2;
+    const cy = y + h / 2;
     c.setFillColor('#ffffff');
     c.setStrokeColor('#1a1f36');
     c.setStrokeWidth(2);
     c.setDashed(true);
-    c.ellipse(x + 2, y + 2, w - 4, h - 4);
+    c.setDashPattern('6 4');
+    c.ellipse(cx - w / 2 + 2, cy - h / 2 + 2, w - 4, h - 4);
     c.fillAndStroke();
     c.setDashed(false);
   }
 }
 
-class CompositeAttrShape extends Shape {
-  paintBackground(c: AbstractCanvas2D, x: number, y: number, w: number, h: number) {
-    c.setFillColor('#ffffff');
-    c.setStrokeColor('#1a1f36');
-    c.setStrokeWidth(2);
-    c.ellipse(x + 2, y + 2, w - 4, h - 4);
-    c.fillAndStroke();
-    const childR = Math.min(w, h) * 0.2;
-    c.ellipse(x + w * 0.7, y + h * 0.7, childR, childR * 0.7);
-    c.fillAndStroke();
-    c.begin();
-    c.moveTo(x + w * 0.5, y + h * 0.5);
-    c.lineTo(x + w * 0.65, y + h * 0.65);
-    c.stroke();
-  }
-}
-
-class MultiAttrShape extends Shape {
-  paintBackground(c: AbstractCanvas2D, x: number, y: number, w: number, h: number) {
-    c.setFillColor('#ffffff');
-    c.setStrokeColor('#1a1f36');
-    c.setStrokeWidth(2);
-    c.ellipse(x + 2, y + 2, w - 4, h - 4);
-    c.fillAndStroke();
-    c.ellipse(x + 6, y + 6, w - 12, h - 12);
-    c.stroke();
-  }
-}
-
+// FIXED: ERD Relationship - matches SVG preview (diamond)
 class RelationshipShape extends Shape {
   paintBackground(c: AbstractCanvas2D, x: number, y: number, w: number, h: number) {
     const cx = x + w / 2;
@@ -2025,6 +1944,7 @@ class RelationshipShape extends Shape {
   }
 }
 
+// FIXED: ERD Identifying Relationship - matches SVG preview (double diamond)
 class IdentifyingRelShape extends Shape {
   paintBackground(c: AbstractCanvas2D, x: number, y: number, w: number, h: number) {
     const cx = x + w / 2;
@@ -2032,16 +1952,21 @@ class IdentifyingRelShape extends Shape {
     c.setFillColor('#ffffff');
     c.setStrokeColor('#1a1f36');
     c.setStrokeWidth(2);
-    const diamond = (pad: number) => {
-      c.begin();
-      c.moveTo(cx, y + pad);
-      c.lineTo(x + w - pad, cy);
-      c.lineTo(cx, y + h - pad);
-      c.lineTo(x + pad, cy);
-      c.close();
-    };
-    diamond(2); c.fillAndStroke();
-    diamond(6); c.stroke();
+    c.begin();
+    c.moveTo(cx, y + 2);
+    c.lineTo(x + w - 2, cy);
+    c.lineTo(cx, y + h - 2);
+    c.lineTo(x + 2, cy);
+    c.close();
+    c.fillAndStroke();
+    const inset = 6;
+    c.begin();
+    c.moveTo(cx, y + 2 + inset);
+    c.lineTo(x + w - 2 - inset, cy);
+    c.lineTo(cx, y + h - 2 - inset);
+    c.lineTo(x + 2 + inset, cy);
+    c.close();
+    c.stroke();
   }
 }
 
@@ -2142,7 +2067,7 @@ class ERDConnectorShape extends Shape {
   }
 }
 
-// ─── Arrow Shapes - FIXED: Using fill() for solid arrows ──────────────────────
+// ─── Arrow Shapes ──────────────────────────────────────────────────────
 
 class ArrowShapeCanvas extends Shape {
   paintBackground(c: AbstractCanvas2D, x: number, y: number, w: number, h: number) {
@@ -2490,48 +2415,6 @@ class ERDIdentifyingRelShapeCanvas extends Shape {
   }
 }
 
-class ERDAttributeShapeCanvas extends Shape {
-  paintBackground(c: AbstractCanvas2D, x: number, y: number, w: number, h: number) {
-    const cx = x + w / 2;
-    const cy = y + h / 2;
-    c.setFillColor('#ffffff');
-    c.setStrokeColor('#1a1f36');
-    c.setStrokeWidth(2);
-    c.ellipse(cx - w / 2 + 2, cy - h / 2 + 2, w - 4, h - 4);
-    c.fillAndStroke();
-  }
-}
-
-class ERDMultivaluedAttrShapeCanvas extends Shape {
-  paintBackground(c: AbstractCanvas2D, x: number, y: number, w: number, h: number) {
-    const cx = x + w / 2;
-    const cy = y + h / 2;
-    c.setFillColor('#ffffff');
-    c.setStrokeColor('#1a1f36');
-    c.setStrokeWidth(2);
-    c.ellipse(cx - w / 2 + 2, cy - h / 2 + 2, w - 4, h - 4);
-    c.fillAndStroke();
-    const inset = 6;
-    c.ellipse(cx - w / 2 + 2 + inset, cy - h / 2 + 2 + inset, w - 4 - inset * 2, h - 4 - inset * 2);
-    c.stroke();
-  }
-}
-
-class ERDDerivedAttrShapeCanvas extends Shape {
-  paintBackground(c: AbstractCanvas2D, x: number, y: number, w: number, h: number) {
-    const cx = x + w / 2;
-    const cy = y + h / 2;
-    c.setFillColor('#ffffff');
-    c.setStrokeColor('#1a1f36');
-    c.setStrokeWidth(2);
-    c.setDashed(true);
-    c.setDashPattern('6 4');
-    c.ellipse(cx - w / 2 + 2, cy - h / 2 + 2, w - 4, h - 4);
-    c.fillAndStroke();
-    c.setDashed(false);
-  }
-}
-
 class ERDCardinality11ShapeCanvas extends Shape {
   paintBackground(c: AbstractCanvas2D, x: number, y: number, w: number, h: number) {
     const cy = y + h * 0.65;
@@ -2628,6 +2511,7 @@ class UCActorShapeCanvas extends Shape {
   }
 }
 
+// FIXED: Use Case - matches SVG preview (ellipse)
 class UMLUseCaseShapeCanvas extends Shape {
   paintBackground(c: AbstractCanvas2D, x: number, y: number, w: number, h: number) {
     const cx = x + w / 2;
@@ -3275,11 +3159,11 @@ const SHAPE_REGISTRY: Record<string, typeof Shape> = {
   'igraph.abstractClass': AbstractClassShape,
   'igraph.entity': EntityShape,
   'igraph.weakEntity': WeakEntityShape,
-  'igraph.attribute': AttributeShape,
-  'igraph.primaryKey': PrimaryKeyShape,
-  'igraph.derivedAttr': DerivedAttrShape,
-  'igraph.compositeAttr': CompositeAttrShape,
-  'igraph.multiAttr': MultiAttrShape,
+  'igraph.attribute': ERDAttributeShapeCanvas,
+  'igraph.primaryKey': ERDAttributeShapeCanvas,
+  'igraph.derivedAttr': ERDDerivedAttributeShapeCanvas,
+  'igraph.compositeAttr': ERDAttributeShapeCanvas,
+  'igraph.multiAttr': ERDMultivaluedAttributeShapeCanvas,
   'igraph.relationship': RelationshipShape,
   'igraph.identifyingRel': IdentifyingRelShape,
   'igraph.cardinality': CardinalityShape,
@@ -3324,8 +3208,8 @@ const SHAPE_REGISTRY: Record<string, typeof Shape> = {
   'igraph.erdRelationship': ERDRelationshipShapeCanvas,
   'igraph.erdIdentifyingRelationship': ERDIdentifyingRelShapeCanvas,
   'igraph.erdAttribute': ERDAttributeShapeCanvas,
-  'igraph.erdMultivaluedAttribute': ERDMultivaluedAttrShapeCanvas,
-  'igraph.erdDerivedAttribute': ERDDerivedAttrShapeCanvas,
+  'igraph.erdMultivaluedAttribute': ERDMultivaluedAttributeShapeCanvas,
+  'igraph.erdDerivedAttribute': ERDDerivedAttributeShapeCanvas,
   'igraph.erdCardinality11': ERDCardinality11ShapeCanvas,
   'igraph.erdCardinality1N': ERDCardinality1NShapeCanvas,
   'igraph.erdCardinalityN1': ERDCardinalityN1ShapeCanvas,
@@ -3334,10 +3218,6 @@ const SHAPE_REGISTRY: Record<string, typeof Shape> = {
 
 // ─── Public API ───────────────────────────────────────────────────────────────
 
-/**
- * Call this ONCE at app startup (before any Graph is created).
- * Uses maxGraph's official ShapeRegistry.add(name, cls) API.
- */
 export function registerAllCustomShapes(): void {
   Object.entries(SHAPE_REGISTRY).forEach(([name, cls]) => {
     ShapeRegistry.add(name, cls);

@@ -1,6 +1,3 @@
-// components/shapes/shapes/ClassShapes.tsx
-// Class Diagram shapes
-
 import React from 'react';
 import { Svg, Rect, Line, Polygon, Path, Text as SvgText } from 'react-native-svg';
 

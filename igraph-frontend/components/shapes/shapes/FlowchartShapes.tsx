@@ -1,6 +1,3 @@
-// components/shapes/shapes/FlowchartShapes.tsx
-// Flowchart specific shapes
-
 import React from 'react';
 import { Svg, Rect, Polygon, Ellipse, Line, G, Path } from 'react-native-svg';
 

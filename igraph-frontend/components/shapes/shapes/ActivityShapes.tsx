@@ -1,6 +1,3 @@
-// components/shapes/shapes/ActivityShapes.tsx
-// Activity Diagram shapes
-
 import React from 'react';
 import { Svg, Rect, Ellipse, Polygon, Line, Path, Circle } from 'react-native-svg';
 

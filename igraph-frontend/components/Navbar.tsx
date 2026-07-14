@@ -1,5 +1,3 @@
-// components/Navbar.tsx - Full updated with mobile compact support
-
 import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
@@ -8,13 +6,14 @@ import {
   StyleSheet,
   Dimensions,
   Image,
-  ScrollView,
   StatusBar,
-  Animated,
   Platform,
+  Animated,
 } from 'react-native';
 import { useRouter, usePathname, Href } from 'expo-router';
 import { Svg, Path, Rect, Circle } from 'react-native-svg';
+import * as Haptics from 'expo-haptics'; // npx expo install expo-haptics
+import { useSave } from '../contexts/SaveContext';
 
 // ============ BREAKPOINT ============
 const DESKTOP_BREAKPOINT = 1024;
@@ -22,46 +21,42 @@ const DESKTOP_BREAKPOINT = 1024;
 // ============ HEIGHT CONSTANTS ============
 const NAVBAR_HEIGHT_DEFAULT = 52;
 const NAVBAR_HEIGHT_COMPACT = 40;
-const NAVBAR_HEIGHT_MOBILE_COMPACT = 44; // ← Mobile compact (slightly taller for touch)
+const NAVBAR_HEIGHT_MOBILE_COMPACT = 44;
 
 // ============ ICONS ============
-const DiagramIcon = ({ active }: { active: boolean }) => (
+const DiagramIcon = ({ active, size = 18, color }: { active: boolean; size?: number; color?: string }) => (
+  <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+    <Rect x="3" y="3" width="18" height="18" rx="3" stroke={color ?? (active ? '#ffffff' : '#64748b')} strokeWidth={1.8} fill="none" />
+    <Path d="M8 8h8M8 12h6M8 16h4" stroke={color ?? (active ? '#ffffff' : '#64748b')} strokeWidth={1.8} strokeLinecap="round" />
+  </Svg>
+);
+
+const CreateIcon = ({ active, size = 18, color }: { active: boolean; size?: number; color?: string }) => (
+  <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+    <Path d="M4 20L8.5 19L19.5 8L16 4.5L5 15.5L4 20Z" stroke={color ?? (active ? '#ffffff' : '#64748b')} strokeWidth={1.8} fill="none" strokeLinejoin="round" />
+    <Path d="M14 6L18 10" stroke={color ?? (active ? '#ffffff' : '#64748b')} strokeWidth={1.8} strokeLinecap="round" />
+  </Svg>
+);
+
+const LearnIcon = ({ active, size = 18, color }: { active: boolean; size?: number; color?: string }) => (
+  <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+    <Path d="M12 4L3 9L12 14L21 9L12 4Z" stroke={color ?? (active ? '#ffffff' : '#64748b')} strokeWidth={1.8} fill="none" strokeLinejoin="round" />
+    <Path d="M3 14L12 19L21 14" stroke={color ?? (active ? '#ffffff' : '#64748b')} strokeWidth={1.8} fill="none" />
+  </Svg>
+);
+
+const UserAccountIcon = ({ active, size = 18, color }: { active: boolean; size?: number; color?: string }) => (
+  <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+    <Circle cx="12" cy="8" r="4" stroke={color ?? (active ? '#ffffff' : '#64748b')} strokeWidth={1.8} fill="none" />
+    <Path d="M20 21V19C20 16.8 18.2 15 16 15H8C5.8 15 4 16.8 4 19V21" stroke={color ?? (active ? '#ffffff' : '#64748b')} strokeWidth={1.8} strokeLinecap="round" fill="none" />
+  </Svg>
+);
+
+const SaveIcon = ({ color = '#ffffff' }: { color?: string }) => (
   <Svg width={18} height={18} viewBox="0 0 24 24" fill="none">
-    <Rect x="3" y="3" width="18" height="18" rx="3" stroke={active ? '#2563eb' : '#64748b'} strokeWidth={1.8} fill={active ? '#eff6ff' : 'none'} />
-    <Path d="M8 8h8M8 12h6M8 16h4" stroke={active ? '#2563eb' : '#64748b'} strokeWidth={1.8} strokeLinecap="round" />
-  </Svg>
-);
-
-const CreateIcon = ({ active }: { active: boolean }) => (
-  <Svg width={18} height={18} viewBox="0 0 24 24" fill="none">
-    <Path d="M4 20L8.5 19L19.5 8L16 4.5L5 15.5L4 20Z" stroke={active ? '#2563eb' : '#64748b'} strokeWidth={1.8} fill={active ? '#eff6ff' : 'none'} strokeLinejoin="round" />
-    <Path d="M14 6L18 10" stroke={active ? '#2563eb' : '#64748b'} strokeWidth={1.8} strokeLinecap="round" />
-  </Svg>
-);
-
-const LearnIcon = ({ active }: { active: boolean }) => (
-  <Svg width={18} height={18} viewBox="0 0 24 24" fill="none">
-    <Path d="M12 4L3 9L12 14L21 9L12 4Z" stroke={active ? '#2563eb' : '#64748b'} strokeWidth={1.8} fill={active ? '#eff6ff' : 'none'} strokeLinejoin="round" />
-    <Path d="M3 14L12 19L21 14" stroke={active ? '#2563eb' : '#64748b'} strokeWidth={1.8} fill="none" />
-  </Svg>
-);
-
-const UserAccountIcon = ({ active }: { active: boolean }) => (
-  <Svg width={18} height={18} viewBox="0 0 24 24" fill="none">
-    <Circle cx="12" cy="8" r="4" stroke={active ? '#2563eb' : '#64748b'} strokeWidth={1.8} fill="none" />
-    <Path d="M20 21V19C20 16.8 18.2 15 16 15H8C5.8 15 4 16.8 4 19V21" stroke={active ? '#2563eb' : '#64748b'} strokeWidth={1.8} strokeLinecap="round" fill="none" />
-  </Svg>
-);
-
-const MenuIcon = () => (
-  <Svg width={22} height={22} viewBox="0 0 24 24" fill="none">
-    <Path d="M3 12H21M3 6H21M3 18H21" stroke="#0f172a" strokeWidth={2} strokeLinecap="round" />
-  </Svg>
-);
-
-const CloseIcon = () => (
-  <Svg width={22} height={22} viewBox="0 0 24 24" fill="none">
-    <Path d="M18 6L6 18M6 6L18 18" stroke="#0f172a" strokeWidth={2} strokeLinecap="round" />
+    <Path d="M19 21H5C4.46957 21 3.96086 20.7893 3.58579 20.4142C3.21071 20.0391 3 19.5304 3 19V5C3 4.46957 3.21071 3.96086 3.58579 3.58579C3.21071 3.96086 4.46957 3 5 3H16L21 8V19C21 19.5304 20.7893 20.0391 20.4142 20.4142C20.0391 20.7893 19.5304 21 19 21Z" stroke={color} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" />
+    <Path d="M17 21V13H7V21" stroke={color} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" />
+    <Path d="M7 3V8H15" stroke={color} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" />
   </Svg>
 );
 
@@ -72,6 +67,8 @@ interface NavbarProps {
   compact?: boolean;
   hideNavLinks?: boolean;
   actions?: React.ReactNode;
+  showSave?: boolean;
+  hideTopBar?: boolean;
 }
 
 // ============================================================================
@@ -152,21 +149,22 @@ export default function Navbar({
   compact = false,
   hideNavLinks = false,
   actions,
+  showSave = false,
+  hideTopBar = false,
 }: NavbarProps) {
   const router = useRouter();
   const pathname = usePathname();
+  const { onSave, isSaving } = useSave();
 
   const [screenWidth, setScreenWidth] = useState(Dimensions.get('window').width);
-  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   const isBurger = screenWidth < DESKTOP_BREAKPOINT;
 
   // ─── Dynamic values based on compact mode AND platform ──────────────────
-  // Mobile compact uses 44px (better for touch), desktop compact uses 40px
   const getNavbarHeight = () => {
     if (!compact) return NAVBAR_HEIGHT_DEFAULT;
-    if (isBurger) return NAVBAR_HEIGHT_MOBILE_COMPACT; // 44px on mobile
-    return NAVBAR_HEIGHT_COMPACT; // 40px on desktop
+    if (isBurger) return NAVBAR_HEIGHT_MOBILE_COMPACT;
+    return NAVBAR_HEIGHT_COMPACT;
   };
 
   const navbarHeight = getNavbarHeight();
@@ -176,50 +174,20 @@ export default function Navbar({
   const avatarSize = compact ? (isBurger ? 30 : 28) : 32;
   const showGreeting = !compact;
 
-  const iconAnim = useRef(new Animated.Value(0)).current;
-  const menuAnim = useRef(new Animated.Value(0)).current;
-
   useEffect(() => {
     const sub = Dimensions.addEventListener('change', ({ window }) => {
       setScreenWidth(window.width);
-      if (window.width >= DESKTOP_BREAKPOINT && isMobileMenuOpen) {
-        forceCloseMenu();
-      }
     });
     return () => sub.remove();
-  }, [isMobileMenuOpen]);
-
-  const forceCloseMenu = () => {
-    iconAnim.setValue(0);
-    menuAnim.setValue(0);
-    setIsMobileMenuOpen(false);
-  };
-
-  const openMenu = () => {
-    setIsMobileMenuOpen(true);
-    Animated.parallel([
-      Animated.timing(iconAnim, { toValue: 1, duration: 250, useNativeDriver: true }),
-      Animated.timing(menuAnim, { toValue: 1, duration: 280, useNativeDriver: true }),
-    ]).start();
-  };
-
-  const closeMenu = (callback?: () => void) => {
-    Animated.parallel([
-      Animated.timing(iconAnim, { toValue: 0, duration: 220, useNativeDriver: true }),
-      Animated.timing(menuAnim, { toValue: 0, duration: 200, useNativeDriver: true }),
-    ]).start(() => {
-      setIsMobileMenuOpen(false);
-      callback?.();
-    });
-  };
-
-  const toggleMenu = () => (isMobileMenuOpen ? closeMenu() : openMenu());
+  }, []);
 
   const handleNavigation = (route: string) => {
-    if (isMobileMenuOpen) {
-      closeMenu(() => router.push(route as Href));
-    } else {
-      router.push(route as Href);
+    router.push(route as Href);
+  };
+
+  const triggerTabHaptic = () => {
+    if (Platform.OS === 'ios' || Platform.OS === 'android') {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
     }
   };
 
@@ -229,6 +197,57 @@ export default function Navbar({
     { label: 'Learning References', route: '/(tabs)/reference', icon: LearnIcon },
     { label: 'Account', route: '/(tabs)/userAccount', icon: UserAccountIcon },
   ];
+
+  // Bottom navbar drops Account — it's already reachable via the top avatar button
+  const bottomNavItems = navItems.filter((item) => item.label !== 'Account');
+
+  // ─── ✅ Animated sliding indicator for the bottom navbar ─────────────────
+  // The indicator glides behind whichever side tab (Diagram Library /
+  // Learning References) is active. The Create tab is a raised FAB and
+  // isn't part of the sliding indicator — it gets its own active treatment.
+  const [barWidth, setBarWidth] = useState(0);
+  const itemWidth = barWidth / bottomNavItems.length;
+  const indicatorX = useRef(new Animated.Value(0)).current;
+  const indicatorOpacity = useRef(new Animated.Value(0)).current;
+
+  const activeSideIndex = bottomNavItems.findIndex(
+    (item) => item.route !== '/(tabs)/create' && isRouteActive(pathname, item.route)
+  );
+
+  useEffect(() => {
+    if (itemWidth <= 0) return;
+    if (activeSideIndex === -1) {
+      Animated.timing(indicatorOpacity, { toValue: 0, duration: 150, useNativeDriver: true }).start();
+      return;
+    }
+    Animated.parallel([
+      Animated.spring(indicatorX, {
+        toValue: activeSideIndex * itemWidth,
+        useNativeDriver: true,
+        friction: 8,
+        tension: 65,
+      }),
+      Animated.timing(indicatorOpacity, { toValue: 1, duration: 150, useNativeDriver: true }),
+    ]).start();
+  }, [activeSideIndex, itemWidth]);
+
+  // ─── ✅ FIXED: Handle Save - Guard against accidental auto-saves ──────────
+  const handleSavePress = async () => {
+    if (isSaving) {
+      console.log('🔄 Save already in progress, ignoring duplicate click');
+      return;
+    }
+
+    console.log('🟢 Navbar Save button clicked');
+    console.log('🟢 onSave:', !!onSave);
+    if (onSave) {
+      console.log('🟢 Calling onSave()...');
+      await onSave();
+      console.log('🟢 onSave() completed');
+    } else {
+      console.log('❌ No save handler registered!');
+    }
+  };
 
   // ─────────────────────────────────────────────
   // DESKTOP  (≥ 1024 px)
@@ -247,9 +266,9 @@ export default function Navbar({
                 pressed && styles.logoPressed,
               ]}
             >
-              <Image 
-                source={require('../assets/images/logo.png')} 
-                style={[styles.logoImage, { width: logoSize, height: logoSize }]} 
+              <Image
+                source={require('../assets/images/logo.png')}
+                style={[styles.logoImage, { width: logoSize, height: logoSize }]}
               />
               <Text style={[styles.logoText, { fontSize: logoFontSize }]}>
                 iGraph IT
@@ -275,7 +294,7 @@ export default function Navbar({
                       <View style={styles.navItemInner}>
                         <Icon active={isActive} />
                         <Text style={[
-                          styles.navLabel, 
+                          styles.navLabel,
                           isActive && styles.navLabelActive,
                           { fontSize: navFontSize }
                         ]}>
@@ -289,8 +308,28 @@ export default function Navbar({
               </View>
             )}
 
-            {/* Right side: Actions + Avatar */}
+            {/* Right side: Save + Actions + Avatar */}
             <View style={styles.navRight}>
+              {showSave && onSave && (
+                <Pressable
+                  onPress={handleSavePress}
+                  disabled={isSaving}
+                  style={({ pressed }) => [
+                    styles.saveButton,
+                    isSaving && styles.saveButtonDisabled,
+                    pressed && styles.saveButtonPressed,
+                  ]}
+                >
+                  {isSaving ? (
+                    <View style={styles.saveSpinner} />
+                  ) : (
+                    <>
+                      <SaveIcon color="#ffffff" />
+                      <Text style={styles.saveButtonText}>Save</Text>
+                    </>
+                  )}
+                </Pressable>
+              )}
               {actions}
               <Avatar fullName={fullName} email={userEmail} size={avatarSize} />
               {showGreeting && (
@@ -307,155 +346,148 @@ export default function Navbar({
 
   // ─────────────────────────────────────────────
   // MOBILE + TABLET  (< 1024 px)
+  // Top bar: logo + save + account shortcut (no burger)
+  // Bottom: floating premium navbar with sliding indicator + FAB
   // ─────────────────────────────────────────────
+
+  const isCreateScreen = isRouteActive(pathname, '/(tabs)/create');
+  const shouldShowTopBar = !hideTopBar && !isCreateScreen;
+
   return (
     <>
       <StatusBar barStyle="dark-content" backgroundColor="#ffffff" />
 
-      {/* Top Bar */}
-      <View style={[styles.mobileContainer, { height: navbarHeight }]}>
-        <View style={[styles.mobileNav, { height: navbarHeight }]}>
-          {/* Logo only on left side */}
-          <Pressable
-            onPress={() => handleNavigation('/(tabs)/home')}
-            style={({ pressed }) => [
-              styles.logoArea,
-              pressed && styles.logoPressed,
-            ]}
-          >
-            <Image 
-              source={require('../assets/images/logo.png')} 
-              style={[styles.logoImage, { width: logoSize, height: logoSize }]} 
-            />
-            <Text style={[styles.logoText, { fontSize: logoFontSize }]}>
-              iGraph IT
-            </Text>
-          </Pressable>
-
-          <View style={styles.mobileRight}>
-            {actions}  {/* ← Save button appears here on mobile */}
-            <Pressable 
-              onPress={toggleMenu} 
+      {/* Top Bar — fully removed on the create screen (mobile) */}
+      {shouldShowTopBar && (
+        <View style={[styles.mobileContainer, { height: navbarHeight }]}>
+          <View style={[styles.mobileNav, { height: navbarHeight }]}>
+            <Pressable
+              onPress={() => handleNavigation('/(tabs)/home')}
               style={({ pressed }) => [
-                styles.menuBtn,
-                pressed && styles.menuBtnPressed,
+                styles.logoArea,
+                pressed && styles.logoPressed,
               ]}
             >
-              <Animated.View
-                style={[
-                  StyleSheet.absoluteFillObject,
-                  styles.iconCenter,
-                  {
-                    opacity: iconAnim.interpolate({
-                      inputRange: [0, 1],
-                      outputRange: [1, 0],
-                    }),
-                    transform: [{
-                      rotate: iconAnim.interpolate({
-                        inputRange: [0, 1],
-                        outputRange: ['0deg', '-90deg'],
-                      }),
-                    }],
-                  },
-                ]}
-              >
-                <MenuIcon />
-              </Animated.View>
-
-              <Animated.View
-                style={[
-                  StyleSheet.absoluteFillObject,
-                  styles.iconCenter,
-                  {
-                    opacity: iconAnim.interpolate({
-                      inputRange: [0, 1],
-                      outputRange: [0, 1],
-                    }),
-                    transform: [{
-                      rotate: iconAnim.interpolate({
-                        inputRange: [0, 1],
-                        outputRange: ['90deg', '0deg'],
-                      }),
-                    }],
-                  },
-                ]}
-              >
-                <CloseIcon />
-              </Animated.View>
+              <Image
+                source={require('../assets/images/logo.png')}
+                style={[styles.logoImage, { width: logoSize, height: logoSize }]}
+              />
+              <Text style={[styles.logoText, { fontSize: logoFontSize }]}>
+                iGraph IT
+              </Text>
             </Pressable>
+
+            <View style={styles.mobileRight}>
+              {showSave && onSave && (
+                <Pressable
+                  onPress={handleSavePress}
+                  disabled={isSaving}
+                  style={({ pressed }) => [
+                    styles.mobileSaveButton,
+                    isSaving && styles.mobileSaveButtonDisabled,
+                    pressed && styles.mobileSaveButtonPressed,
+                  ]}
+                >
+                  {isSaving ? (
+                    <View style={styles.saveSpinnerSmall} />
+                  ) : (
+                    <SaveIcon color="#10b981" />
+                  )}
+                </Pressable>
+              )}
+              {actions}
+
+              <Pressable
+                onPress={() => handleNavigation('/(tabs)/userAccount')}
+                style={({ pressed }) => [
+                  styles.accountBtn,
+                  pressed && styles.accountBtnPressed,
+                ]}
+              >
+                <Avatar fullName={fullName} email={userEmail} size={30} />
+              </Pressable>
+            </View>
           </View>
         </View>
-      </View>
-
-      {/* Mobile Menu Dropdown */}
-      {isMobileMenuOpen && (
-        <>
-          <Animated.View
-            style={[styles.overlay, { top: navbarHeight, opacity: menuAnim }]}
-            pointerEvents="auto"
-          >
-            <Pressable style={StyleSheet.absoluteFillObject} onPress={toggleMenu} />
-          </Animated.View>
-
-          <Animated.View
-            style={[
-              styles.mobileMenu,
-              {
-                top: navbarHeight,
-                opacity: menuAnim,
-                transform: [{
-                  translateY: menuAnim.interpolate({
-                    inputRange: [0, 1],
-                    outputRange: [-8, 0],
-                  }),
-                }],
-              },
-            ]}
-          >
-            <ScrollView
-              style={styles.mobileMenuItems}
-              bounces={false}
-              showsVerticalScrollIndicator={false}
-            >
-              {navItems.map((item) => {
-                const isActive = isRouteActive(pathname, item.route);
-                const Icon = item.icon;
-                return (
-                  <Pressable
-                    key={item.label}
-                    onPress={() => handleNavigation(item.route)}
-                    style={({ pressed }) => [
-                      styles.mobileNavItem,
-                      isActive && styles.mobileNavItemActive,
-                      pressed && styles.mobileNavItemPressed,
-                    ]}
-                  >
-                    <Icon active={isActive} />
-                    <Text style={[styles.mobileNavLabel, isActive && styles.mobileNavLabelActive]}>
-                      {item.label}
-                    </Text>
-                  </Pressable>
-                );
-              })}
-              
-              {/* Email-based Avatar in Mobile Menu */}
-              <View style={styles.mobileUserInfoSection}>
-                <View style={styles.mobileUserInfoContainer}>
-                  <Avatar fullName={fullName} email={userEmail} size={44} />
-                  <View style={styles.mobileUserTextContainer}>
-                    <Text style={styles.mobileFullName}>{getDisplayName(fullName, userEmail)}</Text>
-                    {userEmail ? (
-                      <Text style={styles.mobileUserEmail} numberOfLines={1}>
-                        {userEmail}
-                      </Text>
-                    ) : null}
-                  </View>
-                </View>
-              </View>
-            </ScrollView>
-          </Animated.View>
-        </>
       )}
+
+      {/* Docked Bottom Navbar — premium version */}
+      <View style={styles.bottomNavWrapper}>
+        <View
+          style={styles.bottomNavCard}
+          onLayout={(e) => setBarWidth(e.nativeEvent.layout.width)}
+        >
+          {/* Sliding active-tab indicator, sits behind Diagram Library / Learning References */}
+          {barWidth > 0 && (
+            <Animated.View
+              pointerEvents="none"
+              style={[
+                styles.slidingIndicator,
+                {
+                  width: itemWidth - 20,
+                  left: 10,
+                  opacity: indicatorOpacity,
+                  transform: [{ translateX: indicatorX }],
+                },
+              ]}
+            />
+          )}
+
+          {bottomNavItems.map((item) => {
+            const isActive = isRouteActive(pathname, item.route);
+            const isCreateTab = item.route === '/(tabs)/create';
+            const Icon = item.icon;
+
+            // ─── Create tab: raised FAB, always visually elevated ───
+            if (isCreateTab) {
+              return (
+                <Pressable
+                  key={item.label}
+                  onPress={() => {
+                    triggerTabHaptic();
+                    handleNavigation(item.route);
+                  }}
+                  style={({ pressed }) => [
+                    styles.createTabWrapper,
+                    pressed && styles.createTabPressed,
+                  ]}
+                >
+                  <View style={[styles.createFab, isActive && styles.createFabActive]}>
+                    <Icon active size={24} color="#ffffff" />
+                  </View>
+                  <Text style={styles.createTabLabel}>Create</Text>
+                </Pressable>
+              );
+            }
+
+            // ─── Side tabs: icon + label riding on the sliding indicator ───
+            return (
+              <Pressable
+                key={item.label}
+                onPress={() => {
+                  triggerTabHaptic();
+                  handleNavigation(item.route);
+                }}
+                style={({ pressed }) => [
+                  styles.bottomNavItem,
+                  pressed && styles.bottomNavItemPressed,
+                ]}
+              >
+                <Icon active={isActive} size={22} color={isActive ? '#2563eb' : '#94a3b8'} />
+                <Text
+                  style={[
+                    styles.bottomNavLabel,
+                    isActive ? styles.bottomNavLabelActive : styles.bottomNavLabelInactive,
+                  ]}
+                  numberOfLines={1}
+                >
+                  {item.label}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </View>
+      </View>
     </>
   );
 }
@@ -545,6 +577,43 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 8,
   },
+  saveButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: '#10b981',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
+  },
+  saveButtonDisabled: {
+    opacity: 0.5,
+  },
+  saveButtonPressed: {
+    opacity: 0.8,
+    transform: [{ scale: 0.95 }],
+  },
+  saveButtonText: {
+    color: '#ffffff',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  saveSpinner: {
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    borderWidth: 2,
+    borderColor: '#ffffff',
+    borderTopColor: 'transparent',
+  },
+  saveSpinnerSmall: {
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+    borderWidth: 2,
+    borderColor: '#10b981',
+    borderTopColor: 'transparent',
+  },
   avatarContainer: {
     justifyContent: 'center',
     alignItems: 'center',
@@ -565,7 +634,7 @@ const styles = StyleSheet.create({
     color: '#0f172a',
   },
 
-  // ── MOBILE + TABLET ───────────────────────────
+  // ── MOBILE + TABLET TOP BAR ───────────────────
   mobileContainer: {
     backgroundColor: '#ffffff',
     borderBottomWidth: 1,
@@ -581,98 +650,125 @@ const styles = StyleSheet.create({
   mobileRight: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: 10,
   },
-  menuBtn: {
-    width: 40,
-    height: 40,
-    alignItems: 'center',
-    justifyContent: 'center',
+  mobileSaveButton: {
+    width: 36,
+    height: 36,
     borderRadius: 8,
-  },
-  menuBtnPressed: {
-    backgroundColor: '#f1f5f9',
-  },
-  iconCenter: {
     alignItems: 'center',
     justifyContent: 'center',
+    backgroundColor: '#f0fdf4',
+    borderWidth: 1,
+    borderColor: '#bbf7d0',
   },
-  overlay: {
+  mobileSaveButtonDisabled: {
+    opacity: 0.4,
+  },
+  mobileSaveButtonPressed: {
+    backgroundColor: '#dcfce7',
+  },
+  accountBtn: {
+    borderRadius: 20,
+    padding: 2,
+  },
+  accountBtnPressed: {
+    opacity: 0.7,
+  },
+
+  // ── DOCKED BOTTOM NAVBAR (premium) ───────────
+  bottomNavWrapper: {
     position: 'absolute',
     left: 0,
     right: 0,
     bottom: 0,
-    backgroundColor: 'rgba(15, 23, 42, 0.5)',
-    zIndex: 100,
+    zIndex: 200,
   },
-  mobileMenu: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    backgroundColor: '#ffffff',
-    zIndex: 150,
-    paddingBottom: 16,
-    borderBottomLeftRadius: 16,
-    borderBottomRightRadius: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 12,
-    elevation: 8,
-  },
-  mobileMenuItems: {
-    paddingHorizontal: 16,
-    paddingTop: 4,
-  },
-  mobileNavItem: {
+  bottomNavCard: {
     flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    paddingVertical: 14,
-    paddingHorizontal: 12,
-    borderRadius: 10,
-  },
-  mobileNavItemActive: {
-    backgroundColor: '#eff6ff',
-  },
-  mobileNavItemPressed: {
-    backgroundColor: '#dbeafe',
-  },
-  mobileNavLabel: {
-    fontSize: 15,
-    fontWeight: '500',
-    color: '#475569',
-  },
-  mobileNavLabelActive: {
-    color: '#2563eb',
-    fontWeight: '600',
-  },
-  mobileUserInfoSection: {
-    marginTop: 16,
-    paddingTop: 16,
+    alignItems: 'flex-end',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.97)',
     borderTopWidth: 1,
-    borderTopColor: '#f1f5f9',
+    borderTopColor: 'rgba(226, 232, 240, 0.7)',
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    paddingTop: 12,
+    paddingHorizontal: 4,
+    paddingBottom: Platform.OS === 'ios' ? 22 : 14,
+    shadowColor: '#0f172a',
+    shadowOffset: { width: 0, height: -6 },
+    shadowOpacity: 0.10,
+    shadowRadius: 16,
+    elevation: 14,
+    overflow: 'visible',
   },
-  mobileUserInfoContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    paddingVertical: 12,
-    paddingHorizontal: 12,
-    backgroundColor: '#f8fafc',
-    borderRadius: 12,
+  slidingIndicator: {
+    position: 'absolute',
+    top: 6,
+    height: 44,
+    borderRadius: 16,
+    backgroundColor: 'rgba(37, 99, 235, 0.09)',
   },
-  mobileUserTextContainer: {
+  bottomNavItem: {
     flex: 1,
+    flexDirection: 'column',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+    paddingVertical: 6,
   },
-  mobileFullName: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#0f172a',
-    marginBottom: 2,
+  bottomNavItemPressed: {
+    opacity: 0.7,
+    transform: [{ scale: 0.96 }],
   },
-  mobileUserEmail: {
-    fontSize: 13,
-    color: '#64748b',
+  bottomNavLabel: {
+    fontSize: 10.5,
+    letterSpacing: 0.1,
+  },
+  bottomNavLabelInactive: {
+    color: '#94a3b8',
+    fontWeight: '500',
+  },
+  bottomNavLabelActive: {
+    color: '#2563eb',
+    fontWeight: '700',
+  },
+
+  // Elevated Create FAB — the visual centerpiece of the bar
+  createTabWrapper: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    gap: 4,
+  },
+  createTabPressed: {
+    opacity: 0.9,
+    transform: [{ scale: 0.95 }],
+  },
+  createFab: {
+    width: 54,
+    height: 54,
+    borderRadius: 27,
+    marginTop: -30,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#2563eb',
+    borderWidth: 4,
+    borderColor: '#ffffff',
+    shadowColor: '#2563eb',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.35,
+    shadowRadius: 14,
+    elevation: 10,
+  },
+  createFabActive: {
+    backgroundColor: '#1d4ed8',
+  },
+  createTabLabel: {
+    fontSize: 10.5,
+    fontWeight: '700',
+    color: '#2563eb',
+    letterSpacing: 0.1,
   },
 });

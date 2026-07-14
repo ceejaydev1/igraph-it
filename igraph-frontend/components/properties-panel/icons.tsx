@@ -1,5 +1,3 @@
-// components/properties-panel/icons.tsx
-
 import React from 'react';
 import { Svg, Rect, Path } from 'react-native-svg';
 import { COLORS } from '@/constants/theme';

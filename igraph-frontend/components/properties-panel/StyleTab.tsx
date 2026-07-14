@@ -1,5 +1,3 @@
-// components/properties-panel/StyleTab.tsx
-
 import React, { useMemo, useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, Modal, StyleSheet, Platform } from 'react-native';
 import { COLORS, SPACING, RADIUS, TYPOGRAPHY } from '@/constants/theme';

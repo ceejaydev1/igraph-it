@@ -1,5 +1,3 @@
-// components/properties-panel/TextTab.tsx
-
 import React, { useState } from 'react';
 import { View, Text, TouchableOpacity, ScrollView, StyleSheet, Platform } from 'react-native';
 import { COLORS, SPACING, RADIUS, TYPOGRAPHY } from '@/constants/theme';

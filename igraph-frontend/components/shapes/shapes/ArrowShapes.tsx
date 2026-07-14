@@ -1,6 +1,3 @@
-// components/shapes/shapes/ArrowShapes.tsx
-// Arrow shapes for relationships and flows
-
 import React from 'react';
 import { Svg, Line, Polygon, G, Path, Rect} from 'react-native-svg';
 

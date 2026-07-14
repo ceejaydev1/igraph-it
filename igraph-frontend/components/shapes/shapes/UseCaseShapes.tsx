@@ -1,6 +1,3 @@
-// components/shapes/shapes/UseCaseShapes.tsx
-// Use Case Diagram shapes
-
 import React from 'react';
 import { Svg, Rect, Ellipse, Polygon, Line, Path, Circle, Text as SvgText } from 'react-native-svg';
 

@@ -1,6 +1,4 @@
-// app/(auth)/forgot-password.tsx - COMPLETE FIXED VERSION
-
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -15,9 +13,10 @@ import {
   Modal,
   Image,
   Animated,
+  Easing,
 } from 'react-native';
-import { useRouter } from 'expo-router';
-import { Svg, Circle, Rect, Path } from 'react-native-svg';
+import { Stack, useRouter } from 'expo-router';
+import { Svg, Circle, Rect, Path, Defs, LinearGradient, Stop } from 'react-native-svg';
 import { initializeApp, FirebaseApp } from 'firebase/app';
 import { getAuth, Auth, signInWithPopup, GoogleAuthProvider, browserSessionPersistence, setPersistence } from 'firebase/auth';
 import * as authService from '../../services/authService';
@@ -26,15 +25,14 @@ const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
 // Firebase configuration
 const firebaseConfig = {
-  apiKey: process.env.EXPO_PUBLIC_FIREBASE_API_KEY || "AIzaSyCyM0zjlTQ6cCuAf3CGWbxLnUUle_z88F8",
-  authDomain: process.env.EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN || "igraph-it.firebaseapp.com",
-  projectId: process.env.EXPO_PUBLIC_FIREBASE_PROJECT_ID || "igraph-it",
-  storageBucket: process.env.EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET || "igraph-it.firebasestorage.app",
-  messagingSenderId: process.env.EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID || "513560698622",
-  appId: process.env.EXPO_PUBLIC_FIREBASE_APP_ID || "1:513560698622:web:71e12cbf9a1bb95dab0faf"
+  apiKey: process.env.EXPO_PUBLIC_FIREBASE_API_KEY,
+  authDomain: process.env.EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN,
+  projectId: process.env.EXPO_PUBLIC_FIREBASE_PROJECT_ID,
+  storageBucket: process.env.EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: process.env.EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
+  appId: process.env.EXPO_PUBLIC_FIREBASE_APP_ID
 };
 
-// Initialize Firebase
 let firebaseApp: FirebaseApp | undefined;
 let auth: Auth | undefined;
 
@@ -43,7 +41,7 @@ if (Platform.OS === 'web') {
   auth = getAuth(firebaseApp);
 }
 
-// Custom Toast Component - Works on iOS, Android, and Web
+// Custom Toast Component
 const CustomToast = ({ visible, message, isError, onHide }: { 
   visible: boolean; 
   message: string; 
@@ -143,27 +141,74 @@ const getInputWrapperStyle = (isFocused: boolean, hasError: string) => {
   return [styles.inputWrap];
 };
 
-// DiagramBackground component with grid-bg.png
+// ─── BACKGROUND (matches signin.tsx / signup.tsx) ──────────────────────────
+
 const DiagramBackground = () => (
   <View style={StyleSheet.absoluteFillObject} pointerEvents="none">
-    <Image
-      source={require('../../assets/images/grid-bg.png')}
-      style={styles.gridBackground}
-      resizeMode="repeat"
-    />
+    <Svg width="100%" height="100%" viewBox={`0 0 ${SCREEN_WIDTH} ${SCREEN_HEIGHT}`} preserveAspectRatio="xMidYMid slice" style={StyleSheet.absoluteFillObject}>
+      <Defs>
+        <LinearGradient id="bgWash" x1="0%" y1="0%" x2="100%" y2="100%">
+          <Stop offset="0%" stopColor="#e8edff" stopOpacity="1" />
+          <Stop offset="55%" stopColor="#eef2ff" stopOpacity="1" />
+          <Stop offset="100%" stopColor="#e3e9ff" stopOpacity="1" />
+        </LinearGradient>
+        <LinearGradient id="blobTopRight" x1="0%" y1="0%" x2="100%" y2="100%">
+          <Stop offset="0%" stopColor="#c7d2fe" stopOpacity="0.55" />
+          <Stop offset="100%" stopColor="#c7d2fe" stopOpacity="0" />
+        </LinearGradient>
+        <LinearGradient id="blobBottomLeft" x1="0%" y1="0%" x2="100%" y2="100%">
+          <Stop offset="0%" stopColor="#b6c2ff" stopOpacity="0.45" />
+          <Stop offset="100%" stopColor="#b6c2ff" stopOpacity="0" />
+        </LinearGradient>
+      </Defs>
+
+      <Rect x="0" y="0" width={SCREEN_WIDTH} height={SCREEN_HEIGHT} fill="url(#bgWash)" />
+      <Circle cx={SCREEN_WIDTH * 0.9} cy={SCREEN_HEIGHT * 0.08} r={SCREEN_WIDTH * 0.55} fill="url(#blobTopRight)" />
+      <Circle cx={SCREEN_WIDTH * 0.05} cy={SCREEN_HEIGHT * 0.95} r={SCREEN_WIDTH * 0.5} fill="url(#blobBottomLeft)" />
+    </Svg>
+
+    <Image source={require('../../assets/images/grid-bg.png')} style={styles.gridBackground} resizeMode="repeat" />
     <View style={styles.gridOverlay} />
-    <Svg width={SCREEN_WIDTH} height={SCREEN_HEIGHT} style={StyleSheet.absoluteFillObject}>
-      <Path
-        d={`M ${SCREEN_WIDTH * 0.08} ${SCREEN_HEIGHT * 0.25} C ${SCREEN_WIDTH * 0.22} ${SCREEN_HEIGHT * 0.10}, ${SCREEN_WIDTH * 0.36} ${SCREEN_HEIGHT * 0.42}, ${SCREEN_WIDTH * 0.52} ${SCREEN_HEIGHT * 0.32}`}
-        stroke="#bfd0ff" strokeWidth="2" strokeDasharray="8 10" fill="none" opacity="0.32"
-      />
-      <Path
-        d={`M ${SCREEN_WIDTH * 0.82} ${SCREEN_HEIGHT * 0.18} C ${SCREEN_WIDTH * 0.96} ${SCREEN_HEIGHT * 0.30}, ${SCREEN_WIDTH * 0.95} ${SCREEN_HEIGHT * 0.55}, ${SCREEN_WIDTH * 0.78} ${SCREEN_HEIGHT * 0.76}`}
-        stroke="#bfd0ff" strokeWidth="2" strokeDasharray="8 10" fill="none" opacity="0.32"
-      />
-      <Rect x={SCREEN_WIDTH * 0.07} y={SCREEN_HEIGHT * 0.12} width="130" height="72" rx="14" stroke="#bfd0ff" strokeWidth="1.4" fill="none" opacity="0.38" />
-      <Rect x={SCREEN_WIDTH * 0.74} y={SCREEN_HEIGHT * 0.16} width="140" height="78" rx="14" stroke="#bfd0ff" strokeWidth="1.4" fill="none" opacity="0.38" />
-      <Circle cx={SCREEN_WIDTH * 0.76} cy={SCREEN_HEIGHT * 0.72} r="24" stroke="#bfd0ff" strokeWidth="2" fill="none" opacity="0.3" />
+
+    <Svg width="100%" height="100%" viewBox={`0 0 ${SCREEN_WIDTH} ${SCREEN_HEIGHT}`} preserveAspectRatio="xMidYMid slice" style={StyleSheet.absoluteFillObject}>
+
+      {/* ── Mini class diagram (top-left): name / attributes / methods ── */}
+      <Rect x={SCREEN_WIDTH * 0.06} y={SCREEN_HEIGHT * 0.09} width="118" height="88" rx="6" stroke="#a9b8ff" strokeWidth="1.5" fill="#ffffff" fillOpacity="0.4" opacity="0.55" />
+      <Path d={`M ${SCREEN_WIDTH * 0.06} ${SCREEN_HEIGHT * 0.09 + 26} h 118`} stroke="#a9b8ff" strokeWidth="1.5" opacity="0.55" />
+      <Path d={`M ${SCREEN_WIDTH * 0.06} ${SCREEN_HEIGHT * 0.09 + 58} h 118`} stroke="#a9b8ff" strokeWidth="1.5" opacity="0.55" />
+      <Rect x={SCREEN_WIDTH * 0.06 + 10} y={SCREEN_HEIGHT * 0.09 + 10} width="54" height="7" rx="3" fill="#a9b8ff" opacity="0.5" />
+      <Rect x={SCREEN_WIDTH * 0.06 + 10} y={SCREEN_HEIGHT * 0.09 + 35} width="40" height="5" rx="2.5" fill="#c3cdff" opacity="0.5" />
+      <Rect x={SCREEN_WIDTH * 0.06 + 10} y={SCREEN_HEIGHT * 0.09 + 45} width="60" height="5" rx="2.5" fill="#c3cdff" opacity="0.5" />
+      <Rect x={SCREEN_WIDTH * 0.06 + 10} y={SCREEN_HEIGHT * 0.09 + 67} width="48" height="5" rx="2.5" fill="#c3cdff" opacity="0.5" />
+      <Rect x={SCREEN_WIDTH * 0.06 + 10} y={SCREEN_HEIGHT * 0.09 + 77} width="56" height="5" rx="2.5" fill="#c3cdff" opacity="0.5" />
+
+      {/* Association line + multiplicity dot toward the ERD entity */}
+      <Path d={`M ${SCREEN_WIDTH * 0.06 + 118} ${SCREEN_HEIGHT * 0.09 + 44} C ${SCREEN_WIDTH * 0.34} ${SCREEN_HEIGHT * 0.05}, ${SCREEN_WIDTH * 0.42} ${SCREEN_HEIGHT * 0.14}, ${SCREEN_WIDTH * 0.55} ${SCREEN_HEIGHT * 0.16}`} stroke="#a9b8ff" strokeWidth="1.5" fill="none" opacity="0.45" />
+      <Circle cx={SCREEN_WIDTH * 0.06 + 122} cy={SCREEN_HEIGHT * 0.09 + 44} r="2.5" fill="#a9b8ff" opacity="0.5" />
+
+      {/* ── ERD entity (upper-right): rectangle with header row ── */}
+      <Rect x={SCREEN_WIDTH * 0.72} y={SCREEN_HEIGHT * 0.13} width="132" height="70" rx="6" stroke="#a9b8ff" strokeWidth="1.5" fill="#ffffff" fillOpacity="0.4" opacity="0.5" />
+      <Path d={`M ${SCREEN_WIDTH * 0.72} ${SCREEN_HEIGHT * 0.13 + 22} h 132`} stroke="#a9b8ff" strokeWidth="1.5" opacity="0.5" />
+      <Rect x={SCREEN_WIDTH * 0.72 + 10} y={SCREEN_HEIGHT * 0.13 + 8} width="50" height="6" rx="3" fill="#a9b8ff" opacity="0.5" />
+      <Circle cx={SCREEN_WIDTH * 0.72 + 12} cy={SCREEN_HEIGHT * 0.13 + 34} r="2" fill="#c3cdff" opacity="0.6" />
+      <Rect x={SCREEN_WIDTH * 0.72 + 20} y={SCREEN_HEIGHT * 0.13 + 31} width="46" height="5" rx="2.5" fill="#c3cdff" opacity="0.5" />
+      <Circle cx={SCREEN_WIDTH * 0.72 + 12} cy={SCREEN_HEIGHT * 0.13 + 48} r="2" fill="#c3cdff" opacity="0.6" />
+      <Rect x={SCREEN_WIDTH * 0.72 + 20} y={SCREEN_HEIGHT * 0.13 + 45} width="58" height="5" rx="2.5" fill="#c3cdff" opacity="0.5" />
+
+      {/* ── Use-case oval + actor stick figure (lower-left) ── */}
+      <Circle cx={SCREEN_WIDTH * 0.10} cy={SCREEN_HEIGHT * 0.60} r="4.5" stroke="#a9b8ff" strokeWidth="1.6" fill="none" opacity="0.5" />
+      <Path d={`M ${SCREEN_WIDTH * 0.10} ${SCREEN_HEIGHT * 0.60 + 4.5} v 16 M ${SCREEN_WIDTH * 0.10 - 8} ${SCREEN_HEIGHT * 0.60 + 12} h 16 M ${SCREEN_WIDTH * 0.10} ${SCREEN_HEIGHT * 0.60 + 20.5} l -7 12 M ${SCREEN_WIDTH * 0.10} ${SCREEN_HEIGHT * 0.60 + 20.5} l 7 12`} stroke="#a9b8ff" strokeWidth="1.6" fill="none" opacity="0.5" />
+      <Path d={`M ${SCREEN_WIDTH * 0.10 + 12} ${SCREEN_HEIGHT * 0.60 + 12} L ${SCREEN_WIDTH * 0.24} ${SCREEN_HEIGHT * 0.60 + 6}`} stroke="#a9b8ff" strokeWidth="1.5" strokeDasharray="5 6" opacity="0.45" />
+      <Path d={`M ${SCREEN_WIDTH * 0.24} ${SCREEN_HEIGHT * 0.60 + 6} m -22, 0 a 22,13 0 1,0 44,0 a 22,13 0 1,0 -44,0`} stroke="#a9b8ff" strokeWidth="1.5" fill="#ffffff" fillOpacity="0.35" opacity="0.5" />
+
+      {/* ── Flowchart bits (lower-right): decision diamond + terminator ── */}
+      <Path d={`M ${SCREEN_WIDTH * 0.80} ${SCREEN_HEIGHT * 0.66} L ${SCREEN_WIDTH * 0.80 + 20} ${SCREEN_HEIGHT * 0.66 + 14} L ${SCREEN_WIDTH * 0.80} ${SCREEN_HEIGHT * 0.66 + 28} L ${SCREEN_WIDTH * 0.80 - 20} ${SCREEN_HEIGHT * 0.66 + 14} Z`} stroke="#a9b8ff" strokeWidth="1.5" fill="#ffffff" fillOpacity="0.35" opacity="0.5" />
+      <Path d={`M ${SCREEN_WIDTH * 0.80} ${SCREEN_HEIGHT * 0.66 + 28} v 22`} stroke="#a9b8ff" strokeWidth="1.5" strokeDasharray="4 5" opacity="0.4" />
+      <Rect x={SCREEN_WIDTH * 0.80 - 30} y={SCREEN_HEIGHT * 0.66 + 50} width="60" height="24" rx="12" stroke="#a9b8ff" strokeWidth="1.5" fill="#ffffff" fillOpacity="0.35" opacity="0.5" />
+
+      {/* Faint sequence-diagram lifeline for balance, center-right */}
+      <Path d={`M ${SCREEN_WIDTH * 0.90} ${SCREEN_HEIGHT * 0.35} v 90`} stroke="#bfd0ff" strokeWidth="1.4" strokeDasharray="3 6" opacity="0.35" />
+      <Rect x={SCREEN_WIDTH * 0.90 - 26} y={SCREEN_HEIGHT * 0.35} width="52" height="18" rx="4" stroke="#bfd0ff" strokeWidth="1.4" fill="none" opacity="0.35" />
     </Svg>
   </View>
 );
@@ -183,7 +228,6 @@ const GoogleIcon = () => (
   </Svg>
 );
 
-// Custom Error Popup Modal (still used for other errors, but not for Google account)
 const ErrorPopupModal = ({ visible, title, message, onClose, onAction, actionButtonText, actionIcon }: { 
   visible: boolean; 
   title: string; 
@@ -253,6 +297,71 @@ export default function ForgotPassword() {
     actionIcon: undefined as React.ReactNode | undefined
   });
 
+  // Card entrance/exit animation — matches the transition used between
+  // signin.tsx <-> signup.tsx, now shared with forgot-password <-> signin.
+  const cardOpacity = useRef(new Animated.Value(0)).current;
+  const cardTranslateY = useRef(new Animated.Value(20)).current;
+  const [isAnimatingOut, setIsAnimatingOut] = useState(false);
+
+  useEffect(() => {
+    Animated.parallel([
+      Animated.timing(cardOpacity, {
+        toValue: 1,
+        duration: 400,
+        useNativeDriver: true,
+      }),
+      Animated.timing(cardTranslateY, {
+        toValue: 0,
+        duration: 400,
+        easing: Easing.out(Easing.cubic),
+        useNativeDriver: true,
+      }),
+    ]).start();
+  }, []);
+
+  // Shared exit animation before leaving this screen for Sign In
+  const navigateToSignIn = useCallback(() => {
+    if (isAnimatingOut) return;
+    setIsAnimatingOut(true);
+
+    Animated.parallel([
+      Animated.timing(cardOpacity, {
+        toValue: 0,
+        duration: 150,
+        useNativeDriver: true,
+      }),
+      Animated.timing(cardTranslateY, {
+        toValue: -20,
+        duration: 150,
+        easing: Easing.in(Easing.cubic),
+        useNativeDriver: true,
+      }),
+    ]).start(() => {
+      router.push('/(auth)/signin');
+    });
+  }, [cardOpacity, cardTranslateY, router, isAnimatingOut]);
+
+  const handleBack = useCallback(() => {
+    if (isAnimatingOut) return;
+    setIsAnimatingOut(true);
+
+    Animated.parallel([
+      Animated.timing(cardOpacity, {
+        toValue: 0,
+        duration: 150,
+        useNativeDriver: true,
+      }),
+      Animated.timing(cardTranslateY, {
+        toValue: -20,
+        duration: 150,
+        easing: Easing.in(Easing.cubic),
+        useNativeDriver: true,
+      }),
+    ]).start(() => {
+      router.back();
+    });
+  }, [cardOpacity, cardTranslateY, router, isAnimatingOut]);
+
   const showToast = (message: string, isError: boolean = false) => {
     setToastMessage(message);
     setToastIsError(isError);
@@ -306,7 +415,6 @@ export default function ForgotPassword() {
     }
   };
 
-  // ⭐ FIXED: handleSendOTP - Now shows inline error for Google accounts
   const handleSendOTP = async () => {
     console.log('🔍 handleSendOTP called with email:', email);
     
@@ -355,9 +463,8 @@ export default function ForgotPassword() {
         setLoading(false);
         return;
       }
-      
-      // ✅ SUCCESS: OTP was sent - navigate
-      console.log('✅ OTP sent successfully, navigating to verify-otp');
+
+      console.log('OTP sent successfully, navigating to verify-otp');
       const maskedEmail = email.replace(/(.{2})(.*)(@.*)/, '$1•••$3');
       showToast(`OTP code sent to ${maskedEmail}`, false);
       
@@ -389,7 +496,6 @@ export default function ForgotPassword() {
       if (error.response?.status === 400) {
         const data = error.response?.data;
         if (data?.code === 'GOOGLE_ACCOUNT') {
-          // ⭐ Inline error instead of popup
           setError("This email is linked to Google. Please use 'Continue with Google' to log in.");
           setLoading(false);
           return;
@@ -410,12 +516,10 @@ export default function ForgotPassword() {
     }
   };
 
-  // Handle Enter key press on keyboard
   const handleSubmitEditing = () => {
     handleSendOTP();
   };
 
-  // Get dynamic outline color for web
   const getOutlineColor = () => {
     if (error) return '#ef4444';
     if (emailFocused) return '#4c6fff';
@@ -424,6 +528,11 @@ export default function ForgotPassword() {
 
   return (
     <>
+      <Stack.Screen options={{
+        headerShown: false,
+        animation: 'none',
+      }} />
+
       <KeyboardAvoidingView 
         style={styles.flex} 
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
@@ -448,14 +557,22 @@ export default function ForgotPassword() {
         
         <DiagramBackground />
         <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
-          <View style={styles.card}>
+          <Animated.View
+            style={[
+              styles.card,
+              {
+                opacity: cardOpacity,
+                transform: [{ translateY: cardTranslateY }],
+              },
+            ]}
+          >
             {/* Connectors */}
             <View style={styles.connectorTop} />
             <View style={styles.connectorBottom} />
             <View style={styles.connectorLeft} />
             <View style={styles.connectorRight} />
             
-            <TouchableOpacity style={styles.backBtn} onPress={() => router.back()} activeOpacity={0.7}>
+            <TouchableOpacity style={styles.backBtn} onPress={handleBack} activeOpacity={0.7}>
               <BackIcon />
               <Text style={styles.backText}>Back</Text>
             </TouchableOpacity>
@@ -503,11 +620,11 @@ export default function ForgotPassword() {
 
             <View style={styles.signinWrap}>
               <Text style={styles.signinText}>Remember your password?</Text>
-              <TouchableOpacity onPress={() => router.push('/(auth)/signin')}>
+              <TouchableOpacity onPress={navigateToSignIn}>
                 <Text style={styles.signinLink}>Sign In</Text>
               </TouchableOpacity>
             </View>
-          </View>
+          </Animated.View>
         </ScrollView>
       </KeyboardAvoidingView>
     </>

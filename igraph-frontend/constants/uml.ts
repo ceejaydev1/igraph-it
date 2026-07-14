@@ -1,7 +1,3 @@
-// constants/uml.ts
-
-// ─── 10 UML DIAGRAM NAMES ────────────────────────────────────────────────────
-
 export const UML_TABS = [
   'Functional Decomposition Diagram',
   'Flowchart',

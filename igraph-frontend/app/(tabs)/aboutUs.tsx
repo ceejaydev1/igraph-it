@@ -1,5 +1,3 @@
-// igraph-frontend/app/(tabs)/aboutUs.tsx
-
 import React, { useState, useRef } from 'react';
 import {
   View,
@@ -15,9 +13,7 @@ import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Svg, Path } from 'react-native-svg';
 
-// ============================================================================
 // COLORS
-// ============================================================================
 
 const COLORS = {
   primary: '#4c6fff',
@@ -54,9 +50,11 @@ const RADIUS = {
   full: 999,
 };
 
-// ============================================================================
+// Readable-width cap for the content pane on wide screens — same value used
+// in privacy.tsx so both screens feel consistent.
+const CONTENT_MAX_WIDTH = 720;
+
 // ICONS
-// ============================================================================
 
 const BackIcon = () => (
   <Svg width={20} height={20} viewBox="0 0 24 24" fill="none">
@@ -70,9 +68,7 @@ const BackIcon = () => (
   </Svg>
 );
 
-// ============================================================================
 // MEMBER CARD COMPONENT
-// ============================================================================
 
 const MemberCard = ({
   name,
@@ -125,9 +121,7 @@ const MemberCard = ({
   );
 };
 
-// ============================================================================
 // ABOUT CONTENT
-// ============================================================================
 
 const AboutContent = () => (
   <View style={styles.tabContent}>
@@ -141,14 +135,12 @@ const AboutContent = () => (
     <Text style={styles.aboutTextSecondary}>
       We made this because diagramming can feel confusing at first, especially when you're just
       starting out. iGraph IT breaks it down and lets you learn by doing, so by the time you need
-      these skills for school projects or your future job, you'll already feel comfortable with them.
+      these skills for school projects.
     </Text>
   </View>
 );
 
-// ============================================================================
 // TEAM CONTENT
-// ============================================================================
 
 const TeamContent = () => {
   const members = [
@@ -186,9 +178,7 @@ const TeamContent = () => {
   );
 };
 
-// ============================================================================
 // MAIN COMPONENT
-// ============================================================================
 
 export default function AboutUs() {
   const router = useRouter();
@@ -209,9 +199,8 @@ export default function AboutUs() {
   };
 
   const handleScroll = (event: any) => {
-    const { layoutMeasurement, contentOffset, contentSize } = event.nativeEvent;
-    const offsetY = contentOffset.y;
-    setShowScrollTop(offsetY > 300);
+    const { contentOffset } = event.nativeEvent;
+    setShowScrollTop(contentOffset.y > 300);
   };
 
   const scrollToTop = () => {
@@ -232,7 +221,7 @@ export default function AboutUs() {
 
   return (
     <View style={styles.container}>
-      {/* Header */}
+      {/* Header — flat, full-width */}
       <View style={[styles.header, { paddingTop: insets.top + SPACING.sm }]}>
         <TouchableOpacity
           onPress={handleBackPress}
@@ -245,7 +234,7 @@ export default function AboutUs() {
         <View style={styles.headerSpacer} />
       </View>
 
-      {/* Tab Bar - Same style as Privacy */}
+      {/* Tab Bar - flat, full-width (same style as Privacy) */}
       <View style={styles.tabBar}>
         <TouchableOpacity
           style={[styles.tab, activeTab === 'about' && styles.activeTab]}
@@ -265,43 +254,52 @@ export default function AboutUs() {
         </TouchableOpacity>
       </View>
 
-      {/* Content */}
+      {/* Content — capped + centered on wide screens, same pattern as privacy.tsx */}
       <ScrollView
         ref={scrollViewRef}
+        style={styles.scrollView}
         showsVerticalScrollIndicator={false}
         onScroll={handleScroll}
         scrollEventThrottle={16}
         contentContainerStyle={[
-          styles.scrollContent,
+          styles.scrollContentOuter,
           { paddingBottom: isMobile ? SPACING.xxl : SPACING.xxxl },
         ]}
       >
-        {activeTab === 'about' ? <AboutContent /> : <TeamContent />}
+        <View style={[styles.scrollContentInner, isDesktop && { maxWidth: CONTENT_MAX_WIDTH }]}>
+          {activeTab === 'about' ? <AboutContent /> : <TeamContent />}
+        </View>
       </ScrollView>
 
-      {/* Scroll to Top Button */}
+      {/* Scroll to Top Button — outer wrapper centers its child, inner box
+          carries the maxWidth and right-aligns the button within it. Same
+          fix as privacy.tsx: avoids fighting absolute left/right insets
+          against a maxWidth. */}
       {showScrollTop && (
-        <TouchableOpacity style={styles.scrollTopButton} onPress={scrollToTop}>
-          <Svg width={24} height={24} viewBox="0 0 24 24" fill="none">
-            <Path d="M12 19V5M5 12l7-7 7 7" stroke="#ffffff" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
-          </Svg>
-        </TouchableOpacity>
+        <View pointerEvents="box-none" style={styles.scrollTopOuter}>
+          <View
+            pointerEvents="box-none"
+            style={[styles.scrollTopInner, isDesktop && { maxWidth: CONTENT_MAX_WIDTH }]}
+          >
+            <TouchableOpacity style={styles.scrollTopButton} onPress={scrollToTop} activeOpacity={0.85}>
+              <Svg width={24} height={24} viewBox="0 0 24 24" fill="none">
+                <Path d="M12 19V5M5 12l7-7 7 7" stroke="#ffffff" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+              </Svg>
+            </TouchableOpacity>
+          </View>
+        </View>
       )}
     </View>
   );
 }
 
-// ============================================================================
 // STYLES
-// ============================================================================
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: COLORS.background,
   },
-
-  // Header - Same as Privacy
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -340,8 +338,6 @@ const styles = StyleSheet.create({
   headerSpacer: {
     width: 36,
   },
-
-  // Tab Bar - Same as Privacy
   tabBar: {
     flexDirection: 'row',
     borderBottomWidth: 1,
@@ -367,18 +363,24 @@ const styles = StyleSheet.create({
     color: COLORS.primary,
   },
 
-  // Scroll Content - Same as Privacy
-  scrollContent: {
+  scrollView: {
+    flex: 1,
+  },
+
+  // Scroll Content
+  scrollContentOuter: {
     flexGrow: 1,
+    alignItems: 'center',
     paddingHorizontal: SPACING.xl,
     paddingTop: SPACING.lg,
   },
+  scrollContentInner: {
+    width: '100%',
+  },
 
-  // Tab Content
   tabContent: {
     paddingVertical: SPACING.sm,
   },
-
   aboutText: {
     fontSize: 17,
     color: COLORS.textSecondary,
@@ -393,8 +395,6 @@ const styles = StyleSheet.create({
     lineHeight: 26,
     textAlign: 'center',
   },
-
-  // Team rows
   teamRowTop: {
     flexDirection: 'row',
     justifyContent: 'center',
@@ -408,8 +408,6 @@ const styles = StyleSheet.create({
     gap: SPACING.xxxl,
     paddingHorizontal: SPACING.xxxl,
   },
-
-  // Member Card
   memberCard: {
     alignItems: 'center',
     width: 160,
@@ -481,11 +479,21 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
 
-  // Scroll to Top Button - Same as Privacy
-  scrollTopButton: {
+  // Scroll to Top Button
+  scrollTopOuter: {
     position: 'absolute',
-    bottom: SPACING.xxxl,
-    right: SPACING.xl,
+    bottom: 0,
+    left: 0,
+    right: 0,
+    alignItems: 'center',
+    paddingBottom: SPACING.xxxl,
+  },
+  scrollTopInner: {
+    width: '100%',
+    alignItems: 'flex-end',
+    paddingHorizontal: SPACING.xl,
+  },
+  scrollTopButton: {
     backgroundColor: COLORS.primary,
     width: 48,
     height: 48,

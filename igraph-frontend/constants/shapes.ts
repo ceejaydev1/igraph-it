@@ -1,6 +1,3 @@
-// constants/shapes.ts
-// Complete shape definitions with ALL diagram types
-
 export interface ShapeDefinition {
   id: string;
   svgComponent: string;

@@ -1,5 +1,3 @@
-// app/(auth)/splash.tsx
-
 import React, { useEffect, useRef } from 'react';
 import {
   View,
@@ -32,13 +30,6 @@ export default function CreativeSplashScreen({
   const animatedProgress = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
-    // ✅ FIX: previously the loading bar had its OWN opacity animation
-    // (loadingOpacity) on a separate delay timer. Any fixed delay is a
-    // guess that can still desync from when progress actually starts
-    // counting. Now loadingContainer just reuses `fadeIn` directly (see
-    // JSX below) — it appears on the exact same frame as the rest of the
-    // splash, which is also the exact same frame progress starts at 0%.
-    // There's no longer a separate timer that can drift out of sync.
     const entranceAnimation = Animated.sequence([
       Animated.timing(fadeIn, {
         toValue: 1,
@@ -99,8 +90,6 @@ export default function CreativeSplashScreen({
 
   useEffect(() => {
     if (progress >= 1 && onFinish) {
-      // Small buffer so the bar visibly reaches 100% before the splash
-      // unmounts, instead of disappearing the instant it hits full.
       const timer = setTimeout(() => {
         onFinish();
       }, 400);
@@ -113,7 +102,6 @@ export default function CreativeSplashScreen({
     outputRange: ['0%', '100%'],
   });
 
-  // Generate grid lines
   const horizontalLines = Array.from({ length: 12 }).map((_, i) => ({
     key: `h-${i}`,
     top: (SCREEN_HEIGHT / 13) * (i + 1),
@@ -156,7 +144,6 @@ export default function CreativeSplashScreen({
       </View>
 
       <View style={styles.content}>
-        {/* Logo - No circle container, just the image */}
         <Animated.Image
           source={require('../../assets/images/logo.png')}
           style={[

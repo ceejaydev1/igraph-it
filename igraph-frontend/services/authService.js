@@ -1,14 +1,10 @@
-// Handles all authentication API calls to backend
-
 import axios from 'axios';
 import { Platform } from 'react-native';
 import API_BASE_URL from '../constants/api';
 
 console.log('🔗 AuthService initialized with URL:', API_BASE_URL);
 
-// ============================================================================
 // STORAGE
-// ============================================================================
 
 const storage = {
   setItem: async (key, value) => {
@@ -55,9 +51,7 @@ const storage = {
   },
 };
 
-// ============================================================================
 // AXIOS CLIENT
-// ============================================================================
 
 const api = axios.create({
   baseURL: `${API_BASE_URL}/api`,
@@ -129,9 +123,7 @@ api.interceptors.response.use(
   }
 );
 
-// ============================================================================
 // TOKEN MANAGEMENT
-// ============================================================================
 
 export const storeTokens = async (accessToken, refreshToken) => {
   if (!accessToken || !refreshToken) {
@@ -161,9 +153,7 @@ export const getRefreshToken = async () => {
   return await storage.getItem('refreshToken');
 };
 
-// ============================================================================
 // 🚀 FIX: CACHING LAYER
-// ============================================================================
 
 let cachedUserData = null;
 let cacheTimestamp = null;
@@ -184,9 +174,7 @@ export const setCachedUser = (data) => {
   cacheTimestamp = Date.now();
 };
 
-// ============================================================================
 // AUTH API CALLS
-// ============================================================================
 
 export const signUp = async (userData, consentTimestamp = null) => {
   const payload = consentTimestamp 
@@ -257,7 +245,9 @@ export const googleAuth = async (idToken, consentTimestamp = null) => {
       ? { idToken, consentTimestamp }
       : { idToken };
     
-    const response = await api.post('/auth/google', payload);
+    const response = await api.post('/auth/google', payload, {
+      timeout: 45000, // Handles free-tier cold start (same as verifyResetOTP)
+    });
     if (response.data.success && response.data.data?.tokens) {
       await storeTokens(
         response.data.data.tokens.accessToken,
@@ -277,9 +267,7 @@ export const googleAuth = async (idToken, consentTimestamp = null) => {
   }
 };
 
-// ============================================================================
 // ⭐ FIXED: FORGOT PASSWORD - Returns error data instead of throwing
-// ============================================================================
 
 export const forgotPassword = async (email) => {
   try {
@@ -299,9 +287,7 @@ export const forgotPassword = async (email) => {
   }
 };
 
-// ============================================================================
 // 🏓 PING: Wake up free-tier backend before OTP verify
-// ============================================================================
 
 export const pingBackend = async () => {
   try {
@@ -313,9 +299,7 @@ export const pingBackend = async () => {
   }
 };
 
-// ============================================================================
 // OTP VERIFICATION
-// ============================================================================
 
 export const verifyResetOTP = async (email, otp) => {
   try {
@@ -425,9 +409,7 @@ export const recordConsent = async (consentTimestamp) => {
   }
 };
 
-// ============================================================================
 // USER ACCOUNT METHODS
-// ============================================================================
 
 export const changePassword = async (currentPassword, newPassword) => {
   try {
@@ -502,6 +484,16 @@ export const updateProfile = async (data) => {
     }
     
     throw new Error(error.response?.data?.message || 'Failed to update profile');
+  }
+};
+
+export const getUserDiagrams = async () => {
+  try {
+    const response = await api.get('/diagrams/user');
+    return response.data;
+  } catch (error) {
+    console.error('Get user diagrams error:', error.response?.data || error.message);
+    throw error;
   }
 };
 

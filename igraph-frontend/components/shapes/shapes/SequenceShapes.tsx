@@ -1,6 +1,3 @@
-// components/shapes/shapes/SequenceShapes.tsx
-// Sequence Diagram shapes - FIXED with clean, simple design for shape panel
-
 import React from 'react';
 import { Svg, Rect, Line, Polygon, Path, G, Text as SvgText } from 'react-native-svg';
 
