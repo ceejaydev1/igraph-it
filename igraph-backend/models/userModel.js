@@ -1,5 +1,3 @@
-// igraph-backend/models/userModel.js
-
 const { db } = require('../config/firebase');
 
 const COLLECTION = 'students';

@@ -17,8 +17,6 @@ const handleValidationErrors = (req, res, next) => {
   next();
 };
 
-// middleware/validationMiddleware.js
-
 const validateSignup = [
   body('fullName')
     .trim()

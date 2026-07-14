@@ -11,50 +11,26 @@ const diagramRoutes = require('./routes/diagramRoutes');
 
 const app = express();
 
-// ============================================================================
-// ✅ PRODUCTION-GRADE CORS CONFIGURATION
-// ============================================================================
-
-// ALLOWED ORIGINS - Add ALL your domains here
 const allowedOrigins = [
-  // Production
-  'https://igraphitv1.netlify.app',
-  'https://igraph-frontend.vercel.app',
-  'https://igraph-it.vercel.app',
-  'https://igraph-it.netlify.app',
+
   'https://igraph-backend.onrender.com',
   'https://igraph-it-1b6y.vercel.app',
   
-  // Local Development - ALL ports
-  'http://localhost:3000',
   'http://localhost:3001',
   'http://localhost:5000',
   'http://localhost:8080',
   'http://localhost:8081',
-  'http://localhost:8082',
-  'http://localhost:19000',
-  'http://localhost:19001',
-  'http://localhost:19006',
-  'http://127.0.0.1:3000',
-  'http://127.0.0.1:5000',
-  'http://127.0.0.1:8080',
-  'http://127.0.0.1:8081',
-  'http://127.0.0.1:19000',
-  'http://127.0.0.1:19006',
   
-  // Network IPs
   'http://192.168.1.100:19000',
   'http://192.168.1.100:5000',
   'http://192.168.1.100:8081',
   'http://10.0.0.1:8081',
   'http://10.0.0.2:8081',
   
-  // Expo
   'exp://localhost:19000',
   'exp://127.0.0.1:19000',
 ];
 
-// ✅ CORS with dynamic origin checking
 const corsOptions = {
   origin: function (origin, callback) {
     if (!origin) {
@@ -76,10 +52,10 @@ const corsOptions = {
     const isNetlify = /^https?:\/\/.*\.netlify\.app/.test(origin);
     
     if (isAllowed || isLocal || isNetlify) {
-      console.log(`✅ CORS allowed: ${origin}`);
+      console.log(`CORS allowed: ${origin}`);
       callback(null, true);
     } else {
-      console.warn(`⚠️ CORS blocked: ${origin}`);
+      console.warn(`CORS blocked: ${origin}`);
       callback(new Error('Not allowed by CORS'));
     }
   },
@@ -99,10 +75,7 @@ const corsOptions = {
   optionsSuccessStatus: 204,
 };
 
-// ✅ Apply CORS FIRST
 app.use(cors(corsOptions));
-
-// ✅ Additional CORS middleware for preflight
 app.use((req, res, next) => {
   const origin = req.headers.origin;
   
@@ -135,17 +108,10 @@ app.use((req, res, next) => {
   next();
 });
 
-// ============================================================================
-// ✅ BODY PARSER - With increased limits
-// ============================================================================
-
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
-
-// Compression
 app.use(compression());
 
-// Security headers
 const isProduction = process.env.NODE_ENV === 'production';
 app.use(helmet({
   crossOriginResourcePolicy: { policy: "cross-origin" },
@@ -154,7 +120,7 @@ app.use(helmet({
   contentSecurityPolicy: isProduction ? undefined : false,
 }));
 
-// ✅ Error handler for payload too large
+// Error handler for payload too large
 app.use((err, req, res, next) => {
   console.error('❌ Error caught by middleware:', err);
   
@@ -171,9 +137,7 @@ app.use((err, req, res, next) => {
 
 const PORT = process.env.PORT || 5000;
 
-// ============================================================================
 // RATE LIMITING
-// ============================================================================
 
 const globalLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
@@ -188,9 +152,7 @@ const globalLimiter = rateLimit({
 
 app.use(globalLimiter);
 
-// ============================================================================
 // ROUTES
-// ============================================================================
 
 app.get('/', (req, res) => {
   res.json({
@@ -212,7 +174,7 @@ app.use((req, res) => {
   });
 });
 
-// ✅ Global error handler
+// Global error handler
 app.use((err, req, res, next) => {
   console.error('Server Error:', err.stack);
   
@@ -238,9 +200,7 @@ app.use((err, req, res, next) => {
   });
 });
 
-// ============================================================================
 // START SERVER
-// ============================================================================
 
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`✅ iGraph IT Backend running on port ${PORT}`);

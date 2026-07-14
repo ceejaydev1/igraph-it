@@ -58,7 +58,7 @@ const protect = async (req, res, next) => {
       fullName: user.full_name
     };
 
-    next(); // Proceed to the protected route handler
+    next(); 
 
   } catch (error) {
     console.error('Auth middleware error:', error);

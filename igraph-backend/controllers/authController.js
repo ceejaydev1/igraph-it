@@ -1,5 +1,3 @@
-// igraph-backend/controllers/authController.js
-
 const bcrypt = require('bcryptjs');
 const { v4: uuidv4 } = require('uuid');
 const { db, auth } = require('../config/firebase');
@@ -10,9 +8,7 @@ const { generateOTP, getOTPExpiry } = require('../utils/generateOTP');
 const { generateAccessToken, generateRefreshToken, verifyRefreshToken } = require('../utils/generateJWT');
 const { sendVerificationEmail, sendPasswordResetEmail } = require('../services/emailService');
 
-// ============================================================================
 // HELPERS
-// ============================================================================
 
 /**
  * Per-email OTP rate limiter.
@@ -45,17 +41,13 @@ const isEmailOTPRateLimited = async (email, purpose, maxRequests = 3, windowMinu
   }
 };
 
-// ============================================================================
 // PING (cold-start wake-up for free-tier hosting)
-// ============================================================================
 
 const ping = async (req, res) => {
   res.status(200).json({ success: true, message: 'pong' });
 };
 
-// ============================================================================
 // SIGN UP
-// ============================================================================
 
 const signup = async (req, res) => {
   try {
@@ -136,9 +128,7 @@ const signup = async (req, res) => {
   }
 };
 
-// ============================================================================
 // VERIFY OTP
-// ============================================================================
 
 const verifyOTP = async (req, res) => {
   try {
@@ -292,9 +282,7 @@ const verifyOTP = async (req, res) => {
   }
 };
 
-// ============================================================================
 // RESEND OTP
-// ============================================================================
 
 const resendOTP = async (req, res) => {
   try {
@@ -359,9 +347,7 @@ const resendOTP = async (req, res) => {
   }
 };
 
-// ============================================================================
 // SIGN IN
-// ============================================================================
 
 const signin = async (req, res) => {
   try {
@@ -436,9 +422,7 @@ const signin = async (req, res) => {
   }
 };
 
-// ============================================================================
 // GOOGLE AUTH
-// ============================================================================
 
 const googleAuth = async (req, res) => {
   try {
@@ -526,9 +510,7 @@ const googleAuth = async (req, res) => {
   }
 };
 
-// ============================================================================
 // FORGOT PASSWORD
-// ============================================================================
 
 const forgotPassword = async (req, res) => {
   try {
@@ -610,9 +592,9 @@ const forgotPassword = async (req, res) => {
   }
 };
 
-// ============================================================================
+
 // VERIFY RESET OTP
-// ============================================================================
+
 
 const verifyResetOTP = async (req, res) => {
   try {
@@ -676,9 +658,7 @@ const verifyResetOTP = async (req, res) => {
   }
 };
 
-// ============================================================================
 // RESET PASSWORD
-// ============================================================================
 
 const resetPassword = async (req, res) => {
   try {
@@ -763,9 +743,7 @@ const resetPassword = async (req, res) => {
   }
 };
 
-// ============================================================================
 // REFRESH TOKEN
-// ============================================================================
 
 const refreshToken = async (req, res) => {
   try {
@@ -833,9 +811,7 @@ const refreshToken = async (req, res) => {
   }
 };
 
-// ============================================================================
 // LOGOUT
-// ============================================================================
 
 const logout = async (req, res) => {
   try {
@@ -867,9 +843,7 @@ const logout = async (req, res) => {
   }
 };
 
-// ============================================================================
 // GET CURRENT USER
-// ============================================================================
 
 const getCurrentUser = async (req, res) => {
   try {
@@ -899,9 +873,9 @@ const getCurrentUser = async (req, res) => {
   }
 };
 
-// ============================================================================
+
 // UPDATE PROFILE
-// ============================================================================
+
 
 const updateProfile = async (req, res) => {
   try {
@@ -945,9 +919,7 @@ const updateProfile = async (req, res) => {
   }
 };
 
-// ============================================================================
 // CHANGE PASSWORD
-// ============================================================================
 
 const changePassword = async (req, res) => {
   try {
@@ -1010,7 +982,6 @@ const changePassword = async (req, res) => {
       console.log(`✅ Firebase Auth password changed for uid: ${userId}`);
     } catch (firebaseError) {
       console.error('Firebase Auth password update error:', firebaseError.message);
-      // Non-fatal
     }
 
     // Invalidate all sessions
@@ -1036,9 +1007,7 @@ const changePassword = async (req, res) => {
   }
 };
 
-// ============================================================================
 // MODULE EXPORTS
-// ============================================================================
 
 module.exports = {
   ping,

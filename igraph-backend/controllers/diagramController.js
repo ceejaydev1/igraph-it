@@ -1,14 +1,8 @@
-// igraph-backend/controllers/diagramController.js
-// ✅ FULLY FIXED: Delete and Rename working
-
 const { db } = require('../config/firebase');
 const { v4: uuidv4 } = require('uuid');
 
 const COLLECTION = 'diagrams';
 
-/**
- * Save a new diagram for the current user
- */
 const saveDiagram = async (req, res) => {
   try {
     const userId = req.user.uid;
@@ -78,9 +72,6 @@ const saveDiagram = async (req, res) => {
   }
 };
 
-/**
- * Get all saved diagrams for the current user
- */
 const getSavedDiagrams = async (req, res) => {
   try {
     const userId = req.user.uid;
@@ -121,9 +112,6 @@ const getSavedDiagrams = async (req, res) => {
   }
 };
 
-/**
- * Get a specific diagram by ID
- */
 const getDiagram = async (req, res) => {
   try {
     const userId = req.user.uid;
@@ -173,9 +161,6 @@ const getDiagram = async (req, res) => {
   }
 };
 
-/**
- * ✅ Rename a diagram
- */
 const renameDiagram = async (req, res) => {
   try {
     const userId = req.user.uid;
@@ -248,9 +233,7 @@ const renameDiagram = async (req, res) => {
   }
 };
 
-/**
- * Delete a diagram
- */
+
 const deleteDiagram = async (req, res) => {
   try {
     const userId = req.user.uid;

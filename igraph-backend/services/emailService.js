@@ -5,22 +5,17 @@ const sendVerificationEmail = async (toEmail, fullName, otp) => {
   const senderEmail = process.env.EMAIL_USER;
   const isProduction = process.env.NODE_ENV === 'production';
 
-  // Log the attempt
   console.log(`📧 Attempting to send verification email to ${toEmail}`);
   console.log(`🔑 API Key present: ${!!apiKey}`);
   console.log(`📧 Sender email: ${senderEmail}`);
 
-  // If no API key, only log (never silently fail in production)
   if (!apiKey || apiKey === 'your_brevo_api_key_here') {
     console.log(`📧 [DEV_MODE] Verification OTP for ${toEmail}: ${otp}`);
     
     if (isProduction) {
       console.error('🚨 CRITICAL: Brevo API key missing in production!');
-      // In production, we should throw an error, not silently fail
       throw new Error('Email service not configured properly');
     }
-    
-    // In development, return true (simulate success)
     return true;
   }
 

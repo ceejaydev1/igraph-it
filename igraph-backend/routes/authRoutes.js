@@ -1,5 +1,3 @@
-// igraph-backend/routes/authRoutes.js
-
 const express = require('express');
 const router = express.Router();
 const rateLimit = require('express-rate-limit');
@@ -16,9 +14,7 @@ const {
 } = require('../middleware/validationMiddleware');
 const { protect } = require('../middleware/authMiddleware');
 
-// ============================================================================
 // ENVIRONMENT
-// ============================================================================
 
 const isLabMode = process.env.IS_LAB_MODE === 'true';
 const LAB_MAX   = 100;
@@ -32,22 +28,6 @@ if (LAB_ACTIVE) {
   console.warn('[RATE LIMIT] Lab mode is ACTIVE — per-account limits at 100, IP limits disabled.');
 }
 
-// ============================================================================
-// HELPERS
-// ============================================================================
-
-/**
- * Extracts a safe, normalised key from the request body email.
- * Falls back to IP so the limiter never crashes on missing body fields.
- *
- * Handles edge cases:
- *  - No body at all (raw TCP probes, malformed JSON parsed as null)
- *  - email field present but not a string (array injection, object injection)
- *  - email exceeds sane length (memory exhaustion via huge key strings)
- *  - Unicode homograph emails ("аdmin@…" vs "admin@…") → lowercased + trimmed
- *
- * ✅ FIXED: IP fallback now uses ipKeyGenerator to handle IPv6 properly.
- */
 const emailKey = (prefix) => (req) => {
   try {
     const raw = req.body?.email;
@@ -60,21 +40,11 @@ const emailKey = (prefix) => (req) => {
   return `${prefix}:ip:${ipKeyGenerator(req)}`; // ✅ FIXED
 };
 
-/**
- * Pure IP key — used for the second (IP-level) limiter layer in prod.
- * ✅ Uses ipKeyGenerator to handle IPv6 properly.
- */
 const ipKey = (prefix) => (req) => {
   return `${prefix}:ip:${ipKeyGenerator(req)}`; // ✅ FIXED: removed erroneous second arg
 };
 
 /**
- * Builds a dual-layer limiter pair:
- *   [ipLimiter, accountLimiter]
- *
- * In lab mode: returns a single per-account limiter with LAB_MAX.
- * In prod:     returns both so routes apply them in sequence.
- *
  * @param {object} opts
  * @param {string}  opts.prefix        - Unique string key prefix (e.g. 'otp')
  * @param {number}  opts.windowMs      - Window in milliseconds
@@ -124,22 +94,6 @@ const buildLimiters = ({ prefix, windowMs, ipMax, accountMax, message }) => {
   return [ipLimiter, accountLimiter];
 };
 
-// ============================================================================
-// RATE LIMITERS
-// ============================================================================
-
-/**
- * OTP SEND / RESEND / FORGOT-PASSWORD
- *
- * Threat: Email bombing — attacker triggers hundreds of OTP emails to
- * a victim's inbox to harass or cause email provider blocks.
- *
- * Prod:
- *  - IP:      20/15min  → a shared office IP won't trigger this under normal use
- *  - Account: 3/15min   → matches original; 3 OTP sends per email is plenty
- *
- * Lab: 100/15min per account
- */
 const otpLimiters = buildLimiters({
   prefix:     'otp',
   windowMs:   15 * 60 * 1000,
@@ -148,21 +102,6 @@ const otpLimiters = buildLimiters({
   message:    'Too many OTP requests. Please wait 15 minutes before trying again.',
 });
 
-/**
- * OTP VERIFICATION (brute force guard)
- *
- * Threat: Attacker tries to guess the 6-digit OTP (1,000,000 combinations).
- * With no limit, automated tools can exhaust all codes in seconds.
- *
- * Prod:
- *  - IP:      50/15min  → 40-student lab-equivalent without lab mode; covers CGNAT
- *  - Account: 10/15min  → a legit user won't need more than 3 attempts
- *
- * Note: Your OTP should also be single-use + expire server-side (5–10 min).
- * Rate limiting is the second line of defence here, not the first.
- *
- * Lab: 100/15min per account
- */
 const otpVerifyLimiters = buildLimiters({
   prefix:     'otp-verify',
   windowMs:   15 * 60 * 1000,
@@ -171,18 +110,6 @@ const otpVerifyLimiters = buildLimiters({
   message:    'Too many verification attempts. Please wait 15 minutes.',
 });
 
-/**
- * AUTH (signup / signin / google)
- *
- * Threat: Credential stuffing — attackers use leaked password lists against
- * your signin endpoint. Also covers account enumeration via signup timing.
- *
- * Prod:
- *  - IP:      30/15min  → covers 40 students on one IP without lab mode
- *  - Account: 10/15min  → a real user won't try to sign in 10 times in 15 min
- *
- * Lab: 100/15min per account
- */
 const authLimiters = buildLimiters({
   prefix:     'auth',
   windowMs:   15 * 60 * 1000,
@@ -191,19 +118,6 @@ const authLimiters = buildLimiters({
   message:    'Too many attempts. Please try again later.',
 });
 
-/**
- * RESET PASSWORD (final write step)
- *
- * Threat: Attacker has stolen a valid reset OTP and is trying to
- * programmatically rotate the password. Low risk since OTP is single-use,
- * but worth capping to prevent replay edge cases.
- *
- * Prod:
- *  - IP:      20/hr     → generous; unlikely any legit IP needs more
- *  - Account: 5/hr      → more than enough for a legitimate reset flow
- *
- * Lab: 100/hr per account
- */
 const resetPasswordLimiters = buildLimiters({
   prefix:     'reset-pw',
   windowMs:   60 * 60 * 1000,
@@ -212,26 +126,6 @@ const resetPasswordLimiters = buildLimiters({
   message:    'Too many password reset attempts. Please try again after an hour.',
 });
 
-/**
- * CHANGE PASSWORD (authenticated write)
- *
- * Threat: Session hijack — attacker has a stolen JWT and tries to
- * lock the real user out by changing their password.
- * The protect middleware already validates the JWT, so this is a last resort.
- *
- * Prod:
- *  - IP:      20/15min
- *  - Account: 5/15min
- *
- * Note: For change-password the "account" key falls back to IP since
- * there's no email in the body — the user is identified by their JWT.
- * The protect middleware runs before this limiter so req.user is available;
- * we key on req.user?.id if present, else IP.
- *
- * Lab: 100/15min per account
- *
- * ✅ FIXED: All req.ip fallbacks now use ipKeyGenerator.
- */
 const changePasswordAccountKey = (req) => {
   if (LAB_ACTIVE) {
     const userId = req.user?.id || req.user?._id?.toString();
@@ -271,34 +165,30 @@ const changePasswordLimiters = LAB_ACTIVE
       }),
     ];
 
-// ============================================================================
 // ROUTES
-// ============================================================================
 
-// ─── Health check / cold-start ping ──────────────────────────────────────────
-// No limiter — read-only, no data access, global limiter in app.js covers it.
 router.get('/ping', authController.ping);
 
-// ─── Registration & Verification ─────────────────────────────────────────────
+// Registration & Verification
 router.post('/signup',     ...authLimiters,      validateSignup, authController.signup);
 router.post('/verify-otp', ...otpVerifyLimiters, validateOTP,    authController.verifyOTP);
 router.post('/resend-otp', ...otpLimiters,       validateEmail,  authController.resendOTP);
 
-// ─── Authentication ───────────────────────────────────────────────────────────
+// Authentication 
 router.post('/signin', ...authLimiters, validateSignin,     authController.signin);
 router.post('/google', ...authLimiters, validateGoogleAuth, authController.googleAuth);
 
-// ─── Password Management ──────────────────────────────────────────────────────
+// Password Management
 router.post('/forgot-password',  ...otpLimiters,           validateEmail,         authController.forgotPassword);
 router.post('/verify-reset-otp', ...otpVerifyLimiters,     validateOTP,           authController.verifyResetOTP);
 router.post('/reset-password',   ...resetPasswordLimiters, validateResetPassword, authController.resetPassword);
 
-// ─── Session Management ───────────────────────────────────────────────────────
+// Session Management 
 router.post('/refresh-token', authController.refreshToken);
 router.post('/logout',        protect, authController.logout);
 router.get('/me',             protect, authController.getCurrentUser);
 
-// ─── Account Management ───────────────────────────────────────────────────────
+// Account Management 
 router.put('/update-profile',   protect, authController.updateProfile);
 router.post('/change-password', protect, ...changePasswordLimiters, authController.changePassword);
 
