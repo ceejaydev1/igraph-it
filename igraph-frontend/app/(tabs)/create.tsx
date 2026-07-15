@@ -16,6 +16,7 @@ import {
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Svg, Path, Rect, Circle } from 'react-native-svg';
+import { SvgCanvas2D, ImageExport } from '@maxgraph/core';
 import DiagramCanvas from '@/components/DiagramCanvas';
 import ShapesPanel from '@/components/shapes/ShapesPanel';
 import ShapesBottomPanel from '../../components/shapes/ShapesBottomPanel';
@@ -158,6 +159,11 @@ export default function CreateScreen() {
 
   // ─── ✅ FIX: Use ref to store diagramXml without causing re-renders ───────
   const diagramXmlRef = useRef<string>('');
+  // Same idea for the name: reading it via ref keeps handleSaveDiagram's
+  // identity stable while typing, so it isn't recreated (and re-registered
+  // with SaveContext) on every keystroke — typing the name should never by
+  // itself cause anything save-related to run; only clicking Save should.
+  const diagramNameRef = useRef<string>('Blank diagram');
 
   // ─── Save state ──────────────────────────────────────────────────────────────
   const [isSaving, setIsSaving] = useState(false);
@@ -206,6 +212,10 @@ export default function CreateScreen() {
   useEffect(() => {
     diagramXmlRef.current = diagramXml;
   }, [diagramXml]);
+
+  useEffect(() => {
+    diagramNameRef.current = diagramName;
+  }, [diagramName]);
 
   const getZoomIndex = (current: number): number => {
     let closest = 0;
@@ -466,14 +476,97 @@ export default function CreateScreen() {
   };
 
   // ─── EXPORT FUNCTIONS ──────────────────────────────────────────────────────
+  //
+  // Previously these scraped the live, interactive DOM (container.querySelectorAll
+  // ('svg')) and rasterized whatever was currently visible. That broke in two
+  // ways: (1) the container passed in was graph.container, which only has the
+  // grid background *canvas* as a sibling (not a descendant), so it was never
+  // found; and (2) mxGraph/maxGraph's on-screen SVG is sized/positioned to the
+  // current scroll+zoom viewport, not the full diagram — so exporting captured
+  // whatever tiny/blank slice happened to be scrolled into view, not the actual
+  // drawing. Building the SVG straight from the graph model (via maxGraph's own
+  // ImageExport + SvgCanvas2D, sized from graph.getGraphBounds()) always
+  // captures the full diagram content, regardless of current pan/zoom.
 
-  const renderDiagramToCanvas = (container: HTMLElement, scale: number = 2): Promise<HTMLCanvasElement> => {
+  const buildDiagramSvgElement = (graph: any, options?: { forRaster?: boolean }): SVGSVGElement => {
+    // graph.getGraphBounds() is in "view" pixels — it already includes
+    // whatever zoom level the editor happens to be at (e.g. 200% because the
+    // user zoomed in to place a shape precisely). Exporting those raw pixels
+    // 1:1 made the download look "zoomed in" and inconsistent from one save
+    // to the next. Dividing out the current view scale normalizes the export
+    // back to the diagram's actual size every time, regardless of zoom.
+    const bounds = graph.getGraphBounds();
+    const viewScale = graph.getView().getScale() || 1;
+    const padding = 20;
+
+    // viewBox stays in raw view-pixel units (matching what ImageExport will
+    // actually draw), with padding added in that same raw space.
+    const rawPadding = padding * viewScale;
+    const viewBoxX = bounds.x - rawPadding;
+    const viewBoxY = bounds.y - rawPadding;
+    const viewBoxWidth = bounds.width + rawPadding * 2;
+    const viewBoxHeight = bounds.height + rawPadding * 2;
+
+    // width/height (the actual output size) are normalized back to 1:1 scale.
+    // Mapping the raw viewBox into this smaller/larger box is what undoes the
+    // zoom — and SVG's default preserveAspectRatio ("xMidYMid meet") centers
+    // the content besides, as a safety net if the box isn't an exact multiple.
+    const width = Math.max(1, Math.ceil(viewBoxWidth / viewScale));
+    const height = Math.max(1, Math.ceil(viewBoxHeight / viewScale));
+
+    const svgDoc = document.implementation.createDocument('http://www.w3.org/2000/svg', 'svg', null);
+    const root = svgDoc.documentElement as unknown as SVGSVGElement;
+    root.setAttribute('width', String(width));
+    root.setAttribute('height', String(height));
+    root.setAttribute('viewBox', `${viewBoxX} ${viewBoxY} ${viewBoxWidth} ${viewBoxHeight}`);
+    root.setAttribute('version', '1.1');
+    root.setAttributeNS('http://www.w3.org/2000/xmlns/', 'xmlns:xlink', 'http://www.w3.org/1999/xlink');
+
+    const background = svgDoc.createElementNS('http://www.w3.org/2000/svg', 'rect');
+    background.setAttribute('x', String(viewBoxX));
+    background.setAttribute('y', String(viewBoxY));
+    background.setAttribute('width', String(viewBoxWidth));
+    background.setAttribute('height', String(viewBoxHeight));
+    background.setAttribute('fill', '#ffffff');
+    root.appendChild(background);
+
+    const svgCanvas = new SvgCanvas2D(root, true);
+    // Safari/WebKit (every browser on iOS, not just Safari itself) treats an
+    // <img> loaded from an SVG containing <foreignObject> — which is how
+    // maxGraph renders word-wrapped text labels by default — as tainting any
+    // <canvas> it's drawn onto. canvas.toDataURL()/toBlob() then throws or
+    // silently returns null. That's why PNG/JPG/PDF (all rasterized through a
+    // canvas) failed on mobile while the direct SVG file download (no canvas
+    // involved) kept working. Falling back to plain SVG <text> for the
+    // raster path avoids foreignObject entirely, which is canvas-safe
+    // everywhere — the SVG file download keeps foreignObject for nicer,
+    // properly word-wrapped text since it never touches a canvas.
+    if (options?.forRaster) {
+      svgCanvas.foEnabled = false;
+    }
+    const imageExport = new ImageExport();
+    const rootState = graph.getView().getState(graph.getDataModel().getRoot());
+    imageExport.drawState(rootState, svgCanvas);
+
+    return root;
+  };
+
+  const exportToSVG = (graph: any): string => {
+    const svg = buildDiagramSvgElement(graph);
+    const svgData = new XMLSerializer().serializeToString(svg);
+    return `<?xml version="1.0" encoding="UTF-8"?>\n<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">\n${svgData}`;
+  };
+
+  const renderDiagramToCanvas = (graph: any, scale: number = 2): Promise<HTMLCanvasElement> => {
     return new Promise((resolve, reject) => {
       try {
-        const rect = container.getBoundingClientRect();
+        const svg = buildDiagramSvgElement(graph, { forRaster: true });
+        const width = Number(svg.getAttribute('width')) || 800;
+        const height = Number(svg.getAttribute('height')) || 600;
+
         const canvas = document.createElement('canvas');
-        canvas.width = rect.width * scale;
-        canvas.height = rect.height * scale;
+        canvas.width = width * scale;
+        canvas.height = height * scale;
 
         const ctx = canvas.getContext('2d');
         if (!ctx) {
@@ -481,70 +574,28 @@ export default function CreateScreen() {
           return;
         }
 
-        ctx.scale(scale, scale);
         ctx.fillStyle = '#ffffff';
-        ctx.fillRect(0, 0, rect.width, rect.height);
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-        const gridCanvas = container.querySelector('canvas');
-        if (gridCanvas) {
-          ctx.drawImage(gridCanvas, 0, 0);
-        }
+        const svgData = new XMLSerializer().serializeToString(svg);
+        const svgBlob = new Blob([svgData], { type: 'image/svg+xml;charset=utf-8' });
+        const url = URL.createObjectURL(svgBlob);
 
-        const svgElements = container.querySelectorAll('svg');
-        const drawPromises: Promise<void>[] = [];
-
-        svgElements.forEach((svg: SVGSVGElement) => {
-          const promise = new Promise<void>((resolveDraw) => {
-            try {
-              const svgData = new XMLSerializer().serializeToString(svg);
-              const svgBlob = new Blob([svgData], { type: 'image/svg+xml;charset=utf-8' });
-              const url = URL.createObjectURL(svgBlob);
-
-              const img = new Image();
-              img.onload = () => {
-                ctx.drawImage(img, 0, 0);
-                URL.revokeObjectURL(url);
-                resolveDraw();
-              };
-              img.onerror = () => {
-                URL.revokeObjectURL(url);
-                resolveDraw();
-              };
-              img.src = url;
-            } catch (err) {
-              resolveDraw();
-            }
-          });
-          drawPromises.push(promise);
-        });
-
-        Promise.all(drawPromises).then(() => {
+        const img = new Image();
+        img.onload = () => {
+          ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+          URL.revokeObjectURL(url);
           resolve(canvas);
-        }).catch((err) => {
-          reject(err);
-        });
+        };
+        img.onerror = () => {
+          URL.revokeObjectURL(url);
+          reject(new Error('Could not render diagram to an image'));
+        };
+        img.src = url;
       } catch (err) {
-        reject(err);
+        reject(err as Error);
       }
     });
-  };
-
-  const exportToSVG = (container: HTMLElement): string => {
-    const svgElements = container.querySelectorAll('svg');
-    if (svgElements.length === 0) return '';
-
-    const mainSvg = svgElements[0];
-    const svgData = new XMLSerializer().serializeToString(mainSvg);
-
-    return `<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
-<svg xmlns="http://www.w3.org/2000/svg" 
-     xmlns:xlink="http://www.w3.org/1999/xlink" 
-     width="${mainSvg.getAttribute('width') || '800'}" 
-     height="${mainSvg.getAttribute('height') || '600'}"
-     viewBox="${mainSvg.getAttribute('viewBox') || '0 0 800 600'}">
-  ${svgData.replace(/^<svg[^>]*>/, '').replace(/<\/svg>$/, '')}
-</svg>`;
   };
 
   const downloadFile = (data: string | Blob, filename: string, mimeType: string) => {
@@ -625,7 +676,7 @@ export default function CreateScreen() {
       console.log('🖼️ Generating preview image...');
       let imageDataUrl = '';
       try {
-        const canvas = await renderDiagramToCanvas(container, 0.5);
+        const canvas = await renderDiagramToCanvas(graphInstance, 0.5);
         imageDataUrl = canvas.toDataURL('image/png');
         console.log('🖼️ Preview generated, size:', (imageDataUrl.length / 1024).toFixed(1), 'KB');
       } catch (renderError) {
@@ -635,7 +686,7 @@ export default function CreateScreen() {
 
       // Prepare the save payload
       const payload = {
-        name: diagramName || 'Untitled Diagram',
+        name: diagramNameRef.current || 'Untitled Diagram',
         xml: xml,
         previewImage: imageDataUrl,
         type: activeUmlType || 'General',
@@ -685,7 +736,7 @@ export default function CreateScreen() {
         console.log('✅ Diagram saved successfully!');
         Alert.alert(
           '✅ Diagram Saved!',
-          `"${diagramName}" has been saved to your diagrams.`,
+          `"${diagramNameRef.current}" has been saved to your diagrams.`,
           [
             { 
               text: 'View Saved', 
@@ -716,7 +767,7 @@ export default function CreateScreen() {
       setIsSaving(false);
       setContextIsSaving(false);
     }
-  }, [graphInstance, diagramName, activeUmlType, pages, activePageId, router, setContextIsSaving]);
+  }, [graphInstance, activeUmlType, pages, activePageId, router, setContextIsSaving]);
 
   // ─── ✅ FIXED: Register save handler with context - Stable registration ──
 
@@ -760,10 +811,21 @@ export default function CreateScreen() {
       return;
     }
 
-    const container = graphInstance.container;
-    if (!container) {
-      Alert.alert('Error', 'Could not access diagram canvas.');
-      return;
+    // Mobile browsers only allow window.open() when it's still in the same
+    // synchronous tick as the user's tap — once an `await` runs first, they
+    // silently block it as a popup (desktop is more lenient, which is why PDF
+    // export previously only worked there). Opening the window right here,
+    // before any await, keeps it inside that trusted click context; we fill
+    // in the real content once rendering finishes below.
+    let printWindow: Window | null = null;
+    if (format === 'pdf') {
+      printWindow = window.open('', '_blank');
+      if (printWindow) {
+        printWindow.document.write(
+          '<html><body style="margin:0;display:flex;align-items:center;justify-content:center;min-height:100vh;font-family:system-ui,sans-serif;color:#64748b;">Preparing your diagram…</body></html>'
+        );
+        printWindow.document.close();
+      }
     }
 
     setIsDownloading(true);
@@ -772,7 +834,7 @@ export default function CreateScreen() {
       const name = diagramName || 'diagram';
 
       if (format === 'svg') {
-        const svgContent = exportToSVG(container);
+        const svgContent = exportToSVG(graphInstance);
         if (!svgContent) {
           Alert.alert('Error', 'Could not export SVG. The diagram may be empty.');
           setIsDownloading(false);
@@ -784,19 +846,7 @@ export default function CreateScreen() {
         return;
       }
 
-      const canvas = await renderDiagramToCanvas(container, format === 'jpg' ? 2 : 3);
-      const mimeType = format === 'jpg' ? 'image/jpeg' : 'image/png';
-      const extension = format === 'jpg' ? 'jpg' : 'png';
-
-      canvas.toBlob((blob) => {
-        if (blob) {
-          downloadFile(blob, `${name}.${extension}`, mimeType);
-          Alert.alert('Success', `${format.toUpperCase()} diagram downloaded successfully!`);
-        } else {
-          Alert.alert('Error', 'Failed to generate image.');
-        }
-        setIsDownloading(false);
-      }, mimeType, format === 'jpg' ? 0.92 : undefined);
+      const canvas = await renderDiagramToCanvas(graphInstance, format === 'jpg' ? 2 : 3);
 
       if (format === 'pdf') {
         const dataUrl = canvas.toDataURL('image/png');
@@ -832,11 +882,13 @@ export default function CreateScreen() {
           </html>
         `;
 
-        const printWindow = window.open('', '_blank');
         if (printWindow) {
+          printWindow.document.open();
           printWindow.document.write(pdfHtml);
           printWindow.document.close();
         } else {
+          // Popup was blocked (or unsupported) even for the synchronous open
+          // attempt above — fall back to a direct file download instead.
           downloadFile(pdfHtml, `${name}.pdf.html`, 'text/html');
           Alert.alert(
             'PDF Export',
@@ -845,9 +897,26 @@ export default function CreateScreen() {
           );
         }
         setIsDownloading(false);
+        return;
       }
+
+      const mimeType = format === 'jpg' ? 'image/jpeg' : 'image/png';
+      const extension = format === 'jpg' ? 'jpg' : 'png';
+
+      canvas.toBlob((blob) => {
+        if (blob) {
+          downloadFile(blob, `${name}.${extension}`, mimeType);
+          Alert.alert('Success', `${format.toUpperCase()} diagram downloaded successfully!`);
+        } else {
+          Alert.alert('Error', 'Failed to generate image.');
+        }
+        setIsDownloading(false);
+      }, mimeType, format === 'jpg' ? 0.92 : undefined);
     } catch (error) {
       console.error('Download error:', error);
+      if (printWindow) {
+        try { printWindow.close(); } catch {}
+      }
       Alert.alert('Error', `Failed to download as ${format.toUpperCase()}. Please try again.`);
       setIsDownloading(false);
     }
@@ -861,76 +930,20 @@ export default function CreateScreen() {
       return;
     }
 
-    const container = graphInstance.container;
-    if (!container) {
-      Alert.alert('Error', 'Could not access diagram canvas.');
-      return;
-    }
-
     setIsPreparingPrint(true);
 
-    try {
-      const rect = container.getBoundingClientRect();
-      const canvas = document.createElement('canvas');
-      const scale = 2;
-      canvas.width = rect.width * scale;
-      canvas.height = rect.height * scale;
-
-      const ctx = canvas.getContext('2d');
-      if (!ctx) {
-        Alert.alert('Error', 'Could not create canvas context.');
-        setIsPreparingPrint(false);
-        return;
-      }
-
-      ctx.scale(scale, scale);
-      ctx.fillStyle = '#ffffff';
-      ctx.fillRect(0, 0, rect.width, rect.height);
-
-      const gridCanvas = container.querySelector('canvas');
-      if (gridCanvas) {
-        ctx.drawImage(gridCanvas, 0, 0);
-      }
-
-      const svgElements = container.querySelectorAll('svg');
-      const drawPromises: Promise<void>[] = [];
-
-      svgElements.forEach((svg: SVGSVGElement) => {
-        const promise = new Promise<void>((resolveDraw) => {
-          try {
-            const svgData = new XMLSerializer().serializeToString(svg);
-            const svgBlob = new Blob([svgData], { type: 'image/svg+xml;charset=utf-8' });
-            const url = URL.createObjectURL(svgBlob);
-
-            const img = new Image();
-            img.onload = () => {
-              ctx.drawImage(img, 0, 0);
-              URL.revokeObjectURL(url);
-              resolveDraw();
-            };
-            img.onerror = () => {
-              URL.revokeObjectURL(url);
-              resolveDraw();
-            };
-            img.src = url;
-          } catch (err) {
-            resolveDraw();
-          }
-        });
-        drawPromises.push(promise);
-      });
-
-      Promise.all(drawPromises).then(() => {
+    renderDiagramToCanvas(graphInstance, 2)
+      .then((canvas) => {
         const dataUrl = canvas.toDataURL('image/png');
         setPrintPreviewUrl(dataUrl);
         setIsPreparingPrint(false);
         setShowPrintModal(true);
+      })
+      .catch((error) => {
+        console.error('Print error:', error);
+        Alert.alert('Error', 'Failed to prepare diagram for printing.');
+        setIsPreparingPrint(false);
       });
-    } catch (error) {
-      console.error('Print error:', error);
-      Alert.alert('Error', 'Failed to prepare diagram for printing.');
-      setIsPreparingPrint(false);
-    }
   };
 
   const executePrint = () => {

@@ -411,7 +411,10 @@ export default function Navbar({
         </View>
       )}
 
-      {/* Docked Bottom Navbar — premium version */}
+      {/* Docked Bottom Navbar — premium version. Hidden on the create screen
+          (mobile): it has its own bottom toolbar + shapes panel, and this
+          floating bar (zIndex 200) was sitting on top of and hiding them. */}
+      {!isCreateScreen && (
       <View style={styles.bottomNavWrapper}>
         <View
           style={styles.bottomNavCard}
@@ -488,6 +491,7 @@ export default function Navbar({
           })}
         </View>
       </View>
+      )}
     </>
   );
 }

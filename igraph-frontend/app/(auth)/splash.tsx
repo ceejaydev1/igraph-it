@@ -176,11 +176,14 @@ export default function CreativeSplashScreen({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    // Opaque and already dark from the first frame — no separate white
-    // stage before the splash. Without an opaque fill here the container
-    // would be transparent and the real screen mounted underneath
-    // (signin/home, light background) would show through.
-    backgroundColor: '#0a0e27',
+    // Opaque white, matching the native/PWA launch screen behind the icon.
+    // The logo continues straight off that white screen with no cut, and
+    // the dark backdrop below fades in over it — that fade *is* the
+    // transition into the splash screen. Without this white base the
+    // container would be transparent and the real screen mounted
+    // underneath (signin/home) would show through before the backdrop
+    // finishes darkening.
+    backgroundColor: '#ffffff',
     justifyContent: 'center',
     alignItems: 'center',
   },
