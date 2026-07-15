@@ -6,7 +6,7 @@ const COLLECTION = 'diagrams';
 const saveDiagram = async (req, res) => {
   try {
     const userId = req.user.uid;
-    const { name, xml, previewImage, type, pages, activePageId } = req.body;
+    const { id, name, xml, previewImage, type, pages, activePageId } = req.body;
 
     if (!name || !xml) {
       console.log('❌ Missing required fields:', { name: !!name, xml: !!xml });
@@ -23,8 +23,57 @@ const saveDiagram = async (req, res) => {
       });
     }
 
-    const diagramId = uuidv4();
     const now = new Date().toISOString();
+
+    // Continuing/re-saving an existing diagram updates it in place instead
+    // of creating a duplicate.
+    if (id) {
+      const existingDoc = await db.collection(COLLECTION).doc(id).get();
+
+      if (!existingDoc.exists) {
+        return res.status(404).json({
+          success: false,
+          message: 'Diagram not found.',
+        });
+      }
+
+      const existingData = existingDoc.data();
+
+      if (existingData.user_id !== userId) {
+        console.log(`❌ User ${userId} does not own diagram ${id}`);
+        return res.status(403).json({
+          success: false,
+          message: 'You do not have permission to update this diagram.',
+        });
+      }
+
+      await db.collection(COLLECTION).doc(id).update({
+        name: name.trim(),
+        xml: xml,
+        preview_image: previewImage || null,
+        type: type || 'General',
+        pages: pages || [],
+        active_page_id: activePageId || null,
+        updated_at: now,
+      });
+
+      console.log(`✅ Diagram "${name}" updated in place with ID: ${id}`);
+
+      return res.status(200).json({
+        success: true,
+        message: 'Diagram saved successfully!',
+        data: {
+          diagram: {
+            id,
+            name: name.trim(),
+            type: type || 'General',
+            created_at: existingData.created_at,
+          },
+        },
+      });
+    }
+
+    const diagramId = uuidv4();
 
     const diagramData = {
       diagram_id: diagramId,
@@ -39,8 +88,8 @@ const saveDiagram = async (req, res) => {
       updated_at: now,
     };
 
-    console.log(`📝 Saving diagram for user ${userId}:`, { 
-      name: name.trim(), 
+    console.log(`📝 Saving diagram for user ${userId}:`, {
+      name: name.trim(),
       type: type || 'General',
       xmlLength: xml.length,
       hasPreview: !!previewImage
