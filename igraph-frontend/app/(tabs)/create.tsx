@@ -220,6 +220,14 @@ export default function CreateScreen() {
   // Last diagramId this instance has actually hydrated from the backend, so a
   // re-render doesn't re-fetch, but switching to a *different* diagramId does.
   const loadedDiagramIdRef = useRef<string | null>(null);
+  // The graphInstance we last hydrated. Mobile viewports often report a
+  // different width right after the initial render settles (browser chrome
+  // collapsing, etc.), which flips create.tsx's isDesktop layout branch —
+  // and since mobile/desktop are two separate JSX trees, that fully remounts
+  // DiagramCanvas with a brand-new, blank graph. Tracking the instance (not
+  // just isGraphReady/diagramId) lets hydration notice the swap and reload
+  // into the replacement instead of leaving it blank.
+  const hydratedGraphRef = useRef<any>(null);
   // Gates the autosave effect so the initial blank mount can't race ahead and
   // clobber a real draft before hydration (backend fetch or local draft) runs.
   const hasHydratedRef = useRef(false);
@@ -338,8 +346,17 @@ export default function CreateScreen() {
   // survives a tab switch (instance never unmounts, see Navbar's create-only
   // router.navigate) or a full logout/login (which does unmount everything).
   useEffect(() => {
-    if (!isGraphReady) return;
+    if (!isGraphReady || !graphInstance) return;
     let cancelled = false;
+
+    // A different graph instance than last time means DiagramCanvas was
+    // remounted (e.g. the mobile/desktop layout branch swapped) and is now
+    // blank — forget what we'd previously loaded so it gets reloaded here.
+    if (hydratedGraphRef.current !== graphInstance) {
+      hydratedGraphRef.current = graphInstance;
+      loadedDiagramIdRef.current = null;
+      hasHydratedRef.current = false;
+    }
 
     const hydrate = async () => {
       if (diagramId && diagramId !== loadedDiagramIdRef.current) {
@@ -387,7 +404,7 @@ export default function CreateScreen() {
 
     hydrate();
     return () => { cancelled = true; };
-  }, [isGraphReady, diagramId]);
+  }, [isGraphReady, graphInstance, diagramId]);
 
   // Debounced per-account autosave so unsaved edits survive a tab switch or
   // a logout/login even before the user explicitly hits Save.
