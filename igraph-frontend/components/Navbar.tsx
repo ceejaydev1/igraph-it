@@ -182,6 +182,15 @@ export default function Navbar({
   }, []);
 
   const handleNavigation = (route: string) => {
+    // Create lives on a plain Stack (not real tabs), so router.push would
+    // always mount a brand-new, blank create screen and leave the old one
+    // (with in-progress shapes) frozen behind it. router.navigate resurfaces
+    // the existing instance instead. Scoped to just this route since the
+    // other screens refetch on mount and rely on actually remounting.
+    if (route === '/(tabs)/create') {
+      router.navigate(route as Href);
+      return;
+    }
     router.push(route as Href);
   };
 

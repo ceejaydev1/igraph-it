@@ -64,32 +64,24 @@ const TABS: TabType[] = ['All', 'SDLC', 'UML'];
 const DotGrid = () => {
   const { width: screenWidth, height: screenHeight } = useWindowDimensions();
   const DOT_SPACING = 32;
-  const DOT_SIZE = 2;
-  
-  const columns = Math.ceil(screenWidth / DOT_SPACING);
-  const rows = Math.ceil(screenHeight / DOT_SPACING);
-  const totalDots = columns * rows;
-  
+  const DOT_SIZE = 1.4;
+
   return (
     <View style={styles.dotGridContainer} pointerEvents="none">
-      {[...Array(Math.min(totalDots, 200))].map((_, i) => {
-        const col = i % columns;
-        const row = Math.floor(i / columns);
-        return (
-          <View
-            key={i}
-            style={[
-              styles.dotGridItem,
-              {
-                left: col * DOT_SPACING,
-                top: row * DOT_SPACING,
-                width: DOT_SIZE,
-                height: DOT_SIZE,
-              },
-            ]}
-          />
-        );
-      })}
+      <Svg width={screenWidth} height={screenHeight}>
+        {Array.from({ length: Math.ceil(screenHeight / DOT_SPACING) }).map((_, row) =>
+          Array.from({ length: Math.ceil(screenWidth / DOT_SPACING) }).map((_, col) => (
+            <Circle
+              key={`${row}-${col}`}
+              cx={col * DOT_SPACING}
+              cy={row * DOT_SPACING}
+              r={DOT_SIZE}
+              fill="#4c6fff"
+              opacity={0.12}
+            />
+          ))
+        )}
+      </Svg>
     </View>
   );
 };
@@ -598,13 +590,7 @@ const styles = StyleSheet.create({
     bottom: 0,
     overflow: 'hidden',
   },
-  dotGridItem: {
-    position: 'absolute',
-    backgroundColor: '#4c6fff',
-    borderRadius: 1,
-    opacity: 0.12,
-  },
-  
+
   skeletonContainer: {
     flex: 1,
     backgroundColor: '#f8fafc',

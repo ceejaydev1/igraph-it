@@ -174,6 +174,37 @@ export const setCachedUser = (data) => {
   cacheTimestamp = Date.now();
 };
 
+// Decodes the uid claim out of the stored access token without a network
+// call. No `atob` here — this runs on native too, where Hermes has no
+// global atob/Buffer.
+const base64UrlDecode = (input) => {
+  const base64 = input.replace(/-/g, '+').replace(/_/g, '/');
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+  let output = '', buffer = 0, bits = 0;
+  for (const char of base64) {
+    const value = chars.indexOf(char);
+    if (value === -1) continue;
+    buffer = (buffer << 6) | value;
+    bits += 6;
+    if (bits >= 8) {
+      bits -= 8;
+      output += String.fromCharCode((buffer >> bits) & 0xff);
+    }
+  }
+  return output;
+};
+
+export const getCurrentUserId = async () => {
+  const token = await getAccessToken();
+  if (!token) return null;
+  try {
+    const payload = JSON.parse(decodeURIComponent(escape(base64UrlDecode(token.split('.')[1]))));
+    return payload.uid || null;
+  } catch {
+    return null;
+  }
+};
+
 // AUTH API CALLS
 
 export const signUp = async (userData, consentTimestamp = null) => {
@@ -343,6 +374,39 @@ export const refreshToken = async () => {
     await clearTokens();
     throw error;
   }
+};
+
+// Wraps a raw fetch() call with an access token, and transparently retries
+// once with a freshly-refreshed token on a 401 (e.g. "Token expired") instead
+// of surfacing that raw backend error to the user. The axios `api` instance
+// above already does this via an interceptor, but screens like create.tsx and
+// savedDiagrams.tsx call fetch() directly (for streaming-friendly responses),
+// which bypasses it entirely.
+export const authFetch = async (url, options = {}) => {
+  const attempt = async (accessToken) => fetch(url, {
+    ...options,
+    headers: {
+      ...(options.headers || {}),
+      Authorization: `Bearer ${accessToken}`,
+    },
+  });
+
+  const token = await getAccessToken();
+  let response = await attempt(token);
+
+  if (response.status === 401) {
+    try {
+      const newToken = await refreshToken();
+      if (newToken) {
+        response = await attempt(newToken);
+      }
+    } catch {
+      // Refresh failed (e.g. refresh token also expired) — fall through and
+      // let the caller handle the still-401 response (e.g. prompt sign-in).
+    }
+  }
+
+  return response;
 };
 
 export const verifyToken = async () => {

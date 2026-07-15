@@ -58,6 +58,31 @@ const ChevronIcon = ({ up }: { up: boolean }) => (
   </Svg>
 );
 
+const DotGrid = () => {
+  const { width: screenWidth, height: screenHeight } = useWindowDimensions();
+  const DOT_SPACING = 32;
+  const DOT_SIZE = 1.4;
+
+  return (
+    <View style={styles.dotGridContainer} pointerEvents="none">
+      <Svg width={screenWidth} height={screenHeight}>
+        {Array.from({ length: Math.ceil(screenHeight / DOT_SPACING) }).map((_, row) =>
+          Array.from({ length: Math.ceil(screenWidth / DOT_SPACING) }).map((_, col) => (
+            <Circle
+              key={`${row}-${col}`}
+              cx={col * DOT_SPACING}
+              cy={row * DOT_SPACING}
+              r={DOT_SIZE}
+              fill="#4c6fff"
+              opacity={0.12}
+            />
+          ))
+        )}
+      </Svg>
+    </View>
+  );
+};
+
 // ── Types ──────────────────────────────────────────────
 type Category = 'All' | 'UML' | 'SDLC' | 'General Terms';
 
@@ -236,6 +261,8 @@ export default function LearningReference() {
 
   return (
     <View style={styles.container}>
+      <DotGrid />
+
       {/* Header — centered */}
       <View style={styles.headerSection}>
         {/* Search Bar — same pattern as Home screen */}
@@ -346,6 +373,14 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#f8faff',
+  },
+  dotGridContainer: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    overflow: 'hidden',
   },
 
   // Header — everything centered, same as Home screen's headerSection

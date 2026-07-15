@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useCallback, useState } from 'react';
+import React, { useEffect, useRef, useCallback, useState, forwardRef, useImperativeHandle } from 'react';
 import { View, StyleSheet, Platform, Text } from 'react-native';
 import './maxgraph-common.css';
 
@@ -172,6 +172,10 @@ interface DiagramCanvasProps {
   onChange?: (xml: string) => void;
   onSelectionChange?: (cell: any) => void;
   umlType?: string;
+}
+
+export interface DiagramCanvasHandle {
+  loadXml: (xml: string) => void;
 }
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -470,7 +474,7 @@ function getShapeStyle(styleKey: string): CellStateStyle {
 // ⭐ MAIN WEBCANVAS COMPONENT
 // ════════════════════════════════════════════════════════════════════════════
 
-const WebCanvas = ({ onReady, onChange, onSelectionChange, umlType = 'flowchart' }: DiagramCanvasProps) => {
+const WebCanvas = forwardRef<DiagramCanvasHandle, DiagramCanvasProps>(({ onReady, onChange, onSelectionChange, umlType = 'flowchart' }, ref) => {
   const wrapperRef = useRef<HTMLDivElement>(null);
   const gridCanvasRef = useRef<HTMLCanvasElement>(null);
   const graphDivRef = useRef<HTMLDivElement>(null);
@@ -488,6 +492,20 @@ const WebCanvas = ({ onReady, onChange, onSelectionChange, umlType = 'flowchart'
   useEffect(() => { onReadyRef.current = onReady; }, [onReady]);
   useEffect(() => { onChangeRef.current = onChange; }, [onChange]);
   useEffect(() => { onSelectionChangeRef.current = onSelectionChange; }, [onSelectionChange]);
+
+  useImperativeHandle(ref, () => ({
+    loadXml: (xml: string) => {
+      const graph = graphRef.current;
+      if (!graph || !xml) return;
+      try {
+        new ModelXmlSerializer(graph.getDataModel()).import(xml);
+        graph.clearSelection();
+        (graph.getPlugin('FitPlugin') as FitPlugin | null)?.fit();
+      } catch (e) {
+        console.error('Failed to load diagram XML:', e);
+      }
+    },
+  }), []);
 
   const resizeGridCanvas = useCallback(() => {
     const wrapper = wrapperRef.current;
@@ -1935,9 +1953,9 @@ const WebCanvas = ({ onReady, onChange, onSelectionChange, umlType = 'flowchart'
       )}
     </div>
   );
-};
+});
 
-export default function DiagramCanvas({ onReady, onChange, onSelectionChange, umlType }: DiagramCanvasProps) {
+const DiagramCanvas = forwardRef<DiagramCanvasHandle, DiagramCanvasProps>(({ onReady, onChange, onSelectionChange, umlType }, ref) => {
   if (Platform.OS !== 'web') {
     return (
       <View style={styles.nativeNotice}>
@@ -1948,10 +1966,12 @@ export default function DiagramCanvas({ onReady, onChange, onSelectionChange, um
   }
   return (
     <View style={styles.container}>
-      <WebCanvas onReady={onReady} onChange={onChange} onSelectionChange={onSelectionChange} umlType={umlType} />
+      <WebCanvas ref={ref} onReady={onReady} onChange={onChange} onSelectionChange={onSelectionChange} umlType={umlType} />
     </View>
   );
-}
+});
+
+export default DiagramCanvas;
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: CANVAS_BG },

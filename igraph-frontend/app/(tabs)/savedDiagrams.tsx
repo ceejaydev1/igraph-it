@@ -333,6 +333,61 @@ const ConfirmDeleteModal = ({
 };
 
 // ============================================================================
+// CONFIRM CONTINUE MODAL (open a saved diagram back into the editor)
+// ============================================================================
+
+const ConfirmContinueModal = ({
+  visible,
+  onClose,
+  onConfirm,
+  diagramName,
+}: {
+  visible: boolean;
+  onClose: () => void;
+  onConfirm: () => void;
+  diagramName: string;
+}) => {
+  return (
+    <Modal
+      animationType="fade"
+      transparent={true}
+      visible={visible}
+      onRequestClose={onClose}
+    >
+      <Pressable style={styles.modalOverlay} onPress={onClose}>
+        <Pressable style={styles.modalContainer} onPress={(e) => e.stopPropagation()}>
+          <View style={styles.modalHeader}>
+            <Text style={styles.modalTitle}>Continue Diagram</Text>
+            <TouchableOpacity onPress={onClose} style={styles.modalCloseBtn}>
+              <CloseIcon />
+            </TouchableOpacity>
+          </View>
+
+          <Text style={styles.modalSubtitle}>
+            Are you sure you want to continue "{diagramName}"?
+          </Text>
+
+          <View style={styles.modalButtons}>
+            <TouchableOpacity
+              style={[styles.modalButton, styles.modalCancelButton]}
+              onPress={onClose}
+            >
+              <Text style={styles.modalCancelText}>Cancel</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.modalButton, styles.modalSaveButton]}
+              onPress={onConfirm}
+            >
+              <Text style={styles.modalSaveText}>Continue</Text>
+            </TouchableOpacity>
+          </View>
+        </Pressable>
+      </Pressable>
+    </Modal>
+  );
+};
+
+// ============================================================================
 // LIGHTWEIGHT TOAST (replaces Alert.alert success/error popups)
 // ============================================================================
 
@@ -617,6 +672,9 @@ export default function SavedDiagrams() {
   const [deleteModalVisible, setDeleteModalVisible] = useState(false);
   const [deletingDiagram, setDeletingDiagram] = useState<any>(null);
 
+  const [continueModalVisible, setContinueModalVisible] = useState(false);
+  const [continuingDiagram, setContinuingDiagram] = useState<any>(null);
+
   const isDesktop = width >= 1024;
   const isTablet = width >= 768 && width < 1024;
   const isMobile = width < 768;
@@ -651,9 +709,8 @@ export default function SavedDiagrams() {
       const API_URL = API_BASE_URL || 'https://igraph-backend.onrender.com';
       console.log(`📋 Fetching saved diagrams from: ${API_URL}/api/diagrams/user`);
 
-      const response = await fetch(`${API_URL}/api/diagrams/user`, {
+      const response = await authService.authFetch(`${API_URL}/api/diagrams/user`, {
         headers: {
-          'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json',
         },
       });
@@ -719,10 +776,9 @@ export default function SavedDiagrams() {
       console.log(`🗑️ Diagram ID: ${diagram.id}`);
       console.log(`🗑️ Diagram Name: ${diagram.name}`);
 
-      const response = await fetch(url, {
+      const response = await authService.authFetch(url, {
         method: 'DELETE',
         headers: {
-          'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json',
         },
       });
@@ -784,10 +840,9 @@ export default function SavedDiagrams() {
       console.log(`📝 PUT request to: ${url}`);
       console.log(`📝 New name: "${newName}"`);
 
-      const response = await fetch(url, {
+      const response = await authService.authFetch(url, {
         method: 'PUT',
         headers: {
-          'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({ name: newName }),
@@ -819,9 +874,23 @@ export default function SavedDiagrams() {
     }
   };
 
-  const handleDiagramPress = (diagramId: string) => {
-    router.push({
-      pathname: `/(tabs)/diagram/${diagramId}` as any,
+  const handleDiagramPress = (diagram: any) => {
+    setContinuingDiagram(diagram);
+    setContinueModalVisible(true);
+  };
+
+  const closeContinueModal = () => {
+    setContinueModalVisible(false);
+    setContinuingDiagram(null);
+  };
+
+  const confirmContinueDiagram = () => {
+    if (!continuingDiagram) return;
+    const diagramId = continuingDiagram.id;
+    closeContinueModal();
+    router.navigate({
+      pathname: '/(tabs)/create',
+      params: { diagramId },
     });
   };
 
@@ -909,7 +978,7 @@ export default function SavedDiagrams() {
                   diagram={diagram}
                   isDesktop={isDesktop}
                   isDeleting={deletingId === diagram.id}
-                  onPress={() => handleDiagramPress(diagram.id)}
+                  onPress={() => handleDiagramPress(diagram)}
                   onRename={() => openRenameModal(diagram)}
                   onDelete={() => openDeleteModal(diagram)}
                 />
@@ -939,6 +1008,14 @@ export default function SavedDiagrams() {
         onConfirm={confirmDeleteDiagram}
         diagramName={deletingDiagram?.name || ''}
         isLoading={!!deletingDiagram && deletingId === deletingDiagram.id}
+      />
+
+      {/* Continue Diagram Confirm Modal */}
+      <ConfirmContinueModal
+        visible={continueModalVisible}
+        onClose={closeContinueModal}
+        onConfirm={confirmContinueDiagram}
+        diagramName={continuingDiagram?.name || ''}
       />
 
       {/* Toast feedback */}

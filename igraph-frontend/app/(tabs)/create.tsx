@@ -14,10 +14,11 @@ import {
   Modal,
   Pressable,
 } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Svg, Path, Rect, Circle } from 'react-native-svg';
 import { SvgCanvas2D, ImageExport } from '@maxgraph/core';
-import DiagramCanvas from '@/components/DiagramCanvas';
+import DiagramCanvas, { DiagramCanvasHandle } from '@/components/DiagramCanvas';
 import ShapesPanel from '@/components/shapes/ShapesPanel';
 import ShapesBottomPanel from '../../components/shapes/ShapesBottomPanel';
 import PropertiesPanel from '@/components/properties-panel/PropertiesPanel';
@@ -145,6 +146,7 @@ const generatePageId = () => `page_${Date.now()}_${Math.random().toString(36).su
 
 export default function CreateScreen() {
   const router = useRouter();
+  const { diagramId } = useLocalSearchParams<{ diagramId?: string }>();
   const { width } = useWindowDimensions();
   const isDesktop = width >= 768;
 
@@ -171,6 +173,17 @@ export default function CreateScreen() {
   // ─── Download state ──────────────────────────────────────────────────────────
   const [showDownloadDropdown, setShowDownloadDropdown] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
+
+  // ─── In-app alert/confirm dialog (web) ───────────────────────────────────────
+  // react-native-web's Alert.alert is a no-op, and window.alert/confirm work
+  // but show a distracting native browser chrome ("localhost says..."). This
+  // renders a plain in-app modal instead, matching the app's own style.
+  const [dialogState, setDialogState] = useState<{
+    title: string;
+    message?: string;
+    confirmText?: string;
+    onConfirm?: () => void;
+  } | null>(null);
 
   // ─── Print state ─────────────────────────────────────────────────────────────
   const [showPrintModal, setShowPrintModal] = useState(false);
@@ -199,6 +212,29 @@ export default function CreateScreen() {
 
   // ─── Page XML cache ─────────────────────────────────────────────────────────
   const pageXmlCache = useRef<Map<string, string>>(new Map());
+
+  // ─── Persistence: continue-a-diagram / per-account local draft ──────────────
+  const diagramCanvasRef = useRef<DiagramCanvasHandle>(null);
+  // Diagram currently being edited; null = never-saved new diagram.
+  const currentDiagramIdRef = useRef<string | null>(null);
+  // Last diagramId this instance has actually hydrated from the backend, so a
+  // re-render doesn't re-fetch, but switching to a *different* diagramId does.
+  const loadedDiagramIdRef = useRef<string | null>(null);
+  // Gates the autosave effect so the initial blank mount can't race ahead and
+  // clobber a real draft before hydration (backend fetch or local draft) runs.
+  const hasHydratedRef = useRef(false);
+  // While true, handleGraphChange no-ops: hydration sets diagramXml/
+  // pageXmlCache itself, and the maxGraph CHANGE listener fires synchronously
+  // inside loadXml()'s import — without this guard it would capture the new
+  // XML under the *previous* render's activePageId.
+  const isHydratingRef = useRef(false);
+  const autosaveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Synchronous re-entrancy guard for Save: `isSaving` state doesn't flip
+  // true until after an `await` (auth token lookup) runs, leaving a window
+  // where rapid repeat clicks (e.g. because the no-op Alert.alert on web
+  // gave no visible confirmation) all slip through and each create their own
+  // new diagram before the first one's response ever sets currentDiagramIdRef.
+  const isSavingRef = useRef(false);
 
   // ─── SaveContext integration ──────────────────────────────────────────────
   const { setSaveHandler, setIsSaving: setContextIsSaving } = useSave();
@@ -249,12 +285,124 @@ export default function CreateScreen() {
   };
 
   const handleGraphChange = (xml: string) => {
+    if (isHydratingRef.current) return;
     console.log('🔄 Graph changed, XML length:', xml?.length || 0);
     setDiagramXml(xml);
     if (activePageId) {
       pageXmlCache.current.set(activePageId, xml);
     }
   };
+
+  // ─── Persistence: continue a saved diagram / resume the local draft ────────
+
+  const applyLoadedContent = (content: { name: string; xml: string; pages?: Page[]; activePageId?: string | null }) => {
+    pageXmlCache.current.clear();
+    const loadedPages: Page[] = content.pages && content.pages.length > 0
+      ? content.pages
+      : [{ id: generatePageId(), name: 'Page 1', xml: content.xml || '' }];
+    loadedPages.forEach(p => pageXmlCache.current.set(p.id, p.xml || ''));
+    const targetActiveId = content.activePageId && loadedPages.some(p => p.id === content.activePageId)
+      ? content.activePageId
+      : loadedPages[0].id;
+    const activeXml = pageXmlCache.current.get(targetActiveId) || content.xml || '';
+
+    setPages(loadedPages);
+    setActivePageId(targetActiveId);
+    setDiagramName(content.name || 'Blank diagram');
+    setDiagramXml(activeXml);
+
+    isHydratingRef.current = true;
+    diagramCanvasRef.current?.loadXml(activeXml);
+    isHydratingRef.current = false;
+  };
+
+  const draftKey = (uid: string, id: string | null) => `diagram_draft_${uid}_${id || 'new'}`;
+  const activePointerKey = (uid: string) => `diagram_active_${uid}`;
+
+  const persistDraft = async (uid: string, id: string | null) => {
+    try {
+      const content = {
+        name: diagramNameRef.current,
+        pages: pages.map(p => ({ id: p.id, name: p.name, xml: pageXmlCache.current.get(p.id) || '' })),
+        activePageId,
+      };
+      await AsyncStorage.setItem(draftKey(uid, id), JSON.stringify(content));
+      await AsyncStorage.setItem(activePointerKey(uid), JSON.stringify({ diagramId: id }));
+    } catch (e) {
+      console.warn('Could not persist local draft:', e);
+    }
+  };
+
+  // Loads a specific saved diagram when arriving via "Continue" from Saved
+  // Diagrams; otherwise resumes this account's last local draft so a shape
+  // survives a tab switch (instance never unmounts, see Navbar's create-only
+  // router.navigate) or a full logout/login (which does unmount everything).
+  useEffect(() => {
+    if (!isGraphReady) return;
+    let cancelled = false;
+
+    const hydrate = async () => {
+      if (diagramId && diagramId !== loadedDiagramIdRef.current) {
+        loadedDiagramIdRef.current = diagramId;
+        try {
+          const API_URL = process.env.EXPO_PUBLIC_API_URL || 'https://igraph-backend.onrender.com';
+          const response = await authService.authFetch(`${API_URL}/api/diagrams/${diagramId}`);
+          const result = await response.json();
+          if (cancelled) return;
+          if (result.success && result.data) {
+            applyLoadedContent(result.data);
+            currentDiagramIdRef.current = diagramId;
+          } else {
+            notify('Error', result.message || 'Could not load that diagram.');
+          }
+        } catch (e) {
+          console.error('Failed to load diagram:', e);
+          notify('Error', 'Could not load that diagram. Please check your connection.');
+        } finally {
+          if (!cancelled) hasHydratedRef.current = true;
+        }
+        return;
+      }
+
+      if (!diagramId && !hasHydratedRef.current) {
+        try {
+          const uid = await authService.getCurrentUserId();
+          if (uid) {
+            const pointerRaw = await AsyncStorage.getItem(activePointerKey(uid));
+            const pointer = pointerRaw ? JSON.parse(pointerRaw) : { diagramId: null };
+            const contentRaw = await AsyncStorage.getItem(draftKey(uid, pointer.diagramId));
+            if (contentRaw && !cancelled) {
+              applyLoadedContent(JSON.parse(contentRaw));
+              currentDiagramIdRef.current = pointer.diagramId || null;
+              loadedDiagramIdRef.current = pointer.diagramId || null;
+            }
+          }
+        } catch (e) {
+          console.warn('Could not restore local draft:', e);
+        } finally {
+          if (!cancelled) hasHydratedRef.current = true;
+        }
+      }
+    };
+
+    hydrate();
+    return () => { cancelled = true; };
+  }, [isGraphReady, diagramId]);
+
+  // Debounced per-account autosave so unsaved edits survive a tab switch or
+  // a logout/login even before the user explicitly hits Save.
+  useEffect(() => {
+    if (!hasHydratedRef.current) return;
+    if (autosaveTimeoutRef.current) clearTimeout(autosaveTimeoutRef.current);
+    autosaveTimeoutRef.current = setTimeout(() => {
+      authService.getCurrentUserId().then((uid) => {
+        if (uid) persistDraft(uid, currentDiagramIdRef.current);
+      });
+    }, 800);
+    return () => {
+      if (autosaveTimeoutRef.current) clearTimeout(autosaveTimeoutRef.current);
+    };
+  }, [diagramXml, pages, diagramName, activePageId]);
 
   // ─── Focus helper ─────────────────────────────────────────────────────────
 
@@ -564,9 +712,20 @@ export default function CreateScreen() {
         const width = Number(svg.getAttribute('width')) || 800;
         const height = Number(svg.getAttribute('height')) || 600;
 
+        // Mobile GPUs commonly cap canvas dimensions well below desktop
+        // (often ~4096px per side). Exceeding that makes toBlob/toDataURL
+        // silently return null/blank instead of throwing, which is why large
+        // diagrams could fail to export as PNG/JPG/PDF only on phones.
+        const MAX_CANVAS_DIMENSION = 4096;
+        const effectiveScale = Math.min(
+          scale,
+          MAX_CANVAS_DIMENSION / width,
+          MAX_CANVAS_DIMENSION / height
+        );
+
         const canvas = document.createElement('canvas');
-        canvas.width = width * scale;
-        canvas.height = height * scale;
+        canvas.width = Math.max(1, Math.round(width * effectiveScale));
+        canvas.height = Math.max(1, Math.round(height * effectiveScale));
 
         const ctx = canvas.getContext('2d');
         if (!ctx) {
@@ -598,6 +757,30 @@ export default function CreateScreen() {
     });
   };
 
+  // react-native-web's Alert.alert is a no-op, so on web any download/save
+  // success/failure message was silently swallowed — making broken exports
+  // look like clicking the button did nothing at all. window.alert works but
+  // shows the browser's native "localhost says..." chrome; this shows an
+  // in-app modal instead (see dialogState above).
+  const notify = (title: string, message?: string) => {
+    if (Platform.OS === 'web') {
+      setDialogState({ title, message });
+    } else {
+      Alert.alert(title, message);
+    }
+  };
+
+  const confirmDialog = (title: string, message: string, confirmText: string, onConfirm: () => void) => {
+    if (Platform.OS === 'web') {
+      setDialogState({ title, message, confirmText, onConfirm });
+    } else {
+      Alert.alert(title, message, [
+        { text: 'Cancel', style: 'cancel' },
+        { text: confirmText, onPress: onConfirm },
+      ]);
+    }
+  };
+
   const downloadFile = (data: string | Blob, filename: string, mimeType: string) => {
     const blob = typeof data === 'string' ? new Blob([data], { type: mimeType }) : data;
     const url = URL.createObjectURL(blob);
@@ -614,17 +797,27 @@ export default function CreateScreen() {
 
   const handleSaveDiagram = useCallback(async () => {
     console.log('🟢 SAVE BUTTON CLICKED - handleSaveDiagram called');
-    
+
+    if (isSavingRef.current) {
+      console.log('⏳ Save already in progress, ignoring duplicate click');
+      return;
+    }
+    // Set synchronously, before any `await`, so a rapid second click (which
+    // JS will only ever process after this call either returns or hits its
+    // first await) is guaranteed to see this and bail out above.
+    isSavingRef.current = true;
+
     if (!graphInstance) {
       console.log('❌ No graphInstance');
-      Alert.alert('No Diagram', 'Please create a diagram first.');
+      isSavingRef.current = false;
       return;
     }
 
     const container = graphInstance.container;
     if (!container) {
       console.log('❌ No container');
-      Alert.alert('Error', 'Could not access diagram canvas.');
+      notify('Error', 'Could not access diagram canvas.');
+      isSavingRef.current = false;
       return;
     }
 
@@ -632,17 +825,13 @@ export default function CreateScreen() {
     console.log('🔑 Checking authentication...');
     const token = await authService.getAccessToken();
     console.log('🔑 Token:', token ? `Present (${token.substring(0, 20)}...)` : 'MISSING');
-    
+
     if (!token) {
       console.log('❌ No token found');
-      Alert.alert(
-        'Sign In Required',
-        'Please sign in to save your diagram.',
-        [
-          { text: 'Cancel', style: 'cancel' },
-          { text: 'Sign In', onPress: () => router.push('/(auth)/signin') }
-        ]
-      );
+      isSavingRef.current = false;
+      confirmDialog('Sign In Required', 'Please sign in to save your diagram.', 'Sign In', () => {
+        router.push('/(auth)/signin');
+      });
       return;
     }
 
@@ -666,9 +855,6 @@ export default function CreateScreen() {
       
       if (isEmptyXml) {
         console.log('❌ Empty diagram content - no shapes added yet');
-        Alert.alert('Empty Diagram', 'Please add some content to your diagram before saving.');
-        setIsSaving(false);
-        setContextIsSaving(false);
         return;
       }
 
@@ -684,8 +870,11 @@ export default function CreateScreen() {
         // Continue without preview - it's optional
       }
 
-      // Prepare the save payload
+      // Prepare the save payload. Including the current diagram's id (when
+      // continuing/re-saving one) tells the backend to update that document
+      // in place instead of creating a duplicate.
       const payload = {
+        id: currentDiagramIdRef.current || undefined,
         name: diagramNameRef.current || 'Untitled Diagram',
         xml: xml,
         previewImage: imageDataUrl,
@@ -711,11 +900,10 @@ export default function CreateScreen() {
       });
 
       // Send to backend
-      const response = await fetch(url, {
+      const response = await authService.authFetch(url, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
         },
         body: JSON.stringify(payload)
       });
@@ -734,36 +922,32 @@ export default function CreateScreen() {
 
       if (result.success) {
         console.log('✅ Diagram saved successfully!');
-        Alert.alert(
-          '✅ Diagram Saved!',
-          `"${diagramNameRef.current}" has been saved to your diagrams.`,
-          [
-            { 
-              text: 'View Saved', 
-              onPress: () => {
-                router.push('/(tabs)/savedDiagrams');
-              }
-            },
-            { text: 'Continue Editing', style: 'cancel' }
-          ]
-        );
+        const savedId: string | undefined = result.data?.diagram?.id;
+        if (savedId) {
+          currentDiagramIdRef.current = savedId;
+          loadedDiagramIdRef.current = savedId;
+          authService.getCurrentUserId().then((uid) => {
+            if (uid) persistDraft(uid, savedId);
+          });
+        }
       } else {
         console.log('❌ Save failed:', result.message);
-        Alert.alert('Error', result.message || 'Failed to save diagram. Please try again.');
+        notify('Error', result.message || 'Failed to save diagram. Please try again.');
       }
     } catch (error: any) {
       console.error('❌ Save diagram error:', error);
       console.error('❌ Error stack:', error.stack);
-      
+
       if (error.message?.includes('Network') || error.message?.includes('fetch') || error.message?.includes('Failed to fetch')) {
-        Alert.alert('Network Error', 'Could not connect to server. Please check your internet connection and make sure the backend is running.');
+        notify('Network Error', 'Could not connect to server. Please check your internet connection and make sure the backend is running.');
       } else if (error.message?.includes('JSON')) {
-        Alert.alert('Server Error', 'The server returned an invalid response. Please try again.');
+        notify('Server Error', 'The server returned an invalid response. Please try again.');
       } else {
-        Alert.alert('Error', error.message || 'Failed to save diagram. Please try again.');
+        notify('Error', error.message || 'Failed to save diagram. Please try again.');
       }
     } finally {
       console.log('🔚 Save process finished');
+      isSavingRef.current = false;
       setIsSaving(false);
       setContextIsSaving(false);
     }
@@ -807,7 +991,6 @@ export default function CreateScreen() {
     setShowDownloadDropdown(false);
 
     if (!graphInstance) {
-      Alert.alert('No Diagram', 'Please create a diagram first.');
       return;
     }
 
@@ -836,12 +1019,12 @@ export default function CreateScreen() {
       if (format === 'svg') {
         const svgContent = exportToSVG(graphInstance);
         if (!svgContent) {
-          Alert.alert('Error', 'Could not export SVG. The diagram may be empty.');
+          notify('Error', 'Could not export SVG. The diagram may be empty.');
           setIsDownloading(false);
           return;
         }
         downloadFile(svgContent, `${name}.svg`, 'image/svg+xml;charset=utf-8');
-        Alert.alert('Success', 'SVG diagram downloaded successfully!');
+        notify('Success', 'SVG diagram downloaded successfully!');
         setIsDownloading(false);
         return;
       }
@@ -890,10 +1073,9 @@ export default function CreateScreen() {
           // Popup was blocked (or unsupported) even for the synchronous open
           // attempt above — fall back to a direct file download instead.
           downloadFile(pdfHtml, `${name}.pdf.html`, 'text/html');
-          Alert.alert(
+          notify(
             'PDF Export',
-            'The PDF dialog will open. Please select "Save as PDF" in the print dialog.',
-            [{ text: 'OK' }]
+            'The PDF dialog will open. Please select "Save as PDF" in the print dialog.'
           );
         }
         setIsDownloading(false);
@@ -906,9 +1088,10 @@ export default function CreateScreen() {
       canvas.toBlob((blob) => {
         if (blob) {
           downloadFile(blob, `${name}.${extension}`, mimeType);
-          Alert.alert('Success', `${format.toUpperCase()} diagram downloaded successfully!`);
+          notify('Success', `${format.toUpperCase()} diagram downloaded successfully!`);
         } else {
-          Alert.alert('Error', 'Failed to generate image.');
+          console.error('toBlob returned null', { width: canvas.width, height: canvas.height });
+          notify('Error', 'Failed to generate image. The diagram may be too large to export from this device.');
         }
         setIsDownloading(false);
       }, mimeType, format === 'jpg' ? 0.92 : undefined);
@@ -917,7 +1100,7 @@ export default function CreateScreen() {
       if (printWindow) {
         try { printWindow.close(); } catch {}
       }
-      Alert.alert('Error', `Failed to download as ${format.toUpperCase()}. Please try again.`);
+      notify('Error', `Failed to download as ${format.toUpperCase()}: ${error instanceof Error ? error.message : 'please try again.'}`);
       setIsDownloading(false);
     }
   };
@@ -1050,6 +1233,46 @@ export default function CreateScreen() {
     A6: { label: 'A6', width: '105mm', height: '148mm' },
     B4: { label: 'B4 (JIS)', width: '257mm', height: '364mm' },
     B5: { label: 'B5 (JIS)', width: '182mm', height: '257mm' },
+  };
+
+  const AppDialog = () => {
+    if (!dialogState) return null;
+    const { title, message, confirmText, onConfirm } = dialogState;
+
+    return (
+      <Modal
+        visible
+        transparent
+        animationType="fade"
+        onRequestClose={() => setDialogState(null)}
+      >
+        <Pressable style={styles.modalOverlay} onPress={() => setDialogState(null)}>
+          <Pressable style={styles.modalContent} onPress={(e) => e.stopPropagation()}>
+            <Text style={styles.modalTitle}>{title}</Text>
+            {message ? <Text style={styles.modalSubtitle}>{message}</Text> : null}
+            <View style={styles.modalButtons}>
+              {onConfirm && (
+                <TouchableOpacity
+                  style={[styles.modalButton, styles.modalCancelButton]}
+                  onPress={() => setDialogState(null)}
+                >
+                  <Text style={styles.modalCancelText}>Cancel</Text>
+                </TouchableOpacity>
+              )}
+              <TouchableOpacity
+                style={[styles.modalButton, styles.modalCreateButton]}
+                onPress={() => {
+                  setDialogState(null);
+                  onConfirm?.();
+                }}
+              >
+                <Text style={styles.modalCreateText}>{confirmText || 'OK'}</Text>
+              </TouchableOpacity>
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
+    );
   };
 
   const PrintModal = () => {
@@ -1365,6 +1588,7 @@ export default function CreateScreen() {
         <View style={styles.mobileCanvasContainer}>
           <DiagramCanvas
             key="diagram-canvas"
+            ref={diagramCanvasRef}
             onReady={handleGraphReady}
             onChange={handleGraphChange}
             umlType={activeUmlType}
@@ -1467,6 +1691,7 @@ export default function CreateScreen() {
         )}
 
         <PrintModal />
+        <AppDialog />
       </SafeAreaView>
     );
   }
@@ -1555,6 +1780,7 @@ export default function CreateScreen() {
           <View style={styles.canvasContainer}>
             <DiagramCanvas
               key="diagram-canvas"
+              ref={diagramCanvasRef}
               onReady={handleGraphReady}
               onChange={handleGraphChange}
               umlType={activeUmlType}
@@ -1715,6 +1941,7 @@ export default function CreateScreen() {
         )}
 
         <PrintModal />
+        <AppDialog />
       </View>
     </SafeAreaView>
   );
