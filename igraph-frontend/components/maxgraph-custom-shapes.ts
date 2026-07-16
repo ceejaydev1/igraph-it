@@ -2,7 +2,270 @@ import {
   Shape,
   AbstractCanvas2D,
   ShapeRegistry,
+  Point,
 } from '@maxgraph/core';
+
+import type { PerimeterFunction, CellStateStyle } from '@maxgraph/core';
+
+// ════════════════════════════════════════════════════════════════════════════
+// CUSTOM PERIMETERS
+//
+// A cell's edges connect via the shape's *perimeter*, not its bounding box.
+// maxGraph defaults to a plain rectangle perimeter for any custom Shape, so
+// non-rectangular outlines (parallelogram, pentagon, etc.) get edges that
+// stop at the bounding-box edge instead of the shape's actual outline,
+// leaving a visible gap. makePolygonPerimeter builds a perimeter function
+// from the same local-space points used to paint the shape (mirroring the
+// x/y=0 convention of paintBackground) so edges land exactly on the outline.
+// ════════════════════════════════════════════════════════════════════════════
+
+function makePolygonPerimeter(
+  getLocalPoints: (w: number, h: number) => Array<[number, number]>,
+): PerimeterFunction {
+  return (bounds, _vertex, next) => {
+    const w = bounds.width;
+    const h = bounds.height;
+    const pts = getLocalPoints(w, h).map(([px, py]) => ({ x: bounds.x + px, y: bounds.y + py }));
+    const cx = bounds.x + w / 2;
+    const cy = bounds.y + h / 2;
+    const dx = next.x - cx;
+    const dy = next.y - cy;
+
+    let best: Point | null = null;
+    let bestT = Infinity;
+    for (let i = 0; i < pts.length; i++) {
+      const a = pts[i];
+      const b = pts[(i + 1) % pts.length];
+      const ex = b.x - a.x;
+      const ey = b.y - a.y;
+      const denom = ex * dy - ey * dx;
+      if (Math.abs(denom) < 1e-9) continue;
+      const t = (ex * (a.y - cy) - ey * (a.x - cx)) / denom;
+      const s = (dx * (a.y - cy) - dy * (a.x - cx)) / denom;
+      if (t >= 0 && t < bestT && s >= -1e-6 && s <= 1 + 1e-6) {
+        bestT = t;
+        best = new Point(cx + t * dx, cy + t * dy);
+      }
+    }
+    return best ?? new Point(cx, cy);
+  };
+}
+
+function sampleQuadBezier(
+  p0: [number, number],
+  ctrl: [number, number],
+  p1: [number, number],
+  steps: number,
+): Array<[number, number]> {
+  const pts: Array<[number, number]> = [];
+  for (let i = 1; i <= steps; i++) {
+    const t = i / steps;
+    const mt = 1 - t;
+    pts.push([
+      mt * mt * p0[0] + 2 * mt * t * ctrl[0] + t * t * p1[0],
+      mt * mt * p0[1] + 2 * mt * t * ctrl[1] + t * t * p1[1],
+    ]);
+  }
+  return pts;
+}
+
+function sampleCubicBezier(
+  p0: [number, number],
+  c1: [number, number],
+  c2: [number, number],
+  p1: [number, number],
+  steps: number,
+): Array<[number, number]> {
+  const pts: Array<[number, number]> = [];
+  for (let i = 1; i <= steps; i++) {
+    const t = i / steps;
+    const mt = 1 - t;
+    const a = mt * mt * mt;
+    const b = 3 * mt * mt * t;
+    const cc = 3 * mt * t * t;
+    const d = t * t * t;
+    pts.push([
+      a * p0[0] + b * c1[0] + cc * c2[0] + d * p1[0],
+      a * p0[1] + b * c1[1] + cc * c2[1] + d * p1[1],
+    ]);
+  }
+  return pts;
+}
+
+// Traces the same elliptical top/bottom caps CylinderShapeCanvas paints
+// (left edge -> over the top -> right edge -> under the bottom), sampled
+// into a polygon since makePolygonPerimeter works on straight edges.
+function cylinderPoints(w: number, h: number): Array<[number, number]> {
+  const rx = (w - 4) / 2;
+  const ry = 6;
+  const cx = w / 2;
+  const topCy = ry + 2;
+  const botCy = h - ry - 2;
+  const steps = 10;
+  const pts: Array<[number, number]> = [];
+  for (let i = 0; i <= steps; i++) {
+    const a = Math.PI + (Math.PI * i) / steps;
+    pts.push([cx + rx * Math.cos(a), topCy + ry * Math.sin(a)]);
+  }
+  pts.push([w - 2, botCy]);
+  for (let i = 1; i <= steps; i++) {
+    const a = (Math.PI * i) / steps;
+    pts.push([cx + rx * Math.cos(a), botCy + ry * Math.sin(a)]);
+  }
+  return pts;
+}
+
+// Coarse polygon through CloudShapeCanvas's arcTo anchor points (straight
+// chords instead of the true arcs) - close enough to keep edges off the
+// empty corners of the bounding box, which is what actually matters here.
+function cloudPoints(w: number, h: number): Array<[number, number]> {
+  const cx = w / 2;
+  const r = Math.min(w, h) * 0.4;
+  return [
+    [cx - r * 0.6, h - 6],
+    [cx - r, h - 16],
+    [cx - r * 0.5, h - 27],
+    [cx, h - 34],
+    [cx + r * 0.4, h - 27],
+    [cx + r, h - 16],
+    [cx + r * 0.5, h - 6],
+  ];
+}
+
+// The note/fold-corner shapes below all cut the same top-right corner at
+// 45 degrees; only the fold size and outer inset differ per variant.
+function foldedCornerPoints(w: number, h: number, fold: number, inset: number): Array<[number, number]> {
+  return [
+    [inset, inset],
+    [w - fold - inset, inset],
+    [w - inset, fold + inset],
+    [w - inset, h - inset],
+    [inset, h - inset],
+  ];
+}
+
+// Keyed by the same 'igraph.xxx' style id used to register the shape and
+// used as the cell's `style.shape`. Values may be a PerimeterFunction or one
+// of maxGraph's built-in registered names (Graph() registers these on
+// construction via registerDefaultPerimeters()). Plain rectangles (even
+// with decorations drawn inside them) and line-art/connector symbols whose
+// terminals already sit on the bounding-box edge are intentionally left
+// out - the default rectangle perimeter is already correct for those.
+export const IGRAPH_PERIMETERS: Record<string, CellStateStyle['perimeter']> = {
+  // ─── Ellipse / circle outlines ───────────────────────────────────────────
+  'igraph.circle': 'ellipsePerimeter',
+  'igraph.ellipse': 'ellipsePerimeter',
+  'igraph.multiOval': 'ellipsePerimeter',
+  'igraph.initialNode': 'ellipsePerimeter',
+  'igraph.finalNode': 'ellipsePerimeter',
+  'igraph.umlInitialNode': 'ellipsePerimeter',
+  'igraph.umlActivityFinal': 'ellipsePerimeter',
+  'igraph.umlFlowFinal': 'ellipsePerimeter',
+  'igraph.umlUseCase': 'ellipsePerimeter',
+  'igraph.dfdProcess': 'ellipsePerimeter',
+  'igraph.dfdOnPage': 'ellipsePerimeter',
+  'igraph.fishboneBubble': 'ellipsePerimeter',
+  'igraph.fdd.externalEntity': 'ellipsePerimeter',
+  'igraph.attribute': 'ellipsePerimeter',
+  'igraph.primaryKey': 'ellipsePerimeter',
+  'igraph.compositeAttr': 'ellipsePerimeter',
+  'igraph.multiAttr': 'ellipsePerimeter',
+  'igraph.derivedAttr': 'ellipsePerimeter',
+  'igraph.erdAttribute': 'ellipsePerimeter',
+  'igraph.erdMultivaluedAttribute': 'ellipsePerimeter',
+  'igraph.erdDerivedAttribute': 'ellipsePerimeter',
+
+  // ─── Rhombus / diamond outlines ──────────────────────────────────────────
+  'igraph.diamond': 'rhombusPerimeter',
+  'igraph.doubleRhombus': 'rhombusPerimeter',
+  'igraph.relationship': 'rhombusPerimeter',
+  'igraph.identifyingRel': 'rhombusPerimeter',
+  'igraph.erdRelationship': 'rhombusPerimeter',
+  'igraph.erdIdentifyingRelationship': 'rhombusPerimeter',
+  'igraph.umlDecision': 'rhombusPerimeter',
+
+  // ─── Hexagon (matches maxGraph's built-in corner ratio exactly) ─────────
+  'igraph.hexagon': 'hexagonPerimeter',
+
+  // ─── Straight-edge polygons (mirrors each shape's paintBackground) ──────
+  'igraph.triangle': makePolygonPerimeter((w, h) => [
+    [w / 2, 2],
+    [w - 2, h - 2],
+    [2, h - 2],
+  ]),
+  'igraph.fishboneHead': makePolygonPerimeter((w, h) => [
+    [w / 2, 2],
+    [w - 2, h / 2],
+    [w / 2, h - 2],
+  ]),
+  'igraph.parallelogram': makePolygonPerimeter((w, h) => {
+    const offset = w * 0.18;
+    return [
+      [offset, 2],
+      [w - 2, 2],
+      [w - offset, h - 2],
+      [2, h - 2],
+    ];
+  }),
+  'igraph.pentagon': makePolygonPerimeter((w, h) => [
+    [0, 0],
+    [w, 0],
+    [w, h * 0.68],
+    [w / 2, h],
+    [0, h * 0.68],
+  ]),
+  'igraph.trapezoid': makePolygonPerimeter((w, h) => [
+    [0, h * 0.25],
+    [w, 0],
+    [w, h],
+    [0, h],
+  ]),
+  'igraph.folder': makePolygonPerimeter((w, h) => {
+    const tabWidth = w * 0.25;
+    const tabHeight = h * 0.2;
+    return [
+      [2, tabHeight + 2],
+      [tabWidth + 2, tabHeight + 2],
+      [tabWidth + 6, 2],
+      [w - 2, 2],
+      [w - 2, h - 2],
+      [2, h - 2],
+    ];
+  }),
+
+  // ─── Folded-corner note variants ─────────────────────────────────────────
+  'igraph.noteStandalone': makePolygonPerimeter((w, h) => foldedCornerPoints(w, h, Math.min(w, h) * 0.2, 2)),
+  'igraph.dfdNote': makePolygonPerimeter((w, h) => foldedCornerPoints(w, h, Math.min(w, h) * 0.2, 2)),
+  'igraph.fishboneNote': makePolygonPerimeter((w, h) => foldedCornerPoints(w, h, Math.min(w, h) * 0.2, 2)),
+  'igraph.umlNote': makePolygonPerimeter((w, h) => foldedCornerPoints(w, h, Math.min(w, h) * 0.2, 2)),
+  'igraph.fdd.note': makePolygonPerimeter((w, h) => foldedCornerPoints(w, h, Math.min(w, h) * 0.18, 1)),
+
+  // ─── Curved outlines, approximated as a sampled polygon ─────────────────
+  'igraph.cylinder': makePolygonPerimeter((w, h) => cylinderPoints(w, h)),
+  'igraph.cloud': makePolygonPerimeter((w, h) => cloudPoints(w, h)),
+  'igraph.document': makePolygonPerimeter((w, h) => [
+    [0, 0],
+    [w, 0],
+    [w, h * 0.8],
+    ...sampleCubicBezier([w, h * 0.8], [w * 0.75, h * 0.7], [w * 0.6, h * 0.9], [w * 0.5, h * 0.8], 8),
+    ...sampleCubicBezier([w * 0.5, h * 0.8], [w * 0.4, h * 0.7], [w * 0.2, h * 0.9], [0, h * 0.8], 8),
+  ]),
+  'igraph.dshape': makePolygonPerimeter((w, h) => [
+    [0, 0],
+    [w * 0.7, 0],
+    ...sampleQuadBezier([w * 0.7, 0], [w, h * 0.5], [w * 0.7, h], 8),
+    [0, h],
+  ]),
+  'igraph.display': makePolygonPerimeter((w, h) => [
+    [w * 0.15, 0],
+    [w * 0.85, 0],
+    ...sampleQuadBezier([w * 0.85, 0], [w, 0], [w, h * 0.25], 6),
+    [w, h * 0.75],
+    ...sampleQuadBezier([w, h * 0.75], [w, h], [w * 0.85, h], 6),
+    [w * 0.15, h],
+    ...sampleQuadBezier([w * 0.15, h], [0, h * 0.5], [w * 0.15, 0], 6),
+  ]),
+};
 
 // ════════════════════════════════════════════════════════════════════════════
 // FDD SHAPES - Canvas implementations

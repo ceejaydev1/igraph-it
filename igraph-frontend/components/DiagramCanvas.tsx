@@ -25,7 +25,7 @@ import type {
   WhiteSpaceValue,
 } from '@maxgraph/core';
 
-import { registerAllCustomShapes, IGRAPH_ID_STYLE_MAP } from './maxgraph-custom-shapes';
+import { registerAllCustomShapes, IGRAPH_ID_STYLE_MAP, IGRAPH_PERIMETERS } from './maxgraph-custom-shapes';
 import { UniversalVertexHandler } from './maxgraph-universal-handler';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -151,6 +151,19 @@ function paintGridOnCanvas(
   ctx.stroke();
 }
 
+// CellState bounds (state.x/y/width/height) are always the shape's
+// unrotated axis-aligned bounds — rotation is applied only as a visual
+// transform at render time. Anything positioned relative to those bounds
+// (directional arrows, connection points) must rotate the offset vector
+// itself by the cell's rotation to end up in the right place on screen.
+function rotateVector(dx: number, dy: number, rotationDeg: number): { x: number; y: number } {
+  if (!rotationDeg) return { x: dx, y: dy };
+  const rad = (rotationDeg * Math.PI) / 180;
+  const cos = Math.cos(rad);
+  const sin = Math.sin(rad);
+  return { x: dx * cos - dy * sin, y: dx * sin + dy * cos };
+}
+
 function clientToGraphCoords(
   graph: Graph,
   clientX: number,
@@ -171,6 +184,7 @@ interface DiagramCanvasProps {
   onReady?: (graph: any) => void;
   onChange?: (xml: string) => void;
   onSelectionChange?: (cell: any) => void;
+  onZoomChange?: (scalePercent: number) => void;
   umlType?: string;
 }
 
@@ -467,14 +481,15 @@ function getShapeStyle(styleKey: string): CellStateStyle {
 
   // Merge base with special style if it exists
   const special = specialStyles[styleKey] || {};
-  return { ...base, ...special };
+  const perimeter = IGRAPH_PERIMETERS[styleKey];
+  return { ...base, ...special, ...(perimeter ? { perimeter } : {}) };
 }
 
 // ════════════════════════════════════════════════════════════════════════════
 // ⭐ MAIN WEBCANVAS COMPONENT
 // ════════════════════════════════════════════════════════════════════════════
 
-const WebCanvas = forwardRef<DiagramCanvasHandle, DiagramCanvasProps>(({ onReady, onChange, onSelectionChange, umlType = 'flowchart' }, ref) => {
+const WebCanvas = forwardRef<DiagramCanvasHandle, DiagramCanvasProps>(({ onReady, onChange, onSelectionChange, onZoomChange, umlType = 'flowchart' }, ref) => {
   const wrapperRef = useRef<HTMLDivElement>(null);
   const gridCanvasRef = useRef<HTMLCanvasElement>(null);
   const graphDivRef = useRef<HTMLDivElement>(null);
@@ -488,10 +503,12 @@ const WebCanvas = forwardRef<DiagramCanvasHandle, DiagramCanvasProps>(({ onReady
   const onReadyRef = useRef(onReady);
   const onChangeRef = useRef(onChange);
   const onSelectionChangeRef = useRef(onSelectionChange);
+  const onZoomChangeRef = useRef(onZoomChange);
 
   useEffect(() => { onReadyRef.current = onReady; }, [onReady]);
   useEffect(() => { onChangeRef.current = onChange; }, [onChange]);
   useEffect(() => { onSelectionChangeRef.current = onSelectionChange; }, [onSelectionChange]);
+  useEffect(() => { onZoomChangeRef.current = onZoomChange; }, [onZoomChange]);
 
   useImperativeHandle(ref, () => ({
     loadXml: (xml: string) => {
@@ -1078,6 +1095,12 @@ const WebCanvas = forwardRef<DiagramCanvasHandle, DiagramCanvasProps>(({ onReady
       'igraph.erdCardinalityMN': { ...base, shape: 'igraph.erdCardinalityMN' },
     };
 
+    Object.entries(IGRAPH_PERIMETERS).forEach(([key, perimeter]) => {
+      if (styles[key]) {
+        styles[key] = { ...styles[key], perimeter };
+      }
+    });
+
     Object.entries(styles).forEach(([key, style]) => {
       stylesheet.putCellStyle(key, style);
     });
@@ -1154,7 +1177,7 @@ const WebCanvas = forwardRef<DiagramCanvasHandle, DiagramCanvasProps>(({ onReady
     let arrowDivs: HTMLDivElement[] = [];
     let currentArrowCell: any = null;
 
-    function createArrowSVG(direction: 'up' | 'down' | 'left' | 'right', size: number = 16): string {
+    function createArrowSVG(direction: 'up' | 'down' | 'left' | 'right', size: number = 16, rotation: number = 0): string {
       const half = size / 2;
       let points: string;
 
@@ -1173,7 +1196,8 @@ const WebCanvas = forwardRef<DiagramCanvasHandle, DiagramCanvasProps>(({ onReady
           break;
       }
 
-      return `<svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}"><polygon points="${points}" fill="currentColor"/></svg>`;
+      const rotateStyle = rotation ? ` style="transform: rotate(${rotation}deg)"` : '';
+      return `<svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}"${rotateStyle}><polygon points="${points}" fill="currentColor"/></svg>`;
     }
 
     function createArrowButtons(cell: any) {
@@ -1185,12 +1209,19 @@ const WebCanvas = forwardRef<DiagramCanvasHandle, DiagramCanvasProps>(({ onReady
 
       const view = graph.getView();
       const scale = view.getScale();
-      const translate = view.getTranslate();
 
-      const cx = (geo.x + translate.x) * scale + (geo.width * scale) / 2;
-      const cy = (geo.y + translate.y) * scale + (geo.height * scale) / 2;
-      const w = geo.width * scale;
-      const h = geo.height * scale;
+      // Use maxGraph's own rendered bounds (already scaled/translated, and
+      // reflecting whatever the shape's paint function actually drew) rather
+      // than re-deriving them from geometry + scale/translate by hand — for
+      // some shapes that manual math didn't match the true painted size.
+      const state = view.getState(cell);
+      if (!state) return;
+
+      const cx = state.x + state.width / 2;
+      const cy = state.y + state.height / 2;
+      const w = state.width;
+      const h = state.height;
+      const rotation = state.style?.rotation ?? 0;
 
       const spacing = 14;
       const arrowSize = 14;
@@ -1206,8 +1237,9 @@ const WebCanvas = forwardRef<DiagramCanvasHandle, DiagramCanvasProps>(({ onReady
 
       directions.forEach((dir) => {
         const div = document.createElement('div');
-        const x = cx + dir.dx * (w / 2 + spacing);
-        const y = cy + dir.dy * (h / 2 + spacing);
+        const offset = rotateVector(dir.dx * (w / 2 + spacing), dir.dy * (h / 2 + spacing), rotation);
+        const x = cx + offset.x;
+        const y = cy + offset.y;
 
         div.style.position = 'absolute';
         div.style.left = (x - arrowSize / 2) + 'px';
@@ -1224,7 +1256,7 @@ const WebCanvas = forwardRef<DiagramCanvasHandle, DiagramCanvasProps>(({ onReady
         div.style.transition = 'color 0.15s ease, transform 0.15s ease';
         div.style.userSelect = 'none';
 
-        div.innerHTML = createArrowSVG(dir.label, arrowSize);
+        div.innerHTML = createArrowSVG(dir.label, arrowSize, rotation);
 
         div.addEventListener('mouseenter', () => {
           div.style.color = hoverColor;
@@ -1242,15 +1274,20 @@ const WebCanvas = forwardRef<DiagramCanvasHandle, DiagramCanvasProps>(({ onReady
           const style = cell.getStyle();
           const styleObj = typeof style === 'string' ? {} : style;
           
-          const newX = geo.x + dir.dx * (geo.width / 2 + NEW_SHAPE_SPACING / scale);
-          const newY = geo.y + dir.dy * (geo.height / 2 + NEW_SHAPE_SPACING / scale);
+          // Rotate the direction to match where the arrow is actually drawn
+          // (rotated with the shape), not the shape's unrotated local axes.
+          const rotatedDir = rotateVector(dir.dx, dir.dy, rotation);
+          const newX = geo.x + rotatedDir.x * (geo.width / 2 + NEW_SHAPE_SPACING / scale);
+          const newY = geo.y + rotatedDir.y * (geo.height / 2 + NEW_SHAPE_SPACING / scale);
 
           const roundedX = Math.round(newX / GRID_SIZE) * GRID_SIZE;
           const roundedY = Math.round(newY / GRID_SIZE) * GRID_SIZE;
 
           // Use the same style as the original cell
+          const newShapeKey = styleObj.shape || 'igraph.rectangle';
+          const newShapePerimeter = IGRAPH_PERIMETERS[newShapeKey];
           const shapeStyle: CellStateStyle = {
-            shape: styleObj.shape || 'igraph.rectangle',
+            shape: newShapeKey,
             fillColor: styleObj.fillColor || '#ffffff',
             strokeColor: styleObj.strokeColor || BLACK,
             strokeWidth: styleObj.strokeWidth || 2,
@@ -1259,6 +1296,7 @@ const WebCanvas = forwardRef<DiagramCanvasHandle, DiagramCanvasProps>(({ onReady
             align: (styleObj.align as AlignValue) || 'center',
             verticalAlign: (styleObj.verticalAlign as VAlignValue) || 'middle',
             whiteSpace: (styleObj.whiteSpace as WhiteSpaceValue) || 'wrap',
+            ...(newShapePerimeter ? { perimeter: newShapePerimeter } : {}),
           };
 
           const newCell = graph.insertVertex(
@@ -1329,6 +1367,29 @@ const WebCanvas = forwardRef<DiagramCanvasHandle, DiagramCanvasProps>(({ onReady
 
     graph.getSelectionModel().addListener(InternalEvent.CHANGE, selectionHandler);
 
+    // Moving/resizing the selected shape doesn't change *which* cell is
+    // selected, so selectionHandler above never re-fires and the arrows were
+    // left stuck at the shape's old position. Re-derive their position from
+    // the (now-updated) geometry whenever the model changes.
+    //
+    // The CHANGE event fires before the view has revalidated/repainted the
+    // new bounds, so reading view.getState(cell) synchronously here still
+    // returns the pre-resize size — arrows would end up positioned as if
+    // the shape were still its old (e.g. shorter) size. Defer a tick so the
+    // view's own state update has run first.
+    const geometryChangeHandler = () => {
+      if (currentArrowCell) {
+        const cell = currentArrowCell;
+        setTimeout(() => {
+          if (currentArrowCell === cell) {
+            createArrowButtons(cell);
+          }
+        }, 0);
+      }
+    };
+
+    graph.getDataModel().addListener(InternalEvent.CHANGE, geometryChangeHandler);
+
     const clickOutsideHandler = (e: MouseEvent) => {
       const target = e.target as HTMLElement;
       if (!target.closest('.mxCell') && !target.closest('.mxRubberband')) {
@@ -1338,6 +1399,7 @@ const WebCanvas = forwardRef<DiagramCanvasHandle, DiagramCanvasProps>(({ onReady
 
     return () => {
       graph.getSelectionModel().removeListener(selectionHandler);
+      graph.getDataModel().removeListener(geometryChangeHandler);
       removeArrowButtons();
     };
 
@@ -1365,24 +1427,35 @@ const WebCanvas = forwardRef<DiagramCanvasHandle, DiagramCanvasProps>(({ onReady
       if (!geo) return;
 
       const view = graph.getView();
-      const scale = view.getScale();
-      const translate = view.getTranslate();
 
-      const x = (geo.x + translate.x) * scale;
-      const y = (geo.y + translate.y) * scale;
-      const w = geo.width * scale;
-      const h = geo.height * scale;
+      // Same fix as createArrowButtons/createHoverArrows: use maxGraph's own
+      // rendered bounds rather than manually re-deriving them from geometry
+      // + scale/translate, which didn't match the true painted size for some
+      // shapes.
+      const state = view.getState(cell);
+      if (!state) return;
 
-      const points = [
-        { x: x + w / 2, y: y },
-        { x: x + w / 2, y: y + h },
-        { x: x, y: y + h / 2 },
-        { x: x + w, y: y + h / 2 },
-        { x: x, y: y },
-        { x: x + w, y: y },
-        { x: x, y: y + h },
-        { x: x + w, y: y + h },
+      const w = state.width;
+      const h = state.height;
+      const cx = state.x + w / 2;
+      const cy = state.y + h / 2;
+      const rotation = state.style?.rotation ?? 0;
+
+      const offsets = [
+        { x: 0, y: -h / 2 },
+        { x: 0, y: h / 2 },
+        { x: -w / 2, y: 0 },
+        { x: w / 2, y: 0 },
+        { x: -w / 2, y: -h / 2 },
+        { x: w / 2, y: -h / 2 },
+        { x: -w / 2, y: h / 2 },
+        { x: w / 2, y: h / 2 },
       ];
+
+      const points = offsets.map((o) => {
+        const r = rotateVector(o.x, o.y, rotation);
+        return { x: cx + r.x, y: cy + r.y };
+      });
 
       points.forEach((pt) => {
         const div = document.createElement('div');
@@ -1427,13 +1500,17 @@ const WebCanvas = forwardRef<DiagramCanvasHandle, DiagramCanvasProps>(({ onReady
       if (!geo) return;
 
       const view = graph.getView();
-      const scale = view.getScale();
-      const translate = view.getTranslate();
 
-      const cx = (geo.x + translate.x) * scale + (geo.width * scale) / 2;
-      const cy = (geo.y + translate.y) * scale + (geo.height * scale) / 2;
-      const w = geo.width * scale;
-      const h = geo.height * scale;
+      // Same fix as createArrowButtons: use maxGraph's own rendered bounds
+      // rather than manually re-deriving them from geometry + scale/translate.
+      const state = view.getState(cell);
+      if (!state) return;
+
+      const cx = state.x + state.width / 2;
+      const cy = state.y + state.height / 2;
+      const w = state.width;
+      const h = state.height;
+      const rotation = state.style?.rotation ?? 0;
 
       const spacing = 18;
       const arrowSize = 10;
@@ -1447,8 +1524,9 @@ const WebCanvas = forwardRef<DiagramCanvasHandle, DiagramCanvasProps>(({ onReady
 
       directions.forEach((dir) => {
         const div = document.createElement('div');
-        const x = cx + dir.dx * (w / 2 + spacing);
-        const y = cy + dir.dy * (h / 2 + spacing);
+        const offset = rotateVector(dir.dx * (w / 2 + spacing), dir.dy * (h / 2 + spacing), rotation);
+        const x = cx + offset.x;
+        const y = cy + offset.y;
 
         div.style.position = 'absolute';
         div.style.left = (x - arrowSize / 2) + 'px';
@@ -1465,7 +1543,7 @@ const WebCanvas = forwardRef<DiagramCanvasHandle, DiagramCanvasProps>(({ onReady
         div.style.transition = 'opacity 0.15s ease, transform 0.15s ease';
 
         div.innerHTML = `
-          <svg width="${arrowSize}" height="${arrowSize}" viewBox="0 0 12 12" style="transform: rotate(${dir.angle}deg)">
+          <svg width="${arrowSize}" height="${arrowSize}" viewBox="0 0 12 12" style="transform: rotate(${dir.angle + rotation}deg)">
             <polygon points="2,6 10,2 10,10" fill="${BLUE}"/>
           </svg>
         `;
@@ -1610,6 +1688,9 @@ const WebCanvas = forwardRef<DiagramCanvasHandle, DiagramCanvasProps>(({ onReady
       graphDiv.style.height = '100%';
       graphDiv.style.cursor = 'default';
       graphDiv.style.userSelect = 'none';
+      // Stops the browser from treating a two-finger pinch as native page
+      // zoom (which would otherwise race our own pinch handling below).
+      graphDiv.style.touchAction = 'none';
 
       const graph = new Graph(graphDiv);
       graphRef.current = graph;
@@ -1761,6 +1842,54 @@ const WebCanvas = forwardRef<DiagramCanvasHandle, DiagramCanvasProps>(({ onReady
         }
       }, graphDiv);
 
+      // ─── Pinch-to-zoom (mobile) ──────────────────────────────────────────
+      // Two-finger pinch zooms around the midpoint between the fingers,
+      // keeping whatever's under them fixed on screen (same math as
+      // scroll-to-cursor zoom, just driven by touch distance instead of a
+      // wheel delta). A single finger is left alone so maxGraph's own
+      // touch-as-mouse handling still drives panning/selection/move.
+      let pinchStartDistance = 0;
+      let pinchStartScale = 1;
+
+      const touchDistance = (touches: TouchList) => {
+        const dx = touches[0].clientX - touches[1].clientX;
+        const dy = touches[0].clientY - touches[1].clientY;
+        return Math.sqrt(dx * dx + dy * dy);
+      };
+
+      graphDiv.addEventListener('touchstart', (e: TouchEvent) => {
+        if (e.touches.length === 2) {
+          pinchStartDistance = touchDistance(e.touches);
+          pinchStartScale = graph.getView().getScale();
+        }
+      }, { passive: true });
+
+      graphDiv.addEventListener('touchmove', (e: TouchEvent) => {
+        if (e.touches.length !== 2 || pinchStartDistance <= 0) return;
+        e.preventDefault();
+
+        const factor = touchDistance(e.touches) / pinchStartDistance;
+        const newScale = Math.min(4, Math.max(0.1, pinchStartScale * factor));
+
+        const rect = graphDiv.getBoundingClientRect();
+        const midX = (e.touches[0].clientX + e.touches[1].clientX) / 2 - rect.left;
+        const midY = (e.touches[0].clientY + e.touches[1].clientY) / 2 - rect.top;
+
+        const view = graph.getView();
+        const oldScale = view.getScale();
+        const oldTranslate = view.getTranslate();
+
+        // Graph-space point currently under the fingers' midpoint, and the
+        // translate needed to keep that same point under it at the new scale.
+        const graphX = midX / oldScale - oldTranslate.x;
+        const graphY = midY / oldScale - oldTranslate.y;
+        view.scaleAndTranslate(newScale, midX / newScale - graphX, midY / newScale - graphY);
+      }, { passive: false });
+
+      graphDiv.addEventListener('touchend', (e: TouchEvent) => {
+        if (e.touches.length < 2) pinchStartDistance = 0;
+      }, { passive: true });
+
       let spaceDown = false;
       graphDiv.addEventListener('keydown', (e: KeyboardEvent) => {
         if (e.code === 'Space' && !spaceDown) {
@@ -1777,9 +1906,10 @@ const WebCanvas = forwardRef<DiagramCanvasHandle, DiagramCanvasProps>(({ onReady
         }
       });
 
-      graph.getView().addListener('scale', () => repaintGrid());
+      const reportZoom = () => onZoomChangeRef.current?.(Math.round(graph.getView().getScale() * 100));
+      graph.getView().addListener('scale', () => { repaintGrid(); reportZoom(); });
       graph.getView().addListener('translate', () => repaintGrid());
-      graph.getView().addListener('scaleAndTranslate', () => repaintGrid());
+      graph.getView().addListener('scaleAndTranslate', () => { repaintGrid(); reportZoom(); });
 
       graph.getDataModel().addListener(InternalEvent.CHANGE, () => {
         try {
@@ -1955,7 +2085,7 @@ const WebCanvas = forwardRef<DiagramCanvasHandle, DiagramCanvasProps>(({ onReady
   );
 });
 
-const DiagramCanvas = forwardRef<DiagramCanvasHandle, DiagramCanvasProps>(({ onReady, onChange, onSelectionChange, umlType }, ref) => {
+const DiagramCanvas = forwardRef<DiagramCanvasHandle, DiagramCanvasProps>(({ onReady, onChange, onSelectionChange, onZoomChange, umlType }, ref) => {
   if (Platform.OS !== 'web') {
     return (
       <View style={styles.nativeNotice}>
@@ -1966,7 +2096,7 @@ const DiagramCanvas = forwardRef<DiagramCanvasHandle, DiagramCanvasProps>(({ onR
   }
   return (
     <View style={styles.container}>
-      <WebCanvas ref={ref} onReady={onReady} onChange={onChange} onSelectionChange={onSelectionChange} umlType={umlType} />
+      <WebCanvas ref={ref} onReady={onReady} onChange={onChange} onSelectionChange={onSelectionChange} onZoomChange={onZoomChange} umlType={umlType} />
     </View>
   );
 });

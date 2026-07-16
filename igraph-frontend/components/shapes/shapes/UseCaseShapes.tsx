@@ -19,16 +19,17 @@ export const UMLActorShape: React.FC<ShapeProps> = ({
 }) => {
   const cx = width / 2;
   const head = Math.min(width, height) * 0.15;
-  const bodyTop = head + 2;
-  const bodyBottom = height * 0.58;
+  const headCY = head + 2;
+  const bodyTop = headCY + head;
+  const bodyBot = height * 0.58;
   const armY = height * 0.38;
   return (
     <Svg width={width} height={height} viewBox={`0 0 ${width} ${height}`}>
-      <Ellipse cx={cx} cy={head / 2 + 2} rx={head} ry={head} fill="none" stroke={color} strokeWidth={strokeWidth} />
-      <Line x1={cx} y1={bodyTop + head} x2={cx} y2={bodyBottom} stroke={color} strokeWidth={strokeWidth} />
+      <Ellipse cx={cx} cy={headCY} rx={head} ry={head} fill="none" stroke={color} strokeWidth={strokeWidth} />
+      <Line x1={cx} y1={bodyTop} x2={cx} y2={bodyBot} stroke={color} strokeWidth={strokeWidth} />
       <Line x1={width * 0.2} y1={armY} x2={width * 0.8} y2={armY} stroke={color} strokeWidth={strokeWidth} />
-      <Line x1={cx} y1={bodyBottom} x2={width * 0.2} y2={height - 4} stroke={color} strokeWidth={strokeWidth} />
-      <Line x1={cx} y1={bodyBottom} x2={width * 0.8} y2={height - 4} stroke={color} strokeWidth={strokeWidth} />
+      <Line x1={cx} y1={bodyBot} x2={width * 0.2} y2={height - 2} stroke={color} strokeWidth={strokeWidth} />
+      <Line x1={cx} y1={bodyBot} x2={width * 0.8} y2={height - 2} stroke={color} strokeWidth={strokeWidth} />
     </Svg>
   );
 };
@@ -46,7 +47,7 @@ export const UMLUseCaseShape: React.FC<ShapeProps> = ({
   const cy = height / 2;
   return (
     <Svg width={width} height={height} viewBox={`0 0 ${width} ${height}`}>
-      <Ellipse cx={cx} cy={cy} rx={width / 2 - 4} ry={height / 2 - 4} fill={fillColor} stroke={color} strokeWidth={strokeWidth} />
+      <Ellipse cx={cx} cy={cy} rx={width / 2 - 2} ry={height / 2 - 2} fill={fillColor} stroke={color} strokeWidth={strokeWidth} />
     </Svg>
   );
 };
@@ -61,7 +62,7 @@ export const UMLSystemBoundaryShape: React.FC<ShapeProps> = ({
 }) => {
   return (
     <Svg width={width} height={height} viewBox={`0 0 ${width} ${height}`}>
-      <Rect x={4} y={4} width={width - 8} height={height - 8} fill="none" stroke={color} strokeWidth={strokeWidth} rx={4} />
+      <Rect x={2} y={2} width={width - 4} height={height - 4} fill="none" stroke={color} strokeWidth={strokeWidth} />
     </Svg>
   );
 };
@@ -77,7 +78,7 @@ export const UMLAssociationShape: React.FC<ShapeProps> = ({
   const cy = height / 2;
   return (
     <Svg width={width} height={height} viewBox={`0 0 ${width} ${height}`}>
-      <Line x1={4} y1={cy} x2={width - 4} y2={cy} stroke={color} strokeWidth={strokeWidth} />
+      <Line x1={2} y1={cy} x2={width - 2} y2={cy} stroke={color} strokeWidth={strokeWidth} />
     </Svg>
   );
 };
@@ -95,16 +96,16 @@ export const UMLIncludeShape: React.FC<ShapeProps> = ({
   return (
     <Svg width={width} height={height} viewBox={`0 0 ${width} ${height}`}>
       <Line
-        x1={4}
+        x1={2}
         y1={cy}
-        x2={width - arrow - 4}
+        x2={width - arrow - 2}
         y2={cy}
         stroke={color}
         strokeWidth={strokeWidth}
         strokeDasharray="6,4"
       />
       <Polygon
-        points={`${width - 4},${cy} ${width - arrow - 4},${cy - 5} ${width - arrow - 4},${cy + 5}`}
+        points={`${width - 2},${cy} ${width - arrow - 2},${cy - 5} ${width - arrow - 2},${cy + 5}`}
         fill={color}
       />
     </Svg>
@@ -124,16 +125,16 @@ export const UMLExtendShape: React.FC<ShapeProps> = ({
   return (
     <Svg width={width} height={height} viewBox={`0 0 ${width} ${height}`}>
       <Line
-        x1={4 + arrow}
+        x1={2 + arrow}
         y1={cy}
-        x2={width - 4}
+        x2={width - 2}
         y2={cy}
         stroke={color}
         strokeWidth={strokeWidth}
         strokeDasharray="6,4"
       />
       <Polygon
-        points={`4,${cy} ${4 + arrow},${cy - 5} ${4 + arrow},${cy + 5}`}
+        points={`2,${cy} ${2 + arrow},${cy - 5} ${2 + arrow},${cy + 5}`}
         fill={color}
       />
     </Svg>
@@ -152,9 +153,9 @@ export const UMLGeneralizationShape: React.FC<ShapeProps> = ({
   const s = 14;
   return (
     <Svg width={width} height={height} viewBox={`0 0 ${width} ${height}`}>
-      <Line x1={4} y1={cy} x2={width - s - 4} y2={cy} stroke={color} strokeWidth={strokeWidth} />
+      <Line x1={2} y1={cy} x2={width - s - 2} y2={cy} stroke={color} strokeWidth={strokeWidth} />
       <Polygon
-        points={`${width - s - 4},${cy - s / 2} ${width - 4},${cy} ${width - s - 4},${cy + s / 2}`}
+        points={`${width - s - 2},${cy - s / 2} ${width - 2},${cy} ${width - s - 2},${cy + s / 2}`}
         fill="none"
         stroke={color}
         strokeWidth={strokeWidth}
@@ -176,25 +177,24 @@ export const UMLNoteShape: React.FC<ShapeProps> = ({
   return (
     <Svg width={width} height={height} viewBox={`0 0 ${width} ${height}`}>
       <Path
-        d={`M4,4 L${width - fold - 4},4 L${width - 4},${fold + 4} L${width - 4},${height - 4} L4,${height - 4} Z`}
+        d={`M2,2 L${width - fold - 2},2 L${width - 2},${fold + 2} L${width - 2},${height - 2} L2,${height - 2} Z`}
         fill={fillColor}
         stroke={color}
         strokeWidth={strokeWidth}
-        strokeLinejoin="round"
       />
       <Line
-        x1={width - fold - 4}
-        y1={4}
-        x2={width - fold - 4}
-        y2={fold + 4}
+        x1={width - fold - 2}
+        y1={2}
+        x2={width - fold - 2}
+        y2={fold + 2}
         stroke={color}
         strokeWidth={strokeWidth}
       />
       <Line
-        x1={width - fold - 4}
-        y1={fold + 4}
-        x2={width - 4}
-        y2={fold + 4}
+        x1={width - fold - 2}
+        y1={fold + 2}
+        x2={width - 2}
+        y2={fold + 2}
         stroke={color}
         strokeWidth={strokeWidth}
       />
@@ -214,9 +214,9 @@ export const UMLNoteConnectorShape: React.FC<ShapeProps> = ({
   return (
     <Svg width={width} height={height} viewBox={`0 0 ${width} ${height}`}>
       <Line
-        x1={4}
+        x1={2}
         y1={cy}
-        x2={width - 4}
+        x2={width - 2}
         y2={cy}
         stroke={color}
         strokeWidth={strokeWidth}

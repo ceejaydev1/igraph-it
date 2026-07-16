@@ -20,7 +20,7 @@ export const DFDProcessShape: React.FC<ShapeProps> = ({
 }) => {
   const cx = width / 2;
   const cy = height / 2;
-  const r = Math.min(width, height) / 2 - strokeWidth / 2;
+  const r = Math.min(width, height) / 2 - 2;
   return (
     <Svg width={width} height={height} viewBox={`0 0 ${width} ${height}`}>
       <Circle cx={cx} cy={cy} r={r} fill={fillColor} stroke={color} strokeWidth={strokeWidth} />
@@ -40,9 +40,9 @@ export const DFDDataFlowShape: React.FC<ShapeProps> = ({
   const arrowSize = 10;
   return (
     <Svg width={width} height={height} viewBox={`0 0 ${width} ${height}`}>
-      <Line x1={4} y1={cy} x2={width - arrowSize - 4} y2={cy} stroke={color} strokeWidth={strokeWidth} />
+      <Line x1={2} y1={cy} x2={width - arrowSize - 2} y2={cy} stroke={color} strokeWidth={strokeWidth} />
       <Polygon
-        points={`${width - 4},${cy} ${width - arrowSize - 4},${cy - 5} ${width - arrowSize - 4},${cy + 5}`}
+        points={`${width - 2},${cy} ${width - arrowSize - 2},${cy - 5} ${width - arrowSize - 2},${cy + 5}`}
         fill={color}
       />
     </Svg>
@@ -61,8 +61,8 @@ export const DFDDataStoreShape: React.FC<ShapeProps> = ({
   const y2 = height * 0.8;
   return (
     <Svg width={width} height={height} viewBox={`0 0 ${width} ${height}`}>
-      <Line x1={4} y1={y1} x2={width - 4} y2={y1} stroke={color} strokeWidth={strokeWidth} />
-      <Line x1={4} y1={y2} x2={width - 4} y2={y2} stroke={color} strokeWidth={strokeWidth} />
+      <Line x1={2} y1={y1} x2={width - 2} y2={y1} stroke={color} strokeWidth={strokeWidth} />
+      <Line x1={2} y1={y2} x2={width - 2} y2={y2} stroke={color} strokeWidth={strokeWidth} />
     </Svg>
   );
 };
@@ -78,8 +78,8 @@ export const DFDDataStoreGSShape: React.FC<ShapeProps> = ({
 }) => {
   return (
     <Svg width={width} height={height} viewBox={`0 0 ${width} ${height}`}>
-      <Rect x={4} y={4} width={width - 8} height={height - 8} fill={fillColor} stroke={color} strokeWidth={strokeWidth} rx={2} />
-      <Line x1={width * 0.2} y1={4} x2={width * 0.2} y2={height - 4} stroke={color} strokeWidth={strokeWidth} />
+      <Rect x={2} y={2} width={width - 4} height={height - 4} fill={fillColor} stroke={color} strokeWidth={strokeWidth} />
+      <Line x1={width * 0.2} y1={2} x2={width * 0.2} y2={height - 2} stroke={color} strokeWidth={strokeWidth} />
     </Svg>
   );
 };
@@ -95,7 +95,7 @@ export const DFDExternalEntityShape: React.FC<ShapeProps> = ({
 }) => {
   return (
     <Svg width={width} height={height} viewBox={`0 0 ${width} ${height}`}>
-      <Rect x={4} y={4} width={width - 8} height={height - 8} fill={fillColor} stroke={color} strokeWidth={strokeWidth} rx={2} />
+      <Rect x={2} y={2} width={width - 4} height={height - 4} fill={fillColor} stroke={color} strokeWidth={strokeWidth} />
     </Svg>
   );
 };
@@ -109,21 +109,21 @@ export const DFDBidirectionalShape: React.FC<ShapeProps> = ({
   strokeWidth = 2,
 }) => {
   const cy = height / 2;
-  const arrowSize = 10;
+  const arrow = 10;
   return (
     <Svg width={width} height={height} viewBox={`0 0 ${width} ${height}`}>
       {/* Left arrow (pointing left) */}
       <Polygon
-        points={`4,${cy} ${4 + arrowSize},${cy - 5} ${4 + arrowSize},${cy + 5}`}
+        points={`2,${cy} ${arrow + 2},${cy - 5} ${arrow + 2},${cy + 5}`}
         fill={color}
       />
       {/* Right arrow (pointing right) */}
       <Polygon
-        points={`${width - 4},${cy} ${width - 4 - arrowSize},${cy - 5} ${width - 4 - arrowSize},${cy + 5}`}
+        points={`${width - 2},${cy} ${width - arrow - 2},${cy - 5} ${width - arrow - 2},${cy + 5}`}
         fill={color}
       />
       {/* Line connecting them */}
-      <Line x1={4 + arrowSize} y1={cy} x2={width - 4 - arrowSize} y2={cy} stroke={color} strokeWidth={strokeWidth} />
+      <Line x1={arrow + 2} y1={cy} x2={width - arrow - 2} y2={cy} stroke={color} strokeWidth={strokeWidth} />
     </Svg>
   );
 };
@@ -139,15 +139,14 @@ export const DFDBoundaryShape: React.FC<ShapeProps> = ({
   return (
     <Svg width={width} height={height} viewBox={`0 0 ${width} ${height}`}>
       <Rect
-        x={4}
-        y={4}
-        width={width - 8}
-        height={height - 8}
+        x={2}
+        y={2}
+        width={width - 4}
+        height={height - 4}
         fill="none"
         stroke={color}
         strokeWidth={strokeWidth}
         strokeDasharray="8,6"
-        rx={4}
       />
     </Svg>
   );
@@ -166,25 +165,24 @@ export const DFDNoteShape: React.FC<ShapeProps> = ({
   return (
     <Svg width={width} height={height} viewBox={`0 0 ${width} ${height}`}>
       <Path
-        d={`M4,4 L${width - fold - 4},4 L${width - 4},${fold + 4} L${width - 4},${height - 4} L4,${height - 4} Z`}
+        d={`M2,2 L${width - fold - 2},2 L${width - 2},${fold + 2} L${width - 2},${height - 2} L2,${height - 2} Z`}
         fill={fillColor}
         stroke={color}
         strokeWidth={strokeWidth}
-        strokeLinejoin="round"
       />
       <Line
-        x1={width - fold - 4}
-        y1={4}
-        x2={width - fold - 4}
-        y2={fold + 4}
+        x1={width - fold - 2}
+        y1={2}
+        x2={width - fold - 2}
+        y2={fold + 2}
         stroke={color}
         strokeWidth={strokeWidth}
       />
       <Line
-        x1={width - fold - 4}
-        y1={fold + 4}
-        x2={width - 4}
-        y2={fold + 4}
+        x1={width - fold - 2}
+        y1={fold + 2}
+        x2={width - 2}
+        y2={fold + 2}
         stroke={color}
         strokeWidth={strokeWidth}
       />
@@ -193,6 +191,9 @@ export const DFDNoteShape: React.FC<ShapeProps> = ({
 };
 
 // ─── 9. DFD On-Page Connector ─────────────────────────────────────────────
+// Canvas leaves the inner dot filled white (no setFillColor before the
+// second ellipse), so it doesn't actually show as a colored dot - matched
+// here rather than "fixed" to keep parity with current canvas rendering.
 
 export const DFDOnPageShape: React.FC<ShapeProps> = ({
   width,
@@ -203,11 +204,11 @@ export const DFDOnPageShape: React.FC<ShapeProps> = ({
 }) => {
   const cx = width / 2;
   const cy = height / 2;
-  const r = Math.min(width, height) / 2 - strokeWidth / 2;
+  const r = Math.min(width, height) / 2 - 2;
   return (
     <Svg width={width} height={height} viewBox={`0 0 ${width} ${height}`}>
       <Circle cx={cx} cy={cy} r={r} fill={fillColor} stroke={color} strokeWidth={strokeWidth} />
-      <Circle cx={cx} cy={cy} r={r * 0.3} fill={color} />
+      <Circle cx={cx} cy={cy} r={r * 0.3} fill={fillColor} />
     </Svg>
   );
 };
@@ -225,11 +226,10 @@ export const DFDOffPageShape: React.FC<ShapeProps> = ({
   return (
     <Svg width={width} height={height} viewBox={`0 0 ${width} ${height}`}>
       <Polygon
-        points={`4,4 ${width - 4},4 ${width - 4},${height * 0.65} ${cx},${height - 4} 4,${height * 0.65}`}
+        points={`2,2 ${width - 2},2 ${width - 2},${height * 0.65} ${cx},${height - 2} 2,${height * 0.65}`}
         fill={fillColor}
         stroke={color}
         strokeWidth={strokeWidth}
-        strokeLinejoin="round"
       />
     </Svg>
   );

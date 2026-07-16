@@ -20,9 +20,9 @@ export const UMLClassShape: React.FC<ShapeProps> = ({
 }) => {
   return (
     <Svg width={width} height={height} viewBox={`0 0 ${width} ${height}`}>
-      <Rect x={4} y={4} width={width - 8} height={height - 8} fill={fillColor} stroke={color} strokeWidth={strokeWidth} rx={2} />
-      <Line x1={4} y1={height * 0.3 + 4} x2={width - 4} y2={height * 0.3 + 4} stroke={color} strokeWidth={1.5} />
-      <Line x1={4} y1={height * 0.65 + 4} x2={width - 4} y2={height * 0.65 + 4} stroke={color} strokeWidth={1.5} />
+      <Rect x={2} y={2} width={width - 4} height={height - 4} fill={fillColor} stroke={color} strokeWidth={strokeWidth} />
+      <Line x1={2} y1={height * 0.3 + 2} x2={width - 2} y2={height * 0.3 + 2} stroke={color} strokeWidth={strokeWidth} />
+      <Line x1={2} y1={height * 0.65 + 2} x2={width - 2} y2={height * 0.65 + 2} stroke={color} strokeWidth={strokeWidth} />
     </Svg>
   );
 };
@@ -39,9 +39,9 @@ export const UMLDirectedAssociationShape: React.FC<ShapeProps> = ({
   const arrow = 14;
   return (
     <Svg width={width} height={height} viewBox={`0 0 ${width} ${height}`}>
-      <Line x1={4} y1={cy} x2={width - arrow - 4} y2={cy} stroke={color} strokeWidth={strokeWidth} />
+      <Line x1={2} y1={cy} x2={width - arrow - 2} y2={cy} stroke={color} strokeWidth={strokeWidth} />
       <Polygon
-        points={`${width - 4},${cy} ${width - arrow - 4},${cy - 6} ${width - arrow - 4},${cy + 6}`}
+        points={`${width - 2},${cy} ${width - arrow - 2},${cy - 6} ${width - arrow - 2},${cy + 6}`}
         fill="none"
         stroke={color}
         strokeWidth={strokeWidth}
@@ -51,22 +51,22 @@ export const UMLDirectedAssociationShape: React.FC<ShapeProps> = ({
 };
 
 // ─── 3. Aggregation ──────────────────────────────────────────────────────
+// Canvas always fills the diamond white regardless of style.
 
 export const UMLAggregationShape: React.FC<ShapeProps> = ({
   width,
   height,
   color = '#1a1f36',
-  fillColor = '#ffffff',
   strokeWidth = 2,
 }) => {
   const cy = height / 2;
   const d = 14;
   return (
     <Svg width={width} height={height} viewBox={`0 0 ${width} ${height}`}>
-      <Line x1={d * 2 + 4} y1={cy} x2={width - 4} y2={cy} stroke={color} strokeWidth={strokeWidth} />
+      <Line x1={d * 2 + 2} y1={cy} x2={width - 2} y2={cy} stroke={color} strokeWidth={strokeWidth} />
       <Polygon
-        points={`4,${cy} ${4 + d},${cy - d} ${4 + d * 2},${cy} ${4 + d},${cy + d}`}
-        fill={fillColor}
+        points={`2,${cy} ${2 + d},${cy - d} ${2 + d * 2},${cy} ${2 + d},${cy + d}`}
+        fill="#ffffff"
         stroke={color}
         strokeWidth={strokeWidth}
       />
@@ -75,6 +75,7 @@ export const UMLAggregationShape: React.FC<ShapeProps> = ({
 };
 
 // ─── 4. Composition ──────────────────────────────────────────────────────
+// Canvas always fills the diamond with the stroke color regardless of style.
 
 export const UMLCompositionShape: React.FC<ShapeProps> = ({
   width,
@@ -86,9 +87,9 @@ export const UMLCompositionShape: React.FC<ShapeProps> = ({
   const d = 14;
   return (
     <Svg width={width} height={height} viewBox={`0 0 ${width} ${height}`}>
-      <Line x1={d * 2 + 4} y1={cy} x2={width - 4} y2={cy} stroke={color} strokeWidth={strokeWidth} />
+      <Line x1={d * 2 + 2} y1={cy} x2={width - 2} y2={cy} stroke={color} strokeWidth={strokeWidth} />
       <Polygon
-        points={`4,${cy} ${4 + d},${cy - d} ${4 + d * 2},${cy} ${4 + d},${cy + d}`}
+        points={`2,${cy} ${2 + d},${cy - d} ${2 + d * 2},${cy} ${2 + d},${cy + d}`}
         fill={color}
         stroke={color}
         strokeWidth={strokeWidth}
@@ -110,16 +111,16 @@ export const UMLDependencyShape: React.FC<ShapeProps> = ({
   return (
     <Svg width={width} height={height} viewBox={`0 0 ${width} ${height}`}>
       <Line
-        x1={4}
+        x1={2}
         y1={cy}
-        x2={width - arrow - 4}
+        x2={width - arrow - 2}
         y2={cy}
         stroke={color}
         strokeWidth={strokeWidth}
         strokeDasharray="6,4"
       />
       <Polygon
-        points={`${width - 4},${cy} ${width - arrow - 4},${cy - 6} ${width - arrow - 4},${cy + 6}`}
+        points={`${width - 2},${cy} ${width - arrow - 2},${cy - 6} ${width - arrow - 2},${cy + 6}`}
         fill="none"
         stroke={color}
         strokeWidth={strokeWidth}
@@ -139,7 +140,7 @@ export const UMLMultiplicity1Shape: React.FC<ShapeProps> = ({
   const cy = height / 2;
   return (
     <Svg width={width} height={height} viewBox={`0 0 ${width} ${height}`}>
-      <SvgText x={cx} y={cy + 4} fontSize={12} fill={color} textAnchor="middle" fontWeight="600">1</SvgText>
+      <SvgText x={cx} y={cy + 4} fontSize={12} fill={color} textAnchor="middle">1</SvgText>
     </Svg>
   );
 };
@@ -155,7 +156,7 @@ export const UMLMultiplicity01Shape: React.FC<ShapeProps> = ({
   const cy = height / 2;
   return (
     <Svg width={width} height={height} viewBox={`0 0 ${width} ${height}`}>
-      <SvgText x={cx} y={cy + 4} fontSize={11} fill={color} textAnchor="middle" fontWeight="600">0..1</SvgText>
+      <SvgText x={cx} y={cy + 4} fontSize={11} fill={color} textAnchor="middle">0..1</SvgText>
     </Svg>
   );
 };
@@ -171,7 +172,7 @@ export const UMLMultiplicityManyShape: React.FC<ShapeProps> = ({
   const cy = height / 2;
   return (
     <Svg width={width} height={height} viewBox={`0 0 ${width} ${height}`}>
-      <SvgText x={cx} y={cy + 4} fontSize={14} fill={color} textAnchor="middle" fontWeight="600">*</SvgText>
+      <SvgText x={cx} y={cy + 4} fontSize={14} fill={color} textAnchor="middle">*</SvgText>
     </Svg>
   );
 };
@@ -187,7 +188,7 @@ export const UMLMultiplicity1ManyShape: React.FC<ShapeProps> = ({
   const cy = height / 2;
   return (
     <Svg width={width} height={height} viewBox={`0 0 ${width} ${height}`}>
-      <SvgText x={cx} y={cy + 4} fontSize={11} fill={color} textAnchor="middle" fontWeight="600">1..*</SvgText>
+      <SvgText x={cx} y={cy + 4} fontSize={11} fill={color} textAnchor="middle">1..*</SvgText>
     </Svg>
   );
 };
@@ -203,7 +204,7 @@ export const UMLMultiplicityRangeShape: React.FC<ShapeProps> = ({
   const cy = height / 2;
   return (
     <Svg width={width} height={height} viewBox={`0 0 ${width} ${height}`}>
-      <SvgText x={cx} y={cy + 4} fontSize={11} fill={color} textAnchor="middle" fontWeight="600">n..m</SvgText>
+      <SvgText x={cx} y={cy + 4} fontSize={11} fill={color} textAnchor="middle">n..m</SvgText>
     </Svg>
   );
 };
@@ -219,7 +220,7 @@ export const UMLMultiplicityNShape: React.FC<ShapeProps> = ({
   const cy = height / 2;
   return (
     <Svg width={width} height={height} viewBox={`0 0 ${width} ${height}`}>
-      <SvgText x={cx} y={cy + 4} fontSize={12} fill={color} textAnchor="middle" fontWeight="600">n</SvgText>
+      <SvgText x={cx} y={cy + 4} fontSize={12} fill={color} textAnchor="middle">n</SvgText>
     </Svg>
   );
 };

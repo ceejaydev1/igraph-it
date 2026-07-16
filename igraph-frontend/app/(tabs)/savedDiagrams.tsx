@@ -17,7 +17,7 @@ import {
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Svg, Path, Rect } from 'react-native-svg';
+import { Svg, Path, Rect, Circle } from 'react-native-svg';
 import * as authService from '../../services/authService';
 import API_BASE_URL from '../../constants/api';
 
@@ -77,6 +77,35 @@ const TYPE_COLORS: Record<string, { primary: string; light: string }> = {
 };
 
 const getTypeColors = (type: string) => TYPE_COLORS[type] || TYPE_COLORS.General;
+
+// ============================================================================
+// DOT GRID PATTERN
+// ============================================================================
+
+const DotGrid = () => {
+  const { width: screenWidth, height: screenHeight } = useWindowDimensions();
+  const DOT_SPACING = 32;
+  const DOT_SIZE = 1.4;
+
+  return (
+    <View style={styles.dotGridContainer} pointerEvents="none">
+      <Svg width={screenWidth} height={screenHeight}>
+        {Array.from({ length: Math.ceil(screenHeight / DOT_SPACING) }).map((_, row) =>
+          Array.from({ length: Math.ceil(screenWidth / DOT_SPACING) }).map((_, col) => (
+            <Circle
+              key={`${row}-${col}`}
+              cx={col * DOT_SPACING}
+              cy={row * DOT_SPACING}
+              r={DOT_SIZE}
+              fill={COLORS.primary}
+              opacity={0.12}
+            />
+          ))
+        )}
+      </Svg>
+    </View>
+  );
+};
 
 // ============================================================================
 // ICONS
@@ -909,6 +938,8 @@ export default function SavedDiagrams() {
 
   return (
     <View style={styles.container}>
+      <DotGrid />
+
       {/* Header */}
       <View style={[styles.header, { paddingTop: insets.top + SPACING.sm }]}>
         <TouchableOpacity
@@ -1032,6 +1063,14 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: COLORS.background,
+  },
+  dotGridContainer: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    overflow: 'hidden',
   },
   centerContent: {
     flex: 1,

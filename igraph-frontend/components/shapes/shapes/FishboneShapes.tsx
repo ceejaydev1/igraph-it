@@ -20,7 +20,7 @@ export const FishboneSpineShape: React.FC<ShapeProps> = ({
   const cy = height / 2;
   return (
     <Svg width={width} height={height} viewBox={`0 0 ${width} ${height}`}>
-      <Line x1={4} y1={cy} x2={width - 4} y2={cy} stroke={color} strokeWidth={strokeWidth} />
+      <Line x1={2} y1={cy} x2={width - 2} y2={cy} stroke={color} strokeWidth={strokeWidth} />
     </Svg>
   );
 };
@@ -38,11 +38,10 @@ export const FishboneHeadShape: React.FC<ShapeProps> = ({
   return (
     <Svg width={width} height={height} viewBox={`0 0 ${width} ${height}`}>
       <Polygon
-        points={`${cx},4 ${width - 4},${height / 2} ${cx},${height - 4}`}
+        points={`${cx},2 ${width - 2},${height / 2} ${cx},${height - 2}`}
         fill={fillColor}
         stroke={color}
         strokeWidth={strokeWidth}
-        strokeLinejoin="round"
       />
     </Svg>
   );
@@ -60,10 +59,10 @@ export const FishboneProblemShape: React.FC<ShapeProps> = ({
   return (
     <Svg width={width} height={height} viewBox={`0 0 ${width} ${height}`}>
       <Rect
-        x={4}
-        y={4}
-        width={width - 8}
-        height={height - 8}
+        x={2}
+        y={2}
+        width={width - 4}
+        height={height - 4}
         fill="none"
         stroke={color}
         strokeWidth={strokeWidth}
@@ -83,7 +82,7 @@ export const FishboneCauseTopShape: React.FC<ShapeProps> = ({
   strokeWidth = 2,
 }) => (
   <Svg width={width} height={height} viewBox={`0 0 ${width} ${height}`}>
-    <Line x1={4} y1={height - 4} x2={width - 4} y2={4} stroke={color} strokeWidth={strokeWidth} />
+    <Line x1={2} y1={height - 2} x2={width - 2} y2={2} stroke={color} strokeWidth={strokeWidth} />
   </Svg>
 );
 
@@ -96,7 +95,7 @@ export const FishboneCauseBottomShape: React.FC<ShapeProps> = ({
   strokeWidth = 2,
 }) => (
   <Svg width={width} height={height} viewBox={`0 0 ${width} ${height}`}>
-    <Line x1={4} y1={4} x2={width - 4} y2={height - 4} stroke={color} strokeWidth={strokeWidth} />
+    <Line x1={2} y1={2} x2={width - 2} y2={height - 2} stroke={color} strokeWidth={strokeWidth} />
   </Svg>
 );
 
@@ -109,8 +108,8 @@ export const FishboneSubCauseTopShape: React.FC<ShapeProps> = ({
   strokeWidth = 2,
 }) => (
   <Svg width={width} height={height} viewBox={`0 0 ${width} ${height}`}>
-    <Line x1={4} y1={height - 4} x2={width - 4} y2={4} stroke={color} strokeWidth={strokeWidth} />
-    <Line x1={width * 0.6} y1={height * 0.4} x2={width - 4} y2={height * 0.4} stroke={color} strokeWidth={strokeWidth} />
+    <Line x1={2} y1={height - 2} x2={width - 2} y2={2} stroke={color} strokeWidth={strokeWidth} />
+    <Line x1={width * 0.6} y1={height * 0.4} x2={width - 2} y2={height * 0.4} stroke={color} strokeWidth={strokeWidth} />
   </Svg>
 );
 
@@ -123,8 +122,8 @@ export const FishboneSubCauseBottomShape: React.FC<ShapeProps> = ({
   strokeWidth = 2,
 }) => (
   <Svg width={width} height={height} viewBox={`0 0 ${width} ${height}`}>
-    <Line x1={4} y1={4} x2={width - 4} y2={height - 4} stroke={color} strokeWidth={strokeWidth} />
-    <Line x1={width * 0.6} y1={height * 0.6} x2={width - 4} y2={height * 0.6} stroke={color} strokeWidth={strokeWidth} />
+    <Line x1={2} y1={2} x2={width - 2} y2={height - 2} stroke={color} strokeWidth={strokeWidth} />
+    <Line x1={width * 0.6} y1={height * 0.6} x2={width - 2} y2={height * 0.6} stroke={color} strokeWidth={strokeWidth} />
   </Svg>
 );
 
@@ -137,7 +136,7 @@ export const FishboneTertiaryShape: React.FC<ShapeProps> = ({
   strokeWidth = 1.5,
 }) => (
   <Svg width={width} height={height} viewBox={`0 0 ${width} ${height}`}>
-    <Line x1={4} y1={height - 4} x2={width - 4} y2={4} stroke={color} strokeWidth={strokeWidth} />
+    <Line x1={2} y1={height - 2} x2={width - 2} y2={2} stroke={color} strokeWidth={strokeWidth} />
   </Svg>
 );
 
@@ -153,10 +152,12 @@ export const FishboneArrowShape: React.FC<ShapeProps> = ({
   const arrow = Math.min(width, height) * 0.35;
   return (
     <Svg width={width} height={height} viewBox={`0 0 ${width} ${height}`}>
-      <Line x1={4} y1={cy} x2={width - arrow - 4} y2={cy} stroke={color} strokeWidth={strokeWidth} />
+      <Line x1={2} y1={cy} x2={width - arrow - 2} y2={cy} stroke={color} strokeWidth={strokeWidth} />
       <Polygon
-        points={`${width - 4},${cy} ${width - arrow - 4},${cy - arrow / 2} ${width - arrow - 4},${cy + arrow / 2}`}
+        points={`${width - 2},${cy} ${width - arrow - 2},${cy - arrow / 2} ${width - arrow - 2},${cy + arrow / 2}`}
         fill={color}
+        stroke={color}
+        strokeWidth={strokeWidth}
       />
     </Svg>
   );
@@ -175,17 +176,19 @@ export const FishboneDashedArrowShape: React.FC<ShapeProps> = ({
   return (
     <Svg width={width} height={height} viewBox={`0 0 ${width} ${height}`}>
       <Line
-        x1={4}
+        x1={2}
         y1={cy}
-        x2={width - arrow - 4}
+        x2={width - arrow - 2}
         y2={cy}
         stroke={color}
         strokeWidth={strokeWidth}
         strokeDasharray="6,4"
       />
       <Polygon
-        points={`${width - 4},${cy} ${width - arrow - 4},${cy - arrow / 2} ${width - arrow - 4},${cy + arrow / 2}`}
+        points={`${width - 2},${cy} ${width - arrow - 2},${cy - arrow / 2} ${width - arrow - 2},${cy + arrow / 2}`}
         fill={color}
+        stroke={color}
+        strokeWidth={strokeWidth}
       />
     </Svg>
   );
@@ -203,7 +206,7 @@ export const FishboneCategoryShape: React.FC<ShapeProps> = ({
   const r = Math.min(width, height) * 0.1;
   return (
     <Svg width={width} height={height} viewBox={`0 0 ${width} ${height}`}>
-      <Rect x={4} y={4} width={width - 8} height={height - 8} fill={fillColor} stroke={color} strokeWidth={strokeWidth} rx={r} />
+      <Rect x={2} y={2} width={width - 4} height={height - 4} fill={fillColor} stroke={color} strokeWidth={strokeWidth} rx={r} />
     </Svg>
   );
 };
@@ -221,43 +224,42 @@ export const FishboneBubbleShape: React.FC<ShapeProps> = ({
   const cy = height / 2;
   return (
     <Svg width={width} height={height} viewBox={`0 0 ${width} ${height}`}>
-      <Ellipse cx={cx} cy={cy} rx={width / 2 - 4} ry={height / 2 - 4} fill={fillColor} stroke={color} strokeWidth={strokeWidth} />
+      <Ellipse cx={cx} cy={cy} rx={width / 2 - 2} ry={height / 2 - 2} fill={fillColor} stroke={color} strokeWidth={strokeWidth} />
     </Svg>
   );
 };
 
 // ─── 13. Fishbone Note ────────────────────────────────────────────────────
+// Canvas always fills #fef9c3 regardless of style.
 
 export const FishboneNoteShape: React.FC<ShapeProps> = ({
   width,
   height,
   color = '#1a1f36',
-  fillColor = '#fef9c3',
   strokeWidth = 2,
 }) => {
   const fold = Math.min(width, height) * 0.2;
   return (
     <Svg width={width} height={height} viewBox={`0 0 ${width} ${height}`}>
       <Path
-        d={`M4,4 L${width - fold - 4},4 L${width - 4},${fold + 4} L${width - 4},${height - 4} L4,${height - 4} Z`}
-        fill={fillColor}
-        stroke={color}
-        strokeWidth={strokeWidth}
-        strokeLinejoin="round"
-      />
-      <Line
-        x1={width - fold - 4}
-        y1={4}
-        x2={width - fold - 4}
-        y2={fold + 4}
+        d={`M2,2 L${width - fold - 2},2 L${width - 2},${fold + 2} L${width - 2},${height - 2} L2,${height - 2} Z`}
+        fill="#fef9c3"
         stroke={color}
         strokeWidth={strokeWidth}
       />
       <Line
-        x1={width - fold - 4}
-        y1={fold + 4}
-        x2={width - 4}
-        y2={fold + 4}
+        x1={width - fold - 2}
+        y1={2}
+        x2={width - fold - 2}
+        y2={fold + 2}
+        stroke={color}
+        strokeWidth={strokeWidth}
+      />
+      <Line
+        x1={width - fold - 2}
+        y1={fold + 2}
+        x2={width - 2}
+        y2={fold + 2}
         stroke={color}
         strokeWidth={strokeWidth}
       />

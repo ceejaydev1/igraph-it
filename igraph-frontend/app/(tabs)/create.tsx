@@ -15,6 +15,7 @@ import {
   Pressable,
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
+import { useFocusEffect } from '@react-navigation/native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Svg, Path, Rect, Circle } from 'react-native-svg';
 import { SvgCanvas2D, ImageExport } from '@maxgraph/core';
@@ -260,6 +261,23 @@ export default function CreateScreen() {
   useEffect(() => {
     diagramNameRef.current = diagramName;
   }, [diagramName]);
+
+  // react-native-web's Modal portals to document.body rather than rendering
+  // inside this screen's own container, so it ignores which screen React
+  // Navigation actually has focused. Since this screen deliberately stays
+  // mounted (frozen, not unmounted) when you navigate to another tab, any
+  // Modal left open here — the network-error dialog, print, or add-page —
+  // would otherwise keep showing on top of whatever screen you go to next.
+  // Dismiss them all as soon as this screen loses focus.
+  useFocusEffect(
+    useCallback(() => {
+      return () => {
+        setDialogState(null);
+        setShowPrintModal(false);
+        setShowPageModal(false);
+      };
+    }, [])
+  );
 
   const getZoomIndex = (current: number): number => {
     let closest = 0;
@@ -1608,6 +1626,7 @@ export default function CreateScreen() {
             ref={diagramCanvasRef}
             onReady={handleGraphReady}
             onChange={handleGraphChange}
+            onZoomChange={setZoomLevel}
             umlType={activeUmlType}
           />
 
@@ -1800,6 +1819,7 @@ export default function CreateScreen() {
               ref={diagramCanvasRef}
               onReady={handleGraphReady}
               onChange={handleGraphChange}
+              onZoomChange={setZoomLevel}
               umlType={activeUmlType}
             />
           </View>

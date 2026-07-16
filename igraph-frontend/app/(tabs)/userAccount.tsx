@@ -999,14 +999,31 @@ export default function UserAccount() {
         if (!stillHasToken) {
           router.replace('/(auth)/signin');
         } else {
+          await useCachedUserAsFallback();
           showToast('Failed to load user data. Pull down to refresh.', true);
         }
       }
     } catch (error) {
       console.error('Failed to load user data:', error);
+      await useCachedUserAsFallback();
       showToast('Failed to load user data. Pull down to refresh.', true);
     } finally {
       setLoading(false);
+    }
+  };
+
+  // A transient failure (server unreachable, etc.) shouldn't blank out a
+  // name/email the user already saw moments ago and replace it with the
+  // generic "User" placeholder — fall back to whatever's cached instead.
+  const useCachedUserAsFallback = async () => {
+    const cached = await authService.getCachedUser();
+    if (cached) {
+      setUserData({
+        fullName: cached.fullName || '',
+        email: cached.email || '',
+        username: cached.username || '',
+        authProvider: cached.authProvider || 'email',
+      });
     }
   };
 

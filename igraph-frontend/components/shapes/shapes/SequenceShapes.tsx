@@ -1,5 +1,5 @@
 import React from 'react';
-import { Svg, Rect, Line, Polygon, Path, G, Text as SvgText } from 'react-native-svg';
+import { Svg, Rect, Line, Polygon, Path, Text as SvgText } from 'react-native-svg';
 
 interface ShapeProps {
   width: number;
@@ -22,8 +22,8 @@ export const UMLLifelineShape: React.FC<ShapeProps> = ({
   const cx = width / 2;
   return (
     <Svg width={width} height={height} viewBox={`0 0 ${width} ${height}`}>
-      <Rect x={width * 0.1} y={4} width={width * 0.8} height={header} fill={fillColor} stroke={color} strokeWidth={strokeWidth} rx={2} />
-      <Line x1={cx} y1={header + 4} x2={cx} y2={height - 4} stroke={color} strokeWidth={1.5} strokeDasharray="6,4" />
+      <Rect x={width * 0.1} y={2} width={width * 0.8} height={header} fill={fillColor} stroke={color} strokeWidth={strokeWidth} />
+      <Line x1={cx} y1={header + 2} x2={cx} y2={height - 2} stroke={color} strokeWidth={1.5} strokeDasharray="6,4" />
     </Svg>
   );
 };
@@ -41,7 +41,7 @@ export const UMLActivationShape: React.FC<ShapeProps> = ({
   const x = (width - barW) / 2;
   return (
     <Svg width={width} height={height} viewBox={`0 0 ${width} ${height}`}>
-      <Rect x={x} y={4} width={barW} height={height - 8} fill={fillColor} stroke={color} strokeWidth={strokeWidth} rx={2} />
+      <Rect x={x} y={2} width={barW} height={height - 4} fill={fillColor} stroke={color} strokeWidth={strokeWidth} />
     </Svg>
   );
 };
@@ -75,9 +75,9 @@ export const UMLSyncMsgShape: React.FC<ShapeProps> = ({
   const arrow = 12;
   return (
     <Svg width={width} height={height} viewBox={`0 0 ${width} ${height}`}>
-      <Line x1={4} y1={cy} x2={width - arrow - 4} y2={cy} stroke={color} strokeWidth={strokeWidth} />
+      <Line x1={2} y1={cy} x2={width - arrow - 2} y2={cy} stroke={color} strokeWidth={strokeWidth} />
       <Polygon
-        points={`${width - 4},${cy} ${width - arrow - 4},${cy - 6} ${width - arrow - 4},${cy + 6}`}
+        points={`${width - 2},${cy} ${width - arrow - 2},${cy - 6} ${width - arrow - 2},${cy + 6}`}
         fill={color}
       />
     </Svg>
@@ -96,9 +96,9 @@ export const UMLAsyncMsgShape: React.FC<ShapeProps> = ({
   const arrow = 12;
   return (
     <Svg width={width} height={height} viewBox={`0 0 ${width} ${height}`}>
-      <Line x1={4} y1={cy} x2={width - arrow - 4} y2={cy} stroke={color} strokeWidth={strokeWidth} />
+      <Line x1={2} y1={cy} x2={width - arrow - 2} y2={cy} stroke={color} strokeWidth={strokeWidth} />
       <Polygon
-        points={`${width - 4},${cy} ${width - arrow - 4},${cy - 6} ${width - arrow - 4},${cy + 6}`}
+        points={`${width - 2},${cy} ${width - arrow - 2},${cy - 6} ${width - arrow - 2},${cy + 6}`}
         fill="none"
         stroke={color}
         strokeWidth={strokeWidth}
@@ -120,16 +120,16 @@ export const UMLReturnMsgShape: React.FC<ShapeProps> = ({
   return (
     <Svg width={width} height={height} viewBox={`0 0 ${width} ${height}`}>
       <Line
-        x1={4 + arrow}
+        x1={2 + arrow}
         y1={cy}
-        x2={width - 4}
+        x2={width - 2}
         y2={cy}
         stroke={color}
         strokeWidth={strokeWidth}
         strokeDasharray="6,4"
       />
       <Polygon
-        points={`4,${cy} ${4 + arrow},${cy - 6} ${4 + arrow},${cy + 6}`}
+        points={`2,${cy} ${2 + arrow},${cy - 6} ${2 + arrow},${cy + 6}`}
         fill="none"
         stroke={color}
         strokeWidth={strokeWidth}
@@ -138,102 +138,61 @@ export const UMLReturnMsgShape: React.FC<ShapeProps> = ({
   );
 };
 
-// ─── 7. ALT Fragment ─────────────────────────────────────────────────────
-// Clean: Simple rectangle with "alt" text centered
-
-export const UMLAltShape: React.FC<ShapeProps> = ({
+// Shared frame for the alt/opt/loop/par/break combined-fragment shapes:
+// an unfilled rect with a small pentagon "tag" in the top-left corner
+// holding the operator label - matches each *ShapeCanvas exactly (fixed
+// pixel tag size, not proportional to width/height).
+const FragmentFrame: React.FC<ShapeProps & { label: string; tagWidth: number; textX: number; dashedDivider?: boolean }> = ({
   width,
   height,
   color = '#1a1f36',
-  fillColor = '#ffffff',
   strokeWidth = 2,
-}) => {
-  const cx = width / 2;
-  const cy = height / 2;
-  return (
-    <Svg width={width} height={height} viewBox={`0 0 ${width} ${height}`}>
-      <Rect x={4} y={4} width={width - 8} height={height - 8} fill={fillColor} stroke={color} strokeWidth={strokeWidth} rx={2} />
-      <SvgText x={cx} y={cy + 4} fontSize={12} fill={color} textAnchor="middle" fontWeight="700">alt</SvgText>
-    </Svg>
-  );
-};
+  label,
+  tagWidth,
+  textX,
+  dashedDivider,
+}) => (
+  <Svg width={width} height={height} viewBox={`0 0 ${width} ${height}`}>
+    <Rect x={2} y={2} width={width - 4} height={height - 4} fill="none" stroke={color} strokeWidth={strokeWidth} />
+    <Path
+      d={`M2,2 L${tagWidth},2 L${tagWidth + 8},20 L${tagWidth + 8},35 L2,35 L2,2`}
+      fill="none"
+      stroke={color}
+      strokeWidth={strokeWidth}
+    />
+    <SvgText x={textX} y={22} fontSize={10} fill={color} textAnchor="middle">{label}</SvgText>
+    {dashedDivider && (
+      <Line x1={2} y1={height / 2} x2={width - 2} y2={height / 2} stroke={color} strokeWidth={strokeWidth} strokeDasharray="6,4" />
+    )}
+  </Svg>
+);
+
+// ─── 7. ALT Fragment ─────────────────────────────────────────────────────
+
+export const UMLAltShape: React.FC<ShapeProps> = (props) => (
+  <FragmentFrame {...props} label="alt" tagWidth={30} textX={16} dashedDivider />
+);
 
 // ─── 8. OPT Fragment ─────────────────────────────────────────────────────
-// Clean: Simple rectangle with "opt" text centered
 
-export const UMLOptShape: React.FC<ShapeProps> = ({
-  width,
-  height,
-  color = '#1a1f36',
-  fillColor = '#ffffff',
-  strokeWidth = 2,
-}) => {
-  const cx = width / 2;
-  const cy = height / 2;
-  return (
-    <Svg width={width} height={height} viewBox={`0 0 ${width} ${height}`}>
-      <Rect x={4} y={4} width={width - 8} height={height - 8} fill={fillColor} stroke={color} strokeWidth={strokeWidth} rx={2} />
-      <SvgText x={cx} y={cy + 4} fontSize={12} fill={color} textAnchor="middle" fontWeight="700">opt</SvgText>
-    </Svg>
-  );
-};
+export const UMLOptShape: React.FC<ShapeProps> = (props) => (
+  <FragmentFrame {...props} label="opt" tagWidth={30} textX={16} />
+);
 
 // ─── 9. LOOP Fragment ────────────────────────────────────────────────────
-// Clean: Simple rectangle with "loop" text centered
 
-export const UMLLoopShape: React.FC<ShapeProps> = ({
-  width,
-  height,
-  color = '#1a1f36',
-  fillColor = '#ffffff',
-  strokeWidth = 2,
-}) => {
-  const cx = width / 2;
-  const cy = height / 2;
-  return (
-    <Svg width={width} height={height} viewBox={`0 0 ${width} ${height}`}>
-      <Rect x={4} y={4} width={width - 8} height={height - 8} fill={fillColor} stroke={color} strokeWidth={strokeWidth} rx={2} />
-      <SvgText x={cx} y={cy + 4} fontSize={12} fill={color} textAnchor="middle" fontWeight="700">loop</SvgText>
-    </Svg>
-  );
-};
+export const UMLLoopShape: React.FC<ShapeProps> = (props) => (
+  <FragmentFrame {...props} label="loop" tagWidth={35} textX={20} />
+);
 
 // ─── 10. PAR Fragment ─────────────────────────────────────────────────────
-// Clean: Simple rectangle with "par" text centered
 
-export const UMLParShape: React.FC<ShapeProps> = ({
-  width,
-  height,
-  color = '#1a1f36',
-  fillColor = '#ffffff',
-  strokeWidth = 2,
-}) => {
-  const cx = width / 2;
-  const cy = height / 2;
-  return (
-    <Svg width={width} height={height} viewBox={`0 0 ${width} ${height}`}>
-      <Rect x={4} y={4} width={width - 8} height={height - 8} fill={fillColor} stroke={color} strokeWidth={strokeWidth} rx={2} />
-      <SvgText x={cx} y={cy + 4} fontSize={12} fill={color} textAnchor="middle" fontWeight="700">par</SvgText>
-    </Svg>
-  );
-};
+export const UMLParShape: React.FC<ShapeProps> = (props) => (
+  <FragmentFrame {...props} label="par" tagWidth={30} textX={16} dashedDivider />
+);
 
 // ─── 11. BREAK Fragment ──────────────────────────────────────────────────
-// Clean: Simple rectangle with "break" text centered
 
-export const UMLBreakShape: React.FC<ShapeProps> = ({
-  width,
-  height,
-  color = '#1a1f36',
-  fillColor = '#ffffff',
-  strokeWidth = 2,
-}) => {
-  const cx = width / 2;
-  const cy = height / 2;
-  return (
-    <Svg width={width} height={height} viewBox={`0 0 ${width} ${height}`}>
-      <Rect x={4} y={4} width={width - 8} height={height - 8} fill={fillColor} stroke={color} strokeWidth={strokeWidth} rx={2} />
-      <SvgText x={cx} y={cy + 4} fontSize={12} fill={color} textAnchor="middle" fontWeight="700">break</SvgText>
-    </Svg>
-  );
-};
+export const UMLBreakShape: React.FC<ShapeProps> = (props) => (
+  <FragmentFrame {...props} label="break" tagWidth={38} textX={22} />
+);

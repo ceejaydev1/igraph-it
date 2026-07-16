@@ -19,7 +19,7 @@ export const ERDEntityShape: React.FC<ShapeProps> = ({
   strokeWidth = 2,
 }) => (
   <Svg width={width} height={height} viewBox={`0 0 ${width} ${height}`}>
-    <Rect x={4} y={4} width={width - 8} height={height - 8} fill={fillColor} stroke={color} strokeWidth={strokeWidth} rx={2} />
+    <Rect x={2} y={2} width={width - 4} height={height - 4} fill={fillColor} stroke={color} strokeWidth={strokeWidth} />
   </Svg>
 );
 
@@ -33,8 +33,8 @@ export const ERDWeakEntityShape: React.FC<ShapeProps> = ({
   strokeWidth = 2,
 }) => (
   <Svg width={width} height={height} viewBox={`0 0 ${width} ${height}`}>
-    <Rect x={4} y={4} width={width - 8} height={height - 8} fill={fillColor} stroke={color} strokeWidth={strokeWidth} rx={2} />
-    <Rect x={8} y={8} width={width - 16} height={height - 16} fill="none" stroke={color} strokeWidth={1.5} rx={2} />
+    <Rect x={2} y={2} width={width - 4} height={height - 4} fill={fillColor} stroke={color} strokeWidth={strokeWidth} />
+    <Rect x={6} y={6} width={width - 12} height={height - 12} fill="none" stroke={color} strokeWidth={strokeWidth} />
   </Svg>
 );
 
@@ -52,7 +52,7 @@ export const ERDRelationshipShape: React.FC<ShapeProps> = ({
   return (
     <Svg width={width} height={height} viewBox={`0 0 ${width} ${height}`}>
       <Polygon
-        points={`${cx},4 ${width - 4},${cy} ${cx},${height - 4} 4,${cy}`}
+        points={`${cx},2 ${width - 2},${cy} ${cx},${height - 2} 2,${cy}`}
         fill={fillColor}
         stroke={color}
         strokeWidth={strokeWidth}
@@ -75,7 +75,7 @@ export const ERDIdentifyingRelShape: React.FC<ShapeProps> = ({
   return (
     <Svg width={width} height={height} viewBox={`0 0 ${width} ${height}`}>
       <Polygon
-        points={`${cx},4 ${width - 4},${cy} ${cx},${height - 4} 4,${cy}`}
+        points={`${cx},2 ${width - 2},${cy} ${cx},${height - 2} 2,${cy}`}
         fill={fillColor}
         stroke={color}
         strokeWidth={strokeWidth}
@@ -84,7 +84,7 @@ export const ERDIdentifyingRelShape: React.FC<ShapeProps> = ({
         points={`${cx},8 ${width - 8},${cy} ${cx},${height - 8} 8,${cy}`}
         fill="none"
         stroke={color}
-        strokeWidth={1.5}
+        strokeWidth={strokeWidth}
       />
     </Svg>
   );
@@ -103,7 +103,7 @@ export const ERDAttributeShape: React.FC<ShapeProps> = ({
   const cy = height / 2;
   return (
     <Svg width={width} height={height} viewBox={`0 0 ${width} ${height}`}>
-      <Ellipse cx={cx} cy={cy} rx={width / 2 - 4} ry={height / 2 - 4} fill={fillColor} stroke={color} strokeWidth={strokeWidth} />
+      <Ellipse cx={cx} cy={cy} rx={width / 2 - 2} ry={height / 2 - 2} fill={fillColor} stroke={color} strokeWidth={strokeWidth} />
     </Svg>
   );
 };
@@ -121,8 +121,8 @@ export const ERDMultivaluedAttrShape: React.FC<ShapeProps> = ({
   const cy = height / 2;
   return (
     <Svg width={width} height={height} viewBox={`0 0 ${width} ${height}`}>
-      <Ellipse cx={cx} cy={cy} rx={width / 2 - 4} ry={height / 2 - 4} fill={fillColor} stroke={color} strokeWidth={strokeWidth} />
-      <Ellipse cx={cx} cy={cy} rx={width / 2 - 8} ry={height / 2 - 8} fill="none" stroke={color} strokeWidth={1.5} />
+      <Ellipse cx={cx} cy={cy} rx={width / 2 - 2} ry={height / 2 - 2} fill={fillColor} stroke={color} strokeWidth={strokeWidth} />
+      <Ellipse cx={cx} cy={cy} rx={width / 2 - 8} ry={height / 2 - 8} fill="none" stroke={color} strokeWidth={strokeWidth} />
     </Svg>
   );
 };
@@ -143,8 +143,8 @@ export const ERDDerivedAttrShape: React.FC<ShapeProps> = ({
       <Ellipse
         cx={cx}
         cy={cy}
-        rx={width / 2 - 4}
-        ry={height / 2 - 4}
+        rx={width / 2 - 2}
+        ry={height / 2 - 2}
         fill={fillColor}
         stroke={color}
         strokeWidth={strokeWidth}
@@ -165,7 +165,7 @@ export const ERDConnectorShape: React.FC<ShapeProps> = ({
   const cy = height / 2;
   return (
     <Svg width={width} height={height} viewBox={`0 0 ${width} ${height}`}>
-      <Line x1={4} y1={cy} x2={width - 4} y2={cy} stroke={color} strokeWidth={strokeWidth} />
+      <Line x1={2} y1={cy} x2={width - 2} y2={cy} stroke={color} strokeWidth={strokeWidth} />
     </Svg>
   );
 };
@@ -181,9 +181,9 @@ export const ERDCardinality11Shape: React.FC<ShapeProps> = ({
   const cy = height * 0.65;
   return (
     <Svg width={width} height={height} viewBox={`0 0 ${width} ${height}`}>
-      <SvgText x={width * 0.15} y={height * 0.5} fontSize={14} fill={color} textAnchor="middle" fontWeight="600">1</SvgText>
-      <SvgText x={width * 0.85} y={height * 0.5} fontSize={14} fill={color} textAnchor="middle" fontWeight="600">1</SvgText>
-      <Line x1={4} y1={cy} x2={width - 4} y2={cy} stroke={color} strokeWidth={strokeWidth} />
+      <SvgText x={width * 0.15} y={height * 0.45} fontSize={12} fill={color} textAnchor="middle">1</SvgText>
+      <SvgText x={width * 0.85} y={height * 0.45} fontSize={12} fill={color} textAnchor="middle">1</SvgText>
+      <Line x1={2} y1={cy} x2={width - 2} y2={cy} stroke={color} strokeWidth={strokeWidth} />
     </Svg>
   );
 };
@@ -199,9 +199,9 @@ export const ERDCardinality1NShape: React.FC<ShapeProps> = ({
   const cy = height * 0.65;
   return (
     <Svg width={width} height={height} viewBox={`0 0 ${width} ${height}`}>
-      <SvgText x={width * 0.15} y={height * 0.5} fontSize={14} fill={color} textAnchor="middle" fontWeight="600">1</SvgText>
-      <SvgText x={width * 0.85} y={height * 0.5} fontSize={14} fill={color} textAnchor="middle" fontWeight="600">N</SvgText>
-      <Line x1={4} y1={cy} x2={width - 4} y2={cy} stroke={color} strokeWidth={strokeWidth} />
+      <SvgText x={width * 0.15} y={height * 0.45} fontSize={12} fill={color} textAnchor="middle">1</SvgText>
+      <SvgText x={width * 0.85} y={height * 0.45} fontSize={12} fill={color} textAnchor="middle">N</SvgText>
+      <Line x1={2} y1={cy} x2={width - 2} y2={cy} stroke={color} strokeWidth={strokeWidth} />
     </Svg>
   );
 };
@@ -217,9 +217,9 @@ export const ERDCardinalityN1Shape: React.FC<ShapeProps> = ({
   const cy = height * 0.65;
   return (
     <Svg width={width} height={height} viewBox={`0 0 ${width} ${height}`}>
-      <SvgText x={width * 0.15} y={height * 0.5} fontSize={14} fill={color} textAnchor="middle" fontWeight="600">N</SvgText>
-      <SvgText x={width * 0.85} y={height * 0.5} fontSize={14} fill={color} textAnchor="middle" fontWeight="600">1</SvgText>
-      <Line x1={4} y1={cy} x2={width - 4} y2={cy} stroke={color} strokeWidth={strokeWidth} />
+      <SvgText x={width * 0.15} y={height * 0.45} fontSize={12} fill={color} textAnchor="middle">N</SvgText>
+      <SvgText x={width * 0.85} y={height * 0.45} fontSize={12} fill={color} textAnchor="middle">1</SvgText>
+      <Line x1={2} y1={cy} x2={width - 2} y2={cy} stroke={color} strokeWidth={strokeWidth} />
     </Svg>
   );
 };
@@ -235,9 +235,9 @@ export const ERDCardinalityMNShape: React.FC<ShapeProps> = ({
   const cy = height * 0.65;
   return (
     <Svg width={width} height={height} viewBox={`0 0 ${width} ${height}`}>
-      <SvgText x={width * 0.15} y={height * 0.5} fontSize={14} fill={color} textAnchor="middle" fontWeight="600">M</SvgText>
-      <SvgText x={width * 0.85} y={height * 0.5} fontSize={14} fill={color} textAnchor="middle" fontWeight="600">N</SvgText>
-      <Line x1={4} y1={cy} x2={width - 4} y2={cy} stroke={color} strokeWidth={strokeWidth} />
+      <SvgText x={width * 0.15} y={height * 0.45} fontSize={12} fill={color} textAnchor="middle">M</SvgText>
+      <SvgText x={width * 0.85} y={height * 0.45} fontSize={12} fill={color} textAnchor="middle">N</SvgText>
+      <Line x1={2} y1={cy} x2={width - 2} y2={cy} stroke={color} strokeWidth={strokeWidth} />
     </Svg>
   );
 };

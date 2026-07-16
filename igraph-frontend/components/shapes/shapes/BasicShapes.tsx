@@ -1,5 +1,5 @@
 import React from 'react';
-import { Svg, Rect, Ellipse, Polygon, Circle, Line, G, Path } from 'react-native-svg';
+import { Svg, Rect, Ellipse, Polygon, Circle, Line, Path } from 'react-native-svg';
 
 interface ShapeProps {
   width: number;
@@ -20,14 +20,13 @@ export const RectShape: React.FC<ShapeProps> = ({
 }) => (
   <Svg width={width} height={height} viewBox={`0 0 ${width} ${height}`}>
     <Rect
-      x={4}
-      y={4}
-      width={width - 8}
-      height={height - 8}
+      x={2}
+      y={2}
+      width={width - 4}
+      height={height - 4}
       fill={fillColor}
       stroke={color}
       strokeWidth={strokeWidth}
-      rx={2}
     />
   </Svg>
 );
@@ -43,14 +42,14 @@ export const RoundedRectShape: React.FC<ShapeProps> = ({
 }) => (
   <Svg width={width} height={height} viewBox={`0 0 ${width} ${height}`}>
     <Rect
-      x={4}
-      y={4}
-      width={width - 8}
-      height={height - 8}
+      x={2}
+      y={2}
+      width={width - 4}
+      height={height - 4}
       fill={fillColor}
       stroke={color}
       strokeWidth={strokeWidth}
-      rx={width * 0.15}
+      rx={Math.min(width, height) * 0.15}
     />
   </Svg>
 );
@@ -97,8 +96,8 @@ export const EllipseShape: React.FC<ShapeProps> = ({
       <Ellipse
         cx={cx}
         cy={cy}
-        rx={width / 2 - 4}
-        ry={height / 2 - 4}
+        rx={width / 2 - 1}
+        ry={height / 2 - 1}
         fill={fillColor}
         stroke={color}
         strokeWidth={strokeWidth}
@@ -121,7 +120,7 @@ export const DiamondShape: React.FC<ShapeProps> = ({
   return (
     <Svg width={width} height={height} viewBox={`0 0 ${width} ${height}`}>
       <Polygon
-        points={`${cx},4 ${width - 4},${cy} ${cx},${height - 4} 4,${cy}`}
+        points={`${cx},2 ${width - 2},${cy} ${cx},${height - 2} 2,${cy}`}
         fill={fillColor}
         stroke={color}
         strokeWidth={strokeWidth}
@@ -143,7 +142,7 @@ export const TriangleShape: React.FC<ShapeProps> = ({
   return (
     <Svg width={width} height={height} viewBox={`0 0 ${width} ${height}`}>
       <Polygon
-        points={`${cx},4 ${width - 4},${height - 4} 4,${height - 4}`}
+        points={`${cx},2 ${width - 2},${height - 2} 2,${height - 2}`}
         fill={fillColor}
         stroke={color}
         strokeWidth={strokeWidth}
@@ -160,18 +159,23 @@ export const ParallelogramShape: React.FC<ShapeProps> = ({
   color = '#1a1f36',
   fillColor = '#ffffff',
   strokeWidth = 2,
-}) => (
-  <Svg width={width} height={height} viewBox={`0 0 ${width} ${height}`}>
-    <Polygon
-      points={`${width * 0.2},4 ${width - 4},4 ${width * 0.8},${height - 4} 4,${height - 4}`}
-      fill={fillColor}
-      stroke={color}
-      strokeWidth={strokeWidth}
-    />
-  </Svg>
-);
+}) => {
+  const offset = width * 0.18;
+  return (
+    <Svg width={width} height={height} viewBox={`0 0 ${width} ${height}`}>
+      <Polygon
+        points={`${offset},2 ${width - 2},2 ${width - offset},${height - 2} 2,${height - 2}`}
+        fill={fillColor}
+        stroke={color}
+        strokeWidth={strokeWidth}
+      />
+    </Svg>
+  );
+};
 
 // ─── Cylinder (Database) ──────────────────────────────────────────────────
+// Mirrors CylinderShapeCanvas: straight sides + bottom arc (fillAndStroke),
+// an elliptical top cap drawn over it, then the bottom arc re-stroked.
 
 export const CylinderShape: React.FC<ShapeProps> = ({
   width,
@@ -180,26 +184,31 @@ export const CylinderShape: React.FC<ShapeProps> = ({
   fillColor = '#ffffff',
   strokeWidth = 2,
 }) => {
+  const rx = (width - 4) / 2;
+  const ry = 6;
   const cx = width / 2;
+  const topCy = ry + 2;
+  const botCy = height - ry - 2;
   return (
     <Svg width={width} height={height} viewBox={`0 0 ${width} ${height}`}>
-      <Ellipse
-        cx={cx}
-        cy={height - 8}
-        rx={width / 2 - 4}
-        ry={6}
+      <Path
+        d={`M2,${topCy} L2,${botCy} A${rx},${ry} 0 0,0 ${width - 2},${botCy} L${width - 2},${topCy} Z`}
         fill={fillColor}
         stroke={color}
         strokeWidth={strokeWidth}
       />
-      <Line x1={4} y1={8} x2={4} y2={height - 8} stroke={color} strokeWidth={strokeWidth} />
-      <Line x1={width - 4} y1={8} x2={width - 4} y2={height - 8} stroke={color} strokeWidth={strokeWidth} />
       <Ellipse
         cx={cx}
-        cy={8}
-        rx={width / 2 - 4}
-        ry={6}
+        cy={topCy}
+        rx={rx}
+        ry={ry}
         fill={fillColor}
+        stroke={color}
+        strokeWidth={strokeWidth}
+      />
+      <Path
+        d={`M2,${botCy} A${rx},${ry} 0 0,0 ${width - 2},${botCy}`}
+        fill="none"
         stroke={color}
         strokeWidth={strokeWidth}
       />
@@ -208,6 +217,7 @@ export const CylinderShape: React.FC<ShapeProps> = ({
 };
 
 // ─── Document (paper shape with wavy bottom and text lines) ────────────────
+// Mirrors DocumentShapeCanvas's two-bump curveTo wave exactly.
 
 export const DocumentShape: React.FC<ShapeProps> = ({
   width,
@@ -216,52 +226,45 @@ export const DocumentShape: React.FC<ShapeProps> = ({
   fillColor = '#ffffff',
   strokeWidth = 2,
 }) => {
-  const cx = width / 2;
-  // Paper/document shape with wavy bottom
   return (
     <Svg width={width} height={height} viewBox={`0 0 ${width} ${height}`}>
-      {/* Paper body with wavy bottom */}
       <Path
-        d={`M4,4 L${width - 4},4 L${width - 4},${height - 10} 
-           C${width * 0.88},${height - 14} ${width * 0.78},${height - 6} ${width * 0.7},${height - 10} 
-           C${width * 0.6},${height - 14} ${width * 0.52},${height - 6} ${width * 0.44},${height - 10} 
-           C${width * 0.35},${height - 14} ${width * 0.25},${height - 6} ${width * 0.15},${height - 10} 
-           C${width * 0.08},${height - 14} ${width * 0.04},${height - 10} 4,${height - 10} Z`}
+        d={`M0,0 L${width},0 L${width},${height * 0.8}
+           C${width * 0.75},${height * 0.7} ${width * 0.6},${height * 0.9} ${width * 0.5},${height * 0.8}
+           C${width * 0.4},${height * 0.7} ${width * 0.2},${height * 0.9} 0,${height * 0.8} Z`}
         fill={fillColor}
         stroke={color}
         strokeWidth={strokeWidth}
-        strokeLinejoin="round"
-      />
-      {/* Text lines inside the document */}
-      <Line
-        x1={width * 0.12}
-        y1={height * 0.3}
-        x2={width * 0.88}
-        y2={height * 0.3}
-        stroke="#D1D5DB"
-        strokeWidth={2}
-        strokeLinecap="round"
       />
       <Line
-        x1={width * 0.12}
-        y1={height * 0.46}
-        x2={width * 0.88}
-        y2={height * 0.46}
-        stroke="#D1D5DB"
-        strokeWidth={2}
-        strokeLinecap="round"
+        x1={10}
+        y1={12}
+        x2={width - 10}
+        y2={12}
+        stroke={color}
+        strokeWidth={1}
+        opacity={0.3}
+      />
+      <Line
+        x1={10}
+        y1={20}
+        x2={width - 10}
+        y2={20}
+        stroke={color}
+        strokeWidth={1}
+        opacity={0.3}
       />
     </Svg>
   );
 };
 
 // ─── Folder ─────────────────────────────────────────────────────────────────
+// Canvas always fills #fef9c3 regardless of style, so the preview does too.
 
 export const FolderShape: React.FC<ShapeProps> = ({
   width,
   height,
   color = '#1a1f36',
-  fillColor = '#fef9c3',
   strokeWidth = 2,
 }) => {
   const tabWidth = width * 0.25;
@@ -269,38 +272,37 @@ export const FolderShape: React.FC<ShapeProps> = ({
   return (
     <Svg width={width} height={height} viewBox={`0 0 ${width} ${height}`}>
       <Path
-        d={`M4,${tabHeight + 4} L${tabWidth + 4},${tabHeight + 4} L${tabWidth + 8},4 L${width - 4},4 L${width - 4},${height - 4} L4,${height - 4} Z`}
-        fill={fillColor}
+        d={`M2,${tabHeight + 2} L${tabWidth + 2},${tabHeight + 2} L${tabWidth + 6},2 L${width - 2},2 L${width - 2},${height - 2} L2,${height - 2} Z`}
+        fill="#fef9c3"
         stroke={color}
         strokeWidth={strokeWidth}
-        strokeLinejoin="round"
       />
     </Svg>
   );
 };
 
 // ─── Cloud ─────────────────────────────────────────────────────────────────
+// Canvas always fills #e0f2fe regardless of style, so the preview does too.
 
 export const CloudShape: React.FC<ShapeProps> = ({
   width,
   height,
   color = '#1a1f36',
-  fillColor = '#e0f2fe',
   strokeWidth = 2,
 }) => {
   const cx = width / 2;
-  const cy = height / 2;
   const r = Math.min(width, height) * 0.4;
   return (
     <Svg width={width} height={height} viewBox={`0 0 ${width} ${height}`}>
       <Path
-        d={`M${cx - r * 0.6} ${height - 6} C${cx - r * 0.9} ${height - 6} ${cx - r} ${height - 10} ${cx - r} ${height - 16} 
-           C${cx - r} ${height - 22} ${cx - r * 0.8} ${height - 26} ${cx - r * 0.5} ${height - 27} 
-           C${cx - r * 0.6} ${height - 30} ${cx - r * 0.3} ${height - 34} ${cx} ${height - 34} 
-           C${cx + r * 0.3} ${height - 34} ${cx + r * 0.5} ${height - 30} ${cx + r * 0.4} ${height - 27} 
-           C${cx + r * 0.7} ${height - 26} ${cx + r * 0.9} ${height - 22} ${cx + r} ${height - 16} 
-           C${cx + r} ${height - 10} ${cx + r * 0.8} ${height - 6} ${cx + r * 0.5} ${height - 6} Z`}
-        fill={fillColor}
+        d={`M${cx - r * 0.6},${height - 6}
+           A${r * 0.9},${r * 0.5} 0 0,1 ${cx - r},${height - 16}
+           A${r * 0.8},${r * 0.4} 0 0,1 ${cx - r * 0.5},${height - 27}
+           A${r * 0.6},${r * 0.3} 0 0,1 ${cx},${height - 34}
+           A${r * 0.6},${r * 0.3} 0 0,1 ${cx + r * 0.4},${height - 27}
+           A${r * 0.7},${r * 0.4} 0 0,1 ${cx + r},${height - 16}
+           A${r * 0.8},${r * 0.4} 0 0,1 ${cx + r * 0.5},${height - 6} Z`}
+        fill="#e0f2fe"
         stroke={color}
         strokeWidth={strokeWidth}
       />
@@ -309,37 +311,36 @@ export const CloudShape: React.FC<ShapeProps> = ({
 };
 
 // ─── Note (Standalone) ─────────────────────────────────────────────────────
+// Canvas always fills #fef9c3 regardless of style, so the preview does too.
 
 export const NoteStandaloneShape: React.FC<ShapeProps> = ({
   width,
   height,
   color = '#1a1f36',
-  fillColor = '#fef9c3',
   strokeWidth = 2,
 }) => {
   const fold = Math.min(width, height) * 0.2;
   return (
     <Svg width={width} height={height} viewBox={`0 0 ${width} ${height}`}>
       <Path
-        d={`M4,4 L${width - fold - 4},4 L${width - 4},${fold + 4} L${width - 4},${height - 4} L4,${height - 4} Z`}
-        fill={fillColor}
-        stroke={color}
-        strokeWidth={strokeWidth}
-        strokeLinejoin="round"
-      />
-      <Line
-        x1={width - fold - 4}
-        y1={4}
-        x2={width - fold - 4}
-        y2={fold + 4}
+        d={`M2,2 L${width - fold - 2},2 L${width - 2},${fold + 2} L${width - 2},${height - 2} L2,${height - 2} Z`}
+        fill="#fef9c3"
         stroke={color}
         strokeWidth={strokeWidth}
       />
       <Line
-        x1={width - fold - 4}
-        y1={fold + 4}
-        x2={width - 4}
-        y2={fold + 4}
+        x1={width - fold - 2}
+        y1={2}
+        x2={width - fold - 2}
+        y2={fold + 2}
+        stroke={color}
+        strokeWidth={strokeWidth}
+      />
+      <Line
+        x1={width - fold - 2}
+        y1={fold + 2}
+        x2={width - 2}
+        y2={fold + 2}
         stroke={color}
         strokeWidth={strokeWidth}
       />
@@ -348,6 +349,8 @@ export const NoteStandaloneShape: React.FC<ShapeProps> = ({
 };
 
 // ─── Actor ──────────────────────────────────────────────────────────────────
+// Mirrors ActorShapeCanvas's proportions (head radius scales with size,
+// instead of a fixed pixel radius).
 
 export const ActorShape: React.FC<ShapeProps> = ({
   width,
@@ -356,14 +359,18 @@ export const ActorShape: React.FC<ShapeProps> = ({
   strokeWidth = 2,
 }) => {
   const cx = width / 2;
-  const h = height;
+  const headR = Math.min(width, height) * 0.12;
+  const headCY = headR + 4;
+  const bodyTop = headCY + headR;
+  const bodyBot = height * 0.72;
+  const armY = bodyTop + (bodyBot - bodyTop) * 0.3;
   return (
     <Svg width={width} height={height} viewBox={`0 0 ${width} ${height}`}>
-      <Circle cx={cx} cy={h * 0.22} r={5} fill="none" stroke={color} strokeWidth={strokeWidth} />
-      <Line x1={cx} y1={h * 0.38} x2={cx} y2={h * 0.68} stroke={color} strokeWidth={strokeWidth} />
-      <Line x1={cx - 10} y1={h * 0.48} x2={cx + 10} y2={h * 0.48} stroke={color} strokeWidth={strokeWidth} />
-      <Line x1={cx} y1={h * 0.68} x2={cx - 10} y2={h * 0.9} stroke={color} strokeWidth={strokeWidth} />
-      <Line x1={cx} y1={h * 0.68} x2={cx + 10} y2={h * 0.9} stroke={color} strokeWidth={strokeWidth} />
+      <Circle cx={cx} cy={headCY} r={headR} fill="none" stroke={color} strokeWidth={strokeWidth} />
+      <Line x1={cx} y1={bodyTop} x2={cx} y2={bodyBot} stroke={color} strokeWidth={strokeWidth} />
+      <Line x1={width * 0.2} y1={armY} x2={width * 0.8} y2={armY} stroke={color} strokeWidth={strokeWidth} />
+      <Line x1={cx} y1={bodyBot} x2={width * 0.2} y2={height - 4} stroke={color} strokeWidth={strokeWidth} />
+      <Line x1={cx} y1={bodyBot} x2={width * 0.8} y2={height - 4} stroke={color} strokeWidth={strokeWidth} />
     </Svg>
   );
 };
@@ -379,9 +386,9 @@ export const ConnectorArrowShape: React.FC<ShapeProps> = ({
   const cy = height / 2;
   return (
     <Svg width={width} height={height} viewBox={`0 0 ${width} ${height}`}>
-      <Line x1={4} y1={cy} x2={width - 8} y2={cy} stroke={color} strokeWidth={strokeWidth} />
+      <Line x1={2} y1={cy} x2={width - 10} y2={cy} stroke={color} strokeWidth={strokeWidth} />
       <Polygon
-        points={`${width - 8},${cy} ${width - 16},${cy - 5} ${width - 16},${cy + 5}`}
+        points={`${width - 10},${cy - 5} ${width - 2},${cy} ${width - 10},${cy + 5}`}
         fill={color}
       />
     </Svg>
@@ -403,24 +410,22 @@ export const DoubleRectShape: React.FC<ShapeProps> = ({
 }) => (
   <Svg width={width} height={height} viewBox={`0 0 ${width} ${height}`}>
     <Rect
-      x={4}
-      y={4}
-      width={width - 8}
-      height={height - 8}
+      x={2}
+      y={2}
+      width={width - 4}
+      height={height - 4}
       fill={fillColor}
       stroke={color}
       strokeWidth={strokeWidth}
-      rx={2}
     />
     <Rect
-      x={8}
-      y={8}
-      width={width - 16}
-      height={height - 16}
+      x={6}
+      y={6}
+      width={width - 12}
+      height={height - 12}
       fill="none"
       stroke={color}
-      strokeWidth={1.5}
-      rx={2}
+      strokeWidth={strokeWidth}
     />
   </Svg>
 );
@@ -439,16 +444,16 @@ export const DoubleRhombusShape: React.FC<ShapeProps> = ({
   return (
     <Svg width={width} height={height} viewBox={`0 0 ${width} ${height}`}>
       <Polygon
-        points={`${cx},4 ${width - 4},${cy} ${cx},${height - 4} 4,${cy}`}
+        points={`${cx},2 ${width - 2},${cy} ${cx},${height - 2} 2,${cy}`}
         fill={fillColor}
         stroke={color}
         strokeWidth={strokeWidth}
       />
       <Polygon
-        points={`${cx},8 ${width - 8},${cy} ${cx},${height - 8} 8,${cy}`}
+        points={`${cx},6 ${width - 6},${cy} ${cx},${height - 6} 6,${cy}`}
         fill="none"
         stroke={color}
-        strokeWidth={1.5}
+        strokeWidth={strokeWidth}
       />
     </Svg>
   );
@@ -470,8 +475,8 @@ export const MultiOvalShape: React.FC<ShapeProps> = ({
       <Ellipse
         cx={cx}
         cy={cy}
-        rx={width / 2 - 4}
-        ry={height / 2 - 4}
+        rx={width / 2 - 2}
+        ry={height / 2 - 2}
         fill={fillColor}
         stroke={color}
         strokeWidth={strokeWidth}
@@ -479,11 +484,11 @@ export const MultiOvalShape: React.FC<ShapeProps> = ({
       <Ellipse
         cx={cx}
         cy={cy}
-        rx={width / 2 - 8}
-        ry={height / 2 - 8}
+        rx={width / 2 - 6}
+        ry={height / 2 - 6}
         fill="none"
         stroke={color}
-        strokeWidth={1.5}
+        strokeWidth={strokeWidth}
       />
     </Svg>
   );
@@ -499,9 +504,9 @@ export const LineShape: React.FC<ShapeProps> = ({
 }) => (
   <Svg width={width} height={height} viewBox={`0 0 ${width} ${height}`}>
     <Line
-      x1={4}
+      x1={2}
       y1={height / 2}
-      x2={width - 4}
+      x2={width - 2}
       y2={height / 2}
       stroke={color}
       strokeWidth={strokeWidth}
@@ -516,20 +521,17 @@ export const TextShape: React.FC<ShapeProps> = ({
   height,
   color = '#1a1f36',
 }) => {
-  const cx = width / 2;
-  const cy = height / 2;
   return (
     <Svg width={width} height={height} viewBox={`0 0 ${width} ${height}`}>
       <Rect
-        x={4}
-        y={4}
-        width={width - 8}
-        height={height - 8}
+        x={2}
+        y={2}
+        width={width - 4}
+        height={height - 4}
         fill="none"
         stroke={color}
         strokeWidth={1}
         strokeDasharray="3,3"
-        rx={2}
       />
     </Svg>
   );
@@ -546,15 +548,14 @@ export const DashedRectShape: React.FC<ShapeProps> = ({
 }) => (
   <Svg width={width} height={height} viewBox={`0 0 ${width} ${height}`}>
     <Rect
-      x={4}
-      y={4}
-      width={width - 8}
-      height={height - 8}
+      x={2}
+      y={2}
+      width={width - 4}
+      height={height - 4}
       fill={fillColor}
       stroke={color}
       strokeWidth={strokeWidth}
       strokeDasharray="6,4"
-      rx={2}
     />
   </Svg>
 );
@@ -567,22 +568,24 @@ export const PredefinedShape: React.FC<ShapeProps> = ({
   color = '#1a1f36',
   fillColor = '#ffffff',
   strokeWidth = 2,
-}) => (
-  <Svg width={width} height={height} viewBox={`0 0 ${width} ${height}`}>
-    <Rect
-      x={4}
-      y={4}
-      width={width - 8}
-      height={height - 8}
-      fill={fillColor}
-      stroke={color}
-      strokeWidth={strokeWidth}
-      rx={2}
-    />
-    <Line x1={10} y1={4} x2={10} y2={height - 4} stroke={color} strokeWidth={strokeWidth} />
-    <Line x1={width - 10} y1={4} x2={width - 10} y2={height - 4} stroke={color} strokeWidth={strokeWidth} />
-  </Svg>
-);
+}) => {
+  const m = 8;
+  return (
+    <Svg width={width} height={height} viewBox={`0 0 ${width} ${height}`}>
+      <Rect
+        x={2}
+        y={2}
+        width={width - 4}
+        height={height - 4}
+        fill={fillColor}
+        stroke={color}
+        strokeWidth={strokeWidth}
+      />
+      <Line x1={m} y1={2} x2={m} y2={height - 2} stroke={color} strokeWidth={strokeWidth} />
+      <Line x1={width - m} y1={2} x2={width - m} y2={height - 2} stroke={color} strokeWidth={strokeWidth} />
+    </Svg>
+  );
+};
 
 // ─── FLOWCHART SHAPES ──────────────────────────────────────────────────────
 
@@ -602,7 +605,6 @@ export const PentagonShape: React.FC<ShapeProps> = ({
         fill={fillColor}
         stroke={color}
         strokeWidth={strokeWidth}
-        strokeLinejoin="round"
       />
     </Svg>
   );
@@ -622,7 +624,6 @@ export const TrapezoidShape: React.FC<ShapeProps> = ({
       fill={fillColor}
       stroke={color}
       strokeWidth={strokeWidth}
-      strokeLinejoin="round"
     />
   </Svg>
 );
@@ -641,7 +642,6 @@ export const DShape: React.FC<ShapeProps> = ({
       fill={fillColor}
       stroke={color}
       strokeWidth={strokeWidth}
-      strokeLinejoin="round"
     />
   </Svg>
 );
@@ -665,7 +665,6 @@ export const HexagonShape: React.FC<ShapeProps> = ({
         fill={fillColor}
         stroke={color}
         strokeWidth={strokeWidth}
-        strokeLinejoin="round"
       />
     </Svg>
   );
@@ -685,7 +684,6 @@ export const DisplayShape: React.FC<ShapeProps> = ({
       fill={fillColor}
       stroke={color}
       strokeWidth={strokeWidth}
-      strokeLinejoin="round"
     />
   </Svg>
 );
@@ -706,7 +704,6 @@ export const AnnotationShape: React.FC<ShapeProps> = ({
         fill="none"
         stroke={color}
         strokeWidth={strokeWidth}
-        strokeLinejoin="round"
       />
       {/* Dashed connector line */}
       <Line

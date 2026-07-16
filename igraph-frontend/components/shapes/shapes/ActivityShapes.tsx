@@ -18,7 +18,7 @@ export const UMLInitialNodeShape: React.FC<ShapeProps> = ({
 }) => {
   const cx = width / 2;
   const cy = height / 2;
-  const r = Math.min(width, height) / 2 - 4;
+  const r = Math.min(width, height) / 2 - 2;
   return (
     <Svg width={width} height={height} viewBox={`0 0 ${width} ${height}`}>
       <Circle cx={cx} cy={cy} r={r} fill={color} />
@@ -38,7 +38,7 @@ export const UMLActivityShape: React.FC<ShapeProps> = ({
   const r = Math.min(width, height) * 0.15;
   return (
     <Svg width={width} height={height} viewBox={`0 0 ${width} ${height}`}>
-      <Rect x={4} y={4} width={width - 8} height={height - 8} fill={fillColor} stroke={color} strokeWidth={strokeWidth} rx={r} />
+      <Rect x={2} y={2} width={width - 4} height={height - 4} fill={fillColor} stroke={color} strokeWidth={strokeWidth} rx={r} />
     </Svg>
   );
 };
@@ -57,7 +57,7 @@ export const UMLDecisionShape: React.FC<ShapeProps> = ({
   return (
     <Svg width={width} height={height} viewBox={`0 0 ${width} ${height}`}>
       <Polygon
-        points={`${cx},4 ${width - 4},${cy} ${cx},${height - 4} 4,${cy}`}
+        points={`${cx},2 ${width - 2},${cy} ${cx},${height - 2} 2,${cy}`}
         fill={fillColor}
         stroke={color}
         strokeWidth={strokeWidth}
@@ -72,13 +72,12 @@ export const UMLMergeShape: React.FC<ShapeProps> = ({
   width,
   height,
   color = '#1a1f36',
-  strokeWidth = 2,
 }) => {
   const bar = Math.min(height, 10);
   const y = (height - bar) / 2;
   return (
     <Svg width={width} height={height} viewBox={`0 0 ${width} ${height}`}>
-      <Rect x={4} y={y} width={width - 8} height={bar} fill={color} />
+      <Rect x={2} y={y} width={width - 4} height={bar} fill={color} />
     </Svg>
   );
 };
@@ -89,13 +88,12 @@ export const UMLForkShape: React.FC<ShapeProps> = ({
   width,
   height,
   color = '#1a1f36',
-  strokeWidth = 2,
 }) => {
   const bar = Math.min(height, 10);
   const y = (height - bar) / 2;
   return (
     <Svg width={width} height={height} viewBox={`0 0 ${width} ${height}`}>
-      <Rect x={4} y={y} width={width - 8} height={bar} fill={color} />
+      <Rect x={2} y={y} width={width - 4} height={bar} fill={color} />
     </Svg>
   );
 };
@@ -112,9 +110,9 @@ export const UMLControlFlowShape: React.FC<ShapeProps> = ({
   const arrow = 10;
   return (
     <Svg width={width} height={height} viewBox={`0 0 ${width} ${height}`}>
-      <Line x1={4} y1={cy} x2={width - arrow - 4} y2={cy} stroke={color} strokeWidth={strokeWidth} />
+      <Line x1={2} y1={cy} x2={width - arrow - 2} y2={cy} stroke={color} strokeWidth={strokeWidth} />
       <Polygon
-        points={`${width - 4},${cy} ${width - arrow - 4},${cy - 5} ${width - arrow - 4},${cy + 5}`}
+        points={`${width - 2},${cy} ${width - arrow - 2},${cy - 5} ${width - arrow - 2},${cy + 5}`}
         fill={color}
       />
     </Svg>
@@ -134,16 +132,16 @@ export const UMLObjectFlowShape: React.FC<ShapeProps> = ({
   return (
     <Svg width={width} height={height} viewBox={`0 0 ${width} ${height}`}>
       <Line
-        x1={4}
+        x1={2}
         y1={cy}
-        x2={width - arrow - 4}
+        x2={width - arrow - 2}
         y2={cy}
         stroke={color}
         strokeWidth={strokeWidth}
         strokeDasharray="6,4"
       />
       <Polygon
-        points={`${width - 4},${cy} ${width - arrow - 4},${cy - 5} ${width - arrow - 4},${cy + 5}`}
+        points={`${width - 2},${cy} ${width - arrow - 2},${cy - 5} ${width - arrow - 2},${cy + 5}`}
         fill={color}
       />
     </Svg>
@@ -162,8 +160,8 @@ export const UMLSwimlaneShape: React.FC<ShapeProps> = ({
   const header = Math.min(40, height * 0.2);
   return (
     <Svg width={width} height={height} viewBox={`0 0 ${width} ${height}`}>
-      <Rect x={4} y={4} width={width - 8} height={height - 8} fill={fillColor} stroke={color} strokeWidth={strokeWidth} rx={2} />
-      <Line x1={4} y1={header + 4} x2={width - 4} y2={header + 4} stroke={color} strokeWidth={strokeWidth} />
+      <Rect x={2} y={2} width={width - 4} height={height - 4} fill={fillColor} stroke={color} strokeWidth={strokeWidth} />
+      <Line x1={2} y1={header + 2} x2={width - 2} y2={header + 2} stroke={color} strokeWidth={strokeWidth} />
     </Svg>
   );
 };
@@ -178,7 +176,7 @@ export const UMLActivityFinalShape: React.FC<ShapeProps> = ({
 }) => {
   const cx = width / 2;
   const cy = height / 2;
-  const r = Math.min(width, height) / 2 - 4;
+  const r = Math.min(width, height) / 2 - 2;
   const inner = r * 0.5;
   return (
     <Svg width={width} height={height} viewBox={`0 0 ${width} ${height}`}>
@@ -198,7 +196,7 @@ export const UMLFlowFinalShape: React.FC<ShapeProps> = ({
 }) => {
   const cx = width / 2;
   const cy = height / 2;
-  const r = Math.min(width, height) / 2 - 4;
+  const r = Math.min(width, height) / 2 - 2;
   const p = r * 0.5;
   return (
     <Svg width={width} height={height} viewBox={`0 0 ${width} ${height}`}>
@@ -221,10 +219,10 @@ export const UMLConstraintShape: React.FC<ShapeProps> = ({
   return (
     <Svg width={width} height={height} viewBox={`0 0 ${width} ${height}`}>
       <Rect
-        x={4}
-        y={4}
-        width={width - 8}
-        height={height - 8}
+        x={2}
+        y={2}
+        width={width - 4}
+        height={height - 4}
         fill="none"
         stroke={color}
         strokeWidth={strokeWidth}
