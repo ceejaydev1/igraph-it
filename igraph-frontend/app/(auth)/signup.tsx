@@ -795,7 +795,8 @@ export default function SignUp() {
       const provider = new GoogleAuthProvider();
       provider.addScope('email');
       provider.addScope('profile');
-      provider.setCustomParameters({ prompt: 'select_account' });
+      // See signin.tsx for why this is 'login' and not 'select_account'.
+      provider.setCustomParameters({ prompt: 'login' });
 
       if (Platform.OS === 'web') {
         const result = await signInWithPopup(auth, provider);

@@ -390,6 +390,8 @@ export default function ForgotPassword() {
       const provider = new GoogleAuthProvider();
       provider.addScope('email');
       provider.addScope('profile');
+      // See signin.tsx for why this is 'login' and not left at Google's default.
+      provider.setCustomParameters({ prompt: 'login' });
       const result = await signInWithPopup(auth, provider);
       const user = result.user;
       const idToken = await user.getIdToken();
