@@ -5,11 +5,39 @@ import API_BASE_URL from '../constants/api';
 console.log('🔗 AuthService initialized with URL:', API_BASE_URL);
 
 // STORAGE
+//
+// On web, tokens default to sessionStorage — cleared the moment the browser
+// (or tab) closes — rather than localStorage, which would otherwise leave a
+// 7-day-lived refresh token sitting on whatever machine the user signed in
+// on. This matters most on shared/lab computers, where localStorage meant
+// the next person to open the app could silently resume the previous
+// person's session. Checking "Remember me" at sign-in opts into localStorage
+// for users on their own device who don't want to re-authenticate every time.
+
+const AUTH_PERSIST_KEY = 'authPersistent';
+
+const isPersistentAuth = () => {
+  if (Platform.OS !== 'web') return true;
+  try {
+    return localStorage.getItem(AUTH_PERSIST_KEY) === 'true';
+  } catch {
+    return false;
+  }
+};
+
+// Call before storeTokens (i.e. at sign-in) to choose where this session's
+// tokens land. Native platforms already use SecureStore, which is scoped to
+// the device rather than a browser tab, so this only affects web.
+export const setAuthPersistence = (remember) => {
+  if (Platform.OS === 'web') {
+    localStorage.setItem(AUTH_PERSIST_KEY, remember ? 'true' : 'false');
+  }
+};
 
 const storage = {
   setItem: async (key, value) => {
     if (Platform.OS === 'web') {
-      localStorage.setItem(key, value);
+      (isPersistentAuth() ? localStorage : sessionStorage).setItem(key, value);
     } else {
       try {
         const SecureStore = await import('expo-secure-store');
@@ -23,7 +51,9 @@ const storage = {
   },
   getItem: async (key) => {
     if (Platform.OS === 'web') {
-      return localStorage.getItem(key);
+      // Tokens may be in either store depending on the persistence mode
+      // active when they were written, so check both.
+      return sessionStorage.getItem(key) ?? localStorage.getItem(key);
     } else {
       try {
         const SecureStore = await import('expo-secure-store');
@@ -38,6 +68,7 @@ const storage = {
   removeItem: async (key) => {
     if (Platform.OS === 'web') {
       localStorage.removeItem(key);
+      sessionStorage.removeItem(key);
     } else {
       try {
         const SecureStore = await import('expo-secure-store');
@@ -142,6 +173,7 @@ export const clearTokens = async () => {
   await storage.removeItem('refreshToken');
   if (Platform.OS === 'web') {
     localStorage.removeItem('user');
+    localStorage.removeItem(AUTH_PERSIST_KEY);
   }
 };
 
@@ -227,7 +259,7 @@ export const resendOTP = async (email) => {
 
 let pendingRequest = null;
 
-export const signIn = async (email, password, consentTimestamp = null) => {
+export const signIn = async (email, password, consentTimestamp = null, rememberMe = false) => {
   if (pendingRequest) {
     pendingRequest.abort();
   }
@@ -250,18 +282,19 @@ export const signIn = async (email, password, consentTimestamp = null) => {
     pendingRequest = null;
     
     if (response.data.success && response.data.data?.tokens) {
+      setAuthPersistence(rememberMe);
       const { accessToken, refreshToken } = response.data.data.tokens;
       await storeTokens(accessToken, refreshToken);
-      
+
       if (Platform.OS === 'web' && response.data.data.user) {
         localStorage.setItem('user', JSON.stringify(response.data.data.user));
       }
-      
+
       if (response.data.data.user) {
         setCachedUser(response.data.data.user);
       }
     }
-    
+
     return response.data;
   } catch (error) {
     pendingRequest = null;
@@ -270,16 +303,17 @@ export const signIn = async (email, password, consentTimestamp = null) => {
   }
 };
 
-export const googleAuth = async (idToken, consentTimestamp = null) => {
+export const googleAuth = async (idToken, consentTimestamp = null, rememberMe = false) => {
   try {
-    const payload = consentTimestamp 
+    const payload = consentTimestamp
       ? { idToken, consentTimestamp }
       : { idToken };
-    
+
     const response = await api.post('/auth/google', payload, {
       timeout: 45000, // Handles free-tier cold start (same as verifyResetOTP)
     });
     if (response.data.success && response.data.data?.tokens) {
+      setAuthPersistence(rememberMe);
       await storeTokens(
         response.data.data.tokens.accessToken,
         response.data.data.tokens.refreshToken

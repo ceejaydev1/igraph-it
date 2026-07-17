@@ -641,7 +641,11 @@ export default function SignIn() {
       const provider = new GoogleAuthProvider();
       provider.addScope('email');
       provider.addScope('profile');
-      provider.setCustomParameters({ prompt: 'select_account' });
+      // 'select_account' silently lets Firebase pick whichever Google account
+      // is already signed into this browser session — on a shared machine
+      // that's how one student ends up authenticated as whoever used it
+      // last. 'login' forces an actual re-authentication step every time.
+      provider.setCustomParameters({ prompt: 'login' });
 
       const result = await signInWithPopup(auth, provider);
       stopWatchingFocus();
@@ -717,7 +721,7 @@ export default function SignIn() {
     const startTime = Date.now();
 
     try {
-      const result = await authService.signIn(email, password);
+      const result = await authService.signIn(email, password, null, rememberMe);
       const elapsed = Date.now() - startTime;
       if (elapsed < 500) await new Promise((r) => setTimeout(r, 500 - elapsed));
 

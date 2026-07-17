@@ -58,6 +58,14 @@ export const ICONS = {
     </Svg>
   ),
 
+  NewDiagram: ({ color = '#4a5568' }: { color?: string }) => (
+    <Svg width={22} height={22} viewBox="0 0 24 24" fill="none">
+      <Path d="M13 3H7C5.89543 3 5 3.89543 5 5V19C5 20.1046 5.89543 21 7 21H17C18.1046 21 19 20.1046 19 19V9L13 3Z" stroke={color} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" />
+      <Path d="M13 3V9H19" stroke={color} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" />
+      <Path d="M12 12V17M9.5 14.5H14.5" stroke={color} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" />
+    </Svg>
+  ),
+
   Handle: () => (
     <Svg width={36} height={4} viewBox="0 0 36 4">
       <Rect x="0" y="0" width="36" height="4" rx="2" fill="#d1d5db" />

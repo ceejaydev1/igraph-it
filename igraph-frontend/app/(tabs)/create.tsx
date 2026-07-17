@@ -1009,6 +1009,50 @@ export default function CreateScreen() {
     }
   }, [graphInstance, activeUmlType, pages, activePageId, router, setContextIsSaving]);
 
+  // ─── Start a new, blank diagram ──────────────────────────────────────────
+  // This screen deliberately never unmounts across tab switches (see
+  // Navbar's create-only router.navigate) so in-progress work survives
+  // accidentally tabbing away. But that also means nothing ever resets
+  // currentDiagramIdRef on its own — every Save keeps updating whichever
+  // diagram was last loaded/saved in this instance, with no way to detach
+  // from it. This gives the user an explicit way to do that.
+  const startNewDiagram = useCallback(() => {
+    currentDiagramIdRef.current = null;
+    loadedDiagramIdRef.current = null;
+    pageXmlCache.current.clear();
+
+    const freshPage = { id: generatePageId(), name: 'Page 1', xml: '' };
+    setPages([freshPage]);
+    setActivePageId(freshPage.id);
+    setDiagramName('Blank diagram');
+    diagramNameRef.current = 'Blank diagram';
+    setDiagramXml('');
+    diagramXmlRef.current = '';
+    graphInstance?.getDataModel()?.clear();
+
+    authService.getCurrentUserId().then((uid) => {
+      if (uid) {
+        AsyncStorage.setItem(activePointerKey(uid), JSON.stringify({ diagramId: null })).catch((e) => {
+          console.warn('Could not reset active diagram pointer:', e);
+        });
+      }
+    });
+  }, [graphInstance]);
+
+  const handleNewDiagram = useCallback(() => {
+    const isEmpty = !diagramXmlRef.current || diagramXmlRef.current.trim().length === 0;
+    if (isEmpty) {
+      startNewDiagram();
+      return;
+    }
+    confirmDialog(
+      'Start New Diagram',
+      'This clears the current diagram from this editor. Save it first if you want to keep it — otherwise unsaved changes will be lost.',
+      'Start New',
+      startNewDiagram
+    );
+  }, [startNewDiagram]);
+
   // ─── ✅ FIXED: Register save handler with context - Stable registration ──
 
   // Use ref to track the current handler to prevent re-registration loops
@@ -1590,6 +1634,13 @@ export default function CreateScreen() {
             >
               <ICONS.Close color="#4a5568" />
             </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.mobileTopBarBtn}
+              onPress={handleNewDiagram}
+              activeOpacity={0.7}
+            >
+              <ICONS.NewDiagram color="#4a5568" />
+            </TouchableOpacity>
           </View>
 
           <TextInput
@@ -1764,6 +1815,9 @@ export default function CreateScreen() {
           <View style={styles.navbarLeft}>
             <TouchableOpacity style={styles.navIconBtn} onPress={() => router.back()} activeOpacity={0.7}>
               <ICONS.Close color="#4a5568" />
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.navIconBtn} onPress={handleNewDiagram} activeOpacity={0.7}>
+              <ICONS.NewDiagram color="#4a5568" />
             </TouchableOpacity>
             <TextInput
               style={[styles.titleInput, styles.titleInputDesktop]}
