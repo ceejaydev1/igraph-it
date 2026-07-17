@@ -10,7 +10,9 @@ const {
   validateOTP,
   validateEmail,
   validateResetPassword,
-  validateGoogleAuth
+  validateGoogleAuth,
+  validateLinkGoogle,
+  validateSetPassword
 } = require('../middleware/validationMiddleware');
 const { protect } = require('../middleware/authMiddleware');
 
@@ -174,9 +176,10 @@ router.post('/signup',     ...authLimiters,      validateSignup, authController.
 router.post('/verify-otp', ...otpVerifyLimiters, validateOTP,    authController.verifyOTP);
 router.post('/resend-otp', ...otpLimiters,       validateEmail,  authController.resendOTP);
 
-// Authentication 
-router.post('/signin', ...authLimiters, validateSignin,     authController.signin);
-router.post('/google', ...authLimiters, validateGoogleAuth, authController.googleAuth);
+// Authentication
+router.post('/signin',       ...authLimiters, validateSignin,     authController.signin);
+router.post('/google',       ...authLimiters, validateGoogleAuth, authController.googleAuth);
+router.post('/link-google',  ...authLimiters, validateLinkGoogle, authController.linkGoogleAccount);
 
 // Password Management
 router.post('/forgot-password',  ...otpLimiters,           validateEmail,         authController.forgotPassword);
@@ -188,8 +191,9 @@ router.post('/refresh-token', authController.refreshToken);
 router.post('/logout',        protect, authController.logout);
 router.get('/me',             protect, authController.getCurrentUser);
 
-// Account Management 
+// Account Management
 router.put('/update-profile',   protect, authController.updateProfile);
 router.post('/change-password', protect, ...changePasswordLimiters, authController.changePassword);
+router.post('/set-password',    protect, ...changePasswordLimiters, validateSetPassword, authController.setPassword);
 
 module.exports = router;

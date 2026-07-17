@@ -363,10 +363,10 @@ const signin = async (req, res) => {
       return res.status(401).json({ success: false, message: 'Invalid email or password.' });
     }
 
-    if (user.auth_provider === 'google') {
+    if (user.auth_provider === 'google' && !user.password_hash) {
       return res.status(400).json({
         success: false,
-        message: 'This account uses Google Sign-In. Please sign in with Google.',
+        message: 'This account uses Google Sign-In. Please sign in with Google, or set a password from your Account settings.',
         code: 'GOOGLE_ACCOUNT'
       });
     }
@@ -410,7 +410,8 @@ const signin = async (req, res) => {
           fullName: user.full_name,
           email: user.email,
           profilePicture: user.profile_picture || null,
-          authProvider: user.auth_provider
+          authProvider: user.auth_provider,
+          hasPassword: !!user.password_hash
         },
         tokens: { accessToken, refreshToken }
       }
@@ -447,28 +448,64 @@ const googleAuth = async (req, res) => {
 
     const existingUserByEmail = await userModel.getUserByEmail(email);
 
-    if (existingUserByEmail && existingUserByEmail.auth_provider !== 'google') {
-      return res.status(409).json({
-        success: false,
-        message: 'This email is already registered with email/password. Please sign in using your email and password instead.',
-        code: 'EMAIL_ACCOUNT_EXISTS'
+    if (existingUserByEmail) {
+      // Already Google-capable (signed up via Google originally, or linked
+      // their password account to Google previously) — sign in as this
+      // existing user rather than creating a second doc under the Google uid.
+      const googleCapable = existingUserByEmail.auth_provider === 'google' || existingUserByEmail.google_linked === true;
+
+      if (!googleCapable) {
+        return res.status(409).json({
+          success: false,
+          message: 'This email already has a password-based account. Enter your password to link your Google sign-in.',
+          code: 'LINK_PASSWORD_REQUIRED'
+        });
+      }
+
+      const accessToken = generateAccessToken(existingUserByEmail.user_id, existingUserByEmail.email);
+      const refreshToken = generateRefreshToken(existingUserByEmail.user_id);
+
+      const sessionId = uuidv4();
+      const sessionExpiry = new Date();
+      sessionExpiry.setDate(sessionExpiry.getDate() + 7);
+
+      await db.collection('sessions').doc(sessionId).set({
+        session_id: sessionId,
+        user_id: existingUserByEmail.user_id,
+        refresh_token: refreshToken,
+        device_info: req.headers['user-agent'] || 'unknown',
+        created_at: new Date().toISOString(),
+        expires_at: sessionExpiry.toISOString()
+      });
+
+      return res.status(200).json({
+        success: true,
+        message: 'Google sign in successful!',
+        data: {
+          user: {
+            uid: existingUserByEmail.user_id,
+            fullName: existingUserByEmail.full_name,
+            email: existingUserByEmail.email,
+            profilePicture: existingUserByEmail.profile_picture || null,
+            authProvider: existingUserByEmail.auth_provider,
+            hasPassword: !!existingUserByEmail.password_hash
+          },
+          tokens: { accessToken, refreshToken }
+        }
       });
     }
 
-    let user = await userModel.getUserById(uid);
+    // No account at all for this email yet — brand-new Google-only signup.
+    await userModel.createUser(uid, {
+      fullName: name || 'Google User',
+      email,
+      passwordHash: null,
+      isVerified: true,
+      profilePicture: picture || null,
+      authProvider: 'google'
+    });
 
-    if (!user) {
-      await userModel.createUser(uid, {
-        fullName: name || 'Google User',
-        email,
-        passwordHash: null,
-        isVerified: true,
-        profilePicture: picture || null,
-        authProvider: 'google'
-      });
-
-      user = await userModel.getUserById(uid);
-    }
+    const user = await userModel.getUserById(uid);
 
     const accessToken = generateAccessToken(uid, email);
     const refreshToken = generateRefreshToken(uid);
@@ -495,7 +532,8 @@ const googleAuth = async (req, res) => {
           fullName: user.full_name,
           email: user.email,
           profilePicture: user.profile_picture || null,
-          authProvider: user.auth_provider
+          authProvider: user.auth_provider,
+          hasPassword: false
         },
         tokens: { accessToken, refreshToken }
       }
@@ -506,6 +544,106 @@ const googleAuth = async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Server error during Google authentication.'
+    });
+  }
+};
+
+// LINK GOOGLE ACCOUNT
+// An email/password user signing in with Google for the first time lands
+// here (via the LINK_PASSWORD_REQUIRED response above) — confirming their
+// existing password proves they own the account before we let Google sign
+// them into it going forward.
+
+const linkGoogleAccount = async (req, res) => {
+  try {
+    const { idToken, password } = req.body;
+
+    if (!idToken || !password) {
+      return res.status(400).json({
+        success: false,
+        message: 'ID token and password are required.'
+      });
+    }
+
+    let decodedToken;
+    try {
+      decodedToken = await auth.verifyIdToken(idToken);
+    } catch (err) {
+      console.error('Token verification failed:', err.message);
+      return res.status(401).json({
+        success: false,
+        message: 'Invalid Google token. Please try again.'
+      });
+    }
+
+    const { email } = decodedToken;
+    const user = await userModel.getUserByEmail(email);
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'No account found for this email.'
+      });
+    }
+
+    const alreadyGoogleCapable = user.auth_provider === 'google' || user.google_linked === true;
+
+    if (!alreadyGoogleCapable) {
+      if (!user.password_hash) {
+        return res.status(400).json({
+          success: false,
+          message: 'This account has no password set. Please sign in with Google directly.'
+        });
+      }
+
+      const passwordMatch = await bcrypt.compare(password, user.password_hash);
+      if (!passwordMatch) {
+        return res.status(401).json({
+          success: false,
+          message: 'Incorrect password.'
+        });
+      }
+
+      await userModel.updateUser(user.user_id, { google_linked: true });
+    }
+
+    const accessToken = generateAccessToken(user.user_id, user.email);
+    const refreshToken = generateRefreshToken(user.user_id);
+
+    const sessionId = uuidv4();
+    const sessionExpiry = new Date();
+    sessionExpiry.setDate(sessionExpiry.getDate() + 7);
+
+    await db.collection('sessions').doc(sessionId).set({
+      session_id: sessionId,
+      user_id: user.user_id,
+      refresh_token: refreshToken,
+      device_info: req.headers['user-agent'] || 'unknown',
+      created_at: new Date().toISOString(),
+      expires_at: sessionExpiry.toISOString()
+    });
+
+    res.status(200).json({
+      success: true,
+      message: 'Google account linked successfully!',
+      data: {
+        user: {
+          uid: user.user_id,
+          fullName: user.full_name,
+          email: user.email,
+          profilePicture: user.profile_picture || null,
+          authProvider: user.auth_provider,
+          hasPassword: !!user.password_hash
+        },
+        tokens: { accessToken, refreshToken }
+      }
+    });
+
+  } catch (error) {
+    console.error('Link Google account error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error while linking your Google account.'
     });
   }
 };
@@ -534,11 +672,11 @@ const forgotPassword = async (req, res) => {
       });
     }
 
-    if (user.auth_provider === 'google') {
-      console.log(`🔴 Google account detected for ${email} - blocking password reset`);
+    if (user.auth_provider === 'google' && !user.password_hash) {
+      console.log(`🔴 Google-only account detected for ${email} - blocking password reset`);
       return res.status(400).json({
         success: false,
-        message: 'This email is linked to a Google account. Please sign in with Google instead.',
+        message: 'This email is linked to a Google account with no password set. Please sign in with Google, or set a password first from your Account settings.',
         code: 'GOOGLE_ACCOUNT'
       });
     }
@@ -616,10 +754,10 @@ const verifyResetOTP = async (req, res) => {
       });
     }
 
-    if (user.auth_provider === 'google') {
+    if (user.auth_provider === 'google' && !user.password_hash) {
       return res.status(400).json({
         success: false,
-        message: 'This account uses Google Sign-In. Password reset is not available.',
+        message: 'This account uses Google Sign-In and has no password set. Password reset is not available.',
         code: 'GOOGLE_ACCOUNT'
       });
     }
@@ -680,7 +818,7 @@ const resetPassword = async (req, res) => {
       });
     }
 
-    if (user.auth_provider !== 'email') {
+    if (user.auth_provider !== 'email' && !user.password_hash) {
       return res.status(400).json({
         success: false,
         message: 'This account uses Google Sign-In. Password reset is not available.'
@@ -863,7 +1001,8 @@ const getCurrentUser = async (req, res) => {
           fullName: user.full_name,
           email: user.email,
           profilePicture: user.profile_picture || null,
-          authProvider: user.auth_provider
+          authProvider: user.auth_provider,
+          hasPassword: !!user.password_hash
         }
       }
     });
@@ -905,7 +1044,8 @@ const updateProfile = async (req, res) => {
           fullName: updatedUser.full_name,
           email: updatedUser.email,
           profilePicture: updatedUser.profile_picture || null,
-          authProvider: updatedUser.auth_provider
+          authProvider: updatedUser.auth_provider,
+          hasPassword: !!updatedUser.password_hash
         }
       }
     });
@@ -957,10 +1097,10 @@ const changePassword = async (req, res) => {
       return res.status(404).json({ success: false, message: 'User not found.' });
     }
 
-    if (user.auth_provider === 'google') {
+    if (user.auth_provider === 'google' && !user.password_hash) {
       return res.status(400).json({
         success: false,
-        message: 'Google users cannot change password. Please use Google Sign-In.'
+        message: 'Set a password first from your Account settings before you can change it.'
       });
     }
 
@@ -1007,6 +1147,101 @@ const changePassword = async (req, res) => {
   }
 };
 
+// SET PASSWORD
+// For a Google-only account (no password_hash yet) adding a password for
+// the first time, so it can also sign in with email/password afterward.
+// Requires a freshly-verified Google idToken (not the app's own JWT) as
+// proof of identity, since there's no existing password to check instead.
+
+const setPassword = async (req, res) => {
+  try {
+    const userId = req.user.uid;
+    const { idToken, newPassword } = req.body;
+
+    if (!idToken) {
+      return res.status(400).json({
+        success: false,
+        message: 'Please verify your Google account to continue.'
+      });
+    }
+
+    if (!newPassword || newPassword.length < 8) {
+      return res.status(400).json({
+        success: false,
+        message: 'New password must be at least 8 characters.'
+      });
+    }
+
+    const hasUpperCase = /[A-Z]/.test(newPassword);
+    const hasLowerCase = /[a-z]/.test(newPassword);
+    const hasNumber = /[0-9]/.test(newPassword);
+    const hasSpecial = /[!@#$%^&*(),.?":{}|<>]/.test(newPassword);
+
+    if (!hasUpperCase || !hasLowerCase || !hasNumber || !hasSpecial) {
+      return res.status(400).json({
+        success: false,
+        message: 'Password must contain at least one uppercase letter, one lowercase letter, one number, and one special character.'
+      });
+    }
+
+    const user = await userModel.getUserById(userId);
+    if (!user) {
+      return res.status(404).json({ success: false, message: 'User not found.' });
+    }
+
+    if (user.password_hash) {
+      return res.status(400).json({
+        success: false,
+        message: 'You already have a password set. Use Change Password to update it.'
+      });
+    }
+
+    let decodedToken;
+    try {
+      decodedToken = await auth.verifyIdToken(idToken);
+    } catch (err) {
+      console.error('Token verification failed:', err.message);
+      return res.status(401).json({
+        success: false,
+        message: 'Invalid Google token. Please try again.'
+      });
+    }
+
+    if (decodedToken.uid !== userId) {
+      return res.status(401).json({
+        success: false,
+        message: 'Google verification does not match your signed-in account.'
+      });
+    }
+
+    const saltRounds = 12;
+    const newPasswordHash = await bcrypt.hash(newPassword, saltRounds);
+    await userModel.updatePasswordHash(userId, newPasswordHash);
+
+    try {
+      await auth.updateUser(userId, { password: newPassword });
+      console.log(`✅ Firebase Auth password set for uid: ${userId}`);
+    } catch (firebaseError) {
+      console.error('Firebase Auth password set error:', firebaseError.message);
+    }
+
+    // Unlike changePassword, existing sessions stay valid — we're adding a
+    // credential, not changing/compromising one, so no need to force a
+    // re-login.
+    res.status(200).json({
+      success: true,
+      message: 'Password set successfully! You can now also sign in with your email and password.'
+    });
+
+  } catch (error) {
+    console.error('Set password error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to set password. Please try again.'
+    });
+  }
+};
+
 // MODULE EXPORTS
 
 module.exports = {
@@ -1016,6 +1251,7 @@ module.exports = {
   resendOTP,
   signin,
   googleAuth,
+  linkGoogleAccount,
   forgotPassword,
   verifyResetOTP,
   resetPassword,
@@ -1024,4 +1260,5 @@ module.exports = {
   getCurrentUser,
   updateProfile,
   changePassword,
+  setPassword,
 };
