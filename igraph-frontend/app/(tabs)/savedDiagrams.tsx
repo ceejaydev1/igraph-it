@@ -18,6 +18,7 @@ import {
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Svg, Path, Rect, Circle } from 'react-native-svg';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as authService from '../../services/authService';
 import API_BASE_URL from '../../constants/api';
 
@@ -833,6 +834,25 @@ export default function SavedDiagrams() {
         setSavedDiagrams(prev => prev.filter(d => d.id !== diagram.id));
         setDeleteModalVisible(false);
         showToast(`"${diagram.name}" has been deleted.`, 'success');
+
+        // Create screen caches the last-opened diagram locally (so it can
+        // resume it across tab switches / logins) keyed by its id. If this
+        // was that diagram, clear the cache — otherwise Create silently
+        // resumes editing a "ghost" of a now-deleted diagram, and saving it
+        // later 404s because the backend can't find that id anymore.
+        try {
+          const uid = await authService.getCurrentUserId();
+          if (uid) {
+            await AsyncStorage.removeItem(`diagram_draft_${uid}_${diagram.id}`);
+            const pointerRaw = await AsyncStorage.getItem(`diagram_active_${uid}`);
+            const pointer = pointerRaw ? JSON.parse(pointerRaw) : null;
+            if (pointer?.diagramId === diagram.id) {
+              await AsyncStorage.removeItem(`diagram_active_${uid}`);
+            }
+          }
+        } catch (cleanupError) {
+          console.warn('Could not clear local draft cache for deleted diagram:', cleanupError);
+        }
       } else {
         showToast(result.message || 'Failed to delete diagram', 'error');
       }

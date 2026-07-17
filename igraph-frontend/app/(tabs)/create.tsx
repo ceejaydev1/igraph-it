@@ -935,7 +935,7 @@ export default function CreateScreen() {
       });
 
       // Send to backend
-      const response = await authService.authFetch(url, {
+      let response = await authService.authFetch(url, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -944,14 +944,35 @@ export default function CreateScreen() {
       });
 
       console.log('📥 Response status:', response.status);
-      
+
+      // A 404 here means payload.id pointed at a diagram that no longer
+      // exists server-side — e.g. it was deleted from another device/tab,
+      // but this device's local draft cache still had the old id cached as
+      // "the diagram to keep updating". Don't lose the user's work over a
+      // dangling reference: retry once as a brand-new diagram instead of
+      // surfacing a confusing "Diagram not found" error.
+      if (response.status === 404 && payload.id) {
+        console.warn('⚠️ Referenced diagram id not found on server, retrying as a new diagram');
+        currentDiagramIdRef.current = null;
+        loadedDiagramIdRef.current = null;
+        const { id: _staleId, ...retryPayload } = payload;
+        response = await authService.authFetch(url, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(retryPayload)
+        });
+        console.log('📥 Retry response status:', response.status);
+      }
+
       // Check if response is OK before parsing JSON
       if (!response.ok) {
         const errorText = await response.text();
         console.error('❌ Server error response:', errorText);
         throw new Error(`Server error: ${response.status} - ${errorText || response.statusText}`);
       }
-      
+
       const result = await response.json();
       console.log('📥 Response data:', result);
 
