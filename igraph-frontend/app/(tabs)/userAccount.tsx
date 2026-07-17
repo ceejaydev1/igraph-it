@@ -22,7 +22,32 @@ import {
 import { useRouter } from 'expo-router';
 import { Svg, Path, Circle, Rect } from 'react-native-svg';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { initializeApp, getApps, FirebaseApp } from 'firebase/app';
+import { getAuth, signOut as firebaseSignOut, GoogleAuthProvider, signInWithPopup, Auth } from 'firebase/auth';
 import * as authService from '../../services/authService';
+
+// authService.logout() only clears iGraph IT's own tokens/session — it can't
+// touch Google's own browser session, but it should at least drop Firebase's
+// *local* cached credential so this tab stops acting as if that Google
+// account is still connected. Same lazy init pattern as the auth screens.
+const firebaseConfig = {
+  apiKey: process.env.EXPO_PUBLIC_FIREBASE_API_KEY,
+  authDomain: process.env.EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN,
+  projectId: process.env.EXPO_PUBLIC_FIREBASE_PROJECT_ID,
+  storageBucket: process.env.EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: process.env.EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
+  appId: process.env.EXPO_PUBLIC_FIREBASE_APP_ID,
+};
+
+let firebaseAuth: Auth | undefined;
+if (Platform.OS === 'web' && typeof window !== 'undefined') {
+  try {
+    const app: FirebaseApp = getApps().length ? getApps()[0] : initializeApp(firebaseConfig);
+    firebaseAuth = getAuth(app);
+  } catch (e: any) {
+    console.error('[Firebase] Init error:', e.message);
+  }
+}
 
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
   UIManager.setLayoutAnimationEnabledExperimental(true);
@@ -211,6 +236,15 @@ const EyeIcon = ({ visible }: { visible: boolean }) => (
 const CloseIcon = ({ color = '#0f172a' }: { color?: string }) => (
   <Svg width={22} height={22} viewBox="0 0 24 24" fill="none">
     <Path d="M18 6L6 18M6 6L18 18" stroke={color} strokeWidth={2.5} strokeLinecap="round" />
+  </Svg>
+);
+
+const GoogleIcon = () => (
+  <Svg width={18} height={18} viewBox="0 0 24 24">
+    <Path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4" />
+    <Path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853" />
+    <Path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05" />
+    <Path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335" />
   </Svg>
 );
 
@@ -530,9 +564,72 @@ const EditProfileModal = ({
   );
 };
 
-// PASSWORD CHANGE MODAL
+// PASSWORD RULES — shared by ChangePasswordModal and SetPasswordModal so
+// the live checklist/strength meter and the actual validation never drift
+// apart from each other.
 
 type PasswordFieldError = 'current' | 'new' | 'confirm' | null;
+
+const PASSWORD_RULES: { key: string; label: string; test: (pwd: string) => boolean }[] = [
+  { key: 'length', label: 'At least 8 characters', test: (p) => p.length >= 8 },
+  { key: 'upper', label: 'One uppercase letter', test: (p) => /[A-Z]/.test(p) },
+  { key: 'lower', label: 'One lowercase letter', test: (p) => /[a-z]/.test(p) },
+  { key: 'number', label: 'One number', test: (p) => /[0-9]/.test(p) },
+  { key: 'special', label: 'One special character', test: (p) => /[!@#$%^&*(),.?":{}|<>]/.test(p) },
+];
+
+const isPasswordValid = (pwd: string) => PASSWORD_RULES.every((r) => r.test(pwd));
+
+const getPasswordStrengthMeta = (pwd: string) => {
+  const score = PASSWORD_RULES.filter((r) => r.test(pwd)).length;
+  if (score >= 5) return { text: 'Strong', color: COLORS.success };
+  if (score >= 3) return { text: 'Good', color: COLORS.warning };
+  if (score > 0) return { text: 'Weak', color: COLORS.danger };
+  return { text: '', color: COLORS.gray200 };
+};
+
+const PasswordStrengthMeter = ({ password }: { password: string }) => {
+  if (!password) return null;
+  const score = PASSWORD_RULES.filter((r) => r.test(password)).length;
+  const meta = getPasswordStrengthMeta(password);
+  return (
+    <View style={styles.strengthMeterWrap}>
+      <View style={styles.strengthSegmentRow}>
+        {PASSWORD_RULES.map((_, i) => (
+          <View
+            key={i}
+            style={[styles.strengthSegment, i < score && { backgroundColor: meta.color }]}
+          />
+        ))}
+      </View>
+      {meta.text ? <Text style={[styles.strengthMeterText, { color: meta.color }]}>{meta.text}</Text> : null}
+    </View>
+  );
+};
+
+const PasswordChecklist = ({ password, isMobile }: { password: string; isMobile: boolean }) => (
+  <View style={styles.passwordChecklist}>
+    {PASSWORD_RULES.map((rule) => {
+      const met = rule.test(password);
+      return (
+        <View key={rule.key} style={styles.checklistRow}>
+          <View style={[styles.checklistDot, met && styles.checklistDotMet]}>
+            {met && (
+              <Svg width={8} height={8} viewBox="0 0 10 10">
+                <Path d="M2 5l2.5 2.5L8 3" stroke="#ffffff" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" fill="none" />
+              </Svg>
+            )}
+          </View>
+          <Text style={[styles.checklistText, met && styles.checklistTextMet, { fontSize: isMobile ? 11 : 12 }]}>
+            {rule.label}
+          </Text>
+        </View>
+      );
+    })}
+  </View>
+);
+
+// PASSWORD CHANGE MODAL
 
 const ChangePasswordModal = ({
   visible,
@@ -548,7 +645,7 @@ const ChangePasswordModal = ({
   const { width: windowWidth } = useWindowDimensions();
   const isDesktop = windowWidth >= 1024;
   const isMobile = windowWidth < 768;
-  const modalWidth = isDesktop ? 480 : isMobile ? windowWidth - 32 : 440;
+  const modalWidth = isDesktop ? 460 : isMobile ? windowWidth - 32 : 420;
 
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
@@ -559,18 +656,6 @@ const ChangePasswordModal = ({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [errorField, setErrorField] = useState<PasswordFieldError>(null);
-  const [passwordErrors, setPasswordErrors] = useState<string[]>([]);
-
-  const validateNewPassword = (pwd: string) => {
-    const errs: string[] = [];
-    if (pwd.length < 8) errs.push('At least 8 characters');
-    if (!/[A-Z]/.test(pwd)) errs.push('One uppercase letter');
-    if (!/[a-z]/.test(pwd)) errs.push('One lowercase letter');
-    if (!/[0-9]/.test(pwd)) errs.push('One number');
-    if (!/[!@#$%^&*(),.?":{}|<>]/.test(pwd)) errs.push('One special character');
-    setPasswordErrors(errs);
-    return errs.length === 0;
-  };
 
   const handleChangePassword = async () => {
     if (loading) return;
@@ -578,17 +663,17 @@ const ChangePasswordModal = ({
     setErrorField(null);
 
     if (!currentPassword) {
-      setError('Please enter your current password');
+      setError('Please enter your current password.');
       setErrorField('current');
       return;
     }
-    if (!validateNewPassword(newPassword)) {
-      setError('Please meet all password requirements');
+    if (!isPasswordValid(newPassword)) {
+      setError('Please meet all password requirements below.');
       setErrorField('new');
       return;
     }
     if (newPassword !== confirmPassword) {
-      setError('New passwords do not match');
+      setError('New passwords do not match.');
       setErrorField('confirm');
       return;
     }
@@ -606,11 +691,12 @@ const ChangePasswordModal = ({
           router.replace('/(auth)/signin');
         }, 900);
       } else {
-        setError(result.message || 'Failed to change password');
-        setErrorField('current');
+        setError(result.message || 'Failed to change password.');
       }
     } catch (err: any) {
-      setError(err.response?.data?.message || 'Unable to change password. Please try again.');
+      const message = err.response?.data?.message || err.message || 'Unable to change password. Please try again.';
+      setError(message);
+      setErrorField(message.toLowerCase().includes('current') ? 'current' : null);
     } finally {
       setLoading(false);
     }
@@ -626,32 +712,23 @@ const ChangePasswordModal = ({
     setShowConfirmPassword(false);
     setError('');
     setErrorField(null);
-    setPasswordErrors([]);
     onClose();
   };
-
-  const getPasswordStrength = () => {
-    let score = 0;
-    if (newPassword.length >= 8) score++;
-    if (/[A-Z]/.test(newPassword)) score++;
-    if (/[a-z]/.test(newPassword)) score++;
-    if (/[0-9]/.test(newPassword)) score++;
-    if (/[!@#$%^&*(),.?":{}|<>]/.test(newPassword)) score++;
-
-    if (score >= 4) return { text: 'Strong', color: COLORS.success, width: '100%' as const };
-    if (score === 3) return { text: 'Good', color: COLORS.warning, width: '75%' as const };
-    if (score > 0) return { text: 'Weak', color: COLORS.danger, width: '50%' as const };
-    return { text: '', color: COLORS.gray200, width: '0%' as const };
-  };
-
-  const strength = getPasswordStrength();
 
   return (
     <Modal animationType="fade" transparent visible={visible} onRequestClose={handleClose}>
       <Pressable style={styles.modalOverlay} onPress={handleClose}>
         <Pressable style={[styles.modalContainer, { width: modalWidth }]}>
-          <View style={styles.modalHeader}>
-            <Text style={[styles.modalTitle, { fontSize: isDesktop ? 20 : 18 }]}>Change Password</Text>
+          <View style={styles.modalHeaderRow}>
+            <View style={styles.modalHeaderIconTitle}>
+              <View style={styles.modalIconCircleSmall}>
+                <LockIcon color={COLORS.primary} />
+              </View>
+              <View style={styles.modalHeaderTextCol}>
+                <Text style={[styles.modalTitle, { fontSize: isDesktop ? 20 : 18 }]}>Change Password</Text>
+                <Text style={styles.modalSubtitle}>Use 8+ characters you don't use elsewhere</Text>
+              </View>
+            </View>
             <TouchableOpacity
               onPress={handleClose}
               style={[styles.modalClose, loading && styles.disabledTouchable]}
@@ -705,7 +782,6 @@ const ChangePasswordModal = ({
                 value={newPassword}
                 onChangeText={(text) => {
                   setNewPassword(text);
-                  validateNewPassword(text);
                   setError('');
                   setErrorField(null);
                 }}
@@ -724,25 +800,8 @@ const ChangePasswordModal = ({
               </TouchableOpacity>
             </View>
 
-            {newPassword.length > 0 && (
-              <View style={styles.passwordStrengthContainer}>
-                <View style={styles.passwordStrengthBar}>
-                  <View style={[styles.passwordStrengthFill, { width: strength.width, backgroundColor: strength.color }]} />
-                </View>
-                {strength.text ? <Text style={[styles.passwordStrengthText, { color: strength.color }]}>{strength.text}</Text> : null}
-              </View>
-            )}
-
-            {passwordErrors.length > 0 && (
-              <View style={styles.passwordRequirements}>
-                {passwordErrors.map((err, i) => (
-                  <View key={i} style={styles.passwordRequirementRow}>
-                    <View style={styles.passwordRequirementDot} />
-                    <Text style={[styles.passwordRequirementText, { fontSize: isMobile ? 11 : 12 }]}>{err}</Text>
-                  </View>
-                ))}
-              </View>
-            )}
+            <PasswordStrengthMeter password={newPassword} />
+            {newPassword.length > 0 && <PasswordChecklist password={newPassword} isMobile={isMobile} />}
           </View>
 
           <View style={styles.passwordInputWrapper}>
@@ -789,18 +848,276 @@ const ChangePasswordModal = ({
 
           {error ? <Text style={[styles.modalError, { fontSize: isMobile ? 12 : 14 }]}>{error}</Text> : null}
 
-          <TouchableOpacity
-            style={[styles.modalButton, loading && styles.modalButtonDisabled]}
-            onPress={handleChangePassword}
-            disabled={loading}
-            activeOpacity={0.85}
-            accessibilityRole="button"
-            accessibilityLabel="Update password"
-          >
-            {loading ? <ActivityIndicator color={COLORS.white} size="small" /> : (
-              <Text style={[styles.modalButtonText, { fontSize: isMobile ? 15 : 16 }]}>Update Password</Text>
-            )}
-          </TouchableOpacity>
+          <View style={styles.modalFooterRow}>
+            <TouchableOpacity
+              style={[styles.modalSecondaryButton, loading && styles.disabledTouchable]}
+              onPress={handleClose}
+              disabled={loading}
+              accessibilityRole="button"
+              accessibilityLabel="Cancel"
+            >
+              <Text style={styles.modalSecondaryButtonText}>Cancel</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.modalPrimaryButton, loading && styles.modalButtonDisabled]}
+              onPress={handleChangePassword}
+              disabled={loading}
+              activeOpacity={0.85}
+              accessibilityRole="button"
+              accessibilityLabel="Update password"
+            >
+              {loading ? <ActivityIndicator color={COLORS.white} size="small" /> : (
+                <Text style={[styles.modalButtonText, { fontSize: isMobile ? 15 : 16 }]}>Update Password</Text>
+              )}
+            </TouchableOpacity>
+          </View>
+        </Pressable>
+      </Pressable>
+    </Modal>
+  );
+};
+
+// SET PASSWORD MODAL
+// For a Google-only account adding a password for the first time, so it
+// can also sign in with email/password afterward. There's no existing
+// password to confirm identity with, so this re-verifies Google first (a
+// fresh popup, checked server-side against the signed-in uid) before
+// letting the user choose one.
+
+const SetPasswordModal = ({
+  visible,
+  onClose,
+  onSuccess,
+}: {
+  visible: boolean;
+  onClose: () => void;
+  onSuccess: () => void;
+}) => {
+  const { width: windowWidth } = useWindowDimensions();
+  const isDesktop = windowWidth >= 1024;
+  const isMobile = windowWidth < 768;
+  const modalWidth = isDesktop ? 460 : isMobile ? windowWidth - 32 : 420;
+
+  const [step, setStep] = useState<'verify' | 'password'>('verify');
+  const [verifying, setVerifying] = useState(false);
+  const [verifiedIdToken, setVerifiedIdToken] = useState<string | null>(null);
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+
+  const handleClose = () => {
+    if (loading || verifying) return;
+    setStep('verify');
+    setVerifiedIdToken(null);
+    setNewPassword('');
+    setConfirmPassword('');
+    setShowNewPassword(false);
+    setShowConfirmPassword(false);
+    setError('');
+    onClose();
+  };
+
+  const handleVerifyGoogle = async () => {
+    if (verifying) return;
+    setError('');
+    if (!firebaseAuth) {
+      setError('Google verification is unavailable on this platform.');
+      return;
+    }
+    setVerifying(true);
+    try {
+      const provider = new GoogleAuthProvider();
+      provider.addScope('email');
+      provider.addScope('profile');
+      provider.setCustomParameters({ prompt: 'login' });
+      const result = await signInWithPopup(firebaseAuth, provider);
+      const idToken = await result.user.getIdToken();
+      setVerifiedIdToken(idToken);
+      setStep('password');
+    } catch (err: any) {
+      if (err.code !== 'auth/popup-closed-by-user' && err.code !== 'auth/cancelled-popup-request') {
+        setError('Could not verify your Google account. Please try again.');
+      }
+    } finally {
+      setVerifying(false);
+    }
+  };
+
+  const handleSetPassword = async () => {
+    if (loading) return;
+    setError('');
+
+    if (!isPasswordValid(newPassword)) {
+      setError('Please meet all password requirements below.');
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      setError('Passwords do not match.');
+      return;
+    }
+    if (!verifiedIdToken) {
+      setError('Your Google verification expired — please verify again.');
+      setStep('verify');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const result = await authService.setPassword(verifiedIdToken, newPassword);
+      if (result.success) {
+        handleClose();
+        onSuccess();
+      } else {
+        setError(result.message || 'Failed to set password.');
+      }
+    } catch (err: any) {
+      setError(err.response?.data?.message || 'Unable to set password. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <Modal animationType="fade" transparent visible={visible} onRequestClose={handleClose}>
+      <Pressable style={styles.modalOverlay} onPress={handleClose}>
+        <Pressable style={[styles.modalContainer, { width: modalWidth }]}>
+          <View style={styles.modalHeaderRow}>
+            <View style={styles.modalHeaderIconTitle}>
+              <View style={styles.modalIconCircleSmall}>
+                <LockIcon color={COLORS.primary} />
+              </View>
+              <View style={styles.modalHeaderTextCol}>
+                <Text style={[styles.modalTitle, { fontSize: isDesktop ? 20 : 18 }]}>Set a Password</Text>
+                <Text style={styles.modalSubtitle}>
+                  {step === 'verify' ? "Confirm it's you, then choose a password" : 'Choose a password for your account'}
+                </Text>
+              </View>
+            </View>
+            <TouchableOpacity
+              onPress={handleClose}
+              style={[styles.modalClose, (loading || verifying) && styles.disabledTouchable]}
+              disabled={loading || verifying}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              accessibilityRole="button"
+              accessibilityLabel="Close set password"
+            >
+              <CloseIcon />
+            </TouchableOpacity>
+          </View>
+
+          {step === 'verify' ? (
+            <View style={styles.setPasswordVerifyStep}>
+              <Text style={styles.setPasswordVerifyText}>
+                You signed in with Google. To also sign in with your email and a password, confirm your Google account first.
+              </Text>
+              {error ? <Text style={[styles.modalError, { fontSize: isMobile ? 12 : 14, marginTop: 0 }]}>{error}</Text> : null}
+              <TouchableOpacity
+                style={[styles.googleVerifyButton, verifying && styles.modalButtonDisabled]}
+                onPress={handleVerifyGoogle}
+                disabled={verifying}
+                accessibilityRole="button"
+                accessibilityLabel="Continue with Google"
+              >
+                {verifying ? <ActivityIndicator color={COLORS.gray700} size="small" /> : (
+                  <>
+                    <GoogleIcon />
+                    <Text style={styles.googleVerifyButtonText}>Continue with Google</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+            </View>
+          ) : (
+            <>
+              <View style={styles.passwordInputWrapper}>
+                <Text style={[styles.inputLabel, { fontSize: isMobile ? 12 : 14 }]}>New Password</Text>
+                <View style={[styles.passwordInputContainer, loading && styles.disabledInput]}>
+                  <LockIcon color={COLORS.gray400} />
+                  <TextInput
+                    style={[styles.passwordInput, { fontSize: isMobile ? 15 : 16 }]}
+                    placeholder="Enter a password"
+                    placeholderTextColor={COLORS.gray400}
+                    value={newPassword}
+                    onChangeText={(text) => { setNewPassword(text); setError(''); }}
+                    secureTextEntry={!showNewPassword}
+                    autoCapitalize="none"
+                    editable={!loading}
+                    accessibilityLabel="New password"
+                  />
+                  <TouchableOpacity
+                    style={styles.passwordEyeBtn}
+                    onPress={() => setShowNewPassword(!showNewPassword)}
+                    accessibilityRole="button"
+                    accessibilityLabel={showNewPassword ? 'Hide password' : 'Show password'}
+                  >
+                    <EyeIcon visible={showNewPassword} />
+                  </TouchableOpacity>
+                </View>
+                <PasswordStrengthMeter password={newPassword} />
+                {newPassword.length > 0 && <PasswordChecklist password={newPassword} isMobile={isMobile} />}
+              </View>
+
+              <View style={styles.passwordInputWrapper}>
+                <Text style={[styles.inputLabel, { fontSize: isMobile ? 12 : 14 }]}>Confirm Password</Text>
+                <View style={[styles.passwordInputContainer, (confirmPassword && newPassword !== confirmPassword) && styles.inputError, loading && styles.disabledInput]}>
+                  <LockIcon color={COLORS.gray400} />
+                  <TextInput
+                    style={[styles.passwordInput, { fontSize: isMobile ? 15 : 16 }]}
+                    placeholder="Re-enter the password"
+                    placeholderTextColor={COLORS.gray400}
+                    value={confirmPassword}
+                    onChangeText={(text) => { setConfirmPassword(text); setError(''); }}
+                    secureTextEntry={!showConfirmPassword}
+                    autoCapitalize="none"
+                    editable={!loading}
+                    accessibilityLabel="Confirm password"
+                  />
+                  <TouchableOpacity
+                    style={styles.passwordEyeBtn}
+                    onPress={() => setShowConfirmPassword(!showConfirmPassword)}
+                    accessibilityRole="button"
+                    accessibilityLabel={showConfirmPassword ? 'Hide password' : 'Show password'}
+                  >
+                    <EyeIcon visible={showConfirmPassword} />
+                  </TouchableOpacity>
+                </View>
+                {confirmPassword && newPassword !== confirmPassword && (
+                  <Text style={[styles.passwordMismatchText, { fontSize: isMobile ? 11 : 12 }]}>Passwords do not match</Text>
+                )}
+                {confirmPassword && newPassword === confirmPassword && newPassword.length > 0 && (
+                  <Text style={[styles.matchSuccess, { fontSize: isMobile ? 11 : 12 }]}>✓ Passwords match</Text>
+                )}
+              </View>
+
+              {error ? <Text style={[styles.modalError, { fontSize: isMobile ? 12 : 14 }]}>{error}</Text> : null}
+
+              <View style={styles.modalFooterRow}>
+                <TouchableOpacity
+                  style={[styles.modalSecondaryButton, loading && styles.disabledTouchable]}
+                  onPress={handleClose}
+                  disabled={loading}
+                  accessibilityRole="button"
+                  accessibilityLabel="Cancel"
+                >
+                  <Text style={styles.modalSecondaryButtonText}>Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.modalPrimaryButton, loading && styles.modalButtonDisabled]}
+                  onPress={handleSetPassword}
+                  disabled={loading}
+                  activeOpacity={0.85}
+                  accessibilityRole="button"
+                  accessibilityLabel="Set password"
+                >
+                  {loading ? <ActivityIndicator color={COLORS.white} size="small" /> : (
+                    <Text style={[styles.modalButtonText, { fontSize: isMobile ? 15 : 16 }]}>Set Password</Text>
+                  )}
+                </TouchableOpacity>
+              </View>
+            </>
+          )}
         </Pressable>
       </Pressable>
     </Modal>
@@ -936,6 +1253,7 @@ export default function UserAccount() {
     email: '',
     username: '',
     authProvider: 'email' as 'email' | 'google' | null,
+    hasPassword: true,
   });
   const [savedDiagrams, setSavedDiagrams] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -945,6 +1263,7 @@ export default function UserAccount() {
 
   const [showEditProfileModal, setShowEditProfileModal] = useState(false);
   const [showPasswordModal, setShowPasswordModal] = useState(false);
+  const [showSetPasswordModal, setShowSetPasswordModal] = useState(false);
   const [showSignOutModal, setShowSignOutModal] = useState(false);
   const [signOutLoading, setSignOutLoading] = useState(false);
   const [toast, setToast] = useState({ visible: false, message: '', isError: false });
@@ -984,12 +1303,13 @@ export default function UserAccount() {
       const result = await authService.verifyToken();
 
       if (result.success && result.data?.user) {
-        const { fullName, email, username, authProvider } = result.data.user;
+        const { fullName, email, username, authProvider, hasPassword } = result.data.user;
         setUserData({
           fullName: fullName || '',
           email: email || '',
           username: username || '',
           authProvider: authProvider || 'email',
+          hasPassword: hasPassword !== false,
         });
       } else {
         // verifyToken() already clears tokens when the session is truly
@@ -1023,6 +1343,7 @@ export default function UserAccount() {
         email: cached.email || '',
         username: cached.username || '',
         authProvider: cached.authProvider || 'email',
+        hasPassword: cached.hasPassword !== false,
       });
     }
   };
@@ -1069,11 +1390,23 @@ export default function UserAccount() {
     showToast('Password changed. Signing you out…');
   };
 
+  const handleSetPasswordSuccess = () => {
+    setUserData((prev) => ({ ...prev, hasPassword: true }));
+    showToast('Password set! You can now also sign in with your email and password.');
+  };
+
   const handleSignOutConfirm = async () => {
     setSignOutLoading(true);
     try {
       await authService.logout();
-      setUserData({ fullName: '', email: '', username: '', authProvider: null });
+      if (firebaseAuth) {
+        // Best-effort: clears this tab's cached Firebase credential. Can't
+        // reach Google's own accounts.google.com session — only the person
+        // signing out of Google there (or an environment-level session wipe
+        // on shared machines) actually does that.
+        await firebaseSignOut(firebaseAuth).catch(() => {});
+      }
+      setUserData({ fullName: '', email: '', username: '', authProvider: null, hasPassword: true });
     } catch (error) {
       console.error('Sign out error:', error);
     } finally {
@@ -1194,23 +1527,30 @@ export default function UserAccount() {
                     <ChevronRight color={COLORS.gray400} />
                   </Pressable>
 
-                  {!isGoogleUser && (
-                    <Pressable
-                      style={({ pressed }) => [styles.profileOption, pressed && styles.profileOptionPressed]}
-                      onPress={() => {
-                        toggleProfileExpanded();
-                        setTimeout(() => setShowPasswordModal(true), 180);
-                      }}
-                      accessibilityRole="button"
-                      accessibilityLabel="Change password"
-                    >
-                      <View style={styles.profileOptionLeft}>
-                        <LockIcon color={COLORS.primary} />
-                        <Text style={[styles.profileOptionText, { fontSize: isMobile ? 15 : 16 }]}>Change Password</Text>
-                      </View>
-                      <ChevronRight color={COLORS.gray400} />
-                    </Pressable>
-                  )}
+                  <Pressable
+                    style={({ pressed }) => [styles.profileOption, pressed && styles.profileOptionPressed]}
+                    onPress={() => {
+                      const needsSetPassword = isGoogleUser && !userData.hasPassword;
+                      toggleProfileExpanded();
+                      setTimeout(() => {
+                        if (needsSetPassword) {
+                          setShowSetPasswordModal(true);
+                        } else {
+                          setShowPasswordModal(true);
+                        }
+                      }, 180);
+                    }}
+                    accessibilityRole="button"
+                    accessibilityLabel={isGoogleUser && !userData.hasPassword ? 'Set password' : 'Change password'}
+                  >
+                    <View style={styles.profileOptionLeft}>
+                      <LockIcon color={COLORS.primary} />
+                      <Text style={[styles.profileOptionText, { fontSize: isMobile ? 15 : 16 }]}>
+                        {isGoogleUser && !userData.hasPassword ? 'Set Password' : 'Change Password'}
+                      </Text>
+                    </View>
+                    <ChevronRight color={COLORS.gray400} />
+                  </Pressable>
                 </View>
               )}
             </View>
@@ -1286,6 +1626,12 @@ export default function UserAccount() {
         onClose={() => setShowPasswordModal(false)}
         onSuccess={handlePasswordSuccess}
         router={router}
+      />
+
+      <SetPasswordModal
+        visible={showSetPasswordModal}
+        onClose={() => setShowSetPasswordModal(false)}
+        onSuccess={handleSetPasswordSuccess}
       />
 
       <SignOutModal
@@ -1454,16 +1800,81 @@ const styles = StyleSheet.create({
   inputError: { borderColor: COLORS.danger },
   passwordInput: { flex: 1, paddingVertical: SPACING.md, marginLeft: SPACING.sm, ...TYPOGRAPHY.body, color: COLORS.gray900 },
   passwordEyeBtn: { padding: SPACING.sm },
-  passwordStrengthContainer: { marginTop: SPACING.md },
-  passwordStrengthBar: { height: 4, backgroundColor: COLORS.gray200, borderRadius: RADIUS.full, overflow: 'hidden' },
-  passwordStrengthFill: { height: '100%', borderRadius: RADIUS.full },
-  passwordStrengthText: { ...TYPOGRAPHY.small, marginTop: SPACING.sm },
-  passwordRequirements: { marginTop: SPACING.sm },
-  passwordRequirementRow: { flexDirection: 'row', alignItems: 'center', marginTop: SPACING.xs },
-  passwordRequirementDot: { width: 4, height: 4, borderRadius: RADIUS.full, backgroundColor: COLORS.gray400, marginRight: SPACING.sm },
-  passwordRequirementText: { ...TYPOGRAPHY.small, color: COLORS.gray500 },
+  strengthMeterWrap: { marginTop: SPACING.md, flexDirection: 'row', alignItems: 'center', gap: SPACING.sm },
+  strengthSegmentRow: { flex: 1, flexDirection: 'row', gap: 4 },
+  strengthSegment: { flex: 1, height: 4, borderRadius: RADIUS.full, backgroundColor: COLORS.gray200 },
+  strengthMeterText: { ...TYPOGRAPHY.small, fontWeight: '600' },
+  passwordChecklist: { marginTop: SPACING.md, gap: 6 },
+  checklistRow: { flexDirection: 'row', alignItems: 'center' },
+  checklistDot: {
+    width: 16,
+    height: 16,
+    borderRadius: RADIUS.full,
+    backgroundColor: COLORS.gray100,
+    borderWidth: 1,
+    borderColor: COLORS.gray200,
+    marginRight: SPACING.sm,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  checklistDotMet: { backgroundColor: COLORS.success, borderColor: COLORS.success },
+  checklistText: { ...TYPOGRAPHY.small, color: COLORS.gray500 },
+  checklistTextMet: { color: COLORS.gray700, textDecorationLine: 'line-through' },
   passwordMismatchText: { ...TYPOGRAPHY.small, color: COLORS.danger, marginTop: SPACING.sm },
   matchSuccess: { color: COLORS.success, marginTop: SPACING.sm, fontSize: 12, fontWeight: '500' },
+
+  modalHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    paddingHorizontal: SPACING.xl,
+    paddingVertical: SPACING.lg,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.gray100,
+  },
+  modalHeaderIconTitle: { flexDirection: 'row', alignItems: 'center', flex: 1, gap: SPACING.md },
+  modalIconCircleSmall: {
+    width: 40,
+    height: 40,
+    borderRadius: RADIUS.full,
+    backgroundColor: COLORS.primaryLight,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  modalHeaderTextCol: { flex: 1 },
+  modalSubtitle: { ...TYPOGRAPHY.small, color: COLORS.gray500, marginTop: 2 },
+  modalFooterRow: { flexDirection: 'row', gap: SPACING.md, paddingHorizontal: SPACING.xl, paddingVertical: SPACING.xl },
+  modalPrimaryButton: {
+    flex: 1,
+    backgroundColor: COLORS.primary,
+    paddingVertical: SPACING.md,
+    borderRadius: RADIUS.lg,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  modalSecondaryButton: {
+    flex: 1,
+    backgroundColor: COLORS.gray100,
+    paddingVertical: SPACING.md,
+    borderRadius: RADIUS.lg,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  modalSecondaryButtonText: { ...TYPOGRAPHY.bodyBold, color: COLORS.gray700 },
+  setPasswordVerifyStep: { paddingHorizontal: SPACING.xl, paddingVertical: SPACING.xl },
+  setPasswordVerifyText: { ...TYPOGRAPHY.body, color: COLORS.gray600, lineHeight: 21, marginBottom: SPACING.lg },
+  googleVerifyButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: SPACING.sm,
+    borderWidth: 1.5,
+    borderColor: COLORS.gray200,
+    borderRadius: RADIUS.lg,
+    paddingVertical: SPACING.md,
+    backgroundColor: COLORS.white,
+  },
+  googleVerifyButtonText: { ...TYPOGRAPHY.bodyBold, color: COLORS.gray700 },
 
   toastContainer: { position: 'absolute', top: Platform.OS === 'ios' ? 60 : 50, left: SPACING.xl, right: SPACING.xl, zIndex: 1000, alignItems: 'center' },
   toastContent: {

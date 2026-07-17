@@ -136,6 +136,7 @@ const AnimatedLogo = ({
       pulseAnim.setValue(1);
     }
 
+
     return () => {
       if (pulseLoop.current) {
         pulseLoop.current.stop();
@@ -295,6 +296,91 @@ const SuccessModal = ({
             <Text style={styles.errorModalButtonTextPrimary}>{buttonText}</Text>
           </TouchableOpacity>
         </View>
+      </TouchableOpacity>
+    </Modal>
+  );
+};
+
+// LINK GOOGLE ACCOUNT MODAL
+// Shown when Google sign-in matches an email that already has a
+// password-based account — confirming that password proves ownership
+// before Google is allowed to sign into it going forward.
+const LinkGoogleModal = ({
+  visible,
+  email,
+  password,
+  onChangePassword,
+  showPassword,
+  onToggleShowPassword,
+  error,
+  loading,
+  onCancel,
+  onConfirm,
+}: {
+  visible: boolean;
+  email: string;
+  password: string;
+  onChangePassword: (text: string) => void;
+  showPassword: boolean;
+  onToggleShowPassword: () => void;
+  error: string;
+  loading: boolean;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) => {
+  return (
+    <Modal animationType="fade" transparent visible={visible} onRequestClose={onCancel}>
+      <TouchableOpacity style={styles.errorModalOverlay} activeOpacity={1} onPress={onCancel}>
+        <TouchableOpacity activeOpacity={1} style={styles.errorModalContainer} onPress={() => {}}>
+          <View style={styles.errorModalIconWrapper}>
+            <View style={styles.errorModalIconCircle}>
+              <Svg width={28} height={28} viewBox="0 0 24 24" fill="none">
+                <Path d="M12 15v2m-6 3h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zM8 11V8a4 4 0 118 0v3" stroke="#3b5bdb" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+              </Svg>
+            </View>
+          </View>
+          <Text style={styles.errorModalTitle}>Link Your Google Account</Text>
+          <Text style={styles.errorModalMessage}>
+            {email || 'This email'} already has a password-protected account. Enter its password to also sign in with Google from now on.
+          </Text>
+
+          <View style={[styles.formGroup, { width: '100%' }]}>
+            <View style={[styles.inputWrap, error && styles.inputError]}>
+              <TextInput
+                style={[styles.input, styles.inputWithIcon]}
+                placeholder="Enter your password"
+                placeholderTextColor="#b8c0d4"
+                value={password}
+                onChangeText={onChangePassword}
+                secureTextEntry={!showPassword}
+                autoCapitalize="none"
+                editable={!loading}
+                autoFocus
+                onSubmitEditing={onConfirm}
+                returnKeyType="done"
+              />
+              <TouchableOpacity style={styles.eyeBtn} onPress={onToggleShowPassword} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+                <EyeIcon visible={showPassword} />
+              </TouchableOpacity>
+            </View>
+            {error ? <Text style={styles.errorText}>{error}</Text> : null}
+          </View>
+
+          <TouchableOpacity
+            style={[styles.errorModalButtonPrimary, loading && { opacity: 0.7 }]}
+            onPress={onConfirm}
+            disabled={loading}
+          >
+            {loading ? (
+              <ActivityIndicator color="#ffffff" size="small" />
+            ) : (
+              <Text style={styles.errorModalButtonTextPrimary}>Link Account</Text>
+            )}
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.linkGoogleCancelBtn} onPress={onCancel} disabled={loading}>
+            <Text style={styles.linkGoogleCancelText}>Cancel</Text>
+          </TouchableOpacity>
+        </TouchableOpacity>
       </TouchableOpacity>
     </Modal>
   );
@@ -467,6 +553,18 @@ export default function SignIn() {
     actionButtonText: '',
     actionIcon: undefined as React.ReactNode | undefined,
   });
+
+  // ─── Link Google to an existing email/password account ──────────────────
+  // Shown when googleAuth comes back with LINK_PASSWORD_REQUIRED: this
+  // email already has a password account, so we ask for that password
+  // before letting Google sign into it.
+  const [showLinkGoogleModal, setShowLinkGoogleModal] = useState(false);
+  const [linkGooglePassword, setLinkGooglePassword] = useState('');
+  const [linkGoogleShowPassword, setLinkGoogleShowPassword] = useState(false);
+  const [linkGoogleLoading, setLinkGoogleLoading] = useState(false);
+  const [linkGoogleError, setLinkGoogleError] = useState('');
+  const pendingGoogleIdTokenRef = useRef<string | null>(null);
+  const pendingGoogleEmailRef = useRef<string>('');
 
   // Card entrance animation
   const cardOpacity = useRef(new Animated.Value(0)).current;
@@ -651,6 +749,10 @@ export default function SignIn() {
       stopWatchingFocus();
       setLoading(true);
       const idToken = await result.user.getIdToken();
+      // Kept in refs (not local consts) so the catch block below — a
+      // separate lexical scope — can still reach them if googleAuth throws.
+      pendingGoogleIdTokenRef.current = idToken;
+      pendingGoogleEmailRef.current = result.user.email || '';
       const apiResult = await authService.googleAuth(idToken);
 
       if (apiResult.success) {
@@ -678,7 +780,11 @@ export default function SignIn() {
     } catch (error: any) {
       stopWatchingFocus();
       console.error('Google Sign-In error:', error);
-      if (error.response?.status === 409) {
+      if (error.response?.data?.code === 'LINK_PASSWORD_REQUIRED') {
+        setLinkGoogleError('');
+        setLinkGooglePassword('');
+        setShowLinkGoogleModal(true);
+      } else if (error.response?.status === 409) {
         const errorMsg = error.response?.data?.message || '';
         showErrorPopup(
           'Account Already Exists',
@@ -703,6 +809,50 @@ export default function SignIn() {
     } finally {
       googleSignInInProgress.current = false;
       setLoading(false);
+    }
+  };
+
+  const closeLinkGoogleModal = () => {
+    if (linkGoogleLoading) return;
+    setShowLinkGoogleModal(false);
+    setLinkGooglePassword('');
+    setLinkGoogleShowPassword(false);
+    setLinkGoogleError('');
+    pendingGoogleIdTokenRef.current = null;
+  };
+
+  const handleConfirmLinkGoogle = async () => {
+    if (linkGoogleLoading) return;
+    if (!linkGooglePassword) {
+      setLinkGoogleError('Please enter your password.');
+      return;
+    }
+    const idToken = pendingGoogleIdTokenRef.current;
+    if (!idToken) {
+      setLinkGoogleError('Your Google session expired — please try Sign in with Google again.');
+      return;
+    }
+
+    setLinkGoogleLoading(true);
+    setLinkGoogleError('');
+
+    try {
+      const result = await authService.linkGoogleAccount(idToken, linkGooglePassword, rememberMe);
+      if (result.success) {
+        setShowLinkGoogleModal(false);
+        setShowSuccessAnimation(true);
+        setTimeout(() => { router.replace('/(tabs)/home'); }, 400);
+      } else {
+        setLinkGoogleError(result.message || 'Could not link your Google account.');
+      }
+    } catch (error: any) {
+      if (error.response?.status === 401) {
+        setLinkGoogleError('Incorrect password.');
+      } else {
+        setLinkGoogleError(error.response?.data?.message || 'Could not link your Google account. Please try again.');
+      }
+    } finally {
+      setLinkGoogleLoading(false);
     }
   };
 
@@ -787,6 +937,19 @@ export default function SignIn() {
         onAction={errorModalData.onAction}
         actionButtonText={errorModalData.actionButtonText}
         actionIcon={errorModalData.actionIcon}
+      />
+
+      <LinkGoogleModal
+        visible={showLinkGoogleModal}
+        email={pendingGoogleEmailRef.current}
+        password={linkGooglePassword}
+        onChangePassword={(text) => { setLinkGooglePassword(text); setLinkGoogleError(''); }}
+        showPassword={linkGoogleShowPassword}
+        onToggleShowPassword={() => setLinkGoogleShowPassword((v) => !v)}
+        error={linkGoogleError}
+        loading={linkGoogleLoading}
+        onCancel={closeLinkGoogleModal}
+        onConfirm={handleConfirmLinkGoogle}
       />
 
       <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined} keyboardVerticalOffset={Platform.OS === 'ios' ? 64 : 0}>
@@ -1310,6 +1473,17 @@ const styles = StyleSheet.create({
   errorModalButtonTextPrimary: {
     color: '#ffffff',
     fontSize: 15,
+    fontWeight: '600',
+  },
+  linkGoogleCancelBtn: {
+    width: '100%',
+    paddingVertical: 11,
+    alignItems: 'center',
+    marginTop: 6,
+  },
+  linkGoogleCancelText: {
+    color: '#64748b',
+    fontSize: 14,
     fontWeight: '600',
   },
 });

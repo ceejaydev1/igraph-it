@@ -332,6 +332,41 @@ export const googleAuth = async (idToken, consentTimestamp = null, rememberMe = 
   }
 };
 
+// Called when googleAuth comes back with code: 'LINK_PASSWORD_REQUIRED' —
+// this email already has a password-based account. Confirming that
+// password proves ownership before Google is allowed to sign into it.
+export const linkGoogleAccount = async (idToken, password, rememberMe = false) => {
+  try {
+    const response = await api.post('/auth/link-google', { idToken, password });
+    if (response.data.success && response.data.data?.tokens) {
+      setAuthPersistence(rememberMe);
+      await storeTokens(
+        response.data.data.tokens.accessToken,
+        response.data.data.tokens.refreshToken
+      );
+      if (Platform.OS === 'web' && response.data.data.user) {
+        localStorage.setItem('user', JSON.stringify(response.data.data.user));
+      }
+      if (response.data.data.user) {
+        setCachedUser(response.data.data.user);
+      }
+    }
+    return response.data;
+  } catch (error) {
+    console.error('Link Google account error:', error.response?.data || error.message);
+    throw error;
+  }
+};
+
+// Lets a Google-only account (no password yet) add one, so it can also sign
+// in with email/password afterward. idToken must be a freshly-verified
+// Google credential (re-authenticated moments before this call), since
+// there's no existing password to check instead.
+export const setPassword = async (idToken, newPassword) => {
+  const response = await api.post('/auth/set-password', { idToken, newPassword });
+  return response.data;
+};
+
 // ⭐ FIXED: FORGOT PASSWORD - Returns error data instead of throwing
 
 export const forgotPassword = async (email) => {
