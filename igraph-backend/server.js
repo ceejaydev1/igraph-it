@@ -11,6 +11,15 @@ const diagramRoutes = require('./routes/diagramRoutes');
 
 const app = express();
 
+// Render sits in front of this app as a reverse proxy — without this,
+// Express reads req.ip from the raw socket (Render's proxy) instead of the
+// X-Forwarded-For header, so every request looks like it comes from the
+// same IP and all the rate limiters below end up bucketing every visitor
+// together. `1` trusts exactly one hop (Render's own proxy), which is the
+// correct value for this setup — not `true`, which would trust an
+// attacker-supplied X-Forwarded-For if this app were ever reachable directly.
+app.set('trust proxy', 1);
+
 const allowedOrigins = [
 
   'https://igraph-backend.onrender.com',

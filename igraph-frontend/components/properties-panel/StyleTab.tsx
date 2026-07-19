@@ -88,6 +88,7 @@ export default function StyleTab({ graph, cells }: TabProps) {
                 value={fillEnabled ? fillColor ?? '#ffffff' : undefined}
                 onChange={(hex) => patch({ fillColor: hex })}
                 disabled={!fillEnabled}
+                title="Select a fill color"
               />
             </View>
           }
@@ -110,6 +111,7 @@ export default function StyleTab({ graph, cells }: TabProps) {
               value={lineEnabled ? strokeColor ?? '#000000' : undefined}
               onChange={(hex) => patch({ strokeColor: hex })}
               disabled={!lineEnabled}
+              title="Select a line color"
             />
           }
         />
@@ -123,7 +125,7 @@ export default function StyleTab({ graph, cells }: TabProps) {
             />
           </View>
           <View style={styles.lineWidthStepper}>
-            <NumberStepper value={strokeWidth ?? 1} onChange={(n) => patch({ strokeWidth: n })} min={0} max={40} step={1} suffix="pt" />
+            <NumberStepper value={strokeWidth ?? 1} onChange={(n) => patch({ strokeWidth: n })} min={0} max={10} step={1} suffix="pt" />
           </View>
         </View>
 

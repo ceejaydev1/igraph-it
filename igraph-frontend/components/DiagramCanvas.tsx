@@ -190,6 +190,14 @@ interface DiagramCanvasProps {
 
 export interface DiagramCanvasHandle {
   loadXml: (xml: string) => void;
+  // Forces the graph's SVG to re-measure/repaint itself. React Navigation
+  // hides this screen's whole subtree (rather than unmounting it) while
+  // another tab is active. maxGraph sizes its SVG from the container's DOM
+  // dimensions at the moment it last drew — dimensions a hidden container
+  // can report as stale/zero. Nothing here rebuilds the diagram from data
+  // (the model was never touched), it just re-triggers that measurement so
+  // the existing content actually gets painted again once visible.
+  refresh: () => void;
 }
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -522,6 +530,22 @@ const WebCanvas = forwardRef<DiagramCanvasHandle, DiagramCanvasProps>(({ onReady
         console.error('Failed to load diagram XML:', e);
       }
     },
+    refresh: () => {
+      const graph = graphRef.current;
+      if (!graph) return;
+      try {
+        graph.getView().revalidate();
+        resizeGridCanvas();
+        repaintGrid();
+      } catch (e) {
+        console.error('Failed to refresh diagram view:', e);
+      }
+    },
+    // Deps stay [] (matching the original loadXml-only handle): resizeGridCanvas/
+    // repaintGrid are declared further down this component and would be a
+    // TDZ ReferenceError if referenced directly in this array (it's evaluated
+    // eagerly, unlike the factory body above, which only runs later via
+    // closure once they exist).
   }), []);
 
   const resizeGridCanvas = useCallback(() => {

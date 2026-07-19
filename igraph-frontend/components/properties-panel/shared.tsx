@@ -1,6 +1,42 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, Platform } from 'react-native';
 import { COLORS, SPACING, RADIUS, TYPOGRAPHY, SHADOWS } from '@/constants/theme';
+import ColorPickerPopover from './ColorPickerPopover';
+
+// ─── Mutual exclusion for MiniSwatch popovers ──────────────────────────────
+// Fill / Font / Line color (and any other MiniSwatch) share one "which swatch
+// is open" slot, so opening one (e.g. Fill Color) closes whichever other one
+// (e.g. Font Color) was already open — matches how draw.io / Lucidchart never
+// show two color popovers at once.
+let activeSwatchId: symbol | null = null;
+const activeSwatchListeners = new Set<() => void>();
+
+function setActiveSwatch(id: symbol | null) {
+  activeSwatchId = id;
+  activeSwatchListeners.forEach((l) => l());
+}
+
+function useExclusiveOpen(): [boolean, () => void, () => void] {
+  const idRef = useRef<symbol | null>(null);
+  if (idRef.current === null) idRef.current = Symbol('swatch');
+
+  const [, tick] = useState(0);
+  useEffect(() => {
+    const listener = () => tick((t) => t + 1);
+    activeSwatchListeners.add(listener);
+    return () => {
+      activeSwatchListeners.delete(listener);
+      // Unmounting while open (e.g. selection changed) shouldn't leave a
+      // dangling "active" slot that nothing can ever reclaim.
+      if (activeSwatchId === idRef.current) setActiveSwatch(null);
+    };
+  }, []);
+
+  const isOpen = activeSwatchId === idRef.current;
+  const open = () => setActiveSwatch(idRef.current);
+  const close = () => { if (activeSwatchId === idRef.current) setActiveSwatch(null); };
+  return [isOpen, open, close];
+}
 
 export const Row = ({ children, style }: { children: React.ReactNode; style?: any }) => (
   <View style={[rowStyles.row, style]}>{children}</View>
@@ -102,37 +138,38 @@ export function MiniSwatch({
   value,
   onChange,
   disabled = false,
+  title,
+  allowNone,
 }: {
   value: string | undefined;
   onChange: (hex: string) => void;
   disabled?: boolean;
+  /** Heading shown at the top of the popover, e.g. "Select a fill color". */
+  title?: string;
+  /** Shows a "no color" swatch as the first grid entry, calling onChange('none'). */
+  allowNone?: boolean;
 }) {
-  const [open, setOpen] = useState(false);
+  const [open, doOpen, close] = useExclusiveOpen();
   const bg = value && value !== 'none' ? value : COLORS.white;
 
   return (
     <View>
       <TouchableOpacity
         style={[rowStyles.miniSwatch, { backgroundColor: bg }, disabled && rowStyles.miniSwatchDisabled]}
-        onPress={() => !disabled && setOpen((o) => !o)}
+        onPress={() => !disabled && (open ? close() : doOpen())}
         activeOpacity={0.8}
         disabled={disabled}
       >
         <Text style={rowStyles.miniSwatchPencil}>✎</Text>
       </TouchableOpacity>
       {open && (
-        <View style={rowStyles.paletteFloating}>
-          {PRESET_COLORS.map((c) => (
-            <TouchableOpacity
-              key={c}
-              style={[rowStyles.paletteSwatch, { backgroundColor: c }]}
-              onPress={() => {
-                onChange(c);
-                setOpen(false);
-              }}
-            />
-          ))}
-        </View>
+        <ColorPickerPopover
+          value={value}
+          onChange={onChange}
+          onClose={close}
+          title={title}
+          allowNone={allowNone}
+        />
       )}
     </View>
   );
@@ -563,22 +600,6 @@ const rowStyles = StyleSheet.create({
     flexWrap: 'wrap',
     gap: 6,
     marginTop: SPACING.sm,
-  },
-  paletteFloating: {
-    position: Platform.OS === 'web' ? ('absolute' as any) : 'relative',
-    right: 0,
-    top: 30,
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    width: 100,
-    gap: 6,
-    marginTop: SPACING.sm,
-    backgroundColor: COLORS.white,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    borderRadius: RADIUS.sm,
-    padding: SPACING.xs,
-    zIndex: 30,
   },
   paletteSwatch: {
     width: 20,

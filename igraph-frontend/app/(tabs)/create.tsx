@@ -23,6 +23,7 @@ import DiagramCanvas, { DiagramCanvasHandle } from '@/components/DiagramCanvas';
 import ShapesPanel from '@/components/shapes/ShapesPanel';
 import ShapesBottomPanel from '../../components/shapes/ShapesBottomPanel';
 import PropertiesPanel from '@/components/properties-panel/PropertiesPanel';
+import QuickFormatBar from '@/components/properties-panel/QuickFormatBar';
 import { ICONS } from '../../constants/icons';
 import { COLORS, SPACING } from '@/constants/theme';
 import { IGRAPH_ID_STYLE_MAP } from '@/components/maxgraph-custom-shapes';
@@ -238,6 +239,11 @@ export default function CreateScreen() {
   // XML under the *previous* render's activePageId.
   const isHydratingRef = useRef(false);
   const autosaveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Always points at a flush of the *current* pending autosave (rebuilt by
+  // the debounce effect below on every relevant change). Called synchronously
+  // from the focus-loss handler further down, so it must be a ref rather
+  // than a value captured by that handler's own (deps-[]) closure.
+  const pendingAutosaveFlushRef = useRef<() => void>(() => {});
   // Synchronous re-entrancy guard for Save: `isSaving` state doesn't flip
   // true until after an `await` (auth token lookup) runs, leaving a window
   // where rapid repeat clicks (e.g. because the no-op Alert.alert on web
@@ -271,10 +277,25 @@ export default function CreateScreen() {
   // Dismiss them all as soon as this screen loses focus.
   useFocusEffect(
     useCallback(() => {
+      // Regaining focus after a tab switch can leave the graph's SVG sized/
+      // painted from whatever it measured while this screen was hidden (see
+      // DiagramCanvasHandle.refresh's own comment) — the diagram data itself
+      // was never touched, but it can render as if it vanished. Forcing a
+      // repaint here costs nothing when everything was already fine.
+      diagramCanvasRef.current?.refresh();
+
       return () => {
         setDialogState(null);
         setShowPrintModal(false);
         setShowPageModal(false);
+        // The autosave effect only writes the current draft to AsyncStorage
+        // 800ms after the last edit. Switching tabs faster than that (very
+        // easy to do) previously lost whatever was just drawn, because this
+        // screen can end up rebuilt from scratch on return (e.g. the mobile/
+        // desktop layout branch flipping) with nothing but that draft to
+        // restore from. Firing the pending save right as focus is lost —
+        // instead of waiting on the timer — closes that window.
+        pendingAutosaveFlushRef.current();
       };
     }, [])
   );
@@ -331,15 +352,22 @@ export default function CreateScreen() {
       ? content.activePageId
       : loadedPages[0].id;
     const activeXml = pageXmlCache.current.get(targetActiveId) || content.xml || '';
+    const name = content.name || 'Blank diagram';
 
     setPages(loadedPages);
     setActivePageId(targetActiveId);
-    setDiagramName(content.name || 'Blank diagram');
+    setDiagramName(name);
     setDiagramXml(activeXml);
 
     isHydratingRef.current = true;
     diagramCanvasRef.current?.loadXml(activeXml);
     isHydratingRef.current = false;
+
+    // Returned so callers can persist this exact snapshot to AsyncStorage
+    // immediately (see hydrate()'s backend-load branch below) — reading
+    // `pages`/`activePageId` state here instead wouldn't work, since the
+    // setPages/setActivePageId calls above haven't committed yet.
+    return { name, pages: loadedPages, activePageId: targetActiveId };
   };
 
   const draftKey = (uid: string, id: string | null) => `diagram_draft_${uid}_${id || 'new'}`;
@@ -385,8 +413,38 @@ export default function CreateScreen() {
           const result = await response.json();
           if (cancelled) return;
           if (result.success && result.data) {
-            applyLoadedContent(result.data);
+            const loaded = applyLoadedContent(result.data);
             currentDiagramIdRef.current = diagramId;
+            // Set this *before* the awaits below, not just in the `finally`.
+            // applyLoadedContent's setState calls above get flushed by React
+            // at our next `await`, which re-runs the autosave-debounce effect
+            // (its deps — diagramXml/pages/etc. — just changed) — and that
+            // effect no-ops unless hasHydratedRef.current is already true,
+            // meaning it would otherwise skip arming pendingAutosaveFlushRef.
+            // Leaving that unarmed defeats the focus-loss flush entirely: an
+            // untouched, just-opened diagram would have no pending save to
+            // flush when the user immediately switches tabs, and only this
+            // block's own (slower) direct write below would still be racing
+            // to finish in time.
+            hasHydratedRef.current = true;
+
+            // Persist this snapshot right away too, instead of relying only
+            // on the debounced autosave (800ms after a state change) or the
+            // focus-loss flush above catching up. Navbar strips the
+            // ?diagramId param on every subsequent visit to this tab (see
+            // its create-only router.navigate), so if the user switches tabs
+            // before either of those, the only way back to this diagram is
+            // via the local draft below — and without this, that draft/
+            // pointer wouldn't exist yet, so the canvas would come back blank.
+            const uid = await authService.getCurrentUserId();
+            if (uid && !cancelled) {
+              try {
+                await AsyncStorage.setItem(draftKey(uid, diagramId), JSON.stringify(loaded));
+                await AsyncStorage.setItem(activePointerKey(uid), JSON.stringify({ diagramId }));
+              } catch (e) {
+                console.warn('Could not persist loaded diagram to local draft:', e);
+              }
+            }
           } else {
             notify('Error', result.message || 'Could not load that diagram.');
           }
@@ -429,11 +487,18 @@ export default function CreateScreen() {
   useEffect(() => {
     if (!hasHydratedRef.current) return;
     if (autosaveTimeoutRef.current) clearTimeout(autosaveTimeoutRef.current);
-    autosaveTimeoutRef.current = setTimeout(() => {
+
+    const flush = () => {
       authService.getCurrentUserId().then((uid) => {
         if (uid) persistDraft(uid, currentDiagramIdRef.current);
       });
-    }, 800);
+    };
+    // Also reachable synchronously from the focus-loss handler below, so a
+    // tab switch that lands inside the 800ms debounce window still gets a
+    // save attempt instead of losing whatever was just drawn.
+    pendingAutosaveFlushRef.current = flush;
+
+    autosaveTimeoutRef.current = setTimeout(flush, 800);
     return () => {
       if (autosaveTimeoutRef.current) clearTimeout(autosaveTimeoutRef.current);
     };
@@ -1639,7 +1704,7 @@ export default function CreateScreen() {
               onPress={handleNewDiagram}
               activeOpacity={0.7}
             >
-              <ICONS.NewDiagram color="#4a5568" />
+              <ICONS.NewDiagram color="rgb(152, 176, 219), 203, 235) 85, 104)" />
             </TouchableOpacity>
           </View>
 
@@ -1867,7 +1932,7 @@ export default function CreateScreen() {
           </View>
         </View>
 
-        {/* ─── FORMAT BAR - UNDO/REDO ONLY ───────────────────────────────── */}
+        {/* ─── FORMAT BAR - UNDO/REDO + QUICK STYLE CONTROLS ─────────────── */}
         <View style={styles.formatBar}>
           <TouchableOpacity
             style={[styles.formatBtn, !isGraphReady && styles.formatBtnDisabled]}
@@ -1885,6 +1950,10 @@ export default function CreateScreen() {
           >
             <RedoIcon color={isGraphReady ? '#4a5568' : '#cbd5e1'} size={18} />
           </TouchableOpacity>
+
+          <View style={styles.formatBarDivider} />
+
+          <QuickFormatBar graph={graphInstance} />
         </View>
 
         <View style={styles.body}>
@@ -2158,6 +2227,12 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: '#e2e8f0',
     zIndex: 19,
+  },
+  formatBarDivider: {
+    width: 1,
+    height: 20,
+    backgroundColor: '#e2e8f0',
+    marginHorizontal: 4,
   },
   formatBtn: {
     width: 30,

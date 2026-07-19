@@ -275,9 +275,15 @@ export const IGRAPH_PERIMETERS: Record<string, CellStateStyle['perimeter']> = {
 class FDD_FunctionShapeCanvas extends Shape {
   paintBackground(c: AbstractCanvas2D, x: number, y: number, w: number, h: number) {
     const r = Math.min(w, h) * 0.08;
-    c.setFillColor('#DCEAF7');
-    c.setStrokeColor('#4A78A8');
-    c.setStrokeWidth(2);
+    c.setFillColor(this.fill);
+    c.setStrokeColor(this.stroke);
+    c.setStrokeWidth(this.strokeWidth);
+    // maxGraph's SVG renderer floors any actually-drawn stroke to 1px
+    // (SvgCanvas2D.minStrokeWidth), so strokeWidth=0 alone still paints a
+    // hairline. Dropping the stroke color to 'none' instead skips the
+    // stroke draw entirely, which is the only way to make width 0 truly
+    // invisible.
+    if (this.strokeWidth <= 0) c.setStrokeColor('none');
     c.roundrect(x + 1, y + 1, w - 2, h - 2, r, r);
     c.fillAndStroke();
   }
@@ -288,9 +294,15 @@ class FDD_InputShapeCanvas extends Shape {
   paintBackground(c: AbstractCanvas2D, x: number, y: number, w: number, h: number) {
     const r = Math.min(w, h) * 0.08;
     const cy = y + h / 2;
-    c.setFillColor('#DCEFD2');
-    c.setStrokeColor('#5A9E4B');
-    c.setStrokeWidth(2);
+    c.setFillColor(this.fill);
+    c.setStrokeColor(this.stroke);
+    c.setStrokeWidth(this.strokeWidth);
+    // maxGraph's SVG renderer floors any actually-drawn stroke to 1px
+    // (SvgCanvas2D.minStrokeWidth), so strokeWidth=0 alone still paints a
+    // hairline. Dropping the stroke color to 'none' instead skips the
+    // stroke draw entirely, which is the only way to make width 0 truly
+    // invisible.
+    if (this.strokeWidth <= 0) c.setStrokeColor('none');
     c.roundrect(x + 1, y + 1, w - 2, h - 2, r, r);
     c.fillAndStroke();
     c.setFillColor('#5A9E4B');
@@ -309,9 +321,15 @@ class FDD_OutputShapeCanvas extends Shape {
   paintBackground(c: AbstractCanvas2D, x: number, y: number, w: number, h: number) {
     const r = Math.min(w, h) * 0.08;
     const cy = y + h / 2;
-    c.setFillColor('#FBE8B8');
-    c.setStrokeColor('#F39C12');
-    c.setStrokeWidth(2);
+    c.setFillColor(this.fill);
+    c.setStrokeColor(this.stroke);
+    c.setStrokeWidth(this.strokeWidth);
+    // maxGraph's SVG renderer floors any actually-drawn stroke to 1px
+    // (SvgCanvas2D.minStrokeWidth), so strokeWidth=0 alone still paints a
+    // hairline. Dropping the stroke color to 'none' instead skips the
+    // stroke draw entirely, which is the only way to make width 0 truly
+    // invisible.
+    if (this.strokeWidth <= 0) c.setStrokeColor('none');
     c.roundrect(x + 1, y + 1, w - 2, h - 2, r, r);
     c.fillAndStroke();
     c.setFillColor('#F39C12');
@@ -329,9 +347,15 @@ class FDD_OutputShapeCanvas extends Shape {
 class FDD_ControlShapeCanvas extends Shape {
   paintBackground(c: AbstractCanvas2D, x: number, y: number, w: number, h: number) {
     const cy = y + h / 2;
-    c.setStrokeColor('#000000');
-    c.setStrokeWidth(2);
-    c.setFillColor('#000000');
+    c.setStrokeColor(this.stroke);
+    c.setStrokeWidth(this.strokeWidth);
+    // maxGraph's SVG renderer floors any actually-drawn stroke to 1px
+    // (SvgCanvas2D.minStrokeWidth), so strokeWidth=0 alone still paints a
+    // hairline. Dropping the stroke color to 'none' instead skips the
+    // stroke draw entirely, which is the only way to make width 0 truly
+    // invisible.
+    if (this.strokeWidth <= 0) c.setStrokeColor('none');
+    c.setFillColor(this.fill);
     c.begin();
     c.moveTo(x + 2, cy);
     c.lineTo(x + w - 12, cy);
@@ -349,9 +373,15 @@ class FDD_ControlShapeCanvas extends Shape {
 class FDD_MechanismShapeCanvas extends Shape {
   paintBackground(c: AbstractCanvas2D, x: number, y: number, w: number, h: number) {
     const cy = y + h / 2;
-    c.setStrokeColor('#000000');
-    c.setStrokeWidth(2);
-    c.setFillColor('#000000');
+    c.setStrokeColor(this.stroke);
+    c.setStrokeWidth(this.strokeWidth);
+    // maxGraph's SVG renderer floors any actually-drawn stroke to 1px
+    // (SvgCanvas2D.minStrokeWidth), so strokeWidth=0 alone still paints a
+    // hairline. Dropping the stroke color to 'none' instead skips the
+    // stroke draw entirely, which is the only way to make width 0 truly
+    // invisible.
+    if (this.strokeWidth <= 0) c.setStrokeColor('none');
+    c.setFillColor(this.fill);
     c.setDashed(true);
     c.setDashPattern('8 4');
     c.begin();
@@ -374,9 +404,15 @@ class FDD_InterfaceShapeCanvas extends Shape {
     const cy = y + h / 2;
     const arrowSize = 6;
     const arrowWidth = 12;
-    c.setStrokeColor('#000000');
-    c.setStrokeWidth(2);
-    c.setFillColor('#000000');
+    c.setStrokeColor(this.stroke);
+    c.setStrokeWidth(this.strokeWidth);
+    // maxGraph's SVG renderer floors any actually-drawn stroke to 1px
+    // (SvgCanvas2D.minStrokeWidth), so strokeWidth=0 alone still paints a
+    // hairline. Dropping the stroke color to 'none' instead skips the
+    // stroke draw entirely, which is the only way to make width 0 truly
+    // invisible.
+    if (this.strokeWidth <= 0) c.setStrokeColor('none');
+    c.setFillColor(this.fill);
     c.begin();
     c.moveTo(x + 2, cy);
     c.lineTo(x + arrowWidth, cy - arrowSize);
@@ -400,9 +436,15 @@ class FDD_InterfaceShapeCanvas extends Shape {
 class FDD_BoundaryShapeCanvas extends Shape {
   paintBackground(c: AbstractCanvas2D, x: number, y: number, w: number, h: number) {
     const r = Math.min(w, h) * 0.06;
-    c.setFillColor('transparent');
-    c.setStrokeColor('#666666');
-    c.setStrokeWidth(2);
+    c.setFillColor(this.fill);
+    c.setStrokeColor(this.stroke);
+    c.setStrokeWidth(this.strokeWidth);
+    // maxGraph's SVG renderer floors any actually-drawn stroke to 1px
+    // (SvgCanvas2D.minStrokeWidth), so strokeWidth=0 alone still paints a
+    // hairline. Dropping the stroke color to 'none' instead skips the
+    // stroke draw entirely, which is the only way to make width 0 truly
+    // invisible.
+    if (this.strokeWidth <= 0) c.setStrokeColor('none');
     c.setDashed(true);
     c.setDashPattern('8 4');
     c.roundrect(x + 1, y + 1, w - 2, h - 2, r, r);
@@ -415,9 +457,15 @@ class FDD_BoundaryShapeCanvas extends Shape {
 class FDD_NoteShapeCanvas extends Shape {
   paintBackground(c: AbstractCanvas2D, x: number, y: number, w: number, h: number) {
     const fold = Math.min(w, h) * 0.18;
-    c.setFillColor('#FFF4CC');
-    c.setStrokeColor('#B7950B');
-    c.setStrokeWidth(2);
+    c.setFillColor(this.fill);
+    c.setStrokeColor(this.stroke);
+    c.setStrokeWidth(this.strokeWidth);
+    // maxGraph's SVG renderer floors any actually-drawn stroke to 1px
+    // (SvgCanvas2D.minStrokeWidth), so strokeWidth=0 alone still paints a
+    // hairline. Dropping the stroke color to 'none' instead skips the
+    // stroke draw entirely, which is the only way to make width 0 truly
+    // invisible.
+    if (this.strokeWidth <= 0) c.setStrokeColor('none');
     c.begin();
     c.moveTo(x + 1, y + 1);
     c.lineTo(x + w - fold - 1, y + 1);
@@ -440,9 +488,15 @@ class FDD_NoteShapeCanvas extends Shape {
 // ─── 9. EXTERNAL ENTITY ───────────────────────────────────────────
 class FDD_ExternalEntityShapeCanvas extends Shape {
   paintBackground(c: AbstractCanvas2D, x: number, y: number, w: number, h: number) {
-    c.setFillColor('#F4F4F4');
-    c.setStrokeColor('#8E8E8E');
-    c.setStrokeWidth(2);
+    c.setFillColor(this.fill);
+    c.setStrokeColor(this.stroke);
+    c.setStrokeWidth(this.strokeWidth);
+    // maxGraph's SVG renderer floors any actually-drawn stroke to 1px
+    // (SvgCanvas2D.minStrokeWidth), so strokeWidth=0 alone still paints a
+    // hairline. Dropping the stroke color to 'none' instead skips the
+    // stroke draw entirely, which is the only way to make width 0 truly
+    // invisible.
+    if (this.strokeWidth <= 0) c.setStrokeColor('none');
     c.ellipse(x + 1, y + 1, w - 2, h - 2);
     c.fillAndStroke();
   }
@@ -457,9 +511,15 @@ class DFDProcessShapeCanvas extends Shape {
     const cx = x + w / 2;
     const cy = y + h / 2;
     const r = Math.min(w, h) / 2 - 2;
-    c.setFillColor('#ffffff');
-    c.setStrokeColor('#1a1f36');
-    c.setStrokeWidth(2);
+    c.setFillColor(this.fill);
+    c.setStrokeColor(this.stroke);
+    c.setStrokeWidth(this.strokeWidth);
+    // maxGraph's SVG renderer floors any actually-drawn stroke to 1px
+    // (SvgCanvas2D.minStrokeWidth), so strokeWidth=0 alone still paints a
+    // hairline. Dropping the stroke color to 'none' instead skips the
+    // stroke draw entirely, which is the only way to make width 0 truly
+    // invisible.
+    if (this.strokeWidth <= 0) c.setStrokeColor('none');
     c.ellipse(cx - r, cy - r, r * 2, r * 2);
     c.fillAndStroke();
   }
@@ -469,9 +529,15 @@ class DFDDataFlowShapeCanvas extends Shape {
   paintBackground(c: AbstractCanvas2D, x: number, y: number, w: number, h: number) {
     const cy = y + h / 2;
     const arrow = 10;
-    c.setStrokeColor('#1a1f36');
-    c.setStrokeWidth(2);
-    c.setFillColor('#1a1f36');
+    c.setStrokeColor(this.stroke);
+    c.setStrokeWidth(this.strokeWidth);
+    // maxGraph's SVG renderer floors any actually-drawn stroke to 1px
+    // (SvgCanvas2D.minStrokeWidth), so strokeWidth=0 alone still paints a
+    // hairline. Dropping the stroke color to 'none' instead skips the
+    // stroke draw entirely, which is the only way to make width 0 truly
+    // invisible.
+    if (this.strokeWidth <= 0) c.setStrokeColor('none');
+    c.setFillColor(this.fill);
     c.begin();
     c.moveTo(x + 2, cy);
     c.lineTo(x + w - arrow - 2, cy);
@@ -489,8 +555,14 @@ class DFDDataStoreShapeCanvas extends Shape {
   paintBackground(c: AbstractCanvas2D, x: number, y: number, w: number, h: number) {
     const y1 = y + h * 0.2;
     const y2 = y + h * 0.8;
-    c.setStrokeColor('#1a1f36');
-    c.setStrokeWidth(2);
+    c.setStrokeColor(this.stroke);
+    c.setStrokeWidth(this.strokeWidth);
+    // maxGraph's SVG renderer floors any actually-drawn stroke to 1px
+    // (SvgCanvas2D.minStrokeWidth), so strokeWidth=0 alone still paints a
+    // hairline. Dropping the stroke color to 'none' instead skips the
+    // stroke draw entirely, which is the only way to make width 0 truly
+    // invisible.
+    if (this.strokeWidth <= 0) c.setStrokeColor('none');
     c.begin();
     c.moveTo(x + 2, y1);
     c.lineTo(x + w - 2, y1);
@@ -504,9 +576,15 @@ class DFDDataStoreShapeCanvas extends Shape {
 
 class DFDDataStoreGSShapeCanvas extends Shape {
   paintBackground(c: AbstractCanvas2D, x: number, y: number, w: number, h: number) {
-    c.setFillColor('#ffffff');
-    c.setStrokeColor('#1a1f36');
-    c.setStrokeWidth(2);
+    c.setFillColor(this.fill);
+    c.setStrokeColor(this.stroke);
+    c.setStrokeWidth(this.strokeWidth);
+    // maxGraph's SVG renderer floors any actually-drawn stroke to 1px
+    // (SvgCanvas2D.minStrokeWidth), so strokeWidth=0 alone still paints a
+    // hairline. Dropping the stroke color to 'none' instead skips the
+    // stroke draw entirely, which is the only way to make width 0 truly
+    // invisible.
+    if (this.strokeWidth <= 0) c.setStrokeColor('none');
     c.rect(x + 2, y + 2, w - 4, h - 4);
     c.fillAndStroke();
     c.begin();
@@ -518,9 +596,15 @@ class DFDDataStoreGSShapeCanvas extends Shape {
 
 class DFDExternalEntityShapeCanvas extends Shape {
   paintBackground(c: AbstractCanvas2D, x: number, y: number, w: number, h: number) {
-    c.setFillColor('#ffffff');
-    c.setStrokeColor('#1a1f36');
-    c.setStrokeWidth(2);
+    c.setFillColor(this.fill);
+    c.setStrokeColor(this.stroke);
+    c.setStrokeWidth(this.strokeWidth);
+    // maxGraph's SVG renderer floors any actually-drawn stroke to 1px
+    // (SvgCanvas2D.minStrokeWidth), so strokeWidth=0 alone still paints a
+    // hairline. Dropping the stroke color to 'none' instead skips the
+    // stroke draw entirely, which is the only way to make width 0 truly
+    // invisible.
+    if (this.strokeWidth <= 0) c.setStrokeColor('none');
     c.rect(x + 2, y + 2, w - 4, h - 4);
     c.fillAndStroke();
   }
@@ -530,9 +614,15 @@ class DFDBidirectionalShapeCanvas extends Shape {
   paintBackground(c: AbstractCanvas2D, x: number, y: number, w: number, h: number) {
     const cy = y + h / 2;
     const arrow = 10;
-    c.setStrokeColor('#1a1f36');
-    c.setStrokeWidth(2);
-    c.setFillColor('#1a1f36');
+    c.setStrokeColor(this.stroke);
+    c.setStrokeWidth(this.strokeWidth);
+    // maxGraph's SVG renderer floors any actually-drawn stroke to 1px
+    // (SvgCanvas2D.minStrokeWidth), so strokeWidth=0 alone still paints a
+    // hairline. Dropping the stroke color to 'none' instead skips the
+    // stroke draw entirely, which is the only way to make width 0 truly
+    // invisible.
+    if (this.strokeWidth <= 0) c.setStrokeColor('none');
+    c.setFillColor(this.fill);
     c.begin();
     c.moveTo(x + arrow + 2, cy);
     c.lineTo(x + w - arrow - 2, cy);
@@ -554,8 +644,14 @@ class DFDBidirectionalShapeCanvas extends Shape {
 
 class DFDBoundaryShapeCanvas extends Shape {
   paintBackground(c: AbstractCanvas2D, x: number, y: number, w: number, h: number) {
-    c.setStrokeColor('#1a1f36');
-    c.setStrokeWidth(2);
+    c.setStrokeColor(this.stroke);
+    c.setStrokeWidth(this.strokeWidth);
+    // maxGraph's SVG renderer floors any actually-drawn stroke to 1px
+    // (SvgCanvas2D.minStrokeWidth), so strokeWidth=0 alone still paints a
+    // hairline. Dropping the stroke color to 'none' instead skips the
+    // stroke draw entirely, which is the only way to make width 0 truly
+    // invisible.
+    if (this.strokeWidth <= 0) c.setStrokeColor('none');
     c.setDashed(true);
     c.setDashPattern('8 6');
     c.rect(x + 2, y + 2, w - 4, h - 4);
@@ -567,9 +663,15 @@ class DFDBoundaryShapeCanvas extends Shape {
 class DFDNoteShapeCanvas extends Shape {
   paintBackground(c: AbstractCanvas2D, x: number, y: number, w: number, h: number) {
     const fold = Math.min(w, h) * 0.2;
-    c.setFillColor('#fef9c3');
-    c.setStrokeColor('#1a1f36');
-    c.setStrokeWidth(2);
+    c.setFillColor(this.fill);
+    c.setStrokeColor(this.stroke);
+    c.setStrokeWidth(this.strokeWidth);
+    // maxGraph's SVG renderer floors any actually-drawn stroke to 1px
+    // (SvgCanvas2D.minStrokeWidth), so strokeWidth=0 alone still paints a
+    // hairline. Dropping the stroke color to 'none' instead skips the
+    // stroke draw entirely, which is the only way to make width 0 truly
+    // invisible.
+    if (this.strokeWidth <= 0) c.setStrokeColor('none');
     c.begin();
     c.moveTo(x + 2, y + 2);
     c.lineTo(x + w - fold - 2, y + 2);
@@ -591,9 +693,15 @@ class DFDOnPageShapeCanvas extends Shape {
     const cx = x + w / 2;
     const cy = y + h / 2;
     const r = Math.min(w, h) / 2 - 2;
-    c.setFillColor('#ffffff');
-    c.setStrokeColor('#1a1f36');
-    c.setStrokeWidth(2);
+    c.setFillColor(this.fill);
+    c.setStrokeColor(this.stroke);
+    c.setStrokeWidth(this.strokeWidth);
+    // maxGraph's SVG renderer floors any actually-drawn stroke to 1px
+    // (SvgCanvas2D.minStrokeWidth), so strokeWidth=0 alone still paints a
+    // hairline. Dropping the stroke color to 'none' instead skips the
+    // stroke draw entirely, which is the only way to make width 0 truly
+    // invisible.
+    if (this.strokeWidth <= 0) c.setStrokeColor('none');
     c.ellipse(cx - r, cy - r, r * 2, r * 2);
     c.fillAndStroke();
     const r2 = r * 0.3;
@@ -605,9 +713,15 @@ class DFDOnPageShapeCanvas extends Shape {
 class DFDOffPageShapeCanvas extends Shape {
   paintBackground(c: AbstractCanvas2D, x: number, y: number, w: number, h: number) {
     const cx = x + w / 2;
-    c.setFillColor('#ffffff');
-    c.setStrokeColor('#1a1f36');
-    c.setStrokeWidth(2);
+    c.setFillColor(this.fill);
+    c.setStrokeColor(this.stroke);
+    c.setStrokeWidth(this.strokeWidth);
+    // maxGraph's SVG renderer floors any actually-drawn stroke to 1px
+    // (SvgCanvas2D.minStrokeWidth), so strokeWidth=0 alone still paints a
+    // hairline. Dropping the stroke color to 'none' instead skips the
+    // stroke draw entirely, which is the only way to make width 0 truly
+    // invisible.
+    if (this.strokeWidth <= 0) c.setStrokeColor('none');
     c.begin();
     c.moveTo(x + 2, y + 2);
     c.lineTo(x + w - 2, y + 2);
@@ -626,8 +740,14 @@ class DFDOffPageShapeCanvas extends Shape {
 class FishboneSpineShapeCanvas extends Shape {
   paintBackground(c: AbstractCanvas2D, x: number, y: number, w: number, h: number) {
     const cy = y + h / 2;
-    c.setStrokeColor('#1a1f36');
-    c.setStrokeWidth(2);
+    c.setStrokeColor(this.stroke);
+    c.setStrokeWidth(this.strokeWidth);
+    // maxGraph's SVG renderer floors any actually-drawn stroke to 1px
+    // (SvgCanvas2D.minStrokeWidth), so strokeWidth=0 alone still paints a
+    // hairline. Dropping the stroke color to 'none' instead skips the
+    // stroke draw entirely, which is the only way to make width 0 truly
+    // invisible.
+    if (this.strokeWidth <= 0) c.setStrokeColor('none');
     c.begin();
     c.moveTo(x + 2, cy);
     c.lineTo(x + w - 2, cy);
@@ -638,9 +758,15 @@ class FishboneSpineShapeCanvas extends Shape {
 class FishboneHeadShapeCanvas extends Shape {
   paintBackground(c: AbstractCanvas2D, x: number, y: number, w: number, h: number) {
     const cx = x + w / 2;
-    c.setFillColor('#ffffff');
-    c.setStrokeColor('#1a1f36');
-    c.setStrokeWidth(2);
+    c.setFillColor(this.fill);
+    c.setStrokeColor(this.stroke);
+    c.setStrokeWidth(this.strokeWidth);
+    // maxGraph's SVG renderer floors any actually-drawn stroke to 1px
+    // (SvgCanvas2D.minStrokeWidth), so strokeWidth=0 alone still paints a
+    // hairline. Dropping the stroke color to 'none' instead skips the
+    // stroke draw entirely, which is the only way to make width 0 truly
+    // invisible.
+    if (this.strokeWidth <= 0) c.setStrokeColor('none');
     c.begin();
     c.moveTo(cx, y + 2);
     c.lineTo(x + w - 2, y + h / 2);
@@ -653,8 +779,14 @@ class FishboneHeadShapeCanvas extends Shape {
 class FishboneProblemShapeCanvas extends Shape {
   paintBackground(c: AbstractCanvas2D, x: number, y: number, w: number, h: number) {
     const r = Math.min(w, h) * 0.1;
-    c.setStrokeColor('#1a1f36');
-    c.setStrokeWidth(2);
+    c.setStrokeColor(this.stroke);
+    c.setStrokeWidth(this.strokeWidth);
+    // maxGraph's SVG renderer floors any actually-drawn stroke to 1px
+    // (SvgCanvas2D.minStrokeWidth), so strokeWidth=0 alone still paints a
+    // hairline. Dropping the stroke color to 'none' instead skips the
+    // stroke draw entirely, which is the only way to make width 0 truly
+    // invisible.
+    if (this.strokeWidth <= 0) c.setStrokeColor('none');
     c.setDashed(true);
     c.setDashPattern('6 4');
     c.roundrect(x + 2, y + 2, w - 4, h - 4, r, r);
@@ -665,8 +797,14 @@ class FishboneProblemShapeCanvas extends Shape {
 
 class FishboneCauseTopShapeCanvas extends Shape {
   paintBackground(c: AbstractCanvas2D, x: number, y: number, w: number, h: number) {
-    c.setStrokeColor('#1a1f36');
-    c.setStrokeWidth(2);
+    c.setStrokeColor(this.stroke);
+    c.setStrokeWidth(this.strokeWidth);
+    // maxGraph's SVG renderer floors any actually-drawn stroke to 1px
+    // (SvgCanvas2D.minStrokeWidth), so strokeWidth=0 alone still paints a
+    // hairline. Dropping the stroke color to 'none' instead skips the
+    // stroke draw entirely, which is the only way to make width 0 truly
+    // invisible.
+    if (this.strokeWidth <= 0) c.setStrokeColor('none');
     c.begin();
     c.moveTo(x + 2, y + h - 2);
     c.lineTo(x + w - 2, y + 2);
@@ -676,8 +814,14 @@ class FishboneCauseTopShapeCanvas extends Shape {
 
 class FishboneCauseBottomShapeCanvas extends Shape {
   paintBackground(c: AbstractCanvas2D, x: number, y: number, w: number, h: number) {
-    c.setStrokeColor('#1a1f36');
-    c.setStrokeWidth(2);
+    c.setStrokeColor(this.stroke);
+    c.setStrokeWidth(this.strokeWidth);
+    // maxGraph's SVG renderer floors any actually-drawn stroke to 1px
+    // (SvgCanvas2D.minStrokeWidth), so strokeWidth=0 alone still paints a
+    // hairline. Dropping the stroke color to 'none' instead skips the
+    // stroke draw entirely, which is the only way to make width 0 truly
+    // invisible.
+    if (this.strokeWidth <= 0) c.setStrokeColor('none');
     c.begin();
     c.moveTo(x + 2, y + 2);
     c.lineTo(x + w - 2, y + h - 2);
@@ -687,8 +831,14 @@ class FishboneCauseBottomShapeCanvas extends Shape {
 
 class FishboneSubCauseTopShapeCanvas extends Shape {
   paintBackground(c: AbstractCanvas2D, x: number, y: number, w: number, h: number) {
-    c.setStrokeColor('#1a1f36');
-    c.setStrokeWidth(2);
+    c.setStrokeColor(this.stroke);
+    c.setStrokeWidth(this.strokeWidth);
+    // maxGraph's SVG renderer floors any actually-drawn stroke to 1px
+    // (SvgCanvas2D.minStrokeWidth), so strokeWidth=0 alone still paints a
+    // hairline. Dropping the stroke color to 'none' instead skips the
+    // stroke draw entirely, which is the only way to make width 0 truly
+    // invisible.
+    if (this.strokeWidth <= 0) c.setStrokeColor('none');
     c.begin();
     c.moveTo(x + 2, y + h - 2);
     c.lineTo(x + w - 2, y + 2);
@@ -702,8 +852,14 @@ class FishboneSubCauseTopShapeCanvas extends Shape {
 
 class FishboneSubCauseBottomShapeCanvas extends Shape {
   paintBackground(c: AbstractCanvas2D, x: number, y: number, w: number, h: number) {
-    c.setStrokeColor('#1a1f36');
-    c.setStrokeWidth(2);
+    c.setStrokeColor(this.stroke);
+    c.setStrokeWidth(this.strokeWidth);
+    // maxGraph's SVG renderer floors any actually-drawn stroke to 1px
+    // (SvgCanvas2D.minStrokeWidth), so strokeWidth=0 alone still paints a
+    // hairline. Dropping the stroke color to 'none' instead skips the
+    // stroke draw entirely, which is the only way to make width 0 truly
+    // invisible.
+    if (this.strokeWidth <= 0) c.setStrokeColor('none');
     c.begin();
     c.moveTo(x + 2, y + 2);
     c.lineTo(x + w - 2, y + h - 2);
@@ -717,8 +873,14 @@ class FishboneSubCauseBottomShapeCanvas extends Shape {
 
 class FishboneTertiaryShapeCanvas extends Shape {
   paintBackground(c: AbstractCanvas2D, x: number, y: number, w: number, h: number) {
-    c.setStrokeColor('#1a1f36');
-    c.setStrokeWidth(1.5);
+    c.setStrokeColor(this.stroke);
+    c.setStrokeWidth(this.strokeWidth);
+    // maxGraph's SVG renderer floors any actually-drawn stroke to 1px
+    // (SvgCanvas2D.minStrokeWidth), so strokeWidth=0 alone still paints a
+    // hairline. Dropping the stroke color to 'none' instead skips the
+    // stroke draw entirely, which is the only way to make width 0 truly
+    // invisible.
+    if (this.strokeWidth <= 0) c.setStrokeColor('none');
     c.begin();
     c.moveTo(x + 2, y + h - 2);
     c.lineTo(x + w - 2, y + 2);
@@ -731,9 +893,15 @@ class FishboneArrowShapeCanvas extends Shape {
   paintBackground(c: AbstractCanvas2D, x: number, y: number, w: number, h: number) {
     const cy = y + h / 2;
     const arrow = Math.min(w, h) * 0.35;
-    c.setStrokeColor('#1a1f36');
-    c.setStrokeWidth(2);
-    c.setFillColor('#1a1f36');
+    c.setStrokeColor(this.stroke);
+    c.setStrokeWidth(this.strokeWidth);
+    // maxGraph's SVG renderer floors any actually-drawn stroke to 1px
+    // (SvgCanvas2D.minStrokeWidth), so strokeWidth=0 alone still paints a
+    // hairline. Dropping the stroke color to 'none' instead skips the
+    // stroke draw entirely, which is the only way to make width 0 truly
+    // invisible.
+    if (this.strokeWidth <= 0) c.setStrokeColor('none');
+    c.setFillColor(this.fill);
     c.begin();
     c.moveTo(x + 2, cy);
     c.lineTo(x + w - arrow - 2, cy);
@@ -751,9 +919,15 @@ class FishboneDashedArrowShapeCanvas extends Shape {
   paintBackground(c: AbstractCanvas2D, x: number, y: number, w: number, h: number) {
     const cy = y + h / 2;
     const arrow = Math.min(w, h) * 0.35;
-    c.setStrokeColor('#1a1f36');
-    c.setStrokeWidth(2);
-    c.setFillColor('#1a1f36');
+    c.setStrokeColor(this.stroke);
+    c.setStrokeWidth(this.strokeWidth);
+    // maxGraph's SVG renderer floors any actually-drawn stroke to 1px
+    // (SvgCanvas2D.minStrokeWidth), so strokeWidth=0 alone still paints a
+    // hairline. Dropping the stroke color to 'none' instead skips the
+    // stroke draw entirely, which is the only way to make width 0 truly
+    // invisible.
+    if (this.strokeWidth <= 0) c.setStrokeColor('none');
+    c.setFillColor(this.fill);
     c.setDashed(true);
     c.setDashPattern('6 4');
     c.begin();
@@ -773,9 +947,15 @@ class FishboneDashedArrowShapeCanvas extends Shape {
 class FishboneCategoryShapeCanvas extends Shape {
   paintBackground(c: AbstractCanvas2D, x: number, y: number, w: number, h: number) {
     const r = Math.min(w, h) * 0.1;
-    c.setFillColor('#ffffff');
-    c.setStrokeColor('#1a1f36');
-    c.setStrokeWidth(2);
+    c.setFillColor(this.fill);
+    c.setStrokeColor(this.stroke);
+    c.setStrokeWidth(this.strokeWidth);
+    // maxGraph's SVG renderer floors any actually-drawn stroke to 1px
+    // (SvgCanvas2D.minStrokeWidth), so strokeWidth=0 alone still paints a
+    // hairline. Dropping the stroke color to 'none' instead skips the
+    // stroke draw entirely, which is the only way to make width 0 truly
+    // invisible.
+    if (this.strokeWidth <= 0) c.setStrokeColor('none');
     c.roundrect(x + 2, y + 2, w - 4, h - 4, r, r);
     c.fillAndStroke();
   }
@@ -785,9 +965,15 @@ class FishboneBubbleShapeCanvas extends Shape {
   paintBackground(c: AbstractCanvas2D, x: number, y: number, w: number, h: number) {
     const cx = x + w / 2;
     const cy = y + h / 2;
-    c.setFillColor('#ffffff');
-    c.setStrokeColor('#1a1f36');
-    c.setStrokeWidth(2);
+    c.setFillColor(this.fill);
+    c.setStrokeColor(this.stroke);
+    c.setStrokeWidth(this.strokeWidth);
+    // maxGraph's SVG renderer floors any actually-drawn stroke to 1px
+    // (SvgCanvas2D.minStrokeWidth), so strokeWidth=0 alone still paints a
+    // hairline. Dropping the stroke color to 'none' instead skips the
+    // stroke draw entirely, which is the only way to make width 0 truly
+    // invisible.
+    if (this.strokeWidth <= 0) c.setStrokeColor('none');
     c.ellipse(cx - w / 2 + 2, cy - h / 2 + 2, w - 4, h - 4);
     c.fillAndStroke();
   }
@@ -796,9 +982,15 @@ class FishboneBubbleShapeCanvas extends Shape {
 class FishboneNoteShapeCanvas extends Shape {
   paintBackground(c: AbstractCanvas2D, x: number, y: number, w: number, h: number) {
     const fold = Math.min(w, h) * 0.2;
-    c.setFillColor('#fef9c3');
-    c.setStrokeColor('#1a1f36');
-    c.setStrokeWidth(2);
+    c.setFillColor(this.fill);
+    c.setStrokeColor(this.stroke);
+    c.setStrokeWidth(this.strokeWidth);
+    // maxGraph's SVG renderer floors any actually-drawn stroke to 1px
+    // (SvgCanvas2D.minStrokeWidth), so strokeWidth=0 alone still paints a
+    // hairline. Dropping the stroke color to 'none' instead skips the
+    // stroke draw entirely, which is the only way to make width 0 truly
+    // invisible.
+    if (this.strokeWidth <= 0) c.setStrokeColor('none');
     c.begin();
     c.moveTo(x + 2, y + 2);
     c.lineTo(x + w - fold - 2, y + 2);
@@ -822,9 +1014,15 @@ class FishboneNoteShapeCanvas extends Shape {
 class SchematicBatteryShapeCanvas extends Shape {
   paintBackground(c: AbstractCanvas2D, x: number, y: number, w: number, h: number) {
     const cy = y + h / 2;
-    c.setStrokeColor('#1a1f36');
-    c.setStrokeWidth(2);
-    c.setFillColor('#1a1f36');
+    c.setStrokeColor(this.stroke);
+    c.setStrokeWidth(this.strokeWidth);
+    // maxGraph's SVG renderer floors any actually-drawn stroke to 1px
+    // (SvgCanvas2D.minStrokeWidth), so strokeWidth=0 alone still paints a
+    // hairline. Dropping the stroke color to 'none' instead skips the
+    // stroke draw entirely, which is the only way to make width 0 truly
+    // invisible.
+    if (this.strokeWidth <= 0) c.setStrokeColor('none');
+    c.setFillColor(this.fill);
     c.begin();
     c.moveTo(x + 2, cy);
     c.lineTo(x + w * 0.35, cy);
@@ -852,8 +1050,14 @@ class SchematicACShapeCanvas extends Shape {
     const cx = x + w / 2;
     const cy = y + h / 2;
     const r = Math.min(w, h) * 0.33;
-    c.setStrokeColor('#1a1f36');
-    c.setStrokeWidth(2);
+    c.setStrokeColor(this.stroke);
+    c.setStrokeWidth(this.strokeWidth);
+    // maxGraph's SVG renderer floors any actually-drawn stroke to 1px
+    // (SvgCanvas2D.minStrokeWidth), so strokeWidth=0 alone still paints a
+    // hairline. Dropping the stroke color to 'none' instead skips the
+    // stroke draw entirely, which is the only way to make width 0 truly
+    // invisible.
+    if (this.strokeWidth <= 0) c.setStrokeColor('none');
     c.begin();
     c.moveTo(x + 2, cy);
     c.lineTo(cx - r, cy);
@@ -874,8 +1078,14 @@ class SchematicACShapeCanvas extends Shape {
 class SchematicGroundShapeCanvas extends Shape {
   paintBackground(c: AbstractCanvas2D, x: number, y: number, w: number, h: number) {
     const cx = x + w / 2;
-    c.setStrokeColor('#1a1f36');
-    c.setStrokeWidth(2);
+    c.setStrokeColor(this.stroke);
+    c.setStrokeWidth(this.strokeWidth);
+    // maxGraph's SVG renderer floors any actually-drawn stroke to 1px
+    // (SvgCanvas2D.minStrokeWidth), so strokeWidth=0 alone still paints a
+    // hairline. Dropping the stroke color to 'none' instead skips the
+    // stroke draw entirely, which is the only way to make width 0 truly
+    // invisible.
+    if (this.strokeWidth <= 0) c.setStrokeColor('none');
     c.begin();
     c.moveTo(cx, y + 2);
     c.lineTo(cx, y + h * 0.35);
@@ -899,8 +1109,14 @@ class SchematicResistorShapeCanvas extends Shape {
   paintBackground(c: AbstractCanvas2D, x: number, y: number, w: number, h: number) {
     const cy = y + h / 2;
     const s = h * 0.2;
-    c.setStrokeColor('#1a1f36');
-    c.setStrokeWidth(2);
+    c.setStrokeColor(this.stroke);
+    c.setStrokeWidth(this.strokeWidth);
+    // maxGraph's SVG renderer floors any actually-drawn stroke to 1px
+    // (SvgCanvas2D.minStrokeWidth), so strokeWidth=0 alone still paints a
+    // hairline. Dropping the stroke color to 'none' instead skips the
+    // stroke draw entirely, which is the only way to make width 0 truly
+    // invisible.
+    if (this.strokeWidth <= 0) c.setStrokeColor('none');
     c.begin();
     c.moveTo(x + 2, cy);
     c.lineTo(x + w * 0.15, cy);
@@ -928,9 +1144,15 @@ class SchematicVariableResistorShapeCanvas extends Shape {
   paintBackground(c: AbstractCanvas2D, x: number, y: number, w: number, h: number) {
     const cy = y + h / 2;
     const s = h * 0.15;
-    c.setStrokeColor('#1a1f36');
-    c.setStrokeWidth(2);
-    c.setFillColor('#1a1f36');
+    c.setStrokeColor(this.stroke);
+    c.setStrokeWidth(this.strokeWidth);
+    // maxGraph's SVG renderer floors any actually-drawn stroke to 1px
+    // (SvgCanvas2D.minStrokeWidth), so strokeWidth=0 alone still paints a
+    // hairline. Dropping the stroke color to 'none' instead skips the
+    // stroke draw entirely, which is the only way to make width 0 truly
+    // invisible.
+    if (this.strokeWidth <= 0) c.setStrokeColor('none');
+    c.setFillColor(this.fill);
     c.begin();
     c.moveTo(x + 2, cy);
     c.lineTo(x + w * 0.15, cy);
@@ -968,8 +1190,14 @@ class SchematicCapacitorShapeCanvas extends Shape {
     const cy = y + h / 2;
     const x1 = x + w * 0.4;
     const x2 = x + w * 0.6;
-    c.setStrokeColor('#1a1f36');
-    c.setStrokeWidth(2);
+    c.setStrokeColor(this.stroke);
+    c.setStrokeWidth(this.strokeWidth);
+    // maxGraph's SVG renderer floors any actually-drawn stroke to 1px
+    // (SvgCanvas2D.minStrokeWidth), so strokeWidth=0 alone still paints a
+    // hairline. Dropping the stroke color to 'none' instead skips the
+    // stroke draw entirely, which is the only way to make width 0 truly
+    // invisible.
+    if (this.strokeWidth <= 0) c.setStrokeColor('none');
     c.begin();
     c.moveTo(x + 2, cy);
     c.lineTo(x1, cy);
@@ -994,8 +1222,14 @@ class SchematicInductorShapeCanvas extends Shape {
     const cy = y + h / 2;
     const coils = 4;
     const spacing = (w - 8) / (coils * 2 + 1);
-    c.setStrokeColor('#1a1f36');
-    c.setStrokeWidth(2);
+    c.setStrokeColor(this.stroke);
+    c.setStrokeWidth(this.strokeWidth);
+    // maxGraph's SVG renderer floors any actually-drawn stroke to 1px
+    // (SvgCanvas2D.minStrokeWidth), so strokeWidth=0 alone still paints a
+    // hairline. Dropping the stroke color to 'none' instead skips the
+    // stroke draw entirely, which is the only way to make width 0 truly
+    // invisible.
+    if (this.strokeWidth <= 0) c.setStrokeColor('none');
     c.begin();
     c.moveTo(x + 2, cy);
     c.lineTo(x + 2 + spacing, cy);
@@ -1013,9 +1247,15 @@ class SchematicInductorShapeCanvas extends Shape {
 class SchematicDiodeShapeCanvas extends Shape {
   paintBackground(c: AbstractCanvas2D, x: number, y: number, w: number, h: number) {
     const cy = y + h / 2;
-    c.setStrokeColor('#1a1f36');
-    c.setStrokeWidth(2);
-    c.setFillColor('#ffffff');
+    c.setStrokeColor(this.stroke);
+    c.setStrokeWidth(this.strokeWidth);
+    // maxGraph's SVG renderer floors any actually-drawn stroke to 1px
+    // (SvgCanvas2D.minStrokeWidth), so strokeWidth=0 alone still paints a
+    // hairline. Dropping the stroke color to 'none' instead skips the
+    // stroke draw entirely, which is the only way to make width 0 truly
+    // invisible.
+    if (this.strokeWidth <= 0) c.setStrokeColor('none');
+    c.setFillColor(this.fill);
     c.begin();
     c.moveTo(x + 2, cy);
     c.lineTo(x + w * 0.3, cy);
@@ -1040,9 +1280,15 @@ class SchematicDiodeShapeCanvas extends Shape {
 class SchematicLEDShapeCanvas extends Shape {
   paintBackground(c: AbstractCanvas2D, x: number, y: number, w: number, h: number) {
     const cy = y + h / 2;
-    c.setStrokeColor('#1a1f36');
-    c.setStrokeWidth(2);
-    c.setFillColor('#ffffff');
+    c.setStrokeColor(this.stroke);
+    c.setStrokeWidth(this.strokeWidth);
+    // maxGraph's SVG renderer floors any actually-drawn stroke to 1px
+    // (SvgCanvas2D.minStrokeWidth), so strokeWidth=0 alone still paints a
+    // hairline. Dropping the stroke color to 'none' instead skips the
+    // stroke draw entirely, which is the only way to make width 0 truly
+    // invisible.
+    if (this.strokeWidth <= 0) c.setStrokeColor('none');
+    c.setFillColor(this.fill);
     c.begin();
     c.moveTo(x + 2, cy);
     c.lineTo(x + w * 0.25, cy);
@@ -1077,8 +1323,14 @@ class SchematicNPNShapeCanvas extends Shape {
     const cx = x + w / 2;
     const cy = y + h / 2;
     const r = Math.min(w, h) * 0.25;
-    c.setStrokeColor('#1a1f36');
-    c.setStrokeWidth(2);
+    c.setStrokeColor(this.stroke);
+    c.setStrokeWidth(this.strokeWidth);
+    // maxGraph's SVG renderer floors any actually-drawn stroke to 1px
+    // (SvgCanvas2D.minStrokeWidth), so strokeWidth=0 alone still paints a
+    // hairline. Dropping the stroke color to 'none' instead skips the
+    // stroke draw entirely, which is the only way to make width 0 truly
+    // invisible.
+    if (this.strokeWidth <= 0) c.setStrokeColor('none');
     c.ellipse(cx - r, cy - r, r * 2, r * 2);
     c.stroke();
     c.begin();
@@ -1105,9 +1357,15 @@ class SchematicNPNShapeCanvas extends Shape {
 class SchematicSwitchShapeCanvas extends Shape {
   paintBackground(c: AbstractCanvas2D, x: number, y: number, w: number, h: number) {
     const cy = y + h * 0.6;
-    c.setStrokeColor('#1a1f36');
-    c.setStrokeWidth(2);
-    c.setFillColor('#1a1f36');
+    c.setStrokeColor(this.stroke);
+    c.setStrokeWidth(this.strokeWidth);
+    // maxGraph's SVG renderer floors any actually-drawn stroke to 1px
+    // (SvgCanvas2D.minStrokeWidth), so strokeWidth=0 alone still paints a
+    // hairline. Dropping the stroke color to 'none' instead skips the
+    // stroke draw entirely, which is the only way to make width 0 truly
+    // invisible.
+    if (this.strokeWidth <= 0) c.setStrokeColor('none');
+    c.setFillColor(this.fill);
     c.begin();
     c.moveTo(x + 2, cy);
     c.lineTo(x + w * 0.2, cy);
@@ -1130,9 +1388,15 @@ class SchematicSwitchShapeCanvas extends Shape {
 class SchematicFuseShapeCanvas extends Shape {
   paintBackground(c: AbstractCanvas2D, x: number, y: number, w: number, h: number) {
     const cy = y + h / 2;
-    c.setStrokeColor('#1a1f36');
-    c.setStrokeWidth(2);
-    c.setFillColor('#ffffff');
+    c.setStrokeColor(this.stroke);
+    c.setStrokeWidth(this.strokeWidth);
+    // maxGraph's SVG renderer floors any actually-drawn stroke to 1px
+    // (SvgCanvas2D.minStrokeWidth), so strokeWidth=0 alone still paints a
+    // hairline. Dropping the stroke color to 'none' instead skips the
+    // stroke draw entirely, which is the only way to make width 0 truly
+    // invisible.
+    if (this.strokeWidth <= 0) c.setStrokeColor('none');
+    c.setFillColor(this.fill);
     c.begin();
     c.moveTo(x + 2, cy);
     c.lineTo(x + w * 0.25, cy);
@@ -1154,9 +1418,15 @@ class SchematicConnectionShapeCanvas extends Shape {
   paintBackground(c: AbstractCanvas2D, x: number, y: number, w: number, h: number) {
     const cy = y + h / 2;
     const cx = x + w / 2;
-    c.setStrokeColor('#1a1f36');
-    c.setStrokeWidth(2);
-    c.setFillColor('#1a1f36');
+    c.setStrokeColor(this.stroke);
+    c.setStrokeWidth(this.strokeWidth);
+    // maxGraph's SVG renderer floors any actually-drawn stroke to 1px
+    // (SvgCanvas2D.minStrokeWidth), so strokeWidth=0 alone still paints a
+    // hairline. Dropping the stroke color to 'none' instead skips the
+    // stroke draw entirely, which is the only way to make width 0 truly
+    // invisible.
+    if (this.strokeWidth <= 0) c.setStrokeColor('none');
+    c.setFillColor(this.fill);
     c.begin();
     c.moveTo(x + 2, cy);
     c.lineTo(x + w - 2, cy);
@@ -1170,8 +1440,14 @@ class SchematicNoConnectionShapeCanvas extends Shape {
   paintBackground(c: AbstractCanvas2D, x: number, y: number, w: number, h: number) {
     const cy = y + h / 2;
     const cx = x + w / 2;
-    c.setStrokeColor('#1a1f36');
-    c.setStrokeWidth(2);
+    c.setStrokeColor(this.stroke);
+    c.setStrokeWidth(this.strokeWidth);
+    // maxGraph's SVG renderer floors any actually-drawn stroke to 1px
+    // (SvgCanvas2D.minStrokeWidth), so strokeWidth=0 alone still paints a
+    // hairline. Dropping the stroke color to 'none' instead skips the
+    // stroke draw entirely, which is the only way to make width 0 truly
+    // invisible.
+    if (this.strokeWidth <= 0) c.setStrokeColor('none');
     c.begin();
     c.moveTo(x + 2, cy);
     c.lineTo(x + w - 2, cy);
@@ -1188,9 +1464,15 @@ class SchematicICShapeCanvas extends Shape {
   paintBackground(c: AbstractCanvas2D, x: number, y: number, w: number, h: number) {
     const cx = x + w / 2;
     const cy = y + h / 2;
-    c.setFillColor('#ffffff');
-    c.setStrokeColor('#1a1f36');
-    c.setStrokeWidth(2);
+    c.setFillColor(this.fill);
+    c.setStrokeColor(this.stroke);
+    c.setStrokeWidth(this.strokeWidth);
+    // maxGraph's SVG renderer floors any actually-drawn stroke to 1px
+    // (SvgCanvas2D.minStrokeWidth), so strokeWidth=0 alone still paints a
+    // hairline. Dropping the stroke color to 'none' instead skips the
+    // stroke draw entirely, which is the only way to make width 0 truly
+    // invisible.
+    if (this.strokeWidth <= 0) c.setStrokeColor('none');
     c.rect(x + 2, y + 2, w - 4, h - 4);
     c.fillAndStroke();
     const pinCount = 8;
@@ -1218,9 +1500,15 @@ class SchematicOpAmpShapeCanvas extends Shape {
   paintBackground(c: AbstractCanvas2D, x: number, y: number, w: number, h: number) {
     const cx = x + w / 2;
     const cy = y + h / 2;
-    c.setFillColor('#ffffff');
-    c.setStrokeColor('#1a1f36');
-    c.setStrokeWidth(2);
+    c.setFillColor(this.fill);
+    c.setStrokeColor(this.stroke);
+    c.setStrokeWidth(this.strokeWidth);
+    // maxGraph's SVG renderer floors any actually-drawn stroke to 1px
+    // (SvgCanvas2D.minStrokeWidth), so strokeWidth=0 alone still paints a
+    // hairline. Dropping the stroke color to 'none' instead skips the
+    // stroke draw entirely, which is the only way to make width 0 truly
+    // invisible.
+    if (this.strokeWidth <= 0) c.setStrokeColor('none');
     c.begin();
     c.moveTo(x + 2, cy);
     c.lineTo(cx + 2, y + 2);
@@ -1253,8 +1541,14 @@ class SchematicTransformerShapeCanvas extends Shape {
     const spacing = (w - 12) / (coils * 2 + 1);
     const y1 = y + h * 0.15;
     const y2 = y + h * 0.85;
-    c.setStrokeColor('#1a1f36');
-    c.setStrokeWidth(2);
+    c.setStrokeColor(this.stroke);
+    c.setStrokeWidth(this.strokeWidth);
+    // maxGraph's SVG renderer floors any actually-drawn stroke to 1px
+    // (SvgCanvas2D.minStrokeWidth), so strokeWidth=0 alone still paints a
+    // hairline. Dropping the stroke color to 'none' instead skips the
+    // stroke draw entirely, which is the only way to make width 0 truly
+    // invisible.
+    if (this.strokeWidth <= 0) c.setStrokeColor('none');
     c.begin();
     c.moveTo(x + 4, y1);
     for (let i = 0; i < coils; i++) {
@@ -1296,9 +1590,15 @@ class UMLIncludeShapeCanvas extends Shape {
   paintBackground(c: AbstractCanvas2D, x: number, y: number, w: number, h: number) {
     const cy = y + h / 2;
     const arrow = 12;
-    c.setStrokeColor('#1a1f36');
-    c.setStrokeWidth(2);
-    c.setFillColor('#1a1f36');
+    c.setStrokeColor(this.stroke);
+    c.setStrokeWidth(this.strokeWidth);
+    // maxGraph's SVG renderer floors any actually-drawn stroke to 1px
+    // (SvgCanvas2D.minStrokeWidth), so strokeWidth=0 alone still paints a
+    // hairline. Dropping the stroke color to 'none' instead skips the
+    // stroke draw entirely, which is the only way to make width 0 truly
+    // invisible.
+    if (this.strokeWidth <= 0) c.setStrokeColor('none');
+    c.setFillColor(this.fill);
     c.setDashed(true);
     c.setDashPattern('6 4');
     c.begin();
@@ -1319,9 +1619,15 @@ class UMLExtendShapeCanvas extends Shape {
   paintBackground(c: AbstractCanvas2D, x: number, y: number, w: number, h: number) {
     const cy = y + h / 2;
     const arrow = 12;
-    c.setStrokeColor('#1a1f36');
-    c.setStrokeWidth(2);
-    c.setFillColor('#1a1f36');
+    c.setStrokeColor(this.stroke);
+    c.setStrokeWidth(this.strokeWidth);
+    // maxGraph's SVG renderer floors any actually-drawn stroke to 1px
+    // (SvgCanvas2D.minStrokeWidth), so strokeWidth=0 alone still paints a
+    // hairline. Dropping the stroke color to 'none' instead skips the
+    // stroke draw entirely, which is the only way to make width 0 truly
+    // invisible.
+    if (this.strokeWidth <= 0) c.setStrokeColor('none');
+    c.setFillColor(this.fill);
     c.setDashed(true);
     c.setDashPattern('6 4');
     c.begin();
@@ -1347,9 +1653,15 @@ class UMLInitialNodeShapeCanvas extends Shape {
     const cx = x + w / 2;
     const cy = y + h / 2;
     const r = Math.min(w, h) / 2 - 2;
-    c.setFillColor('#1a1f36');
-    c.setStrokeColor('#1a1f36');
-    c.setStrokeWidth(0);
+    c.setFillColor(this.fill);
+    c.setStrokeColor(this.stroke);
+    c.setStrokeWidth(this.strokeWidth);
+    // maxGraph's SVG renderer floors any actually-drawn stroke to 1px
+    // (SvgCanvas2D.minStrokeWidth), so strokeWidth=0 alone still paints a
+    // hairline. Dropping the stroke color to 'none' instead skips the
+    // stroke draw entirely, which is the only way to make width 0 truly
+    // invisible.
+    if (this.strokeWidth <= 0) c.setStrokeColor('none');
     c.ellipse(cx - r, cy - r, r * 2, r * 2);
     c.fill();
   }
@@ -1359,9 +1671,15 @@ class UMLMergeShapeCanvas extends Shape {
   paintBackground(c: AbstractCanvas2D, x: number, y: number, w: number, h: number) {
     const bar = Math.min(h, 10);
     const yPos = y + (h - bar) / 2;
-    c.setFillColor('#1a1f36');
-    c.setStrokeColor('#1a1f36');
-    c.setStrokeWidth(0);
+    c.setFillColor(this.fill);
+    c.setStrokeColor(this.stroke);
+    c.setStrokeWidth(this.strokeWidth);
+    // maxGraph's SVG renderer floors any actually-drawn stroke to 1px
+    // (SvgCanvas2D.minStrokeWidth), so strokeWidth=0 alone still paints a
+    // hairline. Dropping the stroke color to 'none' instead skips the
+    // stroke draw entirely, which is the only way to make width 0 truly
+    // invisible.
+    if (this.strokeWidth <= 0) c.setStrokeColor('none');
     c.rect(x + 2, yPos, w - 4, bar);
     c.fill();
   }
@@ -1371,9 +1689,15 @@ class UMLForkShapeCanvas extends Shape {
   paintBackground(c: AbstractCanvas2D, x: number, y: number, w: number, h: number) {
     const bar = Math.min(h, 10);
     const yPos = y + (h - bar) / 2;
-    c.setFillColor('#1a1f36');
-    c.setStrokeColor('#1a1f36');
-    c.setStrokeWidth(0);
+    c.setFillColor(this.fill);
+    c.setStrokeColor(this.stroke);
+    c.setStrokeWidth(this.strokeWidth);
+    // maxGraph's SVG renderer floors any actually-drawn stroke to 1px
+    // (SvgCanvas2D.minStrokeWidth), so strokeWidth=0 alone still paints a
+    // hairline. Dropping the stroke color to 'none' instead skips the
+    // stroke draw entirely, which is the only way to make width 0 truly
+    // invisible.
+    if (this.strokeWidth <= 0) c.setStrokeColor('none');
     c.rect(x + 2, yPos, w - 4, bar);
     c.fill();
   }
@@ -1383,9 +1707,15 @@ class UMLControlFlowShapeCanvas extends Shape {
   paintBackground(c: AbstractCanvas2D, x: number, y: number, w: number, h: number) {
     const cy = y + h / 2;
     const arrow = 10;
-    c.setStrokeColor('#1a1f36');
-    c.setStrokeWidth(2);
-    c.setFillColor('#1a1f36');
+    c.setStrokeColor(this.stroke);
+    c.setStrokeWidth(this.strokeWidth);
+    // maxGraph's SVG renderer floors any actually-drawn stroke to 1px
+    // (SvgCanvas2D.minStrokeWidth), so strokeWidth=0 alone still paints a
+    // hairline. Dropping the stroke color to 'none' instead skips the
+    // stroke draw entirely, which is the only way to make width 0 truly
+    // invisible.
+    if (this.strokeWidth <= 0) c.setStrokeColor('none');
+    c.setFillColor(this.fill);
     c.begin();
     c.moveTo(x + 2, cy);
     c.lineTo(x + w - arrow - 2, cy);
@@ -1403,9 +1733,15 @@ class UMLObjectFlowShapeCanvas extends Shape {
   paintBackground(c: AbstractCanvas2D, x: number, y: number, w: number, h: number) {
     const cy = y + h / 2;
     const arrow = 10;
-    c.setStrokeColor('#1a1f36');
-    c.setStrokeWidth(2);
-    c.setFillColor('#1a1f36');
+    c.setStrokeColor(this.stroke);
+    c.setStrokeWidth(this.strokeWidth);
+    // maxGraph's SVG renderer floors any actually-drawn stroke to 1px
+    // (SvgCanvas2D.minStrokeWidth), so strokeWidth=0 alone still paints a
+    // hairline. Dropping the stroke color to 'none' instead skips the
+    // stroke draw entirely, which is the only way to make width 0 truly
+    // invisible.
+    if (this.strokeWidth <= 0) c.setStrokeColor('none');
+    c.setFillColor(this.fill);
     c.setDashed(true);
     c.setDashPattern('6 4');
     c.begin();
@@ -1427,9 +1763,15 @@ class UMLActivityFinalShapeCanvas extends Shape {
     const cx = x + w / 2;
     const cy = y + h / 2;
     const r = Math.min(w, h) / 2 - 2;
-    c.setStrokeColor('#1a1f36');
-    c.setStrokeWidth(2);
-    c.setFillColor('#1a1f36');
+    c.setStrokeColor(this.stroke);
+    c.setStrokeWidth(this.strokeWidth);
+    // maxGraph's SVG renderer floors any actually-drawn stroke to 1px
+    // (SvgCanvas2D.minStrokeWidth), so strokeWidth=0 alone still paints a
+    // hairline. Dropping the stroke color to 'none' instead skips the
+    // stroke draw entirely, which is the only way to make width 0 truly
+    // invisible.
+    if (this.strokeWidth <= 0) c.setStrokeColor('none');
+    c.setFillColor(this.fill);
     c.ellipse(cx - r, cy - r, r * 2, r * 2);
     c.stroke();
     const r2 = r * 0.5;
@@ -1444,8 +1786,14 @@ class UMLFlowFinalShapeCanvas extends Shape {
     const cy = y + h / 2;
     const r = Math.min(w, h) / 2 - 2;
     const p = r * 0.5;
-    c.setStrokeColor('#1a1f36');
-    c.setStrokeWidth(2);
+    c.setStrokeColor(this.stroke);
+    c.setStrokeWidth(this.strokeWidth);
+    // maxGraph's SVG renderer floors any actually-drawn stroke to 1px
+    // (SvgCanvas2D.minStrokeWidth), so strokeWidth=0 alone still paints a
+    // hairline. Dropping the stroke color to 'none' instead skips the
+    // stroke draw entirely, which is the only way to make width 0 truly
+    // invisible.
+    if (this.strokeWidth <= 0) c.setStrokeColor('none');
     c.ellipse(cx - r, cy - r, r * 2, r * 2);
     c.stroke();
     c.begin();
@@ -1467,9 +1815,15 @@ class UMLSyncMsgShapeCanvas extends Shape {
   paintBackground(c: AbstractCanvas2D, x: number, y: number, w: number, h: number) {
     const cy = y + h / 2;
     const arrow = 12;
-    c.setStrokeColor('#1a1f36');
-    c.setStrokeWidth(2);
-    c.setFillColor('#1a1f36');
+    c.setStrokeColor(this.stroke);
+    c.setStrokeWidth(this.strokeWidth);
+    // maxGraph's SVG renderer floors any actually-drawn stroke to 1px
+    // (SvgCanvas2D.minStrokeWidth), so strokeWidth=0 alone still paints a
+    // hairline. Dropping the stroke color to 'none' instead skips the
+    // stroke draw entirely, which is the only way to make width 0 truly
+    // invisible.
+    if (this.strokeWidth <= 0) c.setStrokeColor('none');
+    c.setFillColor(this.fill);
     c.begin();
     c.moveTo(x + 2, cy);
     c.lineTo(x + w - arrow - 2, cy);
@@ -1487,8 +1841,14 @@ class UMLAsyncMsgShapeCanvas extends Shape {
   paintBackground(c: AbstractCanvas2D, x: number, y: number, w: number, h: number) {
     const cy = y + h / 2;
     const arrow = 12;
-    c.setStrokeColor('#1a1f36');
-    c.setStrokeWidth(2);
+    c.setStrokeColor(this.stroke);
+    c.setStrokeWidth(this.strokeWidth);
+    // maxGraph's SVG renderer floors any actually-drawn stroke to 1px
+    // (SvgCanvas2D.minStrokeWidth), so strokeWidth=0 alone still paints a
+    // hairline. Dropping the stroke color to 'none' instead skips the
+    // stroke draw entirely, which is the only way to make width 0 truly
+    // invisible.
+    if (this.strokeWidth <= 0) c.setStrokeColor('none');
     c.begin();
     c.moveTo(x + 2, cy);
     c.lineTo(x + w - arrow - 2, cy);
@@ -1510,9 +1870,15 @@ class UMLCompositionShapeCanvas extends Shape {
   paintBackground(c: AbstractCanvas2D, x: number, y: number, w: number, h: number) {
     const cy = y + h / 2;
     const d = 14;
-    c.setStrokeColor('#1a1f36');
-    c.setStrokeWidth(2);
-    c.setFillColor('#1a1f36');
+    c.setStrokeColor(this.stroke);
+    c.setStrokeWidth(this.strokeWidth);
+    // maxGraph's SVG renderer floors any actually-drawn stroke to 1px
+    // (SvgCanvas2D.minStrokeWidth), so strokeWidth=0 alone still paints a
+    // hairline. Dropping the stroke color to 'none' instead skips the
+    // stroke draw entirely, which is the only way to make width 0 truly
+    // invisible.
+    if (this.strokeWidth <= 0) c.setStrokeColor('none');
+    c.setFillColor(this.fill);
     c.begin();
     c.moveTo(x + d * 2 + 2, cy);
     c.lineTo(x + w - 2, cy);
@@ -1533,9 +1899,15 @@ class UMLCompositionShapeCanvas extends Shape {
 
 class RectangleShapeCanvas extends Shape {
   paintBackground(c: AbstractCanvas2D, x: number, y: number, w: number, h: number) {
-    c.setFillColor('#ffffff');
-    c.setStrokeColor('#1a1f36');
-    c.setStrokeWidth(2);
+    c.setFillColor(this.fill);
+    c.setStrokeColor(this.stroke);
+    c.setStrokeWidth(this.strokeWidth);
+    // maxGraph's SVG renderer floors any actually-drawn stroke to 1px
+    // (SvgCanvas2D.minStrokeWidth), so strokeWidth=0 alone still paints a
+    // hairline. Dropping the stroke color to 'none' instead skips the
+    // stroke draw entirely, which is the only way to make width 0 truly
+    // invisible.
+    if (this.strokeWidth <= 0) c.setStrokeColor('none');
     c.rect(x + 2, y + 2, w - 4, h - 4);
     c.fillAndStroke();
   }
@@ -1544,9 +1916,15 @@ class RectangleShapeCanvas extends Shape {
 class RoundedRectShapeCanvas extends Shape {
   paintBackground(c: AbstractCanvas2D, x: number, y: number, w: number, h: number) {
     const r = Math.min(w, h) * 0.15;
-    c.setFillColor('#ffffff');
-    c.setStrokeColor('#1a1f36');
-    c.setStrokeWidth(2);
+    c.setFillColor(this.fill);
+    c.setStrokeColor(this.stroke);
+    c.setStrokeWidth(this.strokeWidth);
+    // maxGraph's SVG renderer floors any actually-drawn stroke to 1px
+    // (SvgCanvas2D.minStrokeWidth), so strokeWidth=0 alone still paints a
+    // hairline. Dropping the stroke color to 'none' instead skips the
+    // stroke draw entirely, which is the only way to make width 0 truly
+    // invisible.
+    if (this.strokeWidth <= 0) c.setStrokeColor('none');
     c.roundrect(x + 2, y + 2, w - 4, h - 4, r, r);
     c.fillAndStroke();
   }
@@ -1557,9 +1935,15 @@ class CircleShapeCanvas extends Shape {
     const cx = x + w / 2;
     const cy = y + h / 2;
     const r = Math.min(w, h) / 2 - 4;
-    c.setFillColor('#ffffff');
-    c.setStrokeColor('#1a1f36');
-    c.setStrokeWidth(2);
+    c.setFillColor(this.fill);
+    c.setStrokeColor(this.stroke);
+    c.setStrokeWidth(this.strokeWidth);
+    // maxGraph's SVG renderer floors any actually-drawn stroke to 1px
+    // (SvgCanvas2D.minStrokeWidth), so strokeWidth=0 alone still paints a
+    // hairline. Dropping the stroke color to 'none' instead skips the
+    // stroke draw entirely, which is the only way to make width 0 truly
+    // invisible.
+    if (this.strokeWidth <= 0) c.setStrokeColor('none');
     c.ellipse(cx - r, cy - r, r * 2, r * 2);
     c.fillAndStroke();
   }
@@ -1568,9 +1952,15 @@ class CircleShapeCanvas extends Shape {
 class EllipseShapeCanvas extends Shape {
 
     paintBackground(c: AbstractCanvas2D, x: number, y: number, w: number, h: number) {
-    c.setFillColor('#ffffff');
-    c.setStrokeColor('#1a1f36');
-    c.setStrokeWidth(2);
+    c.setFillColor(this.fill);
+    c.setStrokeColor(this.stroke);
+    c.setStrokeWidth(this.strokeWidth);
+    // maxGraph's SVG renderer floors any actually-drawn stroke to 1px
+    // (SvgCanvas2D.minStrokeWidth), so strokeWidth=0 alone still paints a
+    // hairline. Dropping the stroke color to 'none' instead skips the
+    // stroke draw entirely, which is the only way to make width 0 truly
+    // invisible.
+    if (this.strokeWidth <= 0) c.setStrokeColor('none');
     c.ellipse(x + 1, y + 1, w - 2, h - 2);
     c.fillAndStroke();
   }
@@ -1580,9 +1970,15 @@ class DiamondShapeCanvas extends Shape {
   paintBackground(c: AbstractCanvas2D, x: number, y: number, w: number, h: number) {
     const cx = x + w / 2;
     const cy = y + h / 2;
-    c.setFillColor('#ffffff');
-    c.setStrokeColor('#1a1f36');
-    c.setStrokeWidth(2);
+    c.setFillColor(this.fill);
+    c.setStrokeColor(this.stroke);
+    c.setStrokeWidth(this.strokeWidth);
+    // maxGraph's SVG renderer floors any actually-drawn stroke to 1px
+    // (SvgCanvas2D.minStrokeWidth), so strokeWidth=0 alone still paints a
+    // hairline. Dropping the stroke color to 'none' instead skips the
+    // stroke draw entirely, which is the only way to make width 0 truly
+    // invisible.
+    if (this.strokeWidth <= 0) c.setStrokeColor('none');
     c.begin();
     c.moveTo(cx, y + 2);
     c.lineTo(x + w - 2, cy);
@@ -1596,9 +1992,15 @@ class DiamondShapeCanvas extends Shape {
 class TriangleShapeCanvas extends Shape {
   paintBackground(c: AbstractCanvas2D, x: number, y: number, w: number, h: number) {
     const cx = x + w / 2;
-    c.setFillColor('#ffffff');
-    c.setStrokeColor('#1a1f36');
-    c.setStrokeWidth(2);
+    c.setFillColor(this.fill);
+    c.setStrokeColor(this.stroke);
+    c.setStrokeWidth(this.strokeWidth);
+    // maxGraph's SVG renderer floors any actually-drawn stroke to 1px
+    // (SvgCanvas2D.minStrokeWidth), so strokeWidth=0 alone still paints a
+    // hairline. Dropping the stroke color to 'none' instead skips the
+    // stroke draw entirely, which is the only way to make width 0 truly
+    // invisible.
+    if (this.strokeWidth <= 0) c.setStrokeColor('none');
     c.begin();
     c.moveTo(cx, y + 2);
     c.lineTo(x + w - 2, y + h - 2);
@@ -1611,9 +2013,15 @@ class TriangleShapeCanvas extends Shape {
 class ParallelogramShapeCanvas extends Shape {
   paintBackground(c: AbstractCanvas2D, x: number, y: number, w: number, h: number) {
     const offset = w * 0.18;
-    c.setFillColor('#ffffff');
-    c.setStrokeColor('#1a1f36');
-    c.setStrokeWidth(2);
+    c.setFillColor(this.fill);
+    c.setStrokeColor(this.stroke);
+    c.setStrokeWidth(this.strokeWidth);
+    // maxGraph's SVG renderer floors any actually-drawn stroke to 1px
+    // (SvgCanvas2D.minStrokeWidth), so strokeWidth=0 alone still paints a
+    // hairline. Dropping the stroke color to 'none' instead skips the
+    // stroke draw entirely, which is the only way to make width 0 truly
+    // invisible.
+    if (this.strokeWidth <= 0) c.setStrokeColor('none');
     c.begin();
     c.moveTo(x + offset, y + 2);
     c.lineTo(x + w - 2, y + 2);
@@ -1629,9 +2037,15 @@ class CylinderShapeCanvas extends Shape {
     const rx = (w - 4) / 2;
     const ry = 6;
     const cx = x + w / 2;
-    c.setFillColor('#ffffff');
-    c.setStrokeColor('#1a1f36');
-    c.setStrokeWidth(2);
+    c.setFillColor(this.fill);
+    c.setStrokeColor(this.stroke);
+    c.setStrokeWidth(this.strokeWidth);
+    // maxGraph's SVG renderer floors any actually-drawn stroke to 1px
+    // (SvgCanvas2D.minStrokeWidth), so strokeWidth=0 alone still paints a
+    // hairline. Dropping the stroke color to 'none' instead skips the
+    // stroke draw entirely, which is the only way to make width 0 truly
+    // invisible.
+    if (this.strokeWidth <= 0) c.setStrokeColor('none');
     c.begin();
     c.moveTo(x + 2, y + ry + 2);
     c.lineTo(x + 2, y + h - ry - 2);
@@ -1649,9 +2063,15 @@ class CylinderShapeCanvas extends Shape {
 
 class DocumentShapeCanvas extends Shape {
   paintBackground(c: AbstractCanvas2D, x: number, y: number, w: number, h: number) {
-    c.setFillColor('#ffffff');
-    c.setStrokeColor('#1a1f36');
-    c.setStrokeWidth(2);
+    c.setFillColor(this.fill);
+    c.setStrokeColor(this.stroke);
+    c.setStrokeWidth(this.strokeWidth);
+    // maxGraph's SVG renderer floors any actually-drawn stroke to 1px
+    // (SvgCanvas2D.minStrokeWidth), so strokeWidth=0 alone still paints a
+    // hairline. Dropping the stroke color to 'none' instead skips the
+    // stroke draw entirely, which is the only way to make width 0 truly
+    // invisible.
+    if (this.strokeWidth <= 0) c.setStrokeColor('none');
     c.begin();
     c.moveTo(x, y);
     c.lineTo(x + w, y);
@@ -1669,7 +2089,13 @@ class DocumentShapeCanvas extends Shape {
     c.close();
     c.fillAndStroke();
     c.setStrokeColor('#1a1f36');
-    c.setStrokeWidth(1);
+    c.setStrokeWidth(this.strokeWidth);
+    // maxGraph's SVG renderer floors any actually-drawn stroke to 1px
+    // (SvgCanvas2D.minStrokeWidth), so strokeWidth=0 alone still paints a
+    // hairline. Dropping the stroke color to 'none' instead skips the
+    // stroke draw entirely, which is the only way to make width 0 truly
+    // invisible.
+    if (this.strokeWidth <= 0) c.setStrokeColor('none');
     c.setAlpha(0.3);
     c.begin();
     c.moveTo(x + 10, y + 12);
@@ -1687,9 +2113,15 @@ class FolderShapeCanvas extends Shape {
   paintBackground(c: AbstractCanvas2D, x: number, y: number, w: number, h: number) {
     const tabWidth = w * 0.25;
     const tabHeight = h * 0.2;
-    c.setFillColor('#fef9c3');
-    c.setStrokeColor('#1a1f36');
-    c.setStrokeWidth(2);
+    c.setFillColor(this.fill);
+    c.setStrokeColor(this.stroke);
+    c.setStrokeWidth(this.strokeWidth);
+    // maxGraph's SVG renderer floors any actually-drawn stroke to 1px
+    // (SvgCanvas2D.minStrokeWidth), so strokeWidth=0 alone still paints a
+    // hairline. Dropping the stroke color to 'none' instead skips the
+    // stroke draw entirely, which is the only way to make width 0 truly
+    // invisible.
+    if (this.strokeWidth <= 0) c.setStrokeColor('none');
     c.begin();
     c.moveTo(x + 2, y + tabHeight + 2);
     c.lineTo(x + tabWidth + 2, y + tabHeight + 2);
@@ -1707,9 +2139,15 @@ class CloudShapeCanvas extends Shape {
     const cx = x + w / 2;
     const cy = y + h / 2;
     const r = Math.min(w, h) * 0.4;
-    c.setFillColor('#e0f2fe');
-    c.setStrokeColor('#1a1f36');
-    c.setStrokeWidth(2);
+    c.setFillColor(this.fill);
+    c.setStrokeColor(this.stroke);
+    c.setStrokeWidth(this.strokeWidth);
+    // maxGraph's SVG renderer floors any actually-drawn stroke to 1px
+    // (SvgCanvas2D.minStrokeWidth), so strokeWidth=0 alone still paints a
+    // hairline. Dropping the stroke color to 'none' instead skips the
+    // stroke draw entirely, which is the only way to make width 0 truly
+    // invisible.
+    if (this.strokeWidth <= 0) c.setStrokeColor('none');
     c.begin();
     c.moveTo(cx - r * 0.6, y + h - 6);
     c.arcTo(r * 0.9, r * 0.5, 0, false, true, cx - r, y + h - 16);
@@ -1727,9 +2165,15 @@ class CloudShapeCanvas extends Shape {
 class NoteStandaloneShapeCanvas extends Shape {
   paintBackground(c: AbstractCanvas2D, x: number, y: number, w: number, h: number) {
     const fold = Math.min(w, h) * 0.2;
-    c.setFillColor('#fef9c3');
-    c.setStrokeColor('#1a1f36');
-    c.setStrokeWidth(2);
+    c.setFillColor(this.fill);
+    c.setStrokeColor(this.stroke);
+    c.setStrokeWidth(this.strokeWidth);
+    // maxGraph's SVG renderer floors any actually-drawn stroke to 1px
+    // (SvgCanvas2D.minStrokeWidth), so strokeWidth=0 alone still paints a
+    // hairline. Dropping the stroke color to 'none' instead skips the
+    // stroke draw entirely, which is the only way to make width 0 truly
+    // invisible.
+    if (this.strokeWidth <= 0) c.setStrokeColor('none');
     c.begin();
     c.moveTo(x + 2, y + 2);
     c.lineTo(x + w - fold - 2, y + 2);
@@ -1752,8 +2196,14 @@ class ActorShapeCanvas extends Shape {
     const cx = x + w / 2;
     const headR = Math.min(w, h) * 0.12;
     const headCY = y + headR + 4;
-    c.setStrokeColor('#1a1f36');
-    c.setStrokeWidth(2);
+    c.setStrokeColor(this.stroke);
+    c.setStrokeWidth(this.strokeWidth);
+    // maxGraph's SVG renderer floors any actually-drawn stroke to 1px
+    // (SvgCanvas2D.minStrokeWidth), so strokeWidth=0 alone still paints a
+    // hairline. Dropping the stroke color to 'none' instead skips the
+    // stroke draw entirely, which is the only way to make width 0 truly
+    // invisible.
+    if (this.strokeWidth <= 0) c.setStrokeColor('none');
     c.ellipse(cx - headR, headCY - headR, headR * 2, headR * 2);
     c.stroke();
     const bodyTop = headCY + headR;
@@ -1769,9 +2219,15 @@ class ActorShapeCanvas extends Shape {
 class ConnectorArrowShapeCanvas extends Shape {
   paintBackground(c: AbstractCanvas2D, x: number, y: number, w: number, h: number) {
     const cy = y + h / 2;
-    c.setStrokeColor('#1a1f36');
-    c.setStrokeWidth(2);
-    c.setFillColor('#1a1f36');
+    c.setStrokeColor(this.stroke);
+    c.setStrokeWidth(this.strokeWidth);
+    // maxGraph's SVG renderer floors any actually-drawn stroke to 1px
+    // (SvgCanvas2D.minStrokeWidth), so strokeWidth=0 alone still paints a
+    // hairline. Dropping the stroke color to 'none' instead skips the
+    // stroke draw entirely, which is the only way to make width 0 truly
+    // invisible.
+    if (this.strokeWidth <= 0) c.setStrokeColor('none');
+    c.setFillColor(this.fill);
     c.begin(); c.moveTo(x + 2, cy); c.lineTo(x + w - 10, cy); c.stroke();
     c.begin();
     c.moveTo(x + w - 10, cy - 5);
@@ -1784,9 +2240,15 @@ class ConnectorArrowShapeCanvas extends Shape {
 
 class DoubleRectShapeCanvas extends Shape {
   paintBackground(c: AbstractCanvas2D, x: number, y: number, w: number, h: number) {
-    c.setFillColor('#ffffff');
-    c.setStrokeColor('#1a1f36');
-    c.setStrokeWidth(2);
+    c.setFillColor(this.fill);
+    c.setStrokeColor(this.stroke);
+    c.setStrokeWidth(this.strokeWidth);
+    // maxGraph's SVG renderer floors any actually-drawn stroke to 1px
+    // (SvgCanvas2D.minStrokeWidth), so strokeWidth=0 alone still paints a
+    // hairline. Dropping the stroke color to 'none' instead skips the
+    // stroke draw entirely, which is the only way to make width 0 truly
+    // invisible.
+    if (this.strokeWidth <= 0) c.setStrokeColor('none');
     c.rect(x + 2, y + 2, w - 4, h - 4);
     c.fillAndStroke();
     c.rect(x + 6, y + 6, w - 12, h - 12);
@@ -1798,9 +2260,15 @@ class DoubleRhombusShapeCanvas extends Shape {
   paintBackground(c: AbstractCanvas2D, x: number, y: number, w: number, h: number) {
     const cx = x + w / 2;
     const cy = y + h / 2;
-    c.setFillColor('#ffffff');
-    c.setStrokeColor('#1a1f36');
-    c.setStrokeWidth(2);
+    c.setFillColor(this.fill);
+    c.setStrokeColor(this.stroke);
+    c.setStrokeWidth(this.strokeWidth);
+    // maxGraph's SVG renderer floors any actually-drawn stroke to 1px
+    // (SvgCanvas2D.minStrokeWidth), so strokeWidth=0 alone still paints a
+    // hairline. Dropping the stroke color to 'none' instead skips the
+    // stroke draw entirely, which is the only way to make width 0 truly
+    // invisible.
+    if (this.strokeWidth <= 0) c.setStrokeColor('none');
     const drawDiamond = (pad: number) => {
       c.begin();
       c.moveTo(cx, y + pad);
@@ -1816,9 +2284,15 @@ class DoubleRhombusShapeCanvas extends Shape {
 
 class MultiOvalShapeCanvas extends Shape {
   paintBackground(c: AbstractCanvas2D, x: number, y: number, w: number, h: number) {
-    c.setFillColor('#ffffff');
-    c.setStrokeColor('#1a1f36');
-    c.setStrokeWidth(2);
+    c.setFillColor(this.fill);
+    c.setStrokeColor(this.stroke);
+    c.setStrokeWidth(this.strokeWidth);
+    // maxGraph's SVG renderer floors any actually-drawn stroke to 1px
+    // (SvgCanvas2D.minStrokeWidth), so strokeWidth=0 alone still paints a
+    // hairline. Dropping the stroke color to 'none' instead skips the
+    // stroke draw entirely, which is the only way to make width 0 truly
+    // invisible.
+    if (this.strokeWidth <= 0) c.setStrokeColor('none');
     c.ellipse(x + 2, y + 2, w - 4, h - 4);
     c.fillAndStroke();
     c.ellipse(x + 6, y + 6, w - 12, h - 12);
@@ -1829,8 +2303,14 @@ class MultiOvalShapeCanvas extends Shape {
 class LineShapeCanvas extends Shape {
   paintBackground(c: AbstractCanvas2D, x: number, y: number, w: number, h: number) {
     const cy = y + h / 2;
-    c.setStrokeColor('#1a1f36');
-    c.setStrokeWidth(2);
+    c.setStrokeColor(this.stroke);
+    c.setStrokeWidth(this.strokeWidth);
+    // maxGraph's SVG renderer floors any actually-drawn stroke to 1px
+    // (SvgCanvas2D.minStrokeWidth), so strokeWidth=0 alone still paints a
+    // hairline. Dropping the stroke color to 'none' instead skips the
+    // stroke draw entirely, which is the only way to make width 0 truly
+    // invisible.
+    if (this.strokeWidth <= 0) c.setStrokeColor('none');
     c.begin();
     c.moveTo(x + 2, cy);
     c.lineTo(x + w - 2, cy);
@@ -1840,8 +2320,14 @@ class LineShapeCanvas extends Shape {
 
 class TextShapeCanvas extends Shape {
   paintBackground(c: AbstractCanvas2D, x: number, y: number, w: number, h: number) {
-    c.setStrokeColor('#1a1f36');
-    c.setStrokeWidth(1);
+    c.setStrokeColor(this.stroke);
+    c.setStrokeWidth(this.strokeWidth);
+    // maxGraph's SVG renderer floors any actually-drawn stroke to 1px
+    // (SvgCanvas2D.minStrokeWidth), so strokeWidth=0 alone still paints a
+    // hairline. Dropping the stroke color to 'none' instead skips the
+    // stroke draw entirely, which is the only way to make width 0 truly
+    // invisible.
+    if (this.strokeWidth <= 0) c.setStrokeColor('none');
     c.setDashed(true);
     c.rect(x + 2, y + 2, w - 4, h - 4);
     c.stroke();
@@ -1851,9 +2337,15 @@ class TextShapeCanvas extends Shape {
 
 class DashedRectShapeCanvas extends Shape {
   paintBackground(c: AbstractCanvas2D, x: number, y: number, w: number, h: number) {
-    c.setFillColor('#ffffff');
-    c.setStrokeColor('#1a1f36');
-    c.setStrokeWidth(2);
+    c.setFillColor(this.fill);
+    c.setStrokeColor(this.stroke);
+    c.setStrokeWidth(this.strokeWidth);
+    // maxGraph's SVG renderer floors any actually-drawn stroke to 1px
+    // (SvgCanvas2D.minStrokeWidth), so strokeWidth=0 alone still paints a
+    // hairline. Dropping the stroke color to 'none' instead skips the
+    // stroke draw entirely, which is the only way to make width 0 truly
+    // invisible.
+    if (this.strokeWidth <= 0) c.setStrokeColor('none');
     c.setDashed(true);
     c.rect(x + 2, y + 2, w - 4, h - 4);
     c.fillAndStroke();
@@ -1863,9 +2355,15 @@ class DashedRectShapeCanvas extends Shape {
 
 class PredefinedShapeCanvas extends Shape {
   paintBackground(c: AbstractCanvas2D, x: number, y: number, w: number, h: number) {
-    c.setFillColor('#ffffff');
-    c.setStrokeColor('#1a1f36');
-    c.setStrokeWidth(2);
+    c.setFillColor(this.fill);
+    c.setStrokeColor(this.stroke);
+    c.setStrokeWidth(this.strokeWidth);
+    // maxGraph's SVG renderer floors any actually-drawn stroke to 1px
+    // (SvgCanvas2D.minStrokeWidth), so strokeWidth=0 alone still paints a
+    // hairline. Dropping the stroke color to 'none' instead skips the
+    // stroke draw entirely, which is the only way to make width 0 truly
+    // invisible.
+    if (this.strokeWidth <= 0) c.setStrokeColor('none');
     c.rect(x + 2, y + 2, w - 4, h - 4);
     c.fillAndStroke();
     const m = 8;
@@ -1876,9 +2374,15 @@ class PredefinedShapeCanvas extends Shape {
 
 class PentagonShapeCanvas extends Shape {
   paintBackground(c: AbstractCanvas2D, x: number, y: number, w: number, h: number) {
-    c.setFillColor('#ffffff');
-    c.setStrokeColor('#1a1f36');
-    c.setStrokeWidth(2);
+    c.setFillColor(this.fill);
+    c.setStrokeColor(this.stroke);
+    c.setStrokeWidth(this.strokeWidth);
+    // maxGraph's SVG renderer floors any actually-drawn stroke to 1px
+    // (SvgCanvas2D.minStrokeWidth), so strokeWidth=0 alone still paints a
+    // hairline. Dropping the stroke color to 'none' instead skips the
+    // stroke draw entirely, which is the only way to make width 0 truly
+    // invisible.
+    if (this.strokeWidth <= 0) c.setStrokeColor('none');
     c.begin();
     c.moveTo(x, y);
     c.lineTo(x + w, y);
@@ -1897,9 +2401,15 @@ class HexagonShapeCanvas extends Shape {
     const cy = y + h / 2;
     const hw = w / 2;
     const hh = h / 2;
-    c.setFillColor('#ffffff');
-    c.setStrokeColor('#1a1f36');
-    c.setStrokeWidth(2);
+    c.setFillColor(this.fill);
+    c.setStrokeColor(this.stroke);
+    c.setStrokeWidth(this.strokeWidth);
+    // maxGraph's SVG renderer floors any actually-drawn stroke to 1px
+    // (SvgCanvas2D.minStrokeWidth), so strokeWidth=0 alone still paints a
+    // hairline. Dropping the stroke color to 'none' instead skips the
+    // stroke draw entirely, which is the only way to make width 0 truly
+    // invisible.
+    if (this.strokeWidth <= 0) c.setStrokeColor('none');
     c.begin();
     c.moveTo(cx - hw, cy);
     c.lineTo(cx - hw * 0.5, cy - hh);
@@ -1914,9 +2424,15 @@ class HexagonShapeCanvas extends Shape {
 
 class TrapezoidShapeCanvas extends Shape {
   paintBackground(c: AbstractCanvas2D, x: number, y: number, w: number, h: number) {
-    c.setFillColor('#ffffff');
-    c.setStrokeColor('#1a1f36');
-    c.setStrokeWidth(2);
+    c.setFillColor(this.fill);
+    c.setStrokeColor(this.stroke);
+    c.setStrokeWidth(this.strokeWidth);
+    // maxGraph's SVG renderer floors any actually-drawn stroke to 1px
+    // (SvgCanvas2D.minStrokeWidth), so strokeWidth=0 alone still paints a
+    // hairline. Dropping the stroke color to 'none' instead skips the
+    // stroke draw entirely, which is the only way to make width 0 truly
+    // invisible.
+    if (this.strokeWidth <= 0) c.setStrokeColor('none');
     c.begin();
     c.moveTo(x, y + h * 0.25);
     c.lineTo(x + w, y);
@@ -1929,9 +2445,15 @@ class TrapezoidShapeCanvas extends Shape {
 
 class DShapeCanvas extends Shape {
   paintBackground(c: AbstractCanvas2D, x: number, y: number, w: number, h: number) {
-    c.setFillColor('#ffffff');
-    c.setStrokeColor('#1a1f36');
-    c.setStrokeWidth(2);
+    c.setFillColor(this.fill);
+    c.setStrokeColor(this.stroke);
+    c.setStrokeWidth(this.strokeWidth);
+    // maxGraph's SVG renderer floors any actually-drawn stroke to 1px
+    // (SvgCanvas2D.minStrokeWidth), so strokeWidth=0 alone still paints a
+    // hairline. Dropping the stroke color to 'none' instead skips the
+    // stroke draw entirely, which is the only way to make width 0 truly
+    // invisible.
+    if (this.strokeWidth <= 0) c.setStrokeColor('none');
     c.begin();
     c.moveTo(x, y);
     c.lineTo(x + w * 0.7, y);
@@ -1949,9 +2471,15 @@ class DShapeCanvas extends Shape {
 
 class DisplayShapeCanvas extends Shape {
   paintBackground(c: AbstractCanvas2D, x: number, y: number, w: number, h: number) {
-    c.setFillColor('#ffffff');
-    c.setStrokeColor('#1a1f36');
-    c.setStrokeWidth(2);
+    c.setFillColor(this.fill);
+    c.setStrokeColor(this.stroke);
+    c.setStrokeWidth(this.strokeWidth);
+    // maxGraph's SVG renderer floors any actually-drawn stroke to 1px
+    // (SvgCanvas2D.minStrokeWidth), so strokeWidth=0 alone still paints a
+    // hairline. Dropping the stroke color to 'none' instead skips the
+    // stroke draw entirely, which is the only way to make width 0 truly
+    // invisible.
+    if (this.strokeWidth <= 0) c.setStrokeColor('none');
     c.begin();
     c.moveTo(x + w * 0.15, y);
     c.lineTo(x + w * 0.85, y);
@@ -1983,8 +2511,14 @@ class DisplayShapeCanvas extends Shape {
 class AnnotationShapeCanvas extends Shape {
   paintBackground(c: AbstractCanvas2D, x: number, y: number, w: number, h: number) {
     const cy = y + h / 2;
-    c.setStrokeColor('#1a1f36');
-    c.setStrokeWidth(2);
+    c.setStrokeColor(this.stroke);
+    c.setStrokeWidth(this.strokeWidth);
+    // maxGraph's SVG renderer floors any actually-drawn stroke to 1px
+    // (SvgCanvas2D.minStrokeWidth), so strokeWidth=0 alone still paints a
+    // hairline. Dropping the stroke color to 'none' instead skips the
+    // stroke draw entirely, which is the only way to make width 0 truly
+    // invisible.
+    if (this.strokeWidth <= 0) c.setStrokeColor('none');
     c.begin();
     c.moveTo(x + 4, y + 4);
     c.lineTo(x + 10, y + 4);
@@ -2008,7 +2542,7 @@ class InitialNodeSolid extends Shape {
     const r = Math.min(w, h) / 2 - 4;
     const cx = x + w / 2;
     const cy = y + h / 2;
-    c.setFillColor('#1a1f36');
+    c.setFillColor(this.fill);
     c.ellipse(cx - r, cy - r, r * 2, r * 2);
     c.fill();
   }
@@ -2019,9 +2553,15 @@ class FinalNodeShape extends Shape {
     const r = Math.min(w, h) / 2 - 2;
     const cx = x + w / 2;
     const cy = y + h / 2;
-    c.setStrokeColor('#1a1f36');
-    c.setStrokeWidth(2);
-    c.setFillColor('#1a1f36');
+    c.setStrokeColor(this.stroke);
+    c.setStrokeWidth(this.strokeWidth);
+    // maxGraph's SVG renderer floors any actually-drawn stroke to 1px
+    // (SvgCanvas2D.minStrokeWidth), so strokeWidth=0 alone still paints a
+    // hairline. Dropping the stroke color to 'none' instead skips the
+    // stroke draw entirely, which is the only way to make width 0 truly
+    // invisible.
+    if (this.strokeWidth <= 0) c.setStrokeColor('none');
+    c.setFillColor(this.fill);
     c.ellipse(cx - r, cy - r, r * 2, r * 2);
     c.stroke();
     const r2 = r * 0.55;
@@ -2032,7 +2572,7 @@ class FinalNodeShape extends Shape {
 
 class ForkJoinShape extends Shape {
   paintBackground(c: AbstractCanvas2D, x: number, y: number, w: number, h: number) {
-    c.setFillColor('#1a1f36');
+    c.setFillColor(this.fill);
     c.rect(x + 2, y + h / 2 - 6, w - 4, 12);
     c.fill();
   }
@@ -2041,14 +2581,26 @@ class ForkJoinShape extends Shape {
 class LifelineShape extends Shape {
   paintBackground(c: AbstractCanvas2D, x: number, y: number, w: number, h: number) {
     const boxH = h * 0.25;
-    c.setFillColor('#ffffff');
-    c.setStrokeColor('#1a1f36');
-    c.setStrokeWidth(2);
+    c.setFillColor(this.fill);
+    c.setStrokeColor(this.stroke);
+    c.setStrokeWidth(this.strokeWidth);
+    // maxGraph's SVG renderer floors any actually-drawn stroke to 1px
+    // (SvgCanvas2D.minStrokeWidth), so strokeWidth=0 alone still paints a
+    // hairline. Dropping the stroke color to 'none' instead skips the
+    // stroke draw entirely, which is the only way to make width 0 truly
+    // invisible.
+    if (this.strokeWidth <= 0) c.setStrokeColor('none');
     c.rect(x + w * 0.1, y + 2, w * 0.8, boxH);
     c.fillAndStroke();
     c.setDashed(true);
     c.setStrokeColor('#1a1f36');
-    c.setStrokeWidth(1.5);
+    c.setStrokeWidth(this.strokeWidth);
+    // maxGraph's SVG renderer floors any actually-drawn stroke to 1px
+    // (SvgCanvas2D.minStrokeWidth), so strokeWidth=0 alone still paints a
+    // hairline. Dropping the stroke color to 'none' instead skips the
+    // stroke draw entirely, which is the only way to make width 0 truly
+    // invisible.
+    if (this.strokeWidth <= 0) c.setStrokeColor('none');
     c.begin();
     c.moveTo(x + w / 2, y + boxH + 2);
     c.lineTo(x + w / 2, y + h - 2);
@@ -2060,16 +2612,28 @@ class LifelineShape extends Shape {
 class ActivationShape extends Shape {
   paintBackground(c: AbstractCanvas2D, x: number, y: number, w: number, h: number) {
     const cx = x + w / 2;
-    c.setStrokeColor('#1a1f36');
-    c.setStrokeWidth(1);
+    c.setStrokeColor(this.stroke);
+    c.setStrokeWidth(this.strokeWidth);
+    // maxGraph's SVG renderer floors any actually-drawn stroke to 1px
+    // (SvgCanvas2D.minStrokeWidth), so strokeWidth=0 alone still paints a
+    // hairline. Dropping the stroke color to 'none' instead skips the
+    // stroke draw entirely, which is the only way to make width 0 truly
+    // invisible.
+    if (this.strokeWidth <= 0) c.setStrokeColor('none');
     c.setDashed(true);
     c.begin(); c.moveTo(cx, y + 2); c.lineTo(cx, y + h - 2); c.stroke();
     c.setDashed(false);
     const bw = 10;
     const bh = h * 0.5;
-    c.setFillColor('#ffffff');
+    c.setFillColor(this.fill);
     c.setStrokeColor('#1a1f36');
-    c.setStrokeWidth(2);
+    c.setStrokeWidth(this.strokeWidth);
+    // maxGraph's SVG renderer floors any actually-drawn stroke to 1px
+    // (SvgCanvas2D.minStrokeWidth), so strokeWidth=0 alone still paints a
+    // hairline. Dropping the stroke color to 'none' instead skips the
+    // stroke draw entirely, which is the only way to make width 0 truly
+    // invisible.
+    if (this.strokeWidth <= 0) c.setStrokeColor('none');
     c.rect(cx - bw / 2, y + h * 0.25, bw, bh);
     c.fillAndStroke();
   }
@@ -2077,9 +2641,15 @@ class ActivationShape extends Shape {
 
 class ClassBoxShape extends Shape {
   paintBackground(c: AbstractCanvas2D, x: number, y: number, w: number, h: number) {
-    c.setFillColor('#ffffff');
-    c.setStrokeColor('#1a1f36');
-    c.setStrokeWidth(2);
+    c.setFillColor(this.fill);
+    c.setStrokeColor(this.stroke);
+    c.setStrokeWidth(this.strokeWidth);
+    // maxGraph's SVG renderer floors any actually-drawn stroke to 1px
+    // (SvgCanvas2D.minStrokeWidth), so strokeWidth=0 alone still paints a
+    // hairline. Dropping the stroke color to 'none' instead skips the
+    // stroke draw entirely, which is the only way to make width 0 truly
+    // invisible.
+    if (this.strokeWidth <= 0) c.setStrokeColor('none');
     c.rect(x + 2, y + 2, w - 4, h - 4);
     c.fillAndStroke();
     const h1 = h * 0.3;
@@ -2091,9 +2661,15 @@ class ClassBoxShape extends Shape {
 
 class UMLInterfaceShapeCanvas extends Shape {
   paintBackground(c: AbstractCanvas2D, x: number, y: number, w: number, h: number) {
-    c.setFillColor('#ffffff');
-    c.setStrokeColor('#1a1f36');
-    c.setStrokeWidth(2);
+    c.setFillColor(this.fill);
+    c.setStrokeColor(this.stroke);
+    c.setStrokeWidth(this.strokeWidth);
+    // maxGraph's SVG renderer floors any actually-drawn stroke to 1px
+    // (SvgCanvas2D.minStrokeWidth), so strokeWidth=0 alone still paints a
+    // hairline. Dropping the stroke color to 'none' instead skips the
+    // stroke draw entirely, which is the only way to make width 0 truly
+    // invisible.
+    if (this.strokeWidth <= 0) c.setStrokeColor('none');
     c.rect(x + 2, y + 2, w - 4, h - 4);
     c.fillAndStroke();
     c.setDashed(true);
@@ -2105,9 +2681,15 @@ class UMLInterfaceShapeCanvas extends Shape {
 
 class AbstractClassShape extends Shape {
   paintBackground(c: AbstractCanvas2D, x: number, y: number, w: number, h: number) {
-    c.setFillColor('#ffffff');
-    c.setStrokeColor('#1a1f36');
-    c.setStrokeWidth(2);
+    c.setFillColor(this.fill);
+    c.setStrokeColor(this.stroke);
+    c.setStrokeWidth(this.strokeWidth);
+    // maxGraph's SVG renderer floors any actually-drawn stroke to 1px
+    // (SvgCanvas2D.minStrokeWidth), so strokeWidth=0 alone still paints a
+    // hairline. Dropping the stroke color to 'none' instead skips the
+    // stroke draw entirely, which is the only way to make width 0 truly
+    // invisible.
+    if (this.strokeWidth <= 0) c.setStrokeColor('none');
     c.rect(x + 2, y + 2, w - 4, h - 4);
     c.fillAndStroke();
     const h1 = h * 0.3;
@@ -2124,9 +2706,15 @@ class AbstractClassShape extends Shape {
 
 class EntityShape extends Shape {
   paintBackground(c: AbstractCanvas2D, x: number, y: number, w: number, h: number) {
-    c.setFillColor('#ffffff');
-    c.setStrokeColor('#1a1f36');
-    c.setStrokeWidth(2);
+    c.setFillColor(this.fill);
+    c.setStrokeColor(this.stroke);
+    c.setStrokeWidth(this.strokeWidth);
+    // maxGraph's SVG renderer floors any actually-drawn stroke to 1px
+    // (SvgCanvas2D.minStrokeWidth), so strokeWidth=0 alone still paints a
+    // hairline. Dropping the stroke color to 'none' instead skips the
+    // stroke draw entirely, which is the only way to make width 0 truly
+    // invisible.
+    if (this.strokeWidth <= 0) c.setStrokeColor('none');
     c.rect(x + 2, y + 2, w - 4, h - 4);
     c.fillAndStroke();
   }
@@ -2134,9 +2722,15 @@ class EntityShape extends Shape {
 
 class WeakEntityShape extends Shape {
   paintBackground(c: AbstractCanvas2D, x: number, y: number, w: number, h: number) {
-    c.setFillColor('#ffffff');
-    c.setStrokeColor('#1a1f36');
-    c.setStrokeWidth(2);
+    c.setFillColor(this.fill);
+    c.setStrokeColor(this.stroke);
+    c.setStrokeWidth(this.strokeWidth);
+    // maxGraph's SVG renderer floors any actually-drawn stroke to 1px
+    // (SvgCanvas2D.minStrokeWidth), so strokeWidth=0 alone still paints a
+    // hairline. Dropping the stroke color to 'none' instead skips the
+    // stroke draw entirely, which is the only way to make width 0 truly
+    // invisible.
+    if (this.strokeWidth <= 0) c.setStrokeColor('none');
     c.rect(x + 2, y + 2, w - 4, h - 4);
     c.fillAndStroke();
     c.rect(x + 6, y + 6, w - 12, h - 12);
@@ -2149,9 +2743,15 @@ class ERDAttributeShapeCanvas extends Shape {
   paintBackground(c: AbstractCanvas2D, x: number, y: number, w: number, h: number) {
     const cx = x + w / 2;
     const cy = y + h / 2;
-    c.setFillColor('#ffffff');
-    c.setStrokeColor('#1a1f36');
-    c.setStrokeWidth(2);
+    c.setFillColor(this.fill);
+    c.setStrokeColor(this.stroke);
+    c.setStrokeWidth(this.strokeWidth);
+    // maxGraph's SVG renderer floors any actually-drawn stroke to 1px
+    // (SvgCanvas2D.minStrokeWidth), so strokeWidth=0 alone still paints a
+    // hairline. Dropping the stroke color to 'none' instead skips the
+    // stroke draw entirely, which is the only way to make width 0 truly
+    // invisible.
+    if (this.strokeWidth <= 0) c.setStrokeColor('none');
     c.ellipse(cx - w / 2 + 2, cy - h / 2 + 2, w - 4, h - 4);
     c.fillAndStroke();
   }
@@ -2162,9 +2762,15 @@ class ERDMultivaluedAttributeShapeCanvas extends Shape {
   paintBackground(c: AbstractCanvas2D, x: number, y: number, w: number, h: number) {
     const cx = x + w / 2;
     const cy = y + h / 2;
-    c.setFillColor('#ffffff');
-    c.setStrokeColor('#1a1f36');
-    c.setStrokeWidth(2);
+    c.setFillColor(this.fill);
+    c.setStrokeColor(this.stroke);
+    c.setStrokeWidth(this.strokeWidth);
+    // maxGraph's SVG renderer floors any actually-drawn stroke to 1px
+    // (SvgCanvas2D.minStrokeWidth), so strokeWidth=0 alone still paints a
+    // hairline. Dropping the stroke color to 'none' instead skips the
+    // stroke draw entirely, which is the only way to make width 0 truly
+    // invisible.
+    if (this.strokeWidth <= 0) c.setStrokeColor('none');
     c.ellipse(cx - w / 2 + 2, cy - h / 2 + 2, w - 4, h - 4);
     c.fillAndStroke();
     const inset = 6;
@@ -2178,9 +2784,15 @@ class ERDDerivedAttributeShapeCanvas extends Shape {
   paintBackground(c: AbstractCanvas2D, x: number, y: number, w: number, h: number) {
     const cx = x + w / 2;
     const cy = y + h / 2;
-    c.setFillColor('#ffffff');
-    c.setStrokeColor('#1a1f36');
-    c.setStrokeWidth(2);
+    c.setFillColor(this.fill);
+    c.setStrokeColor(this.stroke);
+    c.setStrokeWidth(this.strokeWidth);
+    // maxGraph's SVG renderer floors any actually-drawn stroke to 1px
+    // (SvgCanvas2D.minStrokeWidth), so strokeWidth=0 alone still paints a
+    // hairline. Dropping the stroke color to 'none' instead skips the
+    // stroke draw entirely, which is the only way to make width 0 truly
+    // invisible.
+    if (this.strokeWidth <= 0) c.setStrokeColor('none');
     c.setDashed(true);
     c.setDashPattern('6 4');
     c.ellipse(cx - w / 2 + 2, cy - h / 2 + 2, w - 4, h - 4);
@@ -2194,9 +2806,15 @@ class RelationshipShape extends Shape {
   paintBackground(c: AbstractCanvas2D, x: number, y: number, w: number, h: number) {
     const cx = x + w / 2;
     const cy = y + h / 2;
-    c.setFillColor('#ffffff');
-    c.setStrokeColor('#1a1f36');
-    c.setStrokeWidth(2);
+    c.setFillColor(this.fill);
+    c.setStrokeColor(this.stroke);
+    c.setStrokeWidth(this.strokeWidth);
+    // maxGraph's SVG renderer floors any actually-drawn stroke to 1px
+    // (SvgCanvas2D.minStrokeWidth), so strokeWidth=0 alone still paints a
+    // hairline. Dropping the stroke color to 'none' instead skips the
+    // stroke draw entirely, which is the only way to make width 0 truly
+    // invisible.
+    if (this.strokeWidth <= 0) c.setStrokeColor('none');
     c.begin();
     c.moveTo(cx, y + 2);
     c.lineTo(x + w - 2, cy);
@@ -2212,9 +2830,15 @@ class IdentifyingRelShape extends Shape {
   paintBackground(c: AbstractCanvas2D, x: number, y: number, w: number, h: number) {
     const cx = x + w / 2;
     const cy = y + h / 2;
-    c.setFillColor('#ffffff');
-    c.setStrokeColor('#1a1f36');
-    c.setStrokeWidth(2);
+    c.setFillColor(this.fill);
+    c.setStrokeColor(this.stroke);
+    c.setStrokeWidth(this.strokeWidth);
+    // maxGraph's SVG renderer floors any actually-drawn stroke to 1px
+    // (SvgCanvas2D.minStrokeWidth), so strokeWidth=0 alone still paints a
+    // hairline. Dropping the stroke color to 'none' instead skips the
+    // stroke draw entirely, which is the only way to make width 0 truly
+    // invisible.
+    if (this.strokeWidth <= 0) c.setStrokeColor('none');
     c.begin();
     c.moveTo(cx, y + 2);
     c.lineTo(x + w - 2, cy);
@@ -2235,8 +2859,14 @@ class IdentifyingRelShape extends Shape {
 
 class CardinalityShape extends Shape {
   paintBackground(c: AbstractCanvas2D, x: number, y: number, w: number, h: number) {
-    c.setStrokeColor('#1a1f36');
-    c.setStrokeWidth(2);
+    c.setStrokeColor(this.stroke);
+    c.setStrokeWidth(this.strokeWidth);
+    // maxGraph's SVG renderer floors any actually-drawn stroke to 1px
+    // (SvgCanvas2D.minStrokeWidth), so strokeWidth=0 alone still paints a
+    // hairline. Dropping the stroke color to 'none' instead skips the
+    // stroke draw entirely, which is the only way to make width 0 truly
+    // invisible.
+    if (this.strokeWidth <= 0) c.setStrokeColor('none');
     c.rect(x + 2, y + 2, w - 4, h - 4);
     c.stroke();
   }
@@ -2245,8 +2875,14 @@ class CardinalityShape extends Shape {
 class CrowOneShape extends Shape {
   paintBackground(c: AbstractCanvas2D, x: number, y: number, w: number, h: number) {
     const cy = y + h / 2;
-    c.setStrokeColor('#1a1f36');
-    c.setStrokeWidth(2);
+    c.setStrokeColor(this.stroke);
+    c.setStrokeWidth(this.strokeWidth);
+    // maxGraph's SVG renderer floors any actually-drawn stroke to 1px
+    // (SvgCanvas2D.minStrokeWidth), so strokeWidth=0 alone still paints a
+    // hairline. Dropping the stroke color to 'none' instead skips the
+    // stroke draw entirely, which is the only way to make width 0 truly
+    // invisible.
+    if (this.strokeWidth <= 0) c.setStrokeColor('none');
     c.begin(); c.moveTo(x + 2, cy); c.lineTo(x + w - 2, cy); c.stroke();
     c.begin(); c.moveTo(x + w - 2, y + 4); c.lineTo(x + w - 2, y + h - 4); c.stroke();
   }
@@ -2256,8 +2892,14 @@ class CrowZeroOneShape extends Shape {
   paintBackground(c: AbstractCanvas2D, x: number, y: number, w: number, h: number) {
     const cy = y + h / 2;
     const r = Math.min(w, h) * 0.22;
-    c.setStrokeColor('#1a1f36');
-    c.setStrokeWidth(2);
+    c.setStrokeColor(this.stroke);
+    c.setStrokeWidth(this.strokeWidth);
+    // maxGraph's SVG renderer floors any actually-drawn stroke to 1px
+    // (SvgCanvas2D.minStrokeWidth), so strokeWidth=0 alone still paints a
+    // hairline. Dropping the stroke color to 'none' instead skips the
+    // stroke draw entirely, which is the only way to make width 0 truly
+    // invisible.
+    if (this.strokeWidth <= 0) c.setStrokeColor('none');
     c.begin(); c.moveTo(x + 2, cy); c.lineTo(x + w - r * 2 - 4, cy); c.stroke();
     c.ellipse(x + w - r * 2 - 4, cy - r, r * 2, r * 2); c.stroke();
     c.begin(); c.moveTo(x + w - r * 2 - 4, cy - r); c.lineTo(x + w - r * 2 - 4, cy + r); c.stroke();
@@ -2268,8 +2910,14 @@ class CrowZeroManyShape extends Shape {
   paintBackground(c: AbstractCanvas2D, x: number, y: number, w: number, h: number) {
     const cy = y + h / 2;
     const r = Math.min(w, h) * 0.18;
-    c.setStrokeColor('#1a1f36');
-    c.setStrokeWidth(2);
+    c.setStrokeColor(this.stroke);
+    c.setStrokeWidth(this.strokeWidth);
+    // maxGraph's SVG renderer floors any actually-drawn stroke to 1px
+    // (SvgCanvas2D.minStrokeWidth), so strokeWidth=0 alone still paints a
+    // hairline. Dropping the stroke color to 'none' instead skips the
+    // stroke draw entirely, which is the only way to make width 0 truly
+    // invisible.
+    if (this.strokeWidth <= 0) c.setStrokeColor('none');
     c.begin(); c.moveTo(x + 2, cy); c.lineTo(x + w - 2, cy); c.stroke();
     c.ellipse(x + w - r * 2 - 2, cy - r, r * 2, r * 2); c.stroke();
     c.begin(); c.moveTo(x + w - 2, cy - r * 1.8); c.lineTo(x + w - 2, cy + r * 1.8); c.stroke();
@@ -2281,8 +2929,14 @@ class CrowOneManyShape extends Shape {
   paintBackground(c: AbstractCanvas2D, x: number, y: number, w: number, h: number) {
     const cy = y + h / 2;
     const r = Math.min(w, h) * 0.2;
-    c.setStrokeColor('#1a1f36');
-    c.setStrokeWidth(2);
+    c.setStrokeColor(this.stroke);
+    c.setStrokeWidth(this.strokeWidth);
+    // maxGraph's SVG renderer floors any actually-drawn stroke to 1px
+    // (SvgCanvas2D.minStrokeWidth), so strokeWidth=0 alone still paints a
+    // hairline. Dropping the stroke color to 'none' instead skips the
+    // stroke draw entirely, which is the only way to make width 0 truly
+    // invisible.
+    if (this.strokeWidth <= 0) c.setStrokeColor('none');
     c.begin(); c.moveTo(x + 2, cy); c.lineTo(x + w - 2, cy); c.stroke();
     c.begin(); c.moveTo(x + w - 2, cy - r * 1.5); c.lineTo(x + w - 2, cy + r * 1.5); c.stroke();
     c.begin(); c.moveTo(x + w - r - 2, cy - r * 1.2); c.lineTo(x + w - 2, cy); c.lineTo(x + w - r - 2, cy + r * 1.2); c.stroke();
@@ -2293,8 +2947,14 @@ class CrowManyShape extends Shape {
   paintBackground(c: AbstractCanvas2D, x: number, y: number, w: number, h: number) {
     const cy = y + h / 2;
     const r = Math.min(w, h) * 0.22;
-    c.setStrokeColor('#1a1f36');
-    c.setStrokeWidth(2);
+    c.setStrokeColor(this.stroke);
+    c.setStrokeWidth(this.strokeWidth);
+    // maxGraph's SVG renderer floors any actually-drawn stroke to 1px
+    // (SvgCanvas2D.minStrokeWidth), so strokeWidth=0 alone still paints a
+    // hairline. Dropping the stroke color to 'none' instead skips the
+    // stroke draw entirely, which is the only way to make width 0 truly
+    // invisible.
+    if (this.strokeWidth <= 0) c.setStrokeColor('none');
     c.begin(); c.moveTo(x + 2, cy); c.lineTo(x + w - 2, cy); c.stroke();
     c.begin(); c.moveTo(x + w - r - 2, cy - r * 1.4); c.lineTo(x + w - 2, cy); c.lineTo(x + w - r - 2, cy + r * 1.4); c.stroke();
   }
@@ -2303,8 +2963,14 @@ class CrowManyShape extends Shape {
 class TotalParticipationShape extends Shape {
   paintBackground(c: AbstractCanvas2D, x: number, y: number, w: number, h: number) {
     const cy = y + h / 2;
-    c.setStrokeColor('#1a1f36');
-    c.setStrokeWidth(2);
+    c.setStrokeColor(this.stroke);
+    c.setStrokeWidth(this.strokeWidth);
+    // maxGraph's SVG renderer floors any actually-drawn stroke to 1px
+    // (SvgCanvas2D.minStrokeWidth), so strokeWidth=0 alone still paints a
+    // hairline. Dropping the stroke color to 'none' instead skips the
+    // stroke draw entirely, which is the only way to make width 0 truly
+    // invisible.
+    if (this.strokeWidth <= 0) c.setStrokeColor('none');
     c.begin(); c.moveTo(x + 2, cy); c.lineTo(x + w - 2, cy); c.stroke();
     c.begin(); c.moveTo(x + 6, y + 4); c.lineTo(x + 6, y + h - 4); c.stroke();
     c.begin(); c.moveTo(x + 11, y + 4); c.lineTo(x + 11, y + h - 4); c.stroke();
@@ -2314,8 +2980,14 @@ class TotalParticipationShape extends Shape {
 class PartialParticipationShape extends Shape {
   paintBackground(c: AbstractCanvas2D, x: number, y: number, w: number, h: number) {
     const cy = y + h / 2;
-    c.setStrokeColor('#1a1f36');
-    c.setStrokeWidth(2);
+    c.setStrokeColor(this.stroke);
+    c.setStrokeWidth(this.strokeWidth);
+    // maxGraph's SVG renderer floors any actually-drawn stroke to 1px
+    // (SvgCanvas2D.minStrokeWidth), so strokeWidth=0 alone still paints a
+    // hairline. Dropping the stroke color to 'none' instead skips the
+    // stroke draw entirely, which is the only way to make width 0 truly
+    // invisible.
+    if (this.strokeWidth <= 0) c.setStrokeColor('none');
     c.begin(); c.moveTo(x + 2, cy); c.lineTo(x + w - 2, cy); c.stroke();
     c.begin(); c.moveTo(x + 6, y + 4); c.lineTo(x + 6, y + h - 4); c.stroke();
   }
@@ -2324,8 +2996,14 @@ class PartialParticipationShape extends Shape {
 class ERDConnectorShape extends Shape {
   paintBackground(c: AbstractCanvas2D, x: number, y: number, w: number, h: number) {
     const cy = y + h / 2;
-    c.setStrokeColor('#1a1f36');
-    c.setStrokeWidth(2);
+    c.setStrokeColor(this.stroke);
+    c.setStrokeWidth(this.strokeWidth);
+    // maxGraph's SVG renderer floors any actually-drawn stroke to 1px
+    // (SvgCanvas2D.minStrokeWidth), so strokeWidth=0 alone still paints a
+    // hairline. Dropping the stroke color to 'none' instead skips the
+    // stroke draw entirely, which is the only way to make width 0 truly
+    // invisible.
+    if (this.strokeWidth <= 0) c.setStrokeColor('none');
     c.begin(); c.moveTo(x + 2, cy); c.lineTo(x + w - 2, cy); c.stroke();
   }
 }
@@ -2335,9 +3013,15 @@ class ERDConnectorShape extends Shape {
 class ArrowShapeCanvas extends Shape {
   paintBackground(c: AbstractCanvas2D, x: number, y: number, w: number, h: number) {
     const cy = y + h / 2;
-    c.setStrokeColor('#1a1f36');
-    c.setStrokeWidth(2);
-    c.setFillColor('#1a1f36');
+    c.setStrokeColor(this.stroke);
+    c.setStrokeWidth(this.strokeWidth);
+    // maxGraph's SVG renderer floors any actually-drawn stroke to 1px
+    // (SvgCanvas2D.minStrokeWidth), so strokeWidth=0 alone still paints a
+    // hairline. Dropping the stroke color to 'none' instead skips the
+    // stroke draw entirely, which is the only way to make width 0 truly
+    // invisible.
+    if (this.strokeWidth <= 0) c.setStrokeColor('none');
+    c.setFillColor(this.fill);
     c.begin();
     c.moveTo(x + 2, cy);
     c.lineTo(x + w - 10, cy);
@@ -2354,9 +3038,15 @@ class ArrowShapeCanvas extends Shape {
 class ArrowDownShapeCanvas extends Shape {
   paintBackground(c: AbstractCanvas2D, x: number, y: number, w: number, h: number) {
     const cx = x + w / 2;
-    c.setStrokeColor('#1a1f36');
-    c.setStrokeWidth(2);
-    c.setFillColor('#1a1f36');
+    c.setStrokeColor(this.stroke);
+    c.setStrokeWidth(this.strokeWidth);
+    // maxGraph's SVG renderer floors any actually-drawn stroke to 1px
+    // (SvgCanvas2D.minStrokeWidth), so strokeWidth=0 alone still paints a
+    // hairline. Dropping the stroke color to 'none' instead skips the
+    // stroke draw entirely, which is the only way to make width 0 truly
+    // invisible.
+    if (this.strokeWidth <= 0) c.setStrokeColor('none');
+    c.setFillColor(this.fill);
     c.begin();
     c.moveTo(cx, y + 2);
     c.lineTo(cx, y + h - 10);
@@ -2373,9 +3063,15 @@ class ArrowDownShapeCanvas extends Shape {
 class ArrowRightShapeCanvas extends Shape {
   paintBackground(c: AbstractCanvas2D, x: number, y: number, w: number, h: number) {
     const cy = y + h / 2;
-    c.setStrokeColor('#1a1f36');
-    c.setStrokeWidth(2);
-    c.setFillColor('#1a1f36');
+    c.setStrokeColor(this.stroke);
+    c.setStrokeWidth(this.strokeWidth);
+    // maxGraph's SVG renderer floors any actually-drawn stroke to 1px
+    // (SvgCanvas2D.minStrokeWidth), so strokeWidth=0 alone still paints a
+    // hairline. Dropping the stroke color to 'none' instead skips the
+    // stroke draw entirely, which is the only way to make width 0 truly
+    // invisible.
+    if (this.strokeWidth <= 0) c.setStrokeColor('none');
+    c.setFillColor(this.fill);
     c.begin();
     c.moveTo(x + 2, cy);
     c.lineTo(x + w - 10, cy);
@@ -2392,8 +3088,14 @@ class ArrowRightShapeCanvas extends Shape {
 class OpenArrowShapeCanvas extends Shape {
   paintBackground(c: AbstractCanvas2D, x: number, y: number, w: number, h: number) {
     const cy = y + h / 2;
-    c.setStrokeColor('#1a1f36');
-    c.setStrokeWidth(2);
+    c.setStrokeColor(this.stroke);
+    c.setStrokeWidth(this.strokeWidth);
+    // maxGraph's SVG renderer floors any actually-drawn stroke to 1px
+    // (SvgCanvas2D.minStrokeWidth), so strokeWidth=0 alone still paints a
+    // hairline. Dropping the stroke color to 'none' instead skips the
+    // stroke draw entirely, which is the only way to make width 0 truly
+    // invisible.
+    if (this.strokeWidth <= 0) c.setStrokeColor('none');
     c.begin();
     c.moveTo(x + 2, cy);
     c.lineTo(x + w - 10, cy);
@@ -2410,9 +3112,15 @@ class OpenArrowShapeCanvas extends Shape {
 class DashedArrowShapeCanvas extends Shape {
   paintBackground(c: AbstractCanvas2D, x: number, y: number, w: number, h: number) {
     const cy = y + h / 2;
-    c.setStrokeColor('#1a1f36');
-    c.setStrokeWidth(2);
-    c.setFillColor('#1a1f36');
+    c.setStrokeColor(this.stroke);
+    c.setStrokeWidth(this.strokeWidth);
+    // maxGraph's SVG renderer floors any actually-drawn stroke to 1px
+    // (SvgCanvas2D.minStrokeWidth), so strokeWidth=0 alone still paints a
+    // hairline. Dropping the stroke color to 'none' instead skips the
+    // stroke draw entirely, which is the only way to make width 0 truly
+    // invisible.
+    if (this.strokeWidth <= 0) c.setStrokeColor('none');
+    c.setFillColor(this.fill);
     c.setDashed(true);
     c.begin();
     c.moveTo(x + 2, cy);
@@ -2431,9 +3139,15 @@ class DashedArrowShapeCanvas extends Shape {
 class DashedArrowBackShapeCanvas extends Shape {
   paintBackground(c: AbstractCanvas2D, x: number, y: number, w: number, h: number) {
     const cy = y + h / 2;
-    c.setStrokeColor('#1a1f36');
-    c.setStrokeWidth(2);
-    c.setFillColor('#1a1f36');
+    c.setStrokeColor(this.stroke);
+    c.setStrokeWidth(this.strokeWidth);
+    // maxGraph's SVG renderer floors any actually-drawn stroke to 1px
+    // (SvgCanvas2D.minStrokeWidth), so strokeWidth=0 alone still paints a
+    // hairline. Dropping the stroke color to 'none' instead skips the
+    // stroke draw entirely, which is the only way to make width 0 truly
+    // invisible.
+    if (this.strokeWidth <= 0) c.setStrokeColor('none');
+    c.setFillColor(this.fill);
     c.setDashed(true);
     c.begin();
     c.moveTo(x + 2, cy);
@@ -2452,8 +3166,14 @@ class DashedArrowBackShapeCanvas extends Shape {
 class TriangleArrowShapeCanvas extends Shape {
   paintBackground(c: AbstractCanvas2D, x: number, y: number, w: number, h: number) {
     const cy = y + h / 2;
-    c.setStrokeColor('#1a1f36');
-    c.setStrokeWidth(2);
+    c.setStrokeColor(this.stroke);
+    c.setStrokeWidth(this.strokeWidth);
+    // maxGraph's SVG renderer floors any actually-drawn stroke to 1px
+    // (SvgCanvas2D.minStrokeWidth), so strokeWidth=0 alone still paints a
+    // hairline. Dropping the stroke color to 'none' instead skips the
+    // stroke draw entirely, which is the only way to make width 0 truly
+    // invisible.
+    if (this.strokeWidth <= 0) c.setStrokeColor('none');
     c.begin();
     c.moveTo(x + 2, cy);
     c.lineTo(x + w - 12, cy);
@@ -2471,9 +3191,15 @@ class LoopArrowShapeCanvas extends Shape {
   paintBackground(c: AbstractCanvas2D, x: number, y: number, w: number, h: number) {
     const cx = x + w / 2;
     const cy = y + h / 2;
-    c.setStrokeColor('#1a1f36');
-    c.setStrokeWidth(2);
-    c.setFillColor('#1a1f36');
+    c.setStrokeColor(this.stroke);
+    c.setStrokeWidth(this.strokeWidth);
+    // maxGraph's SVG renderer floors any actually-drawn stroke to 1px
+    // (SvgCanvas2D.minStrokeWidth), so strokeWidth=0 alone still paints a
+    // hairline. Dropping the stroke color to 'none' instead skips the
+    // stroke draw entirely, which is the only way to make width 0 truly
+    // invisible.
+    if (this.strokeWidth <= 0) c.setStrokeColor('none');
+    c.setFillColor(this.fill);
     c.begin();
     c.moveTo(cx - 4, cy + 4);
     c.arcTo(w * 0.35, h * 0.4, 0, false, true, cx - 4, cy - 4);
@@ -2491,9 +3217,15 @@ class LoopArrowShapeCanvas extends Shape {
 class CreateArrowShapeCanvas extends Shape {
   paintBackground(c: AbstractCanvas2D, x: number, y: number, w: number, h: number) {
     const cy = y + h / 2;
-    c.setStrokeColor('#1a1f36');
-    c.setStrokeWidth(2);
-    c.setFillColor('#1a1f36');
+    c.setStrokeColor(this.stroke);
+    c.setStrokeWidth(this.strokeWidth);
+    // maxGraph's SVG renderer floors any actually-drawn stroke to 1px
+    // (SvgCanvas2D.minStrokeWidth), so strokeWidth=0 alone still paints a
+    // hairline. Dropping the stroke color to 'none' instead skips the
+    // stroke draw entirely, which is the only way to make width 0 truly
+    // invisible.
+    if (this.strokeWidth <= 0) c.setStrokeColor('none');
+    c.setFillColor(this.fill);
     c.begin();
     c.moveTo(x + 2, cy);
     c.lineTo(x + w - 10, cy);
@@ -2512,8 +3244,14 @@ class DestructionShapeCanvas extends Shape {
     const cx = x + w / 2;
     const cy = y + h / 2;
     const s = Math.min(w, h) * 0.3;
-    c.setStrokeColor('#1a1f36');
-    c.setStrokeWidth(2);
+    c.setStrokeColor(this.stroke);
+    c.setStrokeWidth(this.strokeWidth);
+    // maxGraph's SVG renderer floors any actually-drawn stroke to 1px
+    // (SvgCanvas2D.minStrokeWidth), so strokeWidth=0 alone still paints a
+    // hairline. Dropping the stroke color to 'none' instead skips the
+    // stroke draw entirely, which is the only way to make width 0 truly
+    // invisible.
+    if (this.strokeWidth <= 0) c.setStrokeColor('none');
     c.begin();
     c.moveTo(cx - s, cy - s);
     c.lineTo(cx + s, cy + s);
@@ -2528,9 +3266,15 @@ class DestructionShapeCanvas extends Shape {
 class AggregationShapeCanvas extends Shape {
   paintBackground(c: AbstractCanvas2D, x: number, y: number, w: number, h: number) {
     const cy = y + h / 2;
-    c.setStrokeColor('#1a1f36');
-    c.setStrokeWidth(2);
-    c.setFillColor('#ffffff');
+    c.setStrokeColor(this.stroke);
+    c.setStrokeWidth(this.strokeWidth);
+    // maxGraph's SVG renderer floors any actually-drawn stroke to 1px
+    // (SvgCanvas2D.minStrokeWidth), so strokeWidth=0 alone still paints a
+    // hairline. Dropping the stroke color to 'none' instead skips the
+    // stroke draw entirely, which is the only way to make width 0 truly
+    // invisible.
+    if (this.strokeWidth <= 0) c.setStrokeColor('none');
+    c.setFillColor(this.fill);
     c.begin();
     c.moveTo(x + 2, cy);
     c.lineTo(x + 12, cy - 7);
@@ -2548,9 +3292,15 @@ class AggregationShapeCanvas extends Shape {
 class CompositionShapeCanvas extends Shape {
   paintBackground(c: AbstractCanvas2D, x: number, y: number, w: number, h: number) {
     const cy = y + h / 2;
-    c.setStrokeColor('#1a1f36');
-    c.setStrokeWidth(2);
-    c.setFillColor('#1a1f36');
+    c.setStrokeColor(this.stroke);
+    c.setStrokeWidth(this.strokeWidth);
+    // maxGraph's SVG renderer floors any actually-drawn stroke to 1px
+    // (SvgCanvas2D.minStrokeWidth), so strokeWidth=0 alone still paints a
+    // hairline. Dropping the stroke color to 'none' instead skips the
+    // stroke draw entirely, which is the only way to make width 0 truly
+    // invisible.
+    if (this.strokeWidth <= 0) c.setStrokeColor('none');
+    c.setFillColor(this.fill);
     c.begin();
     c.moveTo(x + 2, cy);
     c.lineTo(x + 12, cy - 7);
@@ -2567,8 +3317,14 @@ class CompositionShapeCanvas extends Shape {
 
 class MultiplicityShapeCanvas extends Shape {
   paintBackground(c: AbstractCanvas2D, x: number, y: number, w: number, h: number) {
-    c.setStrokeColor('#1a1f36');
-    c.setStrokeWidth(2);
+    c.setStrokeColor(this.stroke);
+    c.setStrokeWidth(this.strokeWidth);
+    // maxGraph's SVG renderer floors any actually-drawn stroke to 1px
+    // (SvgCanvas2D.minStrokeWidth), so strokeWidth=0 alone still paints a
+    // hairline. Dropping the stroke color to 'none' instead skips the
+    // stroke draw entirely, which is the only way to make width 0 truly
+    // invisible.
+    if (this.strokeWidth <= 0) c.setStrokeColor('none');
     c.rect(x + 2, y + h / 2 - 6, w - 4, 12);
     c.stroke();
   }
@@ -2576,9 +3332,15 @@ class MultiplicityShapeCanvas extends Shape {
 
 class ArrowDiagShapeCanvas extends Shape {
   paintBackground(c: AbstractCanvas2D, x: number, y: number, w: number, h: number) {
-    c.setStrokeColor('#1a1f36');
-    c.setStrokeWidth(2);
-    c.setFillColor('#1a1f36');
+    c.setStrokeColor(this.stroke);
+    c.setStrokeWidth(this.strokeWidth);
+    // maxGraph's SVG renderer floors any actually-drawn stroke to 1px
+    // (SvgCanvas2D.minStrokeWidth), so strokeWidth=0 alone still paints a
+    // hairline. Dropping the stroke color to 'none' instead skips the
+    // stroke draw entirely, which is the only way to make width 0 truly
+    // invisible.
+    if (this.strokeWidth <= 0) c.setStrokeColor('none');
+    c.setFillColor(this.fill);
     c.begin();
     c.moveTo(x + 2, y + h - 2);
     c.lineTo(x + w - 2, y + 2);
@@ -2595,9 +3357,15 @@ class ArrowDiagShapeCanvas extends Shape {
 class ArrowSmallShapeCanvas extends Shape {
   paintBackground(c: AbstractCanvas2D, x: number, y: number, w: number, h: number) {
     const cy = y + h / 2;
-    c.setStrokeColor('#1a1f36');
-    c.setStrokeWidth(1.5);
-    c.setFillColor('#1a1f36');
+    c.setStrokeColor(this.stroke);
+    c.setStrokeWidth(this.strokeWidth);
+    // maxGraph's SVG renderer floors any actually-drawn stroke to 1px
+    // (SvgCanvas2D.minStrokeWidth), so strokeWidth=0 alone still paints a
+    // hairline. Dropping the stroke color to 'none' instead skips the
+    // stroke draw entirely, which is the only way to make width 0 truly
+    // invisible.
+    if (this.strokeWidth <= 0) c.setStrokeColor('none');
+    c.setFillColor(this.fill);
     c.begin();
     c.moveTo(x + 2, cy);
     c.lineTo(x + w - 8, cy);
@@ -2615,9 +3383,15 @@ class ArrowSmallShapeCanvas extends Shape {
 
 class ERDEntityShapeCanvas extends Shape {
   paintBackground(c: AbstractCanvas2D, x: number, y: number, w: number, h: number) {
-    c.setFillColor('#ffffff');
-    c.setStrokeColor('#1a1f36');
-    c.setStrokeWidth(2);
+    c.setFillColor(this.fill);
+    c.setStrokeColor(this.stroke);
+    c.setStrokeWidth(this.strokeWidth);
+    // maxGraph's SVG renderer floors any actually-drawn stroke to 1px
+    // (SvgCanvas2D.minStrokeWidth), so strokeWidth=0 alone still paints a
+    // hairline. Dropping the stroke color to 'none' instead skips the
+    // stroke draw entirely, which is the only way to make width 0 truly
+    // invisible.
+    if (this.strokeWidth <= 0) c.setStrokeColor('none');
     c.rect(x + 2, y + 2, w - 4, h - 4);
     c.fillAndStroke();
   }
@@ -2625,9 +3399,15 @@ class ERDEntityShapeCanvas extends Shape {
 
 class ERDWeakEntityShapeCanvas extends Shape {
   paintBackground(c: AbstractCanvas2D, x: number, y: number, w: number, h: number) {
-    c.setFillColor('#ffffff');
-    c.setStrokeColor('#1a1f36');
-    c.setStrokeWidth(2);
+    c.setFillColor(this.fill);
+    c.setStrokeColor(this.stroke);
+    c.setStrokeWidth(this.strokeWidth);
+    // maxGraph's SVG renderer floors any actually-drawn stroke to 1px
+    // (SvgCanvas2D.minStrokeWidth), so strokeWidth=0 alone still paints a
+    // hairline. Dropping the stroke color to 'none' instead skips the
+    // stroke draw entirely, which is the only way to make width 0 truly
+    // invisible.
+    if (this.strokeWidth <= 0) c.setStrokeColor('none');
     c.rect(x + 2, y + 2, w - 4, h - 4);
     c.fillAndStroke();
     const inset = 6;
@@ -2640,9 +3420,15 @@ class ERDRelationshipShapeCanvas extends Shape {
   paintBackground(c: AbstractCanvas2D, x: number, y: number, w: number, h: number) {
     const cx = x + w / 2;
     const cy = y + h / 2;
-    c.setFillColor('#ffffff');
-    c.setStrokeColor('#1a1f36');
-    c.setStrokeWidth(2);
+    c.setFillColor(this.fill);
+    c.setStrokeColor(this.stroke);
+    c.setStrokeWidth(this.strokeWidth);
+    // maxGraph's SVG renderer floors any actually-drawn stroke to 1px
+    // (SvgCanvas2D.minStrokeWidth), so strokeWidth=0 alone still paints a
+    // hairline. Dropping the stroke color to 'none' instead skips the
+    // stroke draw entirely, which is the only way to make width 0 truly
+    // invisible.
+    if (this.strokeWidth <= 0) c.setStrokeColor('none');
     c.begin();
     c.moveTo(cx, y + 2);
     c.lineTo(x + w - 2, cy);
@@ -2657,9 +3443,15 @@ class ERDIdentifyingRelShapeCanvas extends Shape {
   paintBackground(c: AbstractCanvas2D, x: number, y: number, w: number, h: number) {
     const cx = x + w / 2;
     const cy = y + h / 2;
-    c.setFillColor('#ffffff');
-    c.setStrokeColor('#1a1f36');
-    c.setStrokeWidth(2);
+    c.setFillColor(this.fill);
+    c.setStrokeColor(this.stroke);
+    c.setStrokeWidth(this.strokeWidth);
+    // maxGraph's SVG renderer floors any actually-drawn stroke to 1px
+    // (SvgCanvas2D.minStrokeWidth), so strokeWidth=0 alone still paints a
+    // hairline. Dropping the stroke color to 'none' instead skips the
+    // stroke draw entirely, which is the only way to make width 0 truly
+    // invisible.
+    if (this.strokeWidth <= 0) c.setStrokeColor('none');
     c.begin();
     c.moveTo(cx, y + 2);
     c.lineTo(x + w - 2, cy);
@@ -2685,8 +3477,14 @@ class ERDCardinality11ShapeCanvas extends Shape {
     c.setFontSize(12);
     c.text(x + w * 0.15, y + h * 0.45, 0, 0, '1', 'center', 'middle', false, '', 'hidden', false, 0, '');
     c.text(x + w * 0.85, y + h * 0.45, 0, 0, '1', 'center', 'middle', false, '', 'hidden', false, 0, '');
-    c.setStrokeColor('#1a1f36');
-    c.setStrokeWidth(2);
+    c.setStrokeColor(this.stroke);
+    c.setStrokeWidth(this.strokeWidth);
+    // maxGraph's SVG renderer floors any actually-drawn stroke to 1px
+    // (SvgCanvas2D.minStrokeWidth), so strokeWidth=0 alone still paints a
+    // hairline. Dropping the stroke color to 'none' instead skips the
+    // stroke draw entirely, which is the only way to make width 0 truly
+    // invisible.
+    if (this.strokeWidth <= 0) c.setStrokeColor('none');
     c.begin();
     c.moveTo(x + 2, cy);
     c.lineTo(x + w - 2, cy);
@@ -2701,8 +3499,14 @@ class ERDCardinality1NShapeCanvas extends Shape {
     c.setFontSize(12);
     c.text(x + w * 0.15, y + h * 0.45, 0, 0, '1', 'center', 'middle', false, '', 'hidden', false, 0, '');
     c.text(x + w * 0.85, y + h * 0.45, 0, 0, 'N', 'center', 'middle', false, '', 'hidden', false, 0, '');
-    c.setStrokeColor('#1a1f36');
-    c.setStrokeWidth(2);
+    c.setStrokeColor(this.stroke);
+    c.setStrokeWidth(this.strokeWidth);
+    // maxGraph's SVG renderer floors any actually-drawn stroke to 1px
+    // (SvgCanvas2D.minStrokeWidth), so strokeWidth=0 alone still paints a
+    // hairline. Dropping the stroke color to 'none' instead skips the
+    // stroke draw entirely, which is the only way to make width 0 truly
+    // invisible.
+    if (this.strokeWidth <= 0) c.setStrokeColor('none');
     c.begin();
     c.moveTo(x + 2, cy);
     c.lineTo(x + w - 2, cy);
@@ -2717,8 +3521,14 @@ class ERDCardinalityN1ShapeCanvas extends Shape {
     c.setFontSize(12);
     c.text(x + w * 0.15, y + h * 0.45, 0, 0, 'N', 'center', 'middle', false, '', 'hidden', false, 0, '');
     c.text(x + w * 0.85, y + h * 0.45, 0, 0, '1', 'center', 'middle', false, '', 'hidden', false, 0, '');
-    c.setStrokeColor('#1a1f36');
-    c.setStrokeWidth(2);
+    c.setStrokeColor(this.stroke);
+    c.setStrokeWidth(this.strokeWidth);
+    // maxGraph's SVG renderer floors any actually-drawn stroke to 1px
+    // (SvgCanvas2D.minStrokeWidth), so strokeWidth=0 alone still paints a
+    // hairline. Dropping the stroke color to 'none' instead skips the
+    // stroke draw entirely, which is the only way to make width 0 truly
+    // invisible.
+    if (this.strokeWidth <= 0) c.setStrokeColor('none');
     c.begin();
     c.moveTo(x + 2, cy);
     c.lineTo(x + w - 2, cy);
@@ -2733,8 +3543,14 @@ class ERDCardinalityMNShapeCanvas extends Shape {
     c.setFontSize(12);
     c.text(x + w * 0.15, y + h * 0.45, 0, 0, 'M', 'center', 'middle', false, '', 'hidden', false, 0, '');
     c.text(x + w * 0.85, y + h * 0.45, 0, 0, 'N', 'center', 'middle', false, '', 'hidden', false, 0, '');
-    c.setStrokeColor('#1a1f36');
-    c.setStrokeWidth(2);
+    c.setStrokeColor(this.stroke);
+    c.setStrokeWidth(this.strokeWidth);
+    // maxGraph's SVG renderer floors any actually-drawn stroke to 1px
+    // (SvgCanvas2D.minStrokeWidth), so strokeWidth=0 alone still paints a
+    // hairline. Dropping the stroke color to 'none' instead skips the
+    // stroke draw entirely, which is the only way to make width 0 truly
+    // invisible.
+    if (this.strokeWidth <= 0) c.setStrokeColor('none');
     c.begin();
     c.moveTo(x + 2, cy);
     c.lineTo(x + w - 2, cy);
@@ -2749,8 +3565,14 @@ class UCActorShapeCanvas extends Shape {
     const cx = x + w / 2;
     const head = Math.min(w, h) * 0.15;
     const headCY = y + head + 2;
-    c.setStrokeColor('#1a1f36');
-    c.setStrokeWidth(2);
+    c.setStrokeColor(this.stroke);
+    c.setStrokeWidth(this.strokeWidth);
+    // maxGraph's SVG renderer floors any actually-drawn stroke to 1px
+    // (SvgCanvas2D.minStrokeWidth), so strokeWidth=0 alone still paints a
+    // hairline. Dropping the stroke color to 'none' instead skips the
+    // stroke draw entirely, which is the only way to make width 0 truly
+    // invisible.
+    if (this.strokeWidth <= 0) c.setStrokeColor('none');
     c.ellipse(cx - head, headCY - head, head * 2, head * 2);
     c.stroke();
     const bodyTop = headCY + head;
@@ -2779,9 +3601,15 @@ class UMLUseCaseShapeCanvas extends Shape {
   paintBackground(c: AbstractCanvas2D, x: number, y: number, w: number, h: number) {
     const cx = x + w / 2;
     const cy = y + h / 2;
-    c.setFillColor('#ffffff');
-    c.setStrokeColor('#1a1f36');
-    c.setStrokeWidth(2);
+    c.setFillColor(this.fill);
+    c.setStrokeColor(this.stroke);
+    c.setStrokeWidth(this.strokeWidth);
+    // maxGraph's SVG renderer floors any actually-drawn stroke to 1px
+    // (SvgCanvas2D.minStrokeWidth), so strokeWidth=0 alone still paints a
+    // hairline. Dropping the stroke color to 'none' instead skips the
+    // stroke draw entirely, which is the only way to make width 0 truly
+    // invisible.
+    if (this.strokeWidth <= 0) c.setStrokeColor('none');
     c.ellipse(cx - w / 2 + 2, cy - h / 2 + 2, w - 4, h - 4);
     c.fillAndStroke();
   }
@@ -2789,8 +3617,14 @@ class UMLUseCaseShapeCanvas extends Shape {
 
 class UMLSystemBoundaryShapeCanvas extends Shape {
   paintBackground(c: AbstractCanvas2D, x: number, y: number, w: number, h: number) {
-    c.setStrokeColor('#1a1f36');
-    c.setStrokeWidth(2);
+    c.setStrokeColor(this.stroke);
+    c.setStrokeWidth(this.strokeWidth);
+    // maxGraph's SVG renderer floors any actually-drawn stroke to 1px
+    // (SvgCanvas2D.minStrokeWidth), so strokeWidth=0 alone still paints a
+    // hairline. Dropping the stroke color to 'none' instead skips the
+    // stroke draw entirely, which is the only way to make width 0 truly
+    // invisible.
+    if (this.strokeWidth <= 0) c.setStrokeColor('none');
     c.rect(x + 2, y + 2, w - 4, h - 4);
     c.stroke();
   }
@@ -2799,8 +3633,14 @@ class UMLSystemBoundaryShapeCanvas extends Shape {
 class UMLAssociationShapeCanvas extends Shape {
   paintBackground(c: AbstractCanvas2D, x: number, y: number, w: number, h: number) {
     const cy = y + h / 2;
-    c.setStrokeColor('#1a1f36');
-    c.setStrokeWidth(2);
+    c.setStrokeColor(this.stroke);
+    c.setStrokeWidth(this.strokeWidth);
+    // maxGraph's SVG renderer floors any actually-drawn stroke to 1px
+    // (SvgCanvas2D.minStrokeWidth), so strokeWidth=0 alone still paints a
+    // hairline. Dropping the stroke color to 'none' instead skips the
+    // stroke draw entirely, which is the only way to make width 0 truly
+    // invisible.
+    if (this.strokeWidth <= 0) c.setStrokeColor('none');
     c.begin();
     c.moveTo(x + 2, cy);
     c.lineTo(x + w - 2, cy);
@@ -2812,8 +3652,14 @@ class UMLGeneralizationShapeCanvas extends Shape {
   paintBackground(c: AbstractCanvas2D, x: number, y: number, w: number, h: number) {
     const cy = y + h / 2;
     const s = 14;
-    c.setStrokeColor('#1a1f36');
-    c.setStrokeWidth(2);
+    c.setStrokeColor(this.stroke);
+    c.setStrokeWidth(this.strokeWidth);
+    // maxGraph's SVG renderer floors any actually-drawn stroke to 1px
+    // (SvgCanvas2D.minStrokeWidth), so strokeWidth=0 alone still paints a
+    // hairline. Dropping the stroke color to 'none' instead skips the
+    // stroke draw entirely, which is the only way to make width 0 truly
+    // invisible.
+    if (this.strokeWidth <= 0) c.setStrokeColor('none');
     c.begin();
     c.moveTo(x + 2, cy);
     c.lineTo(x + w - s - 2, cy);
@@ -2830,9 +3676,15 @@ class UMLGeneralizationShapeCanvas extends Shape {
 class UMLNoteShapeCanvas extends Shape {
   paintBackground(c: AbstractCanvas2D, x: number, y: number, w: number, h: number) {
     const fold = Math.min(w, h) * 0.2;
-    c.setFillColor('#fef9c3');
-    c.setStrokeColor('#1a1f36');
-    c.setStrokeWidth(2);
+    c.setFillColor(this.fill);
+    c.setStrokeColor(this.stroke);
+    c.setStrokeWidth(this.strokeWidth);
+    // maxGraph's SVG renderer floors any actually-drawn stroke to 1px
+    // (SvgCanvas2D.minStrokeWidth), so strokeWidth=0 alone still paints a
+    // hairline. Dropping the stroke color to 'none' instead skips the
+    // stroke draw entirely, which is the only way to make width 0 truly
+    // invisible.
+    if (this.strokeWidth <= 0) c.setStrokeColor('none');
     c.begin();
     c.moveTo(x + 2, y + 2);
     c.lineTo(x + w - fold - 2, y + 2);
@@ -2852,8 +3704,14 @@ class UMLNoteShapeCanvas extends Shape {
 class UMLNoteConnectorShapeCanvas extends Shape {
   paintBackground(c: AbstractCanvas2D, x: number, y: number, w: number, h: number) {
     const cy = y + h / 2;
-    c.setStrokeColor('#1a1f36');
-    c.setStrokeWidth(2);
+    c.setStrokeColor(this.stroke);
+    c.setStrokeWidth(this.strokeWidth);
+    // maxGraph's SVG renderer floors any actually-drawn stroke to 1px
+    // (SvgCanvas2D.minStrokeWidth), so strokeWidth=0 alone still paints a
+    // hairline. Dropping the stroke color to 'none' instead skips the
+    // stroke draw entirely, which is the only way to make width 0 truly
+    // invisible.
+    if (this.strokeWidth <= 0) c.setStrokeColor('none');
     c.setDashed(true);
     c.setDashPattern('6 4');
     c.begin();
@@ -2893,8 +3751,14 @@ class UMLExtendLabelShapeCanvas extends Shape {
 class UMLConstraintShapeCanvas extends Shape {
   paintBackground(c: AbstractCanvas2D, x: number, y: number, w: number, h: number) {
     const r = Math.min(w, h) * 0.12;
-    c.setStrokeColor('#1a1f36');
-    c.setStrokeWidth(2);
+    c.setStrokeColor(this.stroke);
+    c.setStrokeWidth(this.strokeWidth);
+    // maxGraph's SVG renderer floors any actually-drawn stroke to 1px
+    // (SvgCanvas2D.minStrokeWidth), so strokeWidth=0 alone still paints a
+    // hairline. Dropping the stroke color to 'none' instead skips the
+    // stroke draw entirely, which is the only way to make width 0 truly
+    // invisible.
+    if (this.strokeWidth <= 0) c.setStrokeColor('none');
     c.setDashed(true);
     c.setDashPattern('6 4');
     c.roundrect(x + 2, y + 2, w - 4, h - 4, r, r);
@@ -2906,9 +3770,15 @@ class UMLConstraintShapeCanvas extends Shape {
 class UMLActivityShapeCanvas extends Shape {
   paintBackground(c: AbstractCanvas2D, x: number, y: number, w: number, h: number) {
     const r = Math.min(w, h) * 0.15;
-    c.setFillColor('#ffffff');
-    c.setStrokeColor('#1a1f36');
-    c.setStrokeWidth(2);
+    c.setFillColor(this.fill);
+    c.setStrokeColor(this.stroke);
+    c.setStrokeWidth(this.strokeWidth);
+    // maxGraph's SVG renderer floors any actually-drawn stroke to 1px
+    // (SvgCanvas2D.minStrokeWidth), so strokeWidth=0 alone still paints a
+    // hairline. Dropping the stroke color to 'none' instead skips the
+    // stroke draw entirely, which is the only way to make width 0 truly
+    // invisible.
+    if (this.strokeWidth <= 0) c.setStrokeColor('none');
     c.roundrect(x + 2, y + 2, w - 4, h - 4, r, r);
     c.fillAndStroke();
   }
@@ -2918,9 +3788,15 @@ class UMLDecisionShapeCanvas extends Shape {
   paintBackground(c: AbstractCanvas2D, x: number, y: number, w: number, h: number) {
     const cx = x + w / 2;
     const cy = y + h / 2;
-    c.setFillColor('#ffffff');
-    c.setStrokeColor('#1a1f36');
-    c.setStrokeWidth(2);
+    c.setFillColor(this.fill);
+    c.setStrokeColor(this.stroke);
+    c.setStrokeWidth(this.strokeWidth);
+    // maxGraph's SVG renderer floors any actually-drawn stroke to 1px
+    // (SvgCanvas2D.minStrokeWidth), so strokeWidth=0 alone still paints a
+    // hairline. Dropping the stroke color to 'none' instead skips the
+    // stroke draw entirely, which is the only way to make width 0 truly
+    // invisible.
+    if (this.strokeWidth <= 0) c.setStrokeColor('none');
     c.begin();
     c.moveTo(cx, y + 2);
     c.lineTo(x + w - 2, cy);
@@ -2934,9 +3810,15 @@ class UMLDecisionShapeCanvas extends Shape {
 class UMLSwimlaneShapeCanvas extends Shape {
   paintBackground(c: AbstractCanvas2D, x: number, y: number, w: number, h: number) {
     const header = Math.min(40, h * 0.2);
-    c.setFillColor('#ffffff');
-    c.setStrokeColor('#1a1f36');
-    c.setStrokeWidth(2);
+    c.setFillColor(this.fill);
+    c.setStrokeColor(this.stroke);
+    c.setStrokeWidth(this.strokeWidth);
+    // maxGraph's SVG renderer floors any actually-drawn stroke to 1px
+    // (SvgCanvas2D.minStrokeWidth), so strokeWidth=0 alone still paints a
+    // hairline. Dropping the stroke color to 'none' instead skips the
+    // stroke draw entirely, which is the only way to make width 0 truly
+    // invisible.
+    if (this.strokeWidth <= 0) c.setStrokeColor('none');
     c.rect(x + 2, y + 2, w - 4, h - 4);
     c.fillAndStroke();
     c.begin();
@@ -2952,9 +3834,15 @@ class UMLLifelineShapeCanvas extends Shape {
   paintBackground(c: AbstractCanvas2D, x: number, y: number, w: number, h: number) {
     const header = Math.min(50, h * 0.15);
     const cx = x + w / 2;
-    c.setFillColor('#ffffff');
-    c.setStrokeColor('#1a1f36');
-    c.setStrokeWidth(2);
+    c.setFillColor(this.fill);
+    c.setStrokeColor(this.stroke);
+    c.setStrokeWidth(this.strokeWidth);
+    // maxGraph's SVG renderer floors any actually-drawn stroke to 1px
+    // (SvgCanvas2D.minStrokeWidth), so strokeWidth=0 alone still paints a
+    // hairline. Dropping the stroke color to 'none' instead skips the
+    // stroke draw entirely, which is the only way to make width 0 truly
+    // invisible.
+    if (this.strokeWidth <= 0) c.setStrokeColor('none');
     c.rect(x + w * 0.1, y + 2, w * 0.8, header);
     c.fillAndStroke();
     c.setDashed(true);
@@ -2971,9 +3859,15 @@ class UMLActivationShapeCanvas extends Shape {
   paintBackground(c: AbstractCanvas2D, x: number, y: number, w: number, h: number) {
     const barW = Math.min(16, w * 0.4);
     const xPos = x + (w - barW) / 2;
-    c.setFillColor('#ffffff');
-    c.setStrokeColor('#1a1f36');
-    c.setStrokeWidth(2);
+    c.setFillColor(this.fill);
+    c.setStrokeColor(this.stroke);
+    c.setStrokeWidth(this.strokeWidth);
+    // maxGraph's SVG renderer floors any actually-drawn stroke to 1px
+    // (SvgCanvas2D.minStrokeWidth), so strokeWidth=0 alone still paints a
+    // hairline. Dropping the stroke color to 'none' instead skips the
+    // stroke draw entirely, which is the only way to make width 0 truly
+    // invisible.
+    if (this.strokeWidth <= 0) c.setStrokeColor('none');
     c.rect(xPos, y + 2, barW, h - 4);
     c.fillAndStroke();
   }
@@ -2982,8 +3876,14 @@ class UMLActivationShapeCanvas extends Shape {
 class UMLDestroyShapeCanvas extends Shape {
   paintBackground(c: AbstractCanvas2D, x: number, y: number, w: number, h: number) {
     const p = Math.min(w, h) * 0.2;
-    c.setStrokeColor('#1a1f36');
-    c.setStrokeWidth(2);
+    c.setStrokeColor(this.stroke);
+    c.setStrokeWidth(this.strokeWidth);
+    // maxGraph's SVG renderer floors any actually-drawn stroke to 1px
+    // (SvgCanvas2D.minStrokeWidth), so strokeWidth=0 alone still paints a
+    // hairline. Dropping the stroke color to 'none' instead skips the
+    // stroke draw entirely, which is the only way to make width 0 truly
+    // invisible.
+    if (this.strokeWidth <= 0) c.setStrokeColor('none');
     c.begin();
     c.moveTo(x + p, y + p);
     c.lineTo(x + w - p, y + h - p);
@@ -2999,8 +3899,14 @@ class UMLReturnMsgShapeCanvas extends Shape {
   paintBackground(c: AbstractCanvas2D, x: number, y: number, w: number, h: number) {
     const cy = y + h / 2;
     const arrow = 12;
-    c.setStrokeColor('#1a1f36');
-    c.setStrokeWidth(2);
+    c.setStrokeColor(this.stroke);
+    c.setStrokeWidth(this.strokeWidth);
+    // maxGraph's SVG renderer floors any actually-drawn stroke to 1px
+    // (SvgCanvas2D.minStrokeWidth), so strokeWidth=0 alone still paints a
+    // hairline. Dropping the stroke color to 'none' instead skips the
+    // stroke draw entirely, which is the only way to make width 0 truly
+    // invisible.
+    if (this.strokeWidth <= 0) c.setStrokeColor('none');
     c.setDashed(true);
     c.setDashPattern('6 4');
     c.begin();
@@ -3019,8 +3925,14 @@ class UMLReturnMsgShapeCanvas extends Shape {
 
 class UMLAltShapeCanvas extends Shape {
   paintBackground(c: AbstractCanvas2D, x: number, y: number, w: number, h: number) {
-    c.setStrokeColor('#1a1f36');
-    c.setStrokeWidth(2);
+    c.setStrokeColor(this.stroke);
+    c.setStrokeWidth(this.strokeWidth);
+    // maxGraph's SVG renderer floors any actually-drawn stroke to 1px
+    // (SvgCanvas2D.minStrokeWidth), so strokeWidth=0 alone still paints a
+    // hairline. Dropping the stroke color to 'none' instead skips the
+    // stroke draw entirely, which is the only way to make width 0 truly
+    // invisible.
+    if (this.strokeWidth <= 0) c.setStrokeColor('none');
     c.rect(x + 2, y + 2, w - 4, h - 4);
     c.stroke();
     c.begin();
@@ -3046,8 +3958,14 @@ class UMLAltShapeCanvas extends Shape {
 
 class UMLOptShapeCanvas extends Shape {
   paintBackground(c: AbstractCanvas2D, x: number, y: number, w: number, h: number) {
-    c.setStrokeColor('#1a1f36');
-    c.setStrokeWidth(2);
+    c.setStrokeColor(this.stroke);
+    c.setStrokeWidth(this.strokeWidth);
+    // maxGraph's SVG renderer floors any actually-drawn stroke to 1px
+    // (SvgCanvas2D.minStrokeWidth), so strokeWidth=0 alone still paints a
+    // hairline. Dropping the stroke color to 'none' instead skips the
+    // stroke draw entirely, which is the only way to make width 0 truly
+    // invisible.
+    if (this.strokeWidth <= 0) c.setStrokeColor('none');
     c.rect(x + 2, y + 2, w - 4, h - 4);
     c.stroke();
     c.begin();
@@ -3066,8 +3984,14 @@ class UMLOptShapeCanvas extends Shape {
 
 class UMLLoopShapeCanvas extends Shape {
   paintBackground(c: AbstractCanvas2D, x: number, y: number, w: number, h: number) {
-    c.setStrokeColor('#1a1f36');
-    c.setStrokeWidth(2);
+    c.setStrokeColor(this.stroke);
+    c.setStrokeWidth(this.strokeWidth);
+    // maxGraph's SVG renderer floors any actually-drawn stroke to 1px
+    // (SvgCanvas2D.minStrokeWidth), so strokeWidth=0 alone still paints a
+    // hairline. Dropping the stroke color to 'none' instead skips the
+    // stroke draw entirely, which is the only way to make width 0 truly
+    // invisible.
+    if (this.strokeWidth <= 0) c.setStrokeColor('none');
     c.rect(x + 2, y + 2, w - 4, h - 4);
     c.stroke();
     c.begin();
@@ -3086,8 +4010,14 @@ class UMLLoopShapeCanvas extends Shape {
 
 class UMLParShapeCanvas extends Shape {
   paintBackground(c: AbstractCanvas2D, x: number, y: number, w: number, h: number) {
-    c.setStrokeColor('#1a1f36');
-    c.setStrokeWidth(2);
+    c.setStrokeColor(this.stroke);
+    c.setStrokeWidth(this.strokeWidth);
+    // maxGraph's SVG renderer floors any actually-drawn stroke to 1px
+    // (SvgCanvas2D.minStrokeWidth), so strokeWidth=0 alone still paints a
+    // hairline. Dropping the stroke color to 'none' instead skips the
+    // stroke draw entirely, which is the only way to make width 0 truly
+    // invisible.
+    if (this.strokeWidth <= 0) c.setStrokeColor('none');
     c.rect(x + 2, y + 2, w - 4, h - 4);
     c.stroke();
     c.begin();
@@ -3113,8 +4043,14 @@ class UMLParShapeCanvas extends Shape {
 
 class UMLBreakShapeCanvas extends Shape {
   paintBackground(c: AbstractCanvas2D, x: number, y: number, w: number, h: number) {
-    c.setStrokeColor('#1a1f36');
-    c.setStrokeWidth(2);
+    c.setStrokeColor(this.stroke);
+    c.setStrokeWidth(this.strokeWidth);
+    // maxGraph's SVG renderer floors any actually-drawn stroke to 1px
+    // (SvgCanvas2D.minStrokeWidth), so strokeWidth=0 alone still paints a
+    // hairline. Dropping the stroke color to 'none' instead skips the
+    // stroke draw entirely, which is the only way to make width 0 truly
+    // invisible.
+    if (this.strokeWidth <= 0) c.setStrokeColor('none');
     c.rect(x + 2, y + 2, w - 4, h - 4);
     c.stroke();
     c.begin();
@@ -3135,9 +4071,15 @@ class UMLBreakShapeCanvas extends Shape {
 
 class UMLClassShapeCanvas extends Shape {
   paintBackground(c: AbstractCanvas2D, x: number, y: number, w: number, h: number) {
-    c.setFillColor('#ffffff');
-    c.setStrokeColor('#1a1f36');
-    c.setStrokeWidth(2);
+    c.setFillColor(this.fill);
+    c.setStrokeColor(this.stroke);
+    c.setStrokeWidth(this.strokeWidth);
+    // maxGraph's SVG renderer floors any actually-drawn stroke to 1px
+    // (SvgCanvas2D.minStrokeWidth), so strokeWidth=0 alone still paints a
+    // hairline. Dropping the stroke color to 'none' instead skips the
+    // stroke draw entirely, which is the only way to make width 0 truly
+    // invisible.
+    if (this.strokeWidth <= 0) c.setStrokeColor('none');
     c.rect(x + 2, y + 2, w - 4, h - 4);
     c.fillAndStroke();
     c.begin();
@@ -3155,8 +4097,14 @@ class UMLDirectedAssociationShapeCanvas extends Shape {
   paintBackground(c: AbstractCanvas2D, x: number, y: number, w: number, h: number) {
     const cy = y + h / 2;
     const arrow = 14;
-    c.setStrokeColor('#1a1f36');
-    c.setStrokeWidth(2);
+    c.setStrokeColor(this.stroke);
+    c.setStrokeWidth(this.strokeWidth);
+    // maxGraph's SVG renderer floors any actually-drawn stroke to 1px
+    // (SvgCanvas2D.minStrokeWidth), so strokeWidth=0 alone still paints a
+    // hairline. Dropping the stroke color to 'none' instead skips the
+    // stroke draw entirely, which is the only way to make width 0 truly
+    // invisible.
+    if (this.strokeWidth <= 0) c.setStrokeColor('none');
     c.begin();
     c.moveTo(x + 2, cy);
     c.lineTo(x + w - arrow - 2, cy);
@@ -3174,9 +4122,15 @@ class UMLAggregationShapeCanvas extends Shape {
   paintBackground(c: AbstractCanvas2D, x: number, y: number, w: number, h: number) {
     const cy = y + h / 2;
     const d = 14;
-    c.setStrokeColor('#1a1f36');
-    c.setStrokeWidth(2);
-    c.setFillColor('#ffffff');
+    c.setStrokeColor(this.stroke);
+    c.setStrokeWidth(this.strokeWidth);
+    // maxGraph's SVG renderer floors any actually-drawn stroke to 1px
+    // (SvgCanvas2D.minStrokeWidth), so strokeWidth=0 alone still paints a
+    // hairline. Dropping the stroke color to 'none' instead skips the
+    // stroke draw entirely, which is the only way to make width 0 truly
+    // invisible.
+    if (this.strokeWidth <= 0) c.setStrokeColor('none');
+    c.setFillColor(this.fill);
     c.begin();
     c.moveTo(x + d * 2 + 2, cy);
     c.lineTo(x + w - 2, cy);
@@ -3195,8 +4149,14 @@ class UMLDependencyShapeCanvas extends Shape {
   paintBackground(c: AbstractCanvas2D, x: number, y: number, w: number, h: number) {
     const cy = y + h / 2;
     const arrow = 14;
-    c.setStrokeColor('#1a1f36');
-    c.setStrokeWidth(2);
+    c.setStrokeColor(this.stroke);
+    c.setStrokeWidth(this.strokeWidth);
+    // maxGraph's SVG renderer floors any actually-drawn stroke to 1px
+    // (SvgCanvas2D.minStrokeWidth), so strokeWidth=0 alone still paints a
+    // hairline. Dropping the stroke color to 'none' instead skips the
+    // stroke draw entirely, which is the only way to make width 0 truly
+    // invisible.
+    if (this.strokeWidth <= 0) c.setStrokeColor('none');
     c.setDashed(true);
     c.setDashPattern('6 4');
     c.begin();

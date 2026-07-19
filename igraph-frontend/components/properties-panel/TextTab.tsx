@@ -185,19 +185,19 @@ export default function TextTab({ graph, cells }: TabProps) {
         checked={fontColor !== undefined && fontColor !== 'none'}
         onToggle={() => patch({ fontColor: fontColor && fontColor !== 'none' ? 'none' : '#000000' })}
         label="Font Color"
-        right={<MiniSwatch value={fontColor ?? '#000000'} onChange={(hex) => patch({ fontColor: hex })} />}
+        right={<MiniSwatch value={fontColor ?? '#000000'} onChange={(hex) => patch({ fontColor: hex })} title="Select a font color" />}
       />
       <CheckboxRow
         checked={fillColor !== undefined && fillColor !== 'none'}
         onToggle={() => patch({ labelBackgroundColor: fillColor && fillColor !== 'none' ? 'none' : '#ffffff' })}
         label="Background Color"
-        right={<MiniSwatch value={fillColor ?? '#ffffff'} onChange={(hex) => patch({ labelBackgroundColor: hex })} />}
+        right={<MiniSwatch value={fillColor ?? '#ffffff'} onChange={(hex) => patch({ labelBackgroundColor: hex })} title="Select a background color" />}
       />
       <CheckboxRow
         checked={strokeColor !== undefined && strokeColor !== 'none'}
         onToggle={() => patch({ labelBorderColor: strokeColor && strokeColor !== 'none' ? 'none' : '#000000' })}
         label="Border Color"
-        right={<MiniSwatch value={strokeColor ?? '#000000'} onChange={(hex) => patch({ labelBorderColor: hex })} />}
+        right={<MiniSwatch value={strokeColor ?? '#000000'} onChange={(hex) => patch({ labelBorderColor: hex })} title="Select a border color" />}
       />
       <CheckboxRow
         checked={shadow === 1}
