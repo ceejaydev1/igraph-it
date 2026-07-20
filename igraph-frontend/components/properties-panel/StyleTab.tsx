@@ -14,6 +14,7 @@ import {
   CollapsibleSection,
   Dropdown,
   PresetSwatchGrid,
+  useSidebarColorPicker,
 } from './shared';
 
 interface TabProps {
@@ -44,6 +45,7 @@ function getLineStyle(cells: any[]): LineStyle | undefined {
 
 export default function StyleTab({ graph, cells }: TabProps) {
   const [editStyleOpen, setEditStyleOpen] = useState(false);
+  const { openPicker, activePicker } = useSidebarColorPicker();
 
   const fillColor = getCommonStyleValue(cells, 'fillColor') as string | undefined;
   const strokeColor = getCommonStyleValue(cells, 'strokeColor') as string | undefined;
@@ -65,9 +67,41 @@ export default function StyleTab({ graph, cells }: TabProps) {
     if (style === 'dotted') patch({ dashed: 1, dashPattern: '1 2' });
   };
 
+  // While a color picker is open, it replaces the whole tab (full panel
+  // width, closed with its own X) instead of floating over these fields —
+  // see useSidebarColorPicker.
+  if (activePicker) return <View>{activePicker}</View>;
+
   return (
     <View>
       <PresetSwatchGrid onSelect={(fill, stroke) => patch({ fillColor: fill, strokeColor: stroke })} />
+
+      {/* Fill + Line color side by side in one compact row instead of buried
+          in two separate collapsible sections — saves vertical space on the
+          mobile sheet, where every row competes with the diagram canvas
+          for height. */}
+      <View style={styles.colorsRow}>
+        <View style={styles.colorsRowItem}>
+          <Text style={styles.colorsRowLabel}>Fill</Text>
+          <MiniSwatch
+            value={fillEnabled ? fillColor ?? '#ffffff' : undefined}
+            onChange={(hex) => patch({ fillColor: hex })}
+            disabled={!fillEnabled}
+            title="Select a fill color"
+            onRequestOpen={openPicker}
+          />
+        </View>
+        <View style={styles.colorsRowItem}>
+          <Text style={styles.colorsRowLabel}>Line</Text>
+          <MiniSwatch
+            value={lineEnabled ? strokeColor ?? '#000000' : undefined}
+            onChange={(hex) => patch({ strokeColor: hex })}
+            disabled={!lineEnabled}
+            title="Select a line color"
+            onRequestOpen={openPicker}
+          />
+        </View>
+      </View>
 
       {/* ─── Fill ─────────────────────────────────────────────────────── */}
       <CollapsibleSection title="Fill" defaultOpen>
@@ -76,19 +110,11 @@ export default function StyleTab({ graph, cells }: TabProps) {
           onToggle={() => patch({ fillColor: fillEnabled ? 'none' : '#ffffff' })}
           label="Fill"
           right={
-            <View style={styles.fillRowRight}>
-              <View style={styles.fillTypeDropdown}>
-                <Dropdown<FillType>
-                  value={fillEnabled ? 'auto' : 'none'}
-                  options={FILL_TYPES}
-                  onChange={(key) => patch({ fillColor: key === 'none' ? 'none' : fillColor && fillColor !== 'none' ? fillColor : '#ffffff' })}
-                />
-              </View>
-              <MiniSwatch
-                value={fillEnabled ? fillColor ?? '#ffffff' : undefined}
-                onChange={(hex) => patch({ fillColor: hex })}
-                disabled={!fillEnabled}
-                title="Select a fill color"
+            <View style={styles.fillTypeDropdown}>
+              <Dropdown<FillType>
+                value={fillEnabled ? 'auto' : 'none'}
+                options={FILL_TYPES}
+                onChange={(key) => patch({ fillColor: key === 'none' ? 'none' : fillColor && fillColor !== 'none' ? fillColor : '#ffffff' })}
               />
             </View>
           }
@@ -106,14 +132,6 @@ export default function StyleTab({ graph, cells }: TabProps) {
           checked={lineEnabled}
           onToggle={() => patch({ strokeColor: lineEnabled ? 'none' : '#000000' })}
           label="Line"
-          right={
-            <MiniSwatch
-              value={lineEnabled ? strokeColor ?? '#000000' : undefined}
-              onChange={(hex) => patch({ strokeColor: hex })}
-              disabled={!lineEnabled}
-              title="Select a line color"
-            />
-          }
         />
 
         <View style={styles.lineStyleRow}>
@@ -248,10 +266,21 @@ function EditStyleModal({
 }
 
 const styles = StyleSheet.create({
-  fillRowRight: {
+  colorsRow: {
+    flexDirection: 'row',
+    gap: SPACING.lg,
+    marginBottom: SPACING.md,
+  },
+  colorsRowItem: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: SPACING.xs,
+  },
+  colorsRowLabel: {
+    fontSize: 12,
+    lineHeight: 16,
+    color: COLORS.gray700,
+    fontWeight: '600',
   },
   fillTypeDropdown: {
     width: 72,

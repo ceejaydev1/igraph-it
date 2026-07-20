@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, Platform } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, ScrollView, StyleSheet, Platform } from 'react-native';
 import { COLORS, SPACING, RADIUS, TYPOGRAPHY, SHADOWS } from '@/constants/theme';
 import ColorPickerPopover from './ColorPickerPopover';
 
@@ -140,6 +140,7 @@ export function MiniSwatch({
   disabled = false,
   title,
   allowNone,
+  onRequestOpen,
 }: {
   value: string | undefined;
   onChange: (hex: string) => void;
@@ -148,21 +149,35 @@ export function MiniSwatch({
   title?: string;
   /** Shows a "no color" swatch as the first grid entry, calling onChange('none'). */
   allowNone?: boolean;
+  /** When given, tapping the swatch hands its config off to this callback
+   *  instead of opening its own small floating popover — used by
+   *  useSidebarColorPicker so the picker can render full-panel-width at the
+   *  tab's root instead of a tiny box hanging off the swatch. */
+  onRequestOpen?: (config: { value: string | undefined; onChange: (hex: string) => void; title?: string; allowNone?: boolean }) => void;
 }) {
   const [open, doOpen, close] = useExclusiveOpen();
   const bg = value && value !== 'none' ? value : COLORS.white;
+
+  const handlePress = () => {
+    if (disabled) return;
+    if (onRequestOpen) {
+      onRequestOpen({ value, onChange, title, allowNone });
+      return;
+    }
+    open ? close() : doOpen();
+  };
 
   return (
     <View>
       <TouchableOpacity
         style={[rowStyles.miniSwatch, { backgroundColor: bg }, disabled && rowStyles.miniSwatchDisabled]}
-        onPress={() => !disabled && (open ? close() : doOpen())}
+        onPress={handlePress}
         activeOpacity={0.8}
         disabled={disabled}
       >
         <Text style={rowStyles.miniSwatchPencil}>✎</Text>
       </TouchableOpacity>
-      {open && (
+      {!onRequestOpen && open && (
         <ColorPickerPopover
           value={value}
           onChange={onChange}
@@ -173,6 +188,35 @@ export function MiniSwatch({
       )}
     </View>
   );
+}
+
+/** Full-panel-width color picker for the sidebar/mobile-sheet Style & Text
+ *  tabs: instead of each MiniSwatch popping its own small floating box,
+ *  every swatch in the tab hands its config to one shared picker rendered
+ *  at the tab's root — sized to the tab itself, closed with a plain X
+ *  instead of Cancel/Done. Usage: `const { openPicker, activePicker } =
+ *  useSidebarColorPicker(); return activePicker ?? <normal tab JSX>;`
+ *  passing `onRequestOpen={openPicker}` to each MiniSwatch in that JSX. */
+export function useSidebarColorPicker() {
+  const [active, setActive] = useState<{
+    value: string | undefined;
+    onChange: (hex: string) => void;
+    title?: string;
+    allowNone?: boolean;
+  } | null>(null);
+
+  const activePicker = active ? (
+    <ColorPickerPopover
+      value={active.value}
+      onChange={active.onChange}
+      onClose={() => setActive(null)}
+      title={active.title}
+      allowNone={active.allowNone}
+      fillWidth
+    />
+  ) : null;
+
+  return { openPicker: setActive, activePicker };
 }
 
 /** Checkbox control (unlabeled) — used inside CheckboxRow, or standalone. */
@@ -306,52 +350,35 @@ const THEME_PRESETS: { fill: string; stroke: string }[] = [
   { fill: '#ffe6cc', stroke: '#d79b00' },
 ];
 
+// Swatch width (40) + row gap (8) — used to compute page-snap offsets below.
+const PRESET_ITEM_SIZE = 48;
+const PRESET_PAGE_SIZE = 8;
+// One snap point per group of 8, so a swipe lands cleanly on "next 8"
+// instead of stopping mid-row wherever the drag happened to end.
+const PRESET_SNAP_OFFSETS = Array.from(
+  { length: Math.ceil(THEME_PRESETS.length / PRESET_PAGE_SIZE) },
+  (_, i) => i * PRESET_PAGE_SIZE * PRESET_ITEM_SIZE,
+);
+
 export function PresetSwatchGrid({ onSelect }: { onSelect: (fill: string, stroke: string) => void }) {
-  const PER_PAGE = 8;
-  const pages: { fill: string; stroke: string }[][] = [];
-  for (let i = 0; i < THEME_PRESETS.length; i += PER_PAGE) pages.push(THEME_PRESETS.slice(i, i + PER_PAGE));
-  const [page, setPage] = useState(0);
-  const current = pages[page] ?? [];
-  const atStart = page === 0;
-  const atEnd = page === pages.length - 1;
-
   return (
-    <View style={rowStyles.presetWrap}>
-      <View style={rowStyles.presetRow}>
+    <ScrollView
+      horizontal
+      showsHorizontalScrollIndicator={false}
+      style={rowStyles.presetWrap}
+      contentContainerStyle={rowStyles.presetRow}
+      snapToOffsets={PRESET_SNAP_OFFSETS}
+      decelerationRate="fast"
+    >
+      {THEME_PRESETS.map((p, i) => (
         <TouchableOpacity
-          onPress={() => setPage((p) => Math.max(0, p - 1))}
-          disabled={atStart}
-          style={rowStyles.presetArrow}
-        >
-          <Text style={[rowStyles.presetArrowText, atStart && rowStyles.presetArrowDisabled]}>‹</Text>
-        </TouchableOpacity>
-
-        <View style={rowStyles.presetGrid}>
-          {current.map((p, i) => (
-            <TouchableOpacity
-              key={i}
-              style={[rowStyles.presetSwatch, { backgroundColor: p.fill, borderColor: p.stroke }]}
-              onPress={() => onSelect(p.fill, p.stroke)}
-              activeOpacity={0.8}
-            />
-          ))}
-        </View>
-
-        <TouchableOpacity
-          onPress={() => setPage((p) => Math.min(pages.length - 1, p + 1))}
-          disabled={atEnd}
-          style={rowStyles.presetArrow}
-        >
-          <Text style={[rowStyles.presetArrowText, atEnd && rowStyles.presetArrowDisabled]}>›</Text>
-        </TouchableOpacity>
-      </View>
-
-      <View style={rowStyles.presetDots}>
-        {pages.map((_, i) => (
-          <View key={i} style={[rowStyles.presetDot, i === page && rowStyles.presetDotActive]} />
-        ))}
-      </View>
-    </View>
+          key={i}
+          style={[rowStyles.presetSwatch, { backgroundColor: p.fill, borderColor: p.stroke }]}
+          onPress={() => onSelect(p.fill, p.stroke)}
+          activeOpacity={0.8}
+        />
+      ))}
+    </ScrollView>
   );
 }
 
@@ -728,49 +755,19 @@ const rowStyles = StyleSheet.create({
   presetWrap: {
     marginBottom: SPACING.md,
   },
+  // Single scrollable row instead of a paginated multi-row grid — all
+  // presets reachable by swiping, no page arrows/dots needed.
   presetRow: {
     flexDirection: 'row',
     alignItems: 'center',
-  },
-  presetArrow: {
-    width: 20,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  presetArrowText: {
-    fontSize: 18,
-    color: COLORS.gray500,
-  },
-  presetArrowDisabled: {
-    color: COLORS.gray200,
-  },
-  presetGrid: {
-    flex: 1,
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'space-between',
+    gap: 8,
+    paddingRight: 8,
   },
   presetSwatch: {
-    width: '23%',
-    aspectRatio: 1,
+    width: 40,
+    height: 40,
     borderRadius: RADIUS.sm,
     borderWidth: 1,
-    marginBottom: 6,
-  },
-  presetDots: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    gap: 5,
-    marginTop: 2,
-  },
-  presetDot: {
-    width: 5,
-    height: 5,
-    borderRadius: 3,
-    backgroundColor: COLORS.gray200,
-  },
-  presetDotActive: {
-    backgroundColor: COLORS.primary,
   },
   spinFieldWrap: {
     marginBottom: SPACING.md,

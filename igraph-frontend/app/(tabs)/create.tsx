@@ -42,7 +42,7 @@ const RedoIcon = ({ color = '#4a5568', size = 20 }: { color?: string; size?: num
   </Svg>
 );
 
-//SAVE ICON 
+//SAVE ICON
 
 const SaveIcon = ({ color = '#4a5568' }: { color?: string }) => (
   <Svg width={20} height={20} viewBox="0 0 24 24" fill="none">
@@ -158,6 +158,12 @@ export default function CreateScreen() {
   const [diagramXml, setDiagramXml] = useState<string>('');
   const [showShapesPanel, setShowShapesPanel] = useState(false);
   const [isPanelVisible, setIsPanelVisible] = useState(true);
+  // Mobile-only: Text/Draw/Comment double as direct entry points into the
+  // Properties bottom sheet's Text/Style/Arrange tabs (those three buttons
+  // had no real tool behind them before — just a visual active state — so
+  // this gives them one instead of adding yet another icon to the row).
+  const [showMobileProperties, setShowMobileProperties] = useState(false);
+  const [mobilePropertiesTab, setMobilePropertiesTab] = useState<'style' | 'text' | 'arrange'>('style');
   const [activeTool, setActiveTool] = useState<'shapes' | 'text' | 'draw' | 'comment'>('shapes');
   const [activeUmlType, setActiveUmlType] = useState('Functional Decomposition Diagram');
 
@@ -1369,9 +1375,25 @@ export default function CreateScreen() {
   const toggleShapesPanel = () => {
     setShowShapesPanel(prev => !prev);
     if (activeTool !== 'shapes') setActiveTool('shapes');
+    if (showMobileProperties) setShowMobileProperties(false);
     if (showShapesPanel) {
       setTimeout(focusGraph, 100);
     }
+  };
+
+  // Text/Draw/Comment each open the Properties sheet on a specific tab.
+  // Tapping the one that's already active closes it again (standard toggle-
+  // button behavior); tapping a different one jumps straight to its tab.
+  const openMobileProperties = (tool: 'text' | 'draw' | 'comment', tab: 'text' | 'style' | 'arrange') => {
+    if (showMobileProperties && activeTool === tool) {
+      setShowMobileProperties(false);
+      setTimeout(focusGraph, 100);
+      return;
+    }
+    setActiveTool(tool);
+    setMobilePropertiesTab(tab);
+    setShowMobileProperties(true);
+    if (showShapesPanel) setShowShapesPanel(false);
   };
 
   useEffect(() => {
@@ -1765,6 +1787,7 @@ export default function CreateScreen() {
             onChange={handleGraphChange}
             onZoomChange={setZoomLevel}
             umlType={activeUmlType}
+            isMobile
           />
 
           {/* Floating Undo/Redo buttons */}
@@ -1787,6 +1810,7 @@ export default function CreateScreen() {
               <RedoIcon color={isGraphReady ? '#4a5568' : '#cbd5e1'} size={20} />
             </TouchableOpacity>
           </View>
+
         </View>
 
         {/* ─── BOTTOM TOOLBAR ───────────────────────────────────────────── */}
@@ -1800,22 +1824,31 @@ export default function CreateScreen() {
                 <ICONS.Shapes color={showShapesPanel ? '#4c6fff' : '#64748b'} />
               </TouchableOpacity>
               <TouchableOpacity
-                style={[styles.mobileBottomToolBtn, activeTool === 'text' && styles.mobileBottomToolBtnActive]}
-                onPress={() => setActiveTool('text')}
+                style={[
+                  styles.mobileBottomToolBtn,
+                  showMobileProperties && activeTool === 'text' && styles.mobileBottomToolBtnActive,
+                ]}
+                onPress={() => openMobileProperties('text', 'text')}
               >
-                <ICONS.Text color={activeTool === 'text' ? '#4c6fff' : '#64748b'} />
+                <ICONS.Text color={showMobileProperties && activeTool === 'text' ? '#4c6fff' : '#64748b'} />
               </TouchableOpacity>
               <TouchableOpacity
-                style={[styles.mobileBottomToolBtn, activeTool === 'draw' && styles.mobileBottomToolBtnActive]}
-                onPress={() => setActiveTool('draw')}
+                style={[
+                  styles.mobileBottomToolBtn,
+                  showMobileProperties && activeTool === 'draw' && styles.mobileBottomToolBtnActive,
+                ]}
+                onPress={() => openMobileProperties('draw', 'style')}
               >
-                <ICONS.Draw color={activeTool === 'draw' ? '#4c6fff' : '#64748b'} />
+                <ICONS.Draw color={showMobileProperties && activeTool === 'draw' ? '#4c6fff' : '#64748b'} />
               </TouchableOpacity>
               <TouchableOpacity
-                style={[styles.mobileBottomToolBtn, activeTool === 'comment' && styles.mobileBottomToolBtnActive]}
-                onPress={() => setActiveTool('comment')}
+                style={[
+                  styles.mobileBottomToolBtn,
+                  showMobileProperties && activeTool === 'comment' && styles.mobileBottomToolBtnActive,
+                ]}
+                onPress={() => openMobileProperties('comment', 'arrange')}
               >
-                <ICONS.Comment color={activeTool === 'comment' ? '#4c6fff' : '#64748b'} />
+                <ICONS.Comment color={showMobileProperties && activeTool === 'comment' ? '#4c6fff' : '#64748b'} />
               </TouchableOpacity>
             </View>
 
@@ -1849,6 +1882,25 @@ export default function CreateScreen() {
           isGraphReady={isGraphReady}
           toolbarHeight={toolbarHeight}
         />
+
+        {/* Style/Text/Arrange bottom sheet — opened via Text/Draw/Comment
+            above, each jumping straight to its matching tab (initialTab),
+            not auto-popped-open on selection. Sits as a sibling of
+            ShapesBottomPanel (not nested under the canvas), same docked-
+            above-the-toolbar placement, so the two sheets behave and stack
+            identically. forceOpen skips the component's internal
+            collapsed-rail toggle since the toolbar tab is already that
+            toggle. */}
+        {graphInstance && (
+          <PropertiesPanel
+            graph={graphInstance}
+            visible={showMobileProperties}
+            forceOpen
+            onRequestClose={() => setShowMobileProperties(false)}
+            toolbarHeight={toolbarHeight}
+            initialTab={mobilePropertiesTab}
+          />
+        )}
 
         {showDownloadDropdown && (
           <>

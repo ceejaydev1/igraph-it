@@ -5,14 +5,21 @@ import * as authService from '../services/authService';
 
 export default function Index() {
   const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
+  // Where an authenticated user resumes to — the screen they were last on,
+  // or Home if nothing was recorded (e.g. first-ever sign-in this session).
+  const [lastRoute, setLastRoute] = useState<string | null>(null);
 
   useEffect(() => {
     const checkAuth = async () => {
       try {
         const token = await authService.getAccessToken();
         if (token) {
-          const result = await authService.verifyToken();
+          const [result, savedRoute] = await Promise.all([
+            authService.verifyToken(),
+            authService.getLastRoute(),
+          ]);
           setIsAuthenticated(result.success);
+          setLastRoute(savedRoute);
         } else {
           setIsAuthenticated(false);
         }
@@ -20,7 +27,7 @@ export default function Index() {
         setIsAuthenticated(false);
       }
     };
-    
+
     checkAuth();
   }, []);
 
@@ -30,7 +37,9 @@ export default function Index() {
   }
 
   // Instant redirect - NO SPINNER
-  return <Redirect href={isAuthenticated ? '/(tabs)/home' : '/(auth)/signin'} />;
+  return (
+    <Redirect href={(isAuthenticated ? (lastRoute || '/(tabs)/home') : '/(auth)/signin') as any} />
+  );
 }
 
 const styles = StyleSheet.create({

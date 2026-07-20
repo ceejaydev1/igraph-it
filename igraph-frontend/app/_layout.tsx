@@ -1,5 +1,5 @@
 import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
-import { Stack } from 'expo-router';
+import { Stack, usePathname } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import 'react-native-reanimated';
 import { useColorScheme } from '@/hooks/use-color-scheme';
@@ -283,6 +283,19 @@ export default function RootLayout() {
       };
     }
   }, []);
+
+  // Persist whatever authenticated screen the user is on, so closing the
+  // tab/browser and reopening it (without an explicit sign-out) resumes
+  // there instead of always landing back on Home — app/index.tsx reads this
+  // on launch. Only (tabs) routes are worth remembering: (auth) screens
+  // (sign-in, splash, etc.) and the root index/modal aren't real
+  // destinations to resume into.
+  const pathname = usePathname();
+  useEffect(() => {
+    if (pathname?.startsWith('/(tabs)')) {
+      authService.saveLastRoute(pathname);
+    }
+  }, [pathname]);
 
   // The app (Stack) stays mounted underneath at all times so the splash
   // fades directly into the already-rendered destination screen instead of

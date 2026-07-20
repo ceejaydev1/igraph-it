@@ -171,6 +171,7 @@ export const storeTokens = async (accessToken, refreshToken) => {
 export const clearTokens = async () => {
   await storage.removeItem('accessToken');
   await storage.removeItem('refreshToken');
+  await storage.removeItem('lastRoute');
   if (Platform.OS === 'web') {
     localStorage.removeItem('user');
     localStorage.removeItem(AUTH_PERSIST_KEY);
@@ -183,6 +184,24 @@ export const getAccessToken = async () => {
 
 export const getRefreshToken = async () => {
   return await storage.getItem('refreshToken');
+};
+
+// LAST VISITED ROUTE
+//
+// So closing the tab/browser without signing out and reopening it resumes
+// wherever the user actually was (e.g. mid-edit on a diagram) instead of
+// always bouncing back to Home. Reuses the same `storage` object tokens go
+// through, so it lives/dies with the token: persists as long as the session
+// does (respecting the "Remember me" choice) and is wiped on sign-out via
+// clearTokens above, so a stale route never outlives its session.
+
+export const saveLastRoute = async (path) => {
+  if (!path) return;
+  await storage.setItem('lastRoute', path);
+};
+
+export const getLastRoute = async () => {
+  return await storage.getItem('lastRoute');
 };
 
 // 🚀 FIX: CACHING LAYER

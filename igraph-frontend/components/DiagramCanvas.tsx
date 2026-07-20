@@ -186,6 +186,10 @@ interface DiagramCanvasProps {
   onSelectionChange?: (cell: any) => void;
   onZoomChange?: (scalePercent: number) => void;
   umlType?: string;
+  /** Shows a floating delete (trash) button at the top-right corner of the
+   *  selected shape — mobile has no Delete key, unlike desktop, so touch
+   *  users otherwise have no way to remove a shape at all. */
+  isMobile?: boolean;
 }
 
 export interface DiagramCanvasHandle {
@@ -497,7 +501,7 @@ function getShapeStyle(styleKey: string): CellStateStyle {
 // ⭐ MAIN WEBCANVAS COMPONENT
 // ════════════════════════════════════════════════════════════════════════════
 
-const WebCanvas = forwardRef<DiagramCanvasHandle, DiagramCanvasProps>(({ onReady, onChange, onSelectionChange, onZoomChange, umlType = 'flowchart' }, ref) => {
+const WebCanvas = forwardRef<DiagramCanvasHandle, DiagramCanvasProps>(({ onReady, onChange, onSelectionChange, onZoomChange, umlType = 'flowchart', isMobile = false }, ref) => {
   const wrapperRef = useRef<HTMLDivElement>(null);
   const gridCanvasRef = useRef<HTMLCanvasElement>(null);
   const graphDivRef = useRef<HTMLDivElement>(null);
@@ -1362,6 +1366,51 @@ const WebCanvas = forwardRef<DiagramCanvasHandle, DiagramCanvasProps>(({ onReady
         container.appendChild(div);
         arrowDivs.push(div);
       });
+
+      // Mobile-only: a floating delete button pinned diagonally past the
+      // shape's top-left corner. Desktop has the physical Delete/Backspace
+      // key for this; mobile has no keyboard at all, so without this a
+      // touch user could select a shape but never remove it.
+      // Top-right is already crowded (the rotation handle sits diagonally
+      // past that exact corner — see getRotationHandlePosition in
+      // maxgraph-universal-handler.ts), and every corner/edge-midpoint has
+      // a resize dot sitting right on it, so this needs real outward
+      // clearance, not just a different corner.
+      if (isMobile) {
+        const delSize = 22;
+        const delOffset = 16;
+        const delDiv = document.createElement('div');
+        const cornerOffset = rotateVector(-(w / 2 + delOffset), -(h / 2 + delOffset), rotation);
+        const dx = cx + cornerOffset.x;
+        const dy = cy + cornerOffset.y;
+
+        delDiv.style.position = 'absolute';
+        delDiv.style.left = (dx - delSize / 2) + 'px';
+        delDiv.style.top = (dy - delSize / 2) + 'px';
+        delDiv.style.width = delSize + 'px';
+        delDiv.style.height = delSize + 'px';
+        delDiv.style.borderRadius = '50%';
+        delDiv.style.backgroundColor = '#ef4444';
+        delDiv.style.display = 'flex';
+        delDiv.style.alignItems = 'center';
+        delDiv.style.justifyContent = 'center';
+        delDiv.style.cursor = 'pointer';
+        delDiv.style.pointerEvents = 'all';
+        delDiv.style.zIndex = '11';
+        delDiv.style.boxShadow = '0 2px 6px rgba(0,0,0,0.3)';
+        delDiv.style.userSelect = 'none';
+        delDiv.innerHTML = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6h14z" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+
+        delDiv.addEventListener('click', (e) => {
+          e.stopPropagation();
+          e.preventDefault();
+          graph.removeCells([cell]);
+          removeArrowButtons();
+        });
+
+        container.appendChild(delDiv);
+        arrowDivs.push(delDiv);
+      }
     }
 
     function removeArrowButtons() {
@@ -1427,7 +1476,7 @@ const WebCanvas = forwardRef<DiagramCanvasHandle, DiagramCanvasProps>(({ onReady
       removeArrowButtons();
     };
 
-  }, [handleSelectionChange]);
+  }, [handleSelectionChange, isMobile]);
 
   // ════════════════════════════════════════════════════════════════════════════
   // ⭐ DRAW.IO STYLE: HOVER CONNECTION POINTS
@@ -2109,7 +2158,7 @@ const WebCanvas = forwardRef<DiagramCanvasHandle, DiagramCanvasProps>(({ onReady
   );
 });
 
-const DiagramCanvas = forwardRef<DiagramCanvasHandle, DiagramCanvasProps>(({ onReady, onChange, onSelectionChange, onZoomChange, umlType }, ref) => {
+const DiagramCanvas = forwardRef<DiagramCanvasHandle, DiagramCanvasProps>(({ onReady, onChange, onSelectionChange, onZoomChange, umlType, isMobile }, ref) => {
   if (Platform.OS !== 'web') {
     return (
       <View style={styles.nativeNotice}>
@@ -2120,7 +2169,7 @@ const DiagramCanvas = forwardRef<DiagramCanvasHandle, DiagramCanvasProps>(({ onR
   }
   return (
     <View style={styles.container}>
-      <WebCanvas ref={ref} onReady={onReady} onChange={onChange} onSelectionChange={onSelectionChange} onZoomChange={onZoomChange} umlType={umlType} />
+      <WebCanvas ref={ref} onReady={onReady} onChange={onChange} onSelectionChange={onSelectionChange} onZoomChange={onZoomChange} umlType={umlType} isMobile={isMobile} />
     </View>
   );
 });

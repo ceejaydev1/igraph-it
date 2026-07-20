@@ -113,9 +113,14 @@ interface ColorPickerPopoverProps {
   onClose: () => void;
   title?: string;
   allowNone?: boolean;
+  /** Renders in-flow at 100% of its parent's width with a title-row X to
+   *  close, instead of a small fixed-width floating box with Cancel/Done —
+   *  used by useSidebarColorPicker so it fills the properties panel it's
+   *  opened from rather than hanging off the swatch that triggered it. */
+  fillWidth?: boolean;
 }
 
-export default function ColorPickerPopover({ value, onChange, onClose, title = 'Select a color', allowNone = false }: ColorPickerPopoverProps) {
+export default function ColorPickerPopover({ value, onChange, onClose, title = 'Select a color', allowNone = false, fillWidth = false }: ColorPickerPopoverProps) {
   const startingValue = value && value !== 'none' ? value : '#ffffff';
   const originalRef = useRef(value);
 
@@ -185,6 +190,14 @@ export default function ColorPickerPopover({ value, onChange, onClose, title = '
     onClose();
   };
 
+  // fillWidth's X behaves like Done (keep whatever's live, save it as a
+  // custom color) rather than Cancel — the color's already been applied
+  // live while dragging/typing, so reverting on close would be surprising.
+  const handleCloseX = () => {
+    addCustomColor(currentHex);
+    onClose();
+  };
+
   const handleEyedropper = async () => {
     // @ts-ignore - EyeDropper is a newer browser API, not yet in lib.dom.d.ts everywhere.
     const EyeDropperCtor = typeof window !== 'undefined' ? window.EyeDropper : undefined;
@@ -200,8 +213,21 @@ export default function ColorPickerPopover({ value, onChange, onClose, title = '
   const supportsEyedropper = Platform.OS === 'web' && typeof window !== 'undefined' && !!(window as any).EyeDropper;
 
   return (
-    <View style={styles.card}>
-      <Text style={styles.title}>{title}</Text>
+    <View style={[styles.card, fillWidth && styles.cardFillWidth]}>
+      {fillWidth ? (
+        <View style={styles.headerRow}>
+          <Text style={[styles.title, styles.titleInRow]}>{title}</Text>
+          <TouchableOpacity
+            onPress={handleCloseX}
+            style={styles.closeBtn}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          >
+            <Text style={styles.closeBtnText}>✕</Text>
+          </TouchableOpacity>
+        </View>
+      ) : (
+        <Text style={styles.title}>{title}</Text>
+      )}
 
       {/* ─── Preset grid ──────────────────────────────────────────────── */}
       <View style={styles.grid}>
@@ -346,14 +372,20 @@ export default function ColorPickerPopover({ value, onChange, onClose, title = '
       </View>
 
       {/* ─── Actions ──────────────────────────────────────────────────── */}
-      <View style={styles.actionsRow}>
-        <TouchableOpacity style={styles.cancelBtn} onPress={handleCancel}>
-          <Text style={styles.cancelBtnText}>Cancel</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.doneBtn} onPress={handleDone}>
-          <Text style={styles.doneBtnText}>Done</Text>
-        </TouchableOpacity>
-      </View>
+      {/* fillWidth already has its X in the header row above — Cancel/Done
+          would be redundant (and Cancel's "revert" doesn't fit a picker
+          that's meant to be closed and reopened freely while it fills the
+          whole panel). */}
+      {!fillWidth && (
+        <View style={styles.actionsRow}>
+          <TouchableOpacity style={styles.cancelBtn} onPress={handleCancel}>
+            <Text style={styles.cancelBtnText}>Cancel</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.doneBtn} onPress={handleDone}>
+            <Text style={styles.doneBtnText}>Done</Text>
+          </TouchableOpacity>
+        </View>
+      )}
     </View>
   );
 }
@@ -375,11 +407,51 @@ const styles = StyleSheet.create({
     zIndex: 60,
     ...(Platform.OS === 'web' ? { boxShadow: '0 12px 32px rgba(15,23,42,0.18)' } : SHADOWS.lg),
   },
+  // Renders in-flow filling the tab it's opened from, instead of floating
+  // off the swatch — see useSidebarColorPicker.
+  //
+  // NOTE: `top`/`left` are set to real values (0), not `undefined` — react-
+  // native-web's style merge (styleq) skips keys whose value is `undefined`
+  // rather than treating them as an override, so `card`'s `top: '100%'`
+  // would otherwise silently survive and push this down by its own height
+  // (position:relative + top:100% = shifted down by 100% of its own
+  // rendered height, which is exactly the large empty gap this caused).
+  cardFillWidth: {
+    position: 'relative',
+    top: 0,
+    left: 0,
+    marginTop: 0,
+    width: '100%',
+    zIndex: 0,
+    ...(Platform.OS === 'web' ? { boxShadow: 'none' } : { shadowOpacity: 0, elevation: 0 }),
+  },
   title: {
     fontSize: 13,
     fontWeight: '700',
     color: COLORS.gray900,
     marginBottom: 10,
+  },
+  headerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 10,
+  },
+  titleInRow: {
+    marginBottom: 0,
+    flexShrink: 1,
+  },
+  closeBtn: {
+    width: 24,
+    height: 24,
+    borderRadius: RADIUS.sm,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  closeBtnText: {
+    fontSize: 13,
+    color: COLORS.gray500,
+    fontWeight: '700',
   },
   sectionLabel: {
     fontSize: 11,

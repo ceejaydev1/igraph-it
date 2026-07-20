@@ -11,6 +11,7 @@ import {
   MiniSwatch,
   CollapsibleSection,
   Dropdown,
+  useSidebarColorPicker,
 } from './shared';
 import {
   BoldIcon,
@@ -50,6 +51,7 @@ const WRITING_DIRECTIONS: { key: WritingDirection; label: string }[] = [
 
 export default function TextTab({ graph, cells }: TabProps) {
   const [fontMenuOpen, setFontMenuOpen] = useState(false);
+  const { openPicker, activePicker } = useSidebarColorPicker();
 
   const fontFamily = getCommonStyleValue(cells, 'fontFamily') as string | undefined;
   const fontSize = getCommonStyleValue(cells, 'fontSize') as number | undefined;
@@ -84,6 +86,11 @@ export default function TextTab({ graph, cells }: TabProps) {
   const currentLabelPosition = LABEL_POSITIONS.find(
     (p) => p.align === align && p.verticalAlign === verticalAlign
   )?.key;
+
+  // While a color picker is open, it replaces the whole tab (full panel
+  // width, closed with its own X) instead of floating over these fields —
+  // see useSidebarColorPicker.
+  if (activePicker) return <View>{activePicker}</View>;
 
   return (
     <View>
@@ -185,19 +192,19 @@ export default function TextTab({ graph, cells }: TabProps) {
         checked={fontColor !== undefined && fontColor !== 'none'}
         onToggle={() => patch({ fontColor: fontColor && fontColor !== 'none' ? 'none' : '#000000' })}
         label="Font Color"
-        right={<MiniSwatch value={fontColor ?? '#000000'} onChange={(hex) => patch({ fontColor: hex })} title="Select a font color" />}
+        right={<MiniSwatch value={fontColor ?? '#000000'} onChange={(hex) => patch({ fontColor: hex })} title="Select a font color" onRequestOpen={openPicker} />}
       />
       <CheckboxRow
         checked={fillColor !== undefined && fillColor !== 'none'}
         onToggle={() => patch({ labelBackgroundColor: fillColor && fillColor !== 'none' ? 'none' : '#ffffff' })}
         label="Background Color"
-        right={<MiniSwatch value={fillColor ?? '#ffffff'} onChange={(hex) => patch({ labelBackgroundColor: hex })} title="Select a background color" />}
+        right={<MiniSwatch value={fillColor ?? '#ffffff'} onChange={(hex) => patch({ labelBackgroundColor: hex })} title="Select a background color" onRequestOpen={openPicker} />}
       />
       <CheckboxRow
         checked={strokeColor !== undefined && strokeColor !== 'none'}
         onToggle={() => patch({ labelBorderColor: strokeColor && strokeColor !== 'none' ? 'none' : '#000000' })}
         label="Border Color"
-        right={<MiniSwatch value={strokeColor ?? '#000000'} onChange={(hex) => patch({ labelBorderColor: hex })} title="Select a border color" />}
+        right={<MiniSwatch value={strokeColor ?? '#000000'} onChange={(hex) => patch({ labelBorderColor: hex })} title="Select a border color" onRequestOpen={openPicker} />}
       />
       <CheckboxRow
         checked={shadow === 1}

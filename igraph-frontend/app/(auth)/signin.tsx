@@ -539,7 +539,13 @@ export default function SignIn() {
   const [email, setEmail] = useState((params.prefilledEmail as string) || '');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
-  const [rememberMe, setRememberMe] = useState(false);
+  // Defaults to checked: without it, web sessions live in sessionStorage and
+  // vanish the moment the tab closes, so a user who signs in and closes the
+  // tab without explicitly signing out gets bounced back to sign-in on
+  // reopen instead of resuming where they left off. Defaulting to persistent
+  // (localStorage) matches what most users expect; unchecking it is still
+  // there for anyone on a shared/lab machine who wants session-only auth.
+  const [rememberMe, setRememberMe] = useState(true);
   const [loading, setLoading] = useState(false);
   const [emailFocused, setEmailFocused] = useState(false);
   const [passwordFocused, setPasswordFocused] = useState(false);
