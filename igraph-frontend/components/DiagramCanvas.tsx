@@ -25,8 +25,15 @@ import type {
   WhiteSpaceValue,
 } from '@maxgraph/core';
 
-import { registerAllCustomShapes, IGRAPH_ID_STYLE_MAP, IGRAPH_PERIMETERS } from './maxgraph-custom-shapes';
+import {
+  registerAllCustomShapes,
+  IGRAPH_ID_STYLE_MAP,
+  IGRAPH_PERIMETERS,
+  isUmlClassContainerCell,
+  isUmlClassCompartmentCell,
+} from './maxgraph-custom-shapes';
 import { UniversalVertexHandler } from './maxgraph-universal-handler';
+import { getShapeDefinitionById } from '@/constants/shapes';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -42,43 +49,14 @@ const DROP_W = 120;
 const DROP_H = 60;
 const NEW_SHAPE_SPACING = 160;
 
-const SQUARE_DROP_SHAPES = new Set<string>([
-  'igraph.circle',
-  'igraph.ellipse',
-  'igraph.diamond',
-  'igraph.doubleRhombus',
-  'igraph.multiOval',
-  'igraph.hexagon',
-  'igraph.pentagon',
-  'igraph.umlUseCase',
-  'igraph.umlDecision',
-  'igraph.umlInitialNode',
-  'igraph.initialNode',
-  'igraph.finalNode',
-  'igraph.umlActivityFinal',
-  'igraph.umlFlowFinal',
-  'igraph.dfdProcess',
-  'igraph.dfdOnPage',
-  'igraph.attribute',
-  'igraph.primaryKey',
-  'igraph.derivedAttr',
-  'igraph.compositeAttr',
-  'igraph.multiAttr',
-  'igraph.erdAttribute',
-  'igraph.erdMultivaluedAttribute',
-  'igraph.erdDerivedAttribute',
-  'igraph.relationship',
-  'igraph.identifyingRel',
-  'igraph.erdRelationship',
-  'igraph.erdIdentifyingRelationship',
-  'igraph.crowOne',
-  'igraph.crowZeroOne',
-]);
-
-function getDropSize(styleKey: string): { w: number; h: number } {
-  if (SQUARE_DROP_SHAPES.has(styleKey)) {
-    return { w: 80, h: 80 };
-  }
+// Drop size comes from the shape's own definition (constants/shapes.ts) so
+// its real proportions survive onto the canvas — an oval stays an oval, an
+// actor stays tall/narrow, etc. Previously this forced a fixed set of
+// "square" shapes to 80x80 regardless of their intended aspect ratio, which
+// is what turned ellipses/use-cases/ERD ovals into circles on drop.
+function getDropSize(shapeId: string): { w: number; h: number } {
+  const def = getShapeDefinitionById(shapeId);
+  if (def) return { w: def.width, h: def.height };
   return { w: DROP_W, h: DROP_H };
 }
 
@@ -208,7 +186,7 @@ export interface DiagramCanvasHandle {
 // ⭐ SHAPE STYLE DEFINITIONS - Match the panel previews exactly
 // ════════════════════════════════════════════════════════════════════════════
 
-function getShapeStyle(styleKey: string): CellStateStyle {
+export function getShapeStyle(styleKey: string): CellStateStyle {
   // Base style with default values
   const base: CellStateStyle = {
     shape: styleKey,
@@ -271,6 +249,12 @@ function getShapeStyle(styleKey: string): CellStateStyle {
     // Fishbone Shapes
     'igraph.fishboneArrow': {
       shape: 'igraph.fishboneArrow',
+      fillColor: BLACK,
+      strokeColor: BLACK,
+      strokeWidth: 2,
+    },
+    'igraph.fishboneDashedArrow': {
+      shape: 'igraph.fishboneDashedArrow',
       fillColor: BLACK,
       strokeColor: BLACK,
       strokeWidth: 2,
@@ -455,19 +439,19 @@ function getShapeStyle(styleKey: string): CellStateStyle {
     },
     'igraph.fdd.control': {
       shape: 'igraph.fdd.control',
-      fillColor: 'transparent',
+      fillColor: BLACK,
       strokeColor: BLACK,
       strokeWidth: 2,
     },
     'igraph.fdd.mechanism': {
       shape: 'igraph.fdd.mechanism',
-      fillColor: 'transparent',
+      fillColor: BLACK,
       strokeColor: BLACK,
       strokeWidth: 2,
     },
     'igraph.fdd.interface': {
       shape: 'igraph.fdd.interface',
-      fillColor: 'transparent',
+      fillColor: BLACK,
       strokeColor: BLACK,
       strokeWidth: 2,
     },
@@ -489,12 +473,236 @@ function getShapeStyle(styleKey: string): CellStateStyle {
       strokeColor: '#8E8E8E',
       strokeWidth: 2,
     },
+
+    // Solid-black arrowheads/markers — these shapes ARE the black triangle/
+    // dot/diamond (not an outline with a separate fill), so without an
+    // explicit fillColor here they fall through to base's white fill and
+    // become invisible against the canvas background.
+    'igraph.connectorArrow': {
+      shape: 'igraph.connectorArrow',
+      fillColor: BLACK,
+      strokeColor: BLACK,
+      strokeWidth: 2,
+    },
+    'igraph.umlInclude': {
+      shape: 'igraph.umlInclude',
+      fillColor: BLACK,
+      strokeColor: BLACK,
+      strokeWidth: 2,
+    },
+    'igraph.umlExtend': {
+      shape: 'igraph.umlExtend',
+      fillColor: BLACK,
+      strokeColor: BLACK,
+      strokeWidth: 2,
+    },
+    'igraph.umlControlFlow': {
+      shape: 'igraph.umlControlFlow',
+      fillColor: BLACK,
+      strokeColor: BLACK,
+      strokeWidth: 2,
+    },
+    'igraph.umlObjectFlow': {
+      shape: 'igraph.umlObjectFlow',
+      fillColor: BLACK,
+      strokeColor: BLACK,
+      strokeWidth: 2,
+    },
+    'igraph.umlActivityFinal': {
+      shape: 'igraph.umlActivityFinal',
+      fillColor: BLACK,
+      strokeColor: BLACK,
+      strokeWidth: 2,
+    },
+    'igraph.umlSyncMsg': {
+      shape: 'igraph.umlSyncMsg',
+      fillColor: BLACK,
+      strokeColor: BLACK,
+      strokeWidth: 2,
+    },
+    'igraph.umlComposition': {
+      shape: 'igraph.umlComposition',
+      fillColor: BLACK,
+      strokeColor: BLACK,
+      strokeWidth: 2,
+    },
+    // Aggregation's diamond is intentionally hollow (unlike composition's
+    // solid one) — explicit here so it doesn't drift if composition's entry
+    // above is ever copy-edited.
+    'igraph.umlAggregation': {
+      shape: 'igraph.umlAggregation',
+      fillColor: '#ffffff',
+      strokeColor: BLACK,
+      strokeWidth: 2,
+    },
   };
 
   // Merge base with special style if it exists
   const special = specialStyles[styleKey] || {};
   const perimeter = IGRAPH_PERIMETERS[styleKey];
   return { ...base, ...special, ...(perimeter ? { perimeter } : {}) };
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// ⭐ UML CLASS SHAPE — container + 3 independently-editable compartments
+// ════════════════════════════════════════════════════════════════════════════
+//
+// A plain single-cell box (the older igraph.umlClass) can only carry one
+// label for the whole box, so "class name" / "attributes" / "methods" had
+// to share one text blob. This instead builds a real parent/child cell
+// tree: an outer igraph.umlClassContainer (draws just the border) holding
+// three compartment children, each an ordinary vertex — so each is
+// independently double-click-editable exactly like any other shape, for
+// free. The two divider lines are just the name/attributes compartments'
+// own bottom edges (igraph.classCompartmentDivider), so they track each
+// compartment's real, independently-growable height instead of a fixed
+// 0.3/0.65 split. See the CellEditorHandler override and the
+// LABEL_CHANGED/CELLS_RESIZED listeners below for the growing behavior.
+const CLASS_NAME_RATIO = 0.3;
+const CLASS_ATTRS_RATIO = 0.35;
+
+export function insertUmlClassCell(graph: Graph, x: number, y: number, w: number, h: number) {
+  const nameH = Math.round(h * CLASS_NAME_RATIO);
+  const attrH = Math.round(h * CLASS_ATTRS_RATIO);
+  const methodH = Math.max(20, h - nameH - attrH);
+
+  const container = graph.insertVertex(null, null, '', x, y, w, nameH + attrH + methodH, {
+    shape: 'igraph.umlClassContainer',
+    fillColor: '#ffffff',
+    strokeColor: BLACK,
+    strokeWidth: 2,
+  });
+
+  const nameCell = graph.insertVertex(container, null, 'ClassName', 0, 0, w, nameH, {
+    shape: 'igraph.classCompartmentDivider',
+    strokeColor: BLACK,
+    strokeWidth: 2,
+    fontColor: BLACK,
+    fontSize: 12,
+    fontStyle: 1,
+    align: 'center' as AlignValue,
+    verticalAlign: 'middle' as VAlignValue,
+    whiteSpace: 'wrap' as WhiteSpaceValue,
+    movable: false,
+    resizable: false,
+  });
+  const attrCell = graph.insertVertex(container, null, '', 0, nameH, w, attrH, {
+    shape: 'igraph.classCompartmentDivider',
+    strokeColor: BLACK,
+    strokeWidth: 2,
+    fontColor: BLACK,
+    fontSize: 12,
+    align: 'left' as AlignValue,
+    verticalAlign: 'middle' as VAlignValue,
+    whiteSpace: 'wrap' as WhiteSpaceValue,
+    spacingLeft: 8,
+    movable: false,
+    resizable: false,
+  });
+  const methodCell = graph.insertVertex(container, null, '', 0, nameH + attrH, w, methodH, {
+    shape: 'igraph.classCompartmentPlain',
+    strokeColor: BLACK,
+    strokeWidth: 2,
+    fontColor: BLACK,
+    fontSize: 12,
+    align: 'left' as AlignValue,
+    verticalAlign: 'middle' as VAlignValue,
+    whiteSpace: 'wrap' as WhiteSpaceValue,
+    spacingLeft: 8,
+    movable: false,
+    resizable: false,
+  });
+
+  [nameCell, attrCell, methodCell].forEach((c) => c.setConnectable(false));
+
+  return container;
+}
+
+const CLASS_COMPARTMENT_LINE_HEIGHT = 17;
+const CLASS_COMPARTMENT_V_PADDING = 12;
+
+// Runs when a compartment's edit is committed (see the CellEditorHandler
+// override below for why Enter reaches here as a newline instead of
+// stopping the edit). Grows/shrinks just the edited compartment to fit its
+// line count, shifts every compartment below it down/up by the same delta,
+// and grows/shrinks the container by that delta too — the other
+// compartments' own heights are left untouched, per the chosen behavior.
+function resizeClassCompartmentToFitText(graph: Graph, cell: any) {
+  const container = cell.getParent();
+  const geo = cell.getGeometry();
+  if (!container || !geo) return;
+  const containerGeo = container.getGeometry();
+  if (!containerGeo) return;
+
+  const value = (cell.getValue() as string) ?? '';
+  const lineCount = Math.max(1, value.split('\n').length);
+  const desired = lineCount * CLASS_COMPARTMENT_LINE_HEIGHT + CLASS_COMPARTMENT_V_PADDING;
+  const delta = desired - geo.height;
+  if (Math.abs(delta) < 1) return;
+
+  const siblings = graph
+    .getChildCells(container, true, false)
+    .filter((c: any) => isUmlClassCompartmentCell(c))
+    .sort((a: any, b: any) => (a.getGeometry()?.y ?? 0) - (b.getGeometry()?.y ?? 0));
+
+  graph.batchUpdate(() => {
+    const model = graph.getDataModel();
+
+    const newGeo = geo.clone();
+    newGeo.height = desired;
+    model.setGeometry(cell, newGeo);
+
+    let below = false;
+    siblings.forEach((sib: any) => {
+      if (sib === cell) {
+        below = true;
+        return;
+      }
+      if (!below) return;
+      const sGeo = sib.getGeometry()!.clone();
+      sGeo.y += delta;
+      model.setGeometry(sib, sGeo);
+    });
+
+    const newContainerGeo = containerGeo.clone();
+    newContainerGeo.height += delta;
+    model.setGeometry(container, newContainerGeo);
+  });
+}
+
+// Runs when the user drag-resizes a class container's own handles.
+// Compartments are `resizable: false` (no handles of their own), so
+// without this they'd silently stay their old width/proportions and
+// visibly stop matching the container. Keeps all 3 compartments spanning
+// the container's new width, and rescales their heights proportionally so
+// they still exactly tile its new height.
+function syncClassCompartmentsToContainer(graph: Graph, container: any) {
+  const containerGeo = container.getGeometry();
+  if (!containerGeo) return;
+
+  const children = graph
+    .getChildCells(container, true, false)
+    .filter((c: any) => isUmlClassCompartmentCell(c))
+    .sort((a: any, b: any) => (a.getGeometry()?.y ?? 0) - (b.getGeometry()?.y ?? 0));
+  if (children.length === 0) return;
+
+  const oldTotalHeight = children.reduce((sum: number, c: any) => sum + (c.getGeometry()?.height ?? 0), 0);
+  if (oldTotalHeight <= 0) return;
+  const scale = containerGeo.height / oldTotalHeight;
+
+  graph.batchUpdate(() => {
+    const model = graph.getDataModel();
+    let cursorY = 0;
+    children.forEach((c: any) => {
+      const geo = c.getGeometry()!.clone();
+      geo.width = containerGeo.width;
+      geo.height = Math.max(20, Math.round(geo.height * scale));
+      geo.x = 0;
+      geo.y = cursorY;
+      model.setGeometry(c, geo);
+      cursorY += geo.height;
+    });
+  });
 }
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -1150,7 +1358,7 @@ const WebCanvas = forwardRef<DiagramCanvasHandle, DiagramCanvasProps>(({ onReady
     if (!shapeId || !graph || !graphDiv) return;
 
     const styleKey = IGRAPH_ID_STYLE_MAP[shapeId] ?? 'igraph.rectangle';
-    const { w: dropW, h: dropH } = getDropSize(styleKey);
+    const { w: dropW, h: dropH } = getDropSize(shapeId);
 
     const { x, y } = clientToGraphCoords(graph, e.clientX, e.clientY, graphDiv);
 
@@ -1158,29 +1366,36 @@ const WebCanvas = forwardRef<DiagramCanvasHandle, DiagramCanvasProps>(({ onReady
     const cy = Math.round((y - dropH / 2) / GRID_SIZE) * GRID_SIZE;
 
     try {
-      // ⭐ CRITICAL FIX: Use getShapeStyle to get the proper style
-      const styleObject = getShapeStyle(styleKey);
-      
-      // Add text properties
-      const fullStyle: CellStateStyle = {
-        ...styleObject,
-        fontColor: BLACK,
-        fontSize: 12,
-        align: 'center' as AlignValue,
-        verticalAlign: 'middle' as VAlignValue,
-        whiteSpace: 'wrap' as WhiteSpaceValue,
-      };
+      // Class Diagram's "Class" shape needs a container + 3 independently
+      // editable compartments, not a single vertex — see insertUmlClassCell.
+      let cell: any;
+      if (shapeId === 'class-box') {
+        cell = insertUmlClassCell(graph, cx, cy, dropW, dropH);
+      } else {
+        // ⭐ CRITICAL FIX: Use getShapeStyle to get the proper style
+        const styleObject = getShapeStyle(styleKey);
 
-      const cell = graph.insertVertex(
-        null,
-        null,
-        '',
-        cx,
-        cy,
-        dropW,
-        dropH,
-        fullStyle,
-      );
+        // Add text properties
+        const fullStyle: CellStateStyle = {
+          ...styleObject,
+          fontColor: BLACK,
+          fontSize: 12,
+          align: 'center' as AlignValue,
+          verticalAlign: 'middle' as VAlignValue,
+          whiteSpace: 'wrap' as WhiteSpaceValue,
+        };
+
+        cell = graph.insertVertex(
+          null,
+          null,
+          '',
+          cx,
+          cy,
+          dropW,
+          dropH,
+          fullStyle,
+        );
+      }
 
       graph.clearSelection();
       setTimeout(() => {
@@ -1311,32 +1526,40 @@ const WebCanvas = forwardRef<DiagramCanvasHandle, DiagramCanvasProps>(({ onReady
           const roundedX = Math.round(newX / GRID_SIZE) * GRID_SIZE;
           const roundedY = Math.round(newY / GRID_SIZE) * GRID_SIZE;
 
-          // Use the same style as the original cell
-          const newShapeKey = styleObj.shape || 'igraph.rectangle';
-          const newShapePerimeter = IGRAPH_PERIMETERS[newShapeKey];
-          const shapeStyle: CellStateStyle = {
-            shape: newShapeKey,
-            fillColor: styleObj.fillColor || '#ffffff',
-            strokeColor: styleObj.strokeColor || BLACK,
-            strokeWidth: styleObj.strokeWidth || 2,
-            fontColor: styleObj.fontColor || BLACK,
-            fontSize: styleObj.fontSize || 12,
-            align: (styleObj.align as AlignValue) || 'center',
-            verticalAlign: (styleObj.verticalAlign as VAlignValue) || 'middle',
-            whiteSpace: (styleObj.whiteSpace as WhiteSpaceValue) || 'wrap',
-            ...(newShapePerimeter ? { perimeter: newShapePerimeter } : {}),
-          };
+          // Use the same style as the original cell. A class container needs
+          // its own container+compartments tree (a plain vertex here would
+          // only clone the outer box, losing the 3 editable sections), so it
+          // gets the same special-cased helper used when first dropping one.
+          let newCell: any;
+          if (isUmlClassContainerCell(cell)) {
+            newCell = insertUmlClassCell(graph, roundedX, roundedY, geo.width, geo.height);
+          } else {
+            const newShapeKey = styleObj.shape || 'igraph.rectangle';
+            const newShapePerimeter = IGRAPH_PERIMETERS[newShapeKey];
+            const shapeStyle: CellStateStyle = {
+              shape: newShapeKey,
+              fillColor: styleObj.fillColor || '#ffffff',
+              strokeColor: styleObj.strokeColor || BLACK,
+              strokeWidth: styleObj.strokeWidth || 2,
+              fontColor: styleObj.fontColor || BLACK,
+              fontSize: styleObj.fontSize || 12,
+              align: (styleObj.align as AlignValue) || 'center',
+              verticalAlign: (styleObj.verticalAlign as VAlignValue) || 'middle',
+              whiteSpace: (styleObj.whiteSpace as WhiteSpaceValue) || 'wrap',
+              ...(newShapePerimeter ? { perimeter: newShapePerimeter } : {}),
+            };
 
-          const newCell = graph.insertVertex(
-            null,
-            null,
-            '',
-            roundedX,
-            roundedY,
-            geo.width,
-            geo.height,
-            shapeStyle,
-          );
+            newCell = graph.insertVertex(
+              null,
+              null,
+              '',
+              roundedX,
+              roundedY,
+              geo.width,
+              geo.height,
+              shapeStyle,
+            );
+          }
 
           const edgeStyle = {
             strokeColor: BLACK,
@@ -1858,6 +2081,50 @@ const WebCanvas = forwardRef<DiagramCanvasHandle, DiagramCanvasProps>(({ onReady
       graph.setCellsDeletable(true);
       graph.setPanning(true);
 
+      // ─── UML Class compartments ────────────────────────────────────────
+      // Enter normally commits/stops editing everywhere (setEnterStopsCell
+      // Editing above) so a shape's whole label stays a quick single line.
+      // A class compartment (name/attributes/methods) legitimately needs
+      // multiple lines (e.g. one attribute per line), so Enter there should
+      // insert a newline instead — overriding isStopEditingEvent to return
+      // false for Enter on those cells lets the keystroke fall through to
+      // the editor's native (browser) newline behavior untouched.
+      const cellEditorHandler = graph.getPlugin('CellEditorHandler') as any;
+      if (cellEditorHandler) {
+        const defaultIsStopEditingEvent = cellEditorHandler.isStopEditingEvent.bind(cellEditorHandler);
+        cellEditorHandler.isStopEditingEvent = (evt: KeyboardEvent) => {
+          const editingCell = cellEditorHandler.getEditingCell?.();
+          if (
+            editingCell &&
+            isUmlClassCompartmentCell(editingCell) &&
+            evt.keyCode === 13 &&
+            !evt.ctrlKey &&
+            !evt.shiftKey
+          ) {
+            return false;
+          }
+          return defaultIsStopEditingEvent(evt);
+        };
+      }
+
+      // Once an edit commits, grow/shrink that compartment (and the
+      // container) to fit its new line count.
+      graph.addListener(InternalEvent.LABEL_CHANGED, (_sender: any, evt: any) => {
+        const cell = evt.getProperty('cell');
+        if (cell && isUmlClassCompartmentCell(cell)) {
+          resizeClassCompartmentToFitText(graph, cell);
+        }
+      });
+
+      // Dragging a class container's own resize handle needs its
+      // (non-resizable) compartments kept in sync with the new bounds.
+      graph.addListener(InternalEvent.CELLS_RESIZED, (_sender: any, evt: any) => {
+        const resized = evt.getProperty('cells') as any[] | undefined;
+        resized?.forEach((cell) => {
+          if (isUmlClassContainerCell(cell)) syncClassCompartmentsToContainer(graph, cell);
+        });
+      });
+
       graph.getSelectionModel().addListener(InternalEvent.CHANGE, () => {
         handleSelectionChange();
       });
@@ -1874,7 +2141,11 @@ const WebCanvas = forwardRef<DiagramCanvasHandle, DiagramCanvasProps>(({ onReady
       const fitPlugin = graph.getPlugin('FitPlugin') as FitPlugin | null;
 
       if (panningHandler) {
-        panningHandler.useLeftButtonForPanning = false;
+        // Desktop only gets panning via held-spacebar (below) — there's no
+        // keyboard on mobile, so a single-finger drag on empty canvas is
+        // mobile's only way to pan/scroll at all, and needs to be on by
+        // default there instead of gated behind a key that doesn't exist.
+        panningHandler.useLeftButtonForPanning = isMobile;
         panningHandler.ignoreCell = false;
       }
 
@@ -1923,11 +2194,46 @@ const WebCanvas = forwardRef<DiagramCanvasHandle, DiagramCanvasProps>(({ onReady
       // touch-as-mouse handling still drives panning/selection/move.
       let pinchStartDistance = 0;
       let pinchStartScale = 1;
+      // Raw touchmove fires far more often than the screen can usefully
+      // repaint at, and every one of those events was synchronously calling
+      // scaleAndTranslate (each triggering a full grid repaint + React zoom-
+      // label state update) — that pileup, plus zero smoothing of finger-
+      // tremor noise in the raw distance ratio, is what made pinch feel
+      // dizzying/jumpy compared to the desktop wheel path (which only gets
+      // one coarse step per wheel tick). Coalescing to one applied update per
+      // animation frame fixes both: at most 60 view updates/sec no matter how
+      // many touchmoves land in between, and each one uses the latest finger
+      // positions rather than every intermediate jitter.
+      let pendingPinchTouches: TouchList | null = null;
+      let pinchRafId: number | null = null;
 
       const touchDistance = (touches: TouchList) => {
         const dx = touches[0].clientX - touches[1].clientX;
         const dy = touches[0].clientY - touches[1].clientY;
         return Math.sqrt(dx * dx + dy * dy);
+      };
+
+      const applyPinchFrame = () => {
+        pinchRafId = null;
+        const touches = pendingPinchTouches;
+        if (!touches || touches.length !== 2 || pinchStartDistance <= 0) return;
+
+        const factor = touchDistance(touches) / pinchStartDistance;
+        const newScale = Math.min(4, Math.max(0.1, pinchStartScale * factor));
+
+        const rect = graphDiv.getBoundingClientRect();
+        const midX = (touches[0].clientX + touches[1].clientX) / 2 - rect.left;
+        const midY = (touches[0].clientY + touches[1].clientY) / 2 - rect.top;
+
+        const view = graph.getView();
+        const oldScale = view.getScale();
+        const oldTranslate = view.getTranslate();
+
+        // Graph-space point currently under the fingers' midpoint, and the
+        // translate needed to keep that same point under it at the new scale.
+        const graphX = midX / oldScale - oldTranslate.x;
+        const graphY = midY / oldScale - oldTranslate.y;
+        view.scaleAndTranslate(newScale, midX / newScale - graphX, midY / newScale - graphY);
       };
 
       graphDiv.addEventListener('touchstart', (e: TouchEvent) => {
@@ -1940,27 +2246,21 @@ const WebCanvas = forwardRef<DiagramCanvasHandle, DiagramCanvasProps>(({ onReady
       graphDiv.addEventListener('touchmove', (e: TouchEvent) => {
         if (e.touches.length !== 2 || pinchStartDistance <= 0) return;
         e.preventDefault();
-
-        const factor = touchDistance(e.touches) / pinchStartDistance;
-        const newScale = Math.min(4, Math.max(0.1, pinchStartScale * factor));
-
-        const rect = graphDiv.getBoundingClientRect();
-        const midX = (e.touches[0].clientX + e.touches[1].clientX) / 2 - rect.left;
-        const midY = (e.touches[0].clientY + e.touches[1].clientY) / 2 - rect.top;
-
-        const view = graph.getView();
-        const oldScale = view.getScale();
-        const oldTranslate = view.getTranslate();
-
-        // Graph-space point currently under the fingers' midpoint, and the
-        // translate needed to keep that same point under it at the new scale.
-        const graphX = midX / oldScale - oldTranslate.x;
-        const graphY = midY / oldScale - oldTranslate.y;
-        view.scaleAndTranslate(newScale, midX / newScale - graphX, midY / newScale - graphY);
+        pendingPinchTouches = e.touches;
+        if (pinchRafId === null) {
+          pinchRafId = requestAnimationFrame(applyPinchFrame);
+        }
       }, { passive: false });
 
       graphDiv.addEventListener('touchend', (e: TouchEvent) => {
-        if (e.touches.length < 2) pinchStartDistance = 0;
+        if (e.touches.length < 2) {
+          pinchStartDistance = 0;
+          pendingPinchTouches = null;
+          if (pinchRafId !== null) {
+            cancelAnimationFrame(pinchRafId);
+            pinchRafId = null;
+          }
+        }
       }, { passive: true });
 
       let spaceDown = false;
@@ -1974,7 +2274,9 @@ const WebCanvas = forwardRef<DiagramCanvasHandle, DiagramCanvasProps>(({ onReady
       graphDiv.addEventListener('keyup', (e: KeyboardEvent) => {
         if (e.code === 'Space') {
           spaceDown = false;
-          if (panningHandler) panningHandler.useLeftButtonForPanning = false;
+          // Releasing space returns to this platform's baseline, not
+          // unconditionally off — mobile's baseline is "always on" (set above).
+          if (panningHandler) panningHandler.useLeftButtonForPanning = isMobile;
           graphDiv.style.cursor = 'default';
         }
       });
@@ -2046,6 +2348,7 @@ const WebCanvas = forwardRef<DiagramCanvasHandle, DiagramCanvasProps>(({ onReady
         graphDiv.removeEventListener('keydown', () => { });
         keyHandler.onDestroy();
         if (cleanupClickArrows) cleanupClickArrows();
+        if (pinchRafId !== null) cancelAnimationFrame(pinchRafId);
         graph.destroy();
         graphRef.current = null;
       };
@@ -2055,7 +2358,7 @@ const WebCanvas = forwardRef<DiagramCanvasHandle, DiagramCanvasProps>(({ onReady
       setLoading(false);
       return undefined;
     }
-  }, [repaintGrid, resizeGridCanvas, handleDrop, registerShapeStyles, handleSelectionChange, setupHoverUI, setupClickArrows]);
+  }, [repaintGrid, resizeGridCanvas, handleDrop, registerShapeStyles, handleSelectionChange, setupHoverUI, setupClickArrows, isMobile]);
 
   useEffect(() => {
     const cleanup = initGraph();

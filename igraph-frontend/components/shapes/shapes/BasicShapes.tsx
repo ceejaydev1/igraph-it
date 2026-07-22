@@ -259,12 +259,12 @@ export const DocumentShape: React.FC<ShapeProps> = ({
 };
 
 // ─── Folder ─────────────────────────────────────────────────────────────────
-// Canvas always fills #fef9c3 regardless of style, so the preview does too.
 
 export const FolderShape: React.FC<ShapeProps> = ({
   width,
   height,
   color = '#1a1f36',
+  fillColor = '#ffffff',
   strokeWidth = 2,
 }) => {
   const tabWidth = width * 0.25;
@@ -273,7 +273,7 @@ export const FolderShape: React.FC<ShapeProps> = ({
     <Svg width={width} height={height} viewBox={`0 0 ${width} ${height}`}>
       <Path
         d={`M2,${tabHeight + 2} L${tabWidth + 2},${tabHeight + 2} L${tabWidth + 6},2 L${width - 2},2 L${width - 2},${height - 2} L2,${height - 2} Z`}
-        fill="#fef9c3"
+        fill={fillColor}
         stroke={color}
         strokeWidth={strokeWidth}
       />
@@ -282,41 +282,51 @@ export const FolderShape: React.FC<ShapeProps> = ({
 };
 
 // ─── Cloud ─────────────────────────────────────────────────────────────────
-// Canvas always fills #e0f2fe regardless of style, so the preview does too.
 
+// Path below is the given 24x24 cloud icon (3 overlapping circular arcs +
+// a flat base) with every coordinate/radius scaled independently by
+// sx = width/24, sy = height/24, so it stretches to fill non-square boxes
+// (matching every other shape here) instead of clamping to a fixed aspect
+// ratio. Each arc's rx/ry stay equal to sx/sy respectively since the
+// source arcs are circular, so the scaled arcs stay true ellipses.
 export const CloudShape: React.FC<ShapeProps> = ({
   width,
   height,
   color = '#1a1f36',
+  fillColor = '#ffffff',
   strokeWidth = 2,
 }) => {
-  const cx = width / 2;
-  const r = Math.min(width, height) * 0.4;
+  const sx = width / 24;
+  const sy = height / 24;
+  const p0x = 7 * sx, p0y = 18 * sy;
+  const p1x = 7.58 * sx, p1y = 10.04 * sy;
+  const p2x = 18.3 * sx, p2y = 9.2 * sy;
+  const p3x = 18 * sx, p3y = 18 * sy;
   return (
     <Svg width={width} height={height} viewBox={`0 0 ${width} ${height}`}>
       <Path
-        d={`M${cx - r * 0.6},${height - 6}
-           A${r * 0.9},${r * 0.5} 0 0,1 ${cx - r},${height - 16}
-           A${r * 0.8},${r * 0.4} 0 0,1 ${cx - r * 0.5},${height - 27}
-           A${r * 0.6},${r * 0.3} 0 0,1 ${cx},${height - 34}
-           A${r * 0.6},${r * 0.3} 0 0,1 ${cx + r * 0.4},${height - 27}
-           A${r * 0.7},${r * 0.4} 0 0,1 ${cx + r},${height - 16}
-           A${r * 0.8},${r * 0.4} 0 0,1 ${cx + r * 0.5},${height - 6} Z`}
-        fill="#e0f2fe"
+        d={`M${p0x},${p0y}
+           A${4 * sx},${4 * sy} 0 1,1 ${p1x},${p1y}
+           A${5.5 * sx},${5.5 * sy} 0 0,1 ${p2x},${p2y}
+           A${3.8 * sx},${3.8 * sy} 0 1,1 ${p3x},${p3y}
+           H${p0x} Z`}
+        fill={fillColor}
         stroke={color}
         strokeWidth={strokeWidth}
+        strokeLinecap="round"
+        strokeLinejoin="round"
       />
     </Svg>
   );
 };
 
 // ─── Note (Standalone) ─────────────────────────────────────────────────────
-// Canvas always fills #fef9c3 regardless of style, so the preview does too.
 
 export const NoteStandaloneShape: React.FC<ShapeProps> = ({
   width,
   height,
   color = '#1a1f36',
+  fillColor = '#ffffff',
   strokeWidth = 2,
 }) => {
   const fold = Math.min(width, height) * 0.2;
@@ -324,7 +334,7 @@ export const NoteStandaloneShape: React.FC<ShapeProps> = ({
     <Svg width={width} height={height} viewBox={`0 0 ${width} ${height}`}>
       <Path
         d={`M2,2 L${width - fold - 2},2 L${width - 2},${fold + 2} L${width - 2},${height - 2} L2,${height - 2} Z`}
-        fill="#fef9c3"
+        fill={fillColor}
         stroke={color}
         strokeWidth={strokeWidth}
       />

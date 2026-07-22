@@ -185,3 +185,18 @@ div.mxHandle:hover {
   pointer-events: none;
   z-index: 100;
 }
+
+/* ─── Cell label editor (double-click/double-tap to edit a shape's text) ───
+   The graph container has `user-select: none` (needed so panning/dragging
+   never triggers a page text-selection). maxGraph appends its editing
+   textarea — a contenteditable div — as a child of that same container
+   without ever setting its own user-select, so it silently inherits `none`.
+   On several mobile browsers, a contenteditable element computed to
+   user-select: none does still receive focus() but the on-screen keyboard
+   never opens for it — the element still "works" for a desktop mouse/
+   keyboard user, which is why this only showed up on mobile. Overriding it
+   back to `text` here is what actually lets the keyboard appear. */
+[contenteditable="true"] {
+  user-select: text !important;
+  -webkit-user-select: text !important;
+}

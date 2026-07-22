@@ -19,6 +19,13 @@ export default function Root({ children }: PropsWithChildren) {
             __html: `html, body, #root { background-color: #ffffff; }`,
           }}
         />
+        {/* PWA tags (manifest link, apple-touch-icon, register-sw script,
+            etc.) are NOT added here — Expo's static export of this file
+            silently drops <link>/<script> tags and extra <meta> tags added
+            here (verified: they're present in this source but absent from
+            the built dist/index.html). scripts/inject-pwa-head.js patches
+            them into dist/index.html directly after `npm run build`
+            instead. */}
       </head>
       <body>{children}</body>
     </html>

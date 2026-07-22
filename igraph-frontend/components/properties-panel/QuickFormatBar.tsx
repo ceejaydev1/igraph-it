@@ -3,67 +3,9 @@ import { View, Text, StyleSheet, Platform } from 'react-native';
 import { InternalEvent } from '@maxgraph/core';
 import { COLORS } from '@/constants/theme';
 import { applyStylePatch, getCommonStyleValue } from './PropertiesPanel';
-import { MiniSwatch, ToggleButton, Dropdown, NumberStepper } from './shared';
+import { MiniSwatch, ToggleButton, Dropdown, NumberStepper, Tooltip } from './shared';
 import { BoldIcon, ItalicIcon, UnderlineIcon, AlignLeftIcon, AlignCenterIcon, AlignRightIcon } from './icons';
-
-/** Small dark hover label, same look as the shape-tile tooltip in
- *  ShapesPanel, so users know what each icon-only control does before
- *  clicking it — matches draw.io / Lucidchart's toolbar tooltips. Web only:
- *  there's no hover concept on touch, and every control this wraps already
- *  only renders in the desktop web layout. Hides itself on mousedown so it
- *  doesn't sit on top of a dropdown menu the click just opened. */
-function Tooltip({ label, children }: { label: string; children: React.ReactNode }) {
-  const [hovered, setHovered] = useState(false);
-
-  if (Platform.OS !== 'web') return <>{children}</>;
-
-  return (
-    <div
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
-      onMouseDown={() => setHovered(false)}
-      style={{ position: 'relative', display: 'inline-flex' }}
-    >
-      {children}
-      {hovered && (
-        <div
-          style={{
-            position: 'absolute',
-            top: '100%',
-            left: '50%',
-            transform: 'translateX(-50%)',
-            marginTop: 8,
-            backgroundColor: '#1a1f36',
-            color: '#ffffff',
-            padding: '4px 10px',
-            borderRadius: 6,
-            fontSize: 11,
-            fontWeight: 500,
-            pointerEvents: 'none',
-            zIndex: 1000,
-            whiteSpace: 'nowrap',
-            boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
-          }}
-        >
-          {label}
-          <div
-            style={{
-              position: 'absolute',
-              top: -6,
-              left: '50%',
-              transform: 'translateX(-50%)',
-              width: 0,
-              height: 0,
-              borderLeft: '6px solid transparent',
-              borderRight: '6px solid transparent',
-              borderBottom: '6px solid #1a1f36',
-            }}
-          />
-        </div>
-      )}
-    </div>
-  );
-}
+import EdgeConnectorControls from './EdgeConnectorControls';
 
 type LineStyle = 'solid' | 'dashed' | 'dotted';
 const LINE_STYLES: { key: LineStyle; label: string }[] = [
@@ -128,16 +70,19 @@ interface QuickFormatBarProps {
  *  viewport on very narrow windows, which is a lesser problem than that. */
 export default function QuickFormatBar({ graph }: QuickFormatBarProps) {
   const [cells, setCells] = useState<any[]>([]);
+  const [edgeCells, setEdgeCells] = useState<any[]>([]);
 
   useEffect(() => {
     if (!graph) {
       setCells([]);
+      setEdgeCells([]);
       return;
     }
 
     const handleSelectionChange = () => {
       const selected = graph.getSelectionCells?.() ?? [];
       setCells(selected.filter((c: any) => c.isVertex && c.isVertex()));
+      setEdgeCells(selected.filter((c: any) => c.isEdge && c.isEdge()));
     };
 
     const selectionModel = graph.getSelectionModel();
@@ -157,9 +102,18 @@ export default function QuickFormatBar({ graph }: QuickFormatBarProps) {
   const align = getCommonStyleValue(cells, 'align') as string | undefined;
 
   const fillColor = getCommonStyleValue(cells, 'fillColor') as string | undefined;
-  const strokeColor = getCommonStyleValue(cells, 'strokeColor') as string | undefined;
-  const strokeWidth = getCommonStyleValue(cells, 'strokeWidth') as number | undefined;
-  const lineStyle = getLineStyle(cells);
+
+  // Line Color/Width/Style apply to edges too, not just shapes — a
+  // connector's line *is* its whole visible style, so restricting these to
+  // vertex-only `cells` (as Fill/Font/Align rightly are) meant selecting
+  // just a connector left them doing nothing. `lineCells` is vertices+edges
+  // together so whichever's selected gets restyled.
+  const lineCells = edgeCells.length > 0 ? [...cells, ...edgeCells] : cells;
+  const lineDisabled = lineCells.length === 0;
+  const linePatch = (p: Record<string, any>) => applyStylePatch(graph, lineCells, p);
+  const strokeColor = getCommonStyleValue(lineCells, 'strokeColor') as string | undefined;
+  const strokeWidth = getCommonStyleValue(lineCells, 'strokeWidth') as number | undefined;
+  const lineStyle = getLineStyle(lineCells);
 
   const isBold = ((fontStyle ?? 0) & 1) === 1;
   const isItalic = ((fontStyle ?? 0) & 2) === 2;
@@ -172,16 +126,24 @@ export default function QuickFormatBar({ graph }: QuickFormatBarProps) {
   };
 
   const handleLineStyle = (style: LineStyle) => {
-    if (style === 'solid') patch({ dashed: 0, dashPattern: undefined });
-    if (style === 'dashed') patch({ dashed: 1, dashPattern: '8 4' });
-    if (style === 'dotted') patch({ dashed: 1, dashPattern: '1 2' });
+    if (style === 'solid') linePatch({ dashed: 0, dashPattern: undefined });
+    if (style === 'dashed') linePatch({ dashed: 1, dashPattern: '8 4' });
+    if (style === 'dotted') linePatch({ dashed: 1, dashPattern: '1 2' });
   };
 
   return (
-    <View
-      style={[styles.row, disabled && styles.rowDisabled]}
-      pointerEvents={disabled ? 'none' : 'auto'}
-    >
+    // Outer row is never dimmed/blocked itself — only `vertexControls` below
+    // is. CSS opacity on an ancestor dims every descendant no matter what
+    // pointerEvents says on a child (unlike pointer-events, opacity can't be
+    // "opted out of" partway down the tree), so Connection/Waypoints have to
+    // live outside that dimmed subtree entirely, not just override
+    // pointerEvents inside it — otherwise they render faded even while
+    // fully clickable.
+    <View style={styles.row}>
+      <View
+        style={[styles.vertexControls, disabled && styles.rowDisabled]}
+        pointerEvents={disabled ? 'none' : 'auto'}
+      >
       <Tooltip label="Font Family">
         <View style={styles.fontFamilyDropdown}>
           <Dropdown<string>
@@ -255,11 +217,23 @@ export default function QuickFormatBar({ graph }: QuickFormatBarProps) {
           allowNone
         />
       </Tooltip>
+      </View>
+
+      <View style={styles.divider} />
+
+      {/* Line Color/Width/Style get their own group (not `vertexControls`,
+          not `disabled`) because they're valid on edges too — a connector
+          with no shape selected still has a line. `lineDisabled` covers the
+          one case that's actually empty: nothing at all selected. */}
+      <View
+        style={[styles.vertexControls, lineDisabled && styles.rowDisabled]}
+        pointerEvents={lineDisabled ? 'none' : 'auto'}
+      >
       <Tooltip label="Line Color">
         <MiniSwatch
           value={strokeColor ?? '#000000'}
-          onChange={(hex) => patch({ strokeColor: hex })}
-          disabled={disabled}
+          onChange={(hex) => linePatch({ strokeColor: hex })}
+          disabled={lineDisabled}
           title="Select a line color"
           allowNone
         />
@@ -267,7 +241,7 @@ export default function QuickFormatBar({ graph }: QuickFormatBarProps) {
 
       <Tooltip label="Line Width">
         <View style={styles.strokeWidthStepper}>
-          <NumberStepper value={strokeWidth ?? 1} onChange={(n) => patch({ strokeWidth: n })} min={0} max={10} step={1} suffix="pt" />
+          <NumberStepper value={strokeWidth ?? 1} onChange={(n) => linePatch({ strokeWidth: n })} min={0} max={10} step={1} suffix="pt" />
         </View>
       </Tooltip>
 
@@ -281,12 +255,32 @@ export default function QuickFormatBar({ graph }: QuickFormatBarProps) {
           />
         </View>
       </Tooltip>
+      </View>
+
+      <View style={styles.divider} />
+
+      {/* Unlike every other control in this bar, these two don't need — and
+          deliberately aren't gated behind — a selection: with an edge
+          selected they restyle it, otherwise they set the graph's default
+          edge style for the *next* connection you draw. Living outside
+          `vertexControls` above (rather than inside it with a pointerEvents
+          override) is what keeps them fully opaque/legible even while that
+          group is dimmed for "nothing selected". */}
+      <EdgeConnectorControls graph={graph} variant="toolbar" />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   row: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  // Just the font/fill/line group that genuinely needs a selection — split
+  // out from `row` so Connection/Waypoints (siblings, outside this View)
+  // never inherit its dimmed opacity when nothing's selected.
+  vertexControls: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,

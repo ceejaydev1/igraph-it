@@ -9,7 +9,7 @@
     "ios": "expo start --ios",
     "web": "expo start --web",
     "lint": "expo lint",
-    "build": "expo export --platform web"
+    "build": "expo export --platform web && node ./scripts/inject-pwa-head.js"
   },
   "dependencies": {
     "@expo/vector-icons": "^15.0.3",

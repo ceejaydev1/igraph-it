@@ -19,14 +19,16 @@ import { useFocusEffect } from '@react-navigation/native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Svg, Path, Rect, Circle } from 'react-native-svg';
 import { SvgCanvas2D, ImageExport } from '@maxgraph/core';
-import DiagramCanvas, { DiagramCanvasHandle } from '@/components/DiagramCanvas';
+import DiagramCanvas, { DiagramCanvasHandle, getShapeStyle, insertUmlClassCell } from '@/components/DiagramCanvas';
 import ShapesPanel from '@/components/shapes/ShapesPanel';
 import ShapesBottomPanel from '../../components/shapes/ShapesBottomPanel';
+import ConnectorsBottomPanel from '../../components/ConnectorsBottomPanel';
 import PropertiesPanel from '@/components/properties-panel/PropertiesPanel';
 import QuickFormatBar from '@/components/properties-panel/QuickFormatBar';
 import { ICONS } from '../../constants/icons';
 import { COLORS, SPACING } from '@/constants/theme';
 import { IGRAPH_ID_STYLE_MAP } from '@/components/maxgraph-custom-shapes';
+import { getShapeDefinitionById } from '@/constants/shapes';
 import * as authService from '../../services/authService';
 import { useSave } from '../../contexts/SaveContext';
 
@@ -164,7 +166,11 @@ export default function CreateScreen() {
   // this gives them one instead of adding yet another icon to the row).
   const [showMobileProperties, setShowMobileProperties] = useState(false);
   const [mobilePropertiesTab, setMobilePropertiesTab] = useState<'style' | 'text' | 'arrange'>('style');
-  const [activeTool, setActiveTool] = useState<'shapes' | 'text' | 'draw' | 'comment'>('shapes');
+  // Mobile-only: shows a read-only overlay of every shape's connection
+  // points + every edge's waypoints on the canvas while its sheet is open —
+  // desktop can see these one cell at a time via hover, mobile can't.
+  const [showConnectorsPanel, setShowConnectorsPanel] = useState(false);
+  const [activeTool, setActiveTool] = useState<'shapes' | 'text' | 'draw' | 'comment' | 'connectors'>('shapes');
   const [activeUmlType, setActiveUmlType] = useState('Functional Decomposition Diagram');
 
   // ─── ✅ FIX: Use ref to store diagramXml without causing re-renders ───────
@@ -696,29 +702,44 @@ export default function CreateScreen() {
       const centerX = (containerW / 2) / scale - translate.x;
       const centerY = (containerH / 2) / scale - translate.y;
 
-      const x = Math.round((centerX - 120 / 2) / 10) * 10;
-      const y = Math.round((centerY - 60 / 2) / 10) * 10;
+      // Use the shape's own default width/height (constants/shapes.ts)
+      // instead of a fixed 120x60 for every shape — otherwise an oval,
+      // actor, or ERD attribute all land as the same generic box instead of
+      // their intended proportions.
+      const shapeDef = getShapeDefinitionById(shapeId);
+      const w = shapeDef?.width ?? 120;
+      const h = shapeDef?.height ?? 60;
+
+      const x = Math.round((centerX - w / 2) / 10) * 10;
+      const y = Math.round((centerY - h / 2) / 10) * 10;
 
       const styleKey = IGRAPH_ID_STYLE_MAP[shapeId] ?? 'igraph.rectangle';
 
-      const styleObject = {
-        shape: styleKey,
-        fillColor: '#ffffff',
-        strokeColor: '#1a1f36',
-        strokeWidth: 2,
-        fontColor: '#1a1f36',
-        fontSize: 12,
-        align: 'center' as const,
-        verticalAlign: 'middle' as const,
-        whiteSpace: 'wrap',
-      };
+      // Class Diagram's "Class" shape needs a container + 3 independently
+      // editable compartments, not a single vertex — see insertUmlClassCell.
+      let cell: any;
+      if (shapeId === 'class-box') {
+        cell = insertUmlClassCell(graph, x, y, w, h);
+      } else {
+        // getShapeStyle carries each shape's real default fill (e.g. solid
+        // black arrowheads/markers, FDD category colors) instead of forcing
+        // every shape to a white fill regardless of what it's supposed to be.
+        const styleObject = {
+          ...getShapeStyle(styleKey),
+          fontColor: '#1a1f36',
+          fontSize: 12,
+          align: 'center' as const,
+          verticalAlign: 'middle' as const,
+          whiteSpace: 'wrap',
+        };
 
-      const cell = graph.insertVertex(
-        null, null, '',
-        x, y,
-        120, 60,
-        styleObject,
-      );
+        cell = graph.insertVertex(
+          null, null, '',
+          x, y,
+          w, h,
+          styleObject,
+        );
+      }
 
       graph.setSelectionCell(cell);
       console.log(`✅ Added "${shapeId}" as "${styleKey}" at (${x}, ${y})`);
@@ -1376,6 +1397,7 @@ export default function CreateScreen() {
     setShowShapesPanel(prev => !prev);
     if (activeTool !== 'shapes') setActiveTool('shapes');
     if (showMobileProperties) setShowMobileProperties(false);
+    if (showConnectorsPanel) setShowConnectorsPanel(false);
     if (showShapesPanel) {
       setTimeout(focusGraph, 100);
     }
@@ -1394,6 +1416,19 @@ export default function CreateScreen() {
     setMobilePropertiesTab(tab);
     setShowMobileProperties(true);
     if (showShapesPanel) setShowShapesPanel(false);
+    if (showConnectorsPanel) setShowConnectorsPanel(false);
+  };
+
+  // Opens the read-only Connectors sheet, same toggle/mutual-exclusion
+  // behavior as the buttons above (tapping it again closes it).
+  const toggleConnectorsPanel = () => {
+    setShowConnectorsPanel(prev => !prev);
+    if (activeTool !== 'connectors') setActiveTool('connectors');
+    if (showMobileProperties) setShowMobileProperties(false);
+    if (showShapesPanel) setShowShapesPanel(false);
+    if (showConnectorsPanel) {
+      setTimeout(focusGraph, 100);
+    }
   };
 
   useEffect(() => {
@@ -1726,7 +1761,7 @@ export default function CreateScreen() {
               onPress={handleNewDiagram}
               activeOpacity={0.7}
             >
-              <ICONS.NewDiagram color="rgb(152, 176, 219), 203, 235) 85, 104)" />
+              <ICONS.NewDiagram color="#4a5568" />
             </TouchableOpacity>
           </View>
 
@@ -1850,6 +1885,12 @@ export default function CreateScreen() {
               >
                 <ICONS.Comment color={showMobileProperties && activeTool === 'comment' ? '#4c6fff' : '#64748b'} />
               </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.mobileBottomToolBtn, showConnectorsPanel && styles.mobileBottomToolBtnActive]}
+                onPress={toggleConnectorsPanel}
+              >
+                <ICONS.Connector color={showConnectorsPanel ? '#4c6fff' : '#64748b'} />
+              </TouchableOpacity>
             </View>
 
             <View style={styles.mobileToolDivider} />
@@ -1901,6 +1942,13 @@ export default function CreateScreen() {
             initialTab={mobilePropertiesTab}
           />
         )}
+
+        <ConnectorsBottomPanel
+          visible={showConnectorsPanel}
+          onClose={toggleConnectorsPanel}
+          toolbarHeight={toolbarHeight}
+          graph={graphInstance}
+        />
 
         {showDownloadDropdown && (
           <>

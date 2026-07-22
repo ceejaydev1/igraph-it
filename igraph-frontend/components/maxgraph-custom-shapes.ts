@@ -92,6 +92,55 @@ function sampleCubicBezier(
   return pts;
 }
 
+// Endpoint-to-center conversion for an SVG elliptical arc with no rotation
+// (matches every arcTo call in this file, which all pass angle=0), sampled
+// into a polygon chain the same way sampleQuadBezier/sampleCubicBezier do.
+function sampleArc(
+  p0: [number, number],
+  p1: [number, number],
+  rx: number,
+  ry: number,
+  largeArc: boolean,
+  sweep: boolean,
+  steps: number,
+): Array<[number, number]> {
+  const [x1, y1] = p0;
+  const [x2, y2] = p1;
+  const x1p = (x1 - x2) / 2;
+  const y1p = (y1 - y2) / 2;
+  const lambda = (x1p * x1p) / (rx * rx) + (y1p * y1p) / (ry * ry);
+  if (lambda > 1) {
+    const s = Math.sqrt(lambda);
+    rx *= s;
+    ry *= s;
+  }
+  const sign = largeArc !== sweep ? 1 : -1;
+  const num = rx * rx * ry * ry - rx * rx * y1p * y1p - ry * ry * x1p * x1p;
+  const den = rx * rx * y1p * y1p + ry * ry * x1p * x1p;
+  const co = sign * Math.sqrt(Math.max(0, num / den));
+  const cxp = (co * rx * y1p) / ry;
+  const cyp = (-co * ry * x1p) / rx;
+  const cx = cxp + (x1 + x2) / 2;
+  const cy = cyp + (y1 + y2) / 2;
+
+  const angleBetween = (ux: number, uy: number, vx: number, vy: number) => {
+    const dir = ux * vy - uy * vx < 0 ? -1 : 1;
+    const dot = Math.max(-1, Math.min(1, (ux * vx + uy * vy) / (Math.hypot(ux, uy) * Math.hypot(vx, vy))));
+    return dir * Math.acos(dot);
+  };
+  const theta1 = angleBetween(1, 0, (x1p - cxp) / rx, (y1p - cyp) / ry);
+  let dtheta = angleBetween((x1p - cxp) / rx, (y1p - cyp) / ry, (-x1p - cxp) / rx, (-y1p - cyp) / ry);
+  if (!sweep && dtheta > 0) dtheta -= 2 * Math.PI;
+  if (sweep && dtheta < 0) dtheta += 2 * Math.PI;
+
+  const pts: Array<[number, number]> = [];
+  for (let i = 1; i <= steps; i++) {
+    const t = theta1 + (dtheta * i) / steps;
+    pts.push([cx + rx * Math.cos(t), cy + ry * Math.sin(t)]);
+  }
+  return pts;
+}
+
 // Traces the same elliptical top/bottom caps CylinderShapeCanvas paints
 // (left edge -> over the top -> right edge -> under the bottom), sampled
 // into a polygon since makePolygonPerimeter works on straight edges.
@@ -115,20 +164,21 @@ function cylinderPoints(w: number, h: number): Array<[number, number]> {
   return pts;
 }
 
-// Coarse polygon through CloudShapeCanvas's arcTo anchor points (straight
-// chords instead of the true arcs) - close enough to keep edges off the
-// empty corners of the bounding box, which is what actually matters here.
+// Sampled polygon through CloudShapeCanvas's 3 circular arcs, mirroring the
+// sx = w/24, sy = h/24 scaling used there so the perimeter tracks the
+// actual (possibly stretched) cloud outline.
 function cloudPoints(w: number, h: number): Array<[number, number]> {
-  const cx = w / 2;
-  const r = Math.min(w, h) * 0.4;
+  const sx = w / 24;
+  const sy = h / 24;
+  const p0: [number, number] = [7 * sx, 18 * sy];
+  const p1: [number, number] = [7.58 * sx, 10.04 * sy];
+  const p2: [number, number] = [18.3 * sx, 9.2 * sy];
+  const p3: [number, number] = [18 * sx, 18 * sy];
   return [
-    [cx - r * 0.6, h - 6],
-    [cx - r, h - 16],
-    [cx - r * 0.5, h - 27],
-    [cx, h - 34],
-    [cx + r * 0.4, h - 27],
-    [cx + r, h - 16],
-    [cx + r * 0.5, h - 6],
+    p0,
+    ...sampleArc(p0, p1, 4 * sx, 4 * sy, true, true, 8),
+    ...sampleArc(p1, p2, 5.5 * sx, 5.5 * sy, false, true, 8),
+    ...sampleArc(p2, p3, 3.8 * sx, 3.8 * sy, true, true, 8),
   ];
 }
 
@@ -1932,9 +1982,6 @@ class RoundedRectShapeCanvas extends Shape {
 
 class CircleShapeCanvas extends Shape {
   paintBackground(c: AbstractCanvas2D, x: number, y: number, w: number, h: number) {
-    const cx = x + w / 2;
-    const cy = y + h / 2;
-    const r = Math.min(w, h) / 2 - 4;
     c.setFillColor(this.fill);
     c.setStrokeColor(this.stroke);
     c.setStrokeWidth(this.strokeWidth);
@@ -1944,7 +1991,10 @@ class CircleShapeCanvas extends Shape {
     // stroke draw entirely, which is the only way to make width 0 truly
     // invisible.
     if (this.strokeWidth <= 0) c.setStrokeColor('none');
-    c.ellipse(cx - r, cy - r, r * 2, r * 2);
+    // Follows w/h independently (like EllipseShapeCanvas) so the shape
+    // stretches into an ellipse when resized non-uniformly, instead of
+    // clamping to Math.min(w, h) and staying a fixed circle.
+    c.ellipse(x + 4, y + 4, w - 8, h - 8);
     c.fillAndStroke();
   }
 }
@@ -2134,11 +2184,14 @@ class FolderShapeCanvas extends Shape {
   }
 }
 
+// Mirrors the SVG path in CloudShape (BasicShapes.tsx): the given 24x24
+// cloud icon's 3 circular arcs + flat base, each coordinate/radius scaled
+// independently by sx = w/24, sy = h/24 so it stretches to fill non-square
+// boxes instead of clamping to a fixed aspect ratio.
 class CloudShapeCanvas extends Shape {
   paintBackground(c: AbstractCanvas2D, x: number, y: number, w: number, h: number) {
-    const cx = x + w / 2;
-    const cy = y + h / 2;
-    const r = Math.min(w, h) * 0.4;
+    const sx = w / 24;
+    const sy = h / 24;
     c.setFillColor(this.fill);
     c.setStrokeColor(this.stroke);
     c.setStrokeWidth(this.strokeWidth);
@@ -2148,14 +2201,16 @@ class CloudShapeCanvas extends Shape {
     // stroke draw entirely, which is the only way to make width 0 truly
     // invisible.
     if (this.strokeWidth <= 0) c.setStrokeColor('none');
+    const p0x = x + 7 * sx, p0y = y + 18 * sy;
+    const p1x = x + 7.58 * sx, p1y = y + 10.04 * sy;
+    const p2x = x + 18.3 * sx, p2y = y + 9.2 * sy;
+    const p3x = x + 18 * sx, p3y = y + 18 * sy;
     c.begin();
-    c.moveTo(cx - r * 0.6, y + h - 6);
-    c.arcTo(r * 0.9, r * 0.5, 0, false, true, cx - r, y + h - 16);
-    c.arcTo(r * 0.8, r * 0.4, 0, false, true, cx - r * 0.5, y + h - 27);
-    c.arcTo(r * 0.6, r * 0.3, 0, false, true, cx, y + h - 34);
-    c.arcTo(r * 0.6, r * 0.3, 0, false, true, cx + r * 0.4, y + h - 27);
-    c.arcTo(r * 0.7, r * 0.4, 0, false, true, cx + r, y + h - 16);
-    c.arcTo(r * 0.8, r * 0.4, 0, false, true, cx + r * 0.5, y + h - 6);
+    c.moveTo(p0x, p0y);
+    c.arcTo(4 * sx, 4 * sy, 0, true, true, p1x, p1y);
+    c.arcTo(5.5 * sx, 5.5 * sy, 0, false, true, p2x, p2y);
+    c.arcTo(3.8 * sx, 3.8 * sy, 0, true, true, p3x, p3y);
+    c.lineTo(p0x, p0y);
     c.close();
     c.fillAndStroke();
   }
@@ -4093,6 +4148,45 @@ class UMLClassShapeCanvas extends Shape {
   }
 }
 
+// Outer border only (no divider lines) — used for the Class Diagram's
+// container cell. The two divider lines instead come from each
+// compartment child's own bottom edge (ClassCompartmentDividerShapeCanvas
+// below), so they track each compartment's real, independently-editable
+// and independently-growable height instead of UMLClassShapeCanvas's fixed
+// 0.3/0.65 split.
+class UMLClassContainerShapeCanvas extends Shape {
+  paintBackground(c: AbstractCanvas2D, x: number, y: number, w: number, h: number) {
+    c.setFillColor(this.fill);
+    c.setStrokeColor(this.stroke);
+    c.setStrokeWidth(this.strokeWidth);
+    if (this.strokeWidth <= 0) c.setStrokeColor('none');
+    c.rect(x + 2, y + 2, w - 4, h - 4);
+    c.fillAndStroke();
+  }
+}
+
+// A class-name/attributes/methods compartment child cell: paints only its
+// own bottom divider line. The container above supplies the fill and outer
+// border, so there's nothing else for a compartment to paint.
+class ClassCompartmentDividerShapeCanvas extends Shape {
+  paintBackground(c: AbstractCanvas2D, x: number, y: number, w: number, h: number) {
+    c.setStrokeColor(this.stroke);
+    c.setStrokeWidth(this.strokeWidth);
+    if (this.strokeWidth <= 0) c.setStrokeColor('none');
+    c.begin();
+    c.moveTo(x + 2, y + h);
+    c.lineTo(x + w - 2, y + h);
+    c.stroke();
+  }
+}
+
+// The last (methods) compartment — no divider beneath it, just the label.
+class ClassCompartmentPlainShapeCanvas extends Shape {
+  paintBackground() {
+    // Intentionally empty.
+  }
+}
+
 class UMLDirectedAssociationShapeCanvas extends Shape {
   paintBackground(c: AbstractCanvas2D, x: number, y: number, w: number, h: number) {
     const cy = y + h / 2;
@@ -4334,6 +4428,9 @@ const SHAPE_REGISTRY: Record<string, typeof Shape> = {
   // ─── Class Shapes ──────────────────────────────────────────────────────
   'igraph.umlComposition': UMLCompositionShapeCanvas,
   'igraph.umlClass': UMLClassShapeCanvas,
+  'igraph.umlClassContainer': UMLClassContainerShapeCanvas,
+  'igraph.classCompartmentDivider': ClassCompartmentDividerShapeCanvas,
+  'igraph.classCompartmentPlain': ClassCompartmentPlainShapeCanvas,
   'igraph.umlDirectedAssociation': UMLDirectedAssociationShapeCanvas,
   'igraph.umlAggregation': UMLAggregationShapeCanvas,
   'igraph.umlDependency': UMLDependencyShapeCanvas,
@@ -4448,6 +4545,20 @@ export function registerAllCustomShapes(): void {
   console.log('✅ Registered', Object.keys(SHAPE_REGISTRY).length, 'custom igraph shapes');
 }
 
+// Derived from the cell's own (persisted) style rather than an ephemeral JS
+// property, so these still work after a save/reload round-trip through the
+// XML serializer, which only carries real Cell fields (style included).
+export function isUmlClassContainerCell(cell: any): boolean {
+  const style = cell?.getStyle?.();
+  return typeof style === 'object' && style?.shape === 'igraph.umlClassContainer';
+}
+
+export function isUmlClassCompartmentCell(cell: any): boolean {
+  const style = cell?.getStyle?.();
+  const shape = typeof style === 'object' ? style?.shape : undefined;
+  return shape === 'igraph.classCompartmentDivider' || shape === 'igraph.classCompartmentPlain';
+}
+
 // ─── ID to Style Map ─────────────────────────────────────────────────────────
 
 export const IGRAPH_ID_STYLE_MAP: Record<string, string> = {
@@ -4475,11 +4586,11 @@ export const IGRAPH_ID_STYLE_MAP: Record<string, string> = {
   'folder': 'igraph.folder',
   'cloud': 'igraph.cloud',
   'noteStandalone': 'igraph.noteStandalone',
-  'std-actor': 'igraph.actor',
+  'actor': 'igraph.actor',
   'connector-arrow': 'igraph.connectorArrow',
 
   // ─── Flowchart ──────────────────────────────────────────────────────────
-  'terminator': 'igraph.roundedRectangle',
+  'terminator': 'igraph.ellipse',
   'process': 'igraph.rectangle',
   'decision': 'igraph.diamond',
   'io': 'igraph.parallelogram',
@@ -4594,7 +4705,7 @@ export const IGRAPH_ID_STYLE_MAP: Record<string, string> = {
   'seq-note': 'igraph.umlNote',
 
   // ─── Class ──────────────────────────────────────────────────────────────
-  'class-box': 'igraph.umlClass',
+  'class-box': 'igraph.umlClassContainer',
   'class-association': 'igraph.umlAssociation',
   'class-directed': 'igraph.umlDirectedAssociation',
   'class-aggregation': 'igraph.umlAggregation',

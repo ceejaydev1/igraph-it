@@ -230,12 +230,12 @@ export const FishboneBubbleShape: React.FC<ShapeProps> = ({
 };
 
 // ─── 13. Fishbone Note ────────────────────────────────────────────────────
-// Canvas always fills #fef9c3 regardless of style.
 
 export const FishboneNoteShape: React.FC<ShapeProps> = ({
   width,
   height,
   color = '#1a1f36',
+  fillColor = '#ffffff',
   strokeWidth = 2,
 }) => {
   const fold = Math.min(width, height) * 0.2;
@@ -243,7 +243,7 @@ export const FishboneNoteShape: React.FC<ShapeProps> = ({
     <Svg width={width} height={height} viewBox={`0 0 ${width} ${height}`}>
       <Path
         d={`M2,2 L${width - fold - 2},2 L${width - 2},${fold + 2} L${width - 2},${height - 2} L2,${height - 2} Z`}
-        fill="#fef9c3"
+        fill={fillColor}
         stroke={color}
         strokeWidth={strokeWidth}
       />

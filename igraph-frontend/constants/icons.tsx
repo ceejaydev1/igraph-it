@@ -36,6 +36,15 @@ export const ICONS = {
     </Svg>
   ),
 
+  Connector: ({ color = '#4a5568' }: { color?: string }) => (
+    <Svg width={22} height={22} viewBox="0 0 24 24" fill="none">
+      <Circle cx="5" cy="6" r="2.5" stroke={color} strokeWidth={1.8} />
+      <Circle cx="19" cy="18" r="2.5" stroke={color} strokeWidth={1.8} />
+      <Path d="M7 8L10.5 10.8M13.5 13.2L17 16" stroke={color} strokeWidth={1.8} strokeLinecap="round" />
+      <Circle cx="12" cy="12" r="1.6" fill={color} />
+    </Svg>
+  ),
+
   Undo: ({ color = '#4a5568' }: { color?: string }) => (
     <Svg width={20} height={20} viewBox="0 0 24 24" fill="none">
       <Path d="M3 7V12H8" stroke={color} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" />

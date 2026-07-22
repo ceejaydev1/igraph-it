@@ -49,8 +49,6 @@ export const DIAGRAM_SHAPES: Record<string, ShapeDefinition[]> = {
   // ═══════════════════════════════════════════════════════════════════════════
   'Functional Decomposition Diagram': [
     { id: 'function', svgComponent: 'FDD_FunctionShape', label: 'Function', description: 'Represents a primary function or sub-function.', width: 120, height: 60, category: 'UML' },
-    { id: 'input', svgComponent: 'FDD_InputShape', label: 'Input', description: 'Represents something that enters a function.', width: 80, height: 50, category: 'UML' },
-    { id: 'output', svgComponent: 'FDD_OutputShape', label: 'Output', description: 'Represents something that exits a function.', width: 80, height: 50, category: 'UML' },
     { id: 'control', svgComponent: 'FDD_ControlShape', label: 'Control', description: 'Represents a control that governs a function.', width: 80, height: 40, category: 'UML' },
     { id: 'mechanism', svgComponent: 'FDD_MechanismShape', label: 'Mechanism', description: 'Represents a resource that performs a function.', width: 80, height: 40, category: 'UML' },
     { id: 'fdd-interface', svgComponent: 'FDD_InterfaceShape', label: 'Interface', description: 'Represents an interaction point with external environment.', width: 80, height: 40, category: 'UML' },
@@ -63,7 +61,7 @@ export const DIAGRAM_SHAPES: Record<string, ShapeDefinition[]> = {
   // 2. FLOWCHART
   // ═══════════════════════════════════════════════════════════════════════════
   'Flowchart': [
-    { id: 'terminator', svgComponent: 'RoundedRectShape', label: 'Terminator', description: 'Start/End of process', width: 100, height: 50, category: 'UML' },
+    { id: 'terminator', svgComponent: 'EllipseShape', label: 'Terminator', description: 'Start/End of process', width: 100, height: 50, category: 'UML' },
     { id: 'process', svgComponent: 'RectShape', label: 'Process', description: 'Processing step', width: 120, height: 60, category: 'UML' },
     { id: 'io', svgComponent: 'ParallelogramShape', label: 'Input / Output', description: 'Data input or output', width: 120, height: 60, category: 'UML' },
     { id: 'decision', svgComponent: 'DiamondShape', label: 'Decision', description: 'Branch point', width: 100, height: 80, category: 'UML' },
@@ -810,6 +808,19 @@ export const getAllShapeIds = (): string[] => {
     shapes.forEach(shape => ids.add(shape.id));
   });
   return Array.from(ids);
+};
+
+// Looks up a shape's own default width/height (and full definition) by id,
+// regardless of which category it lives under. Used when inserting a shape
+// onto the canvas so its drop size matches its actual proportions (an oval
+// stays oval, a stick-figure actor stays tall/narrow) instead of forcing
+// every shape to the same box or a one-size-fits-all square.
+export const getShapeDefinitionById = (shapeId: string): ShapeDefinition | undefined => {
+  for (const shapes of Object.values(DIAGRAM_SHAPES)) {
+    const found = shapes.find((s) => s.id === shapeId);
+    if (found) return found;
+  }
+  return undefined;
 };
 
 export const getStyleForSvgComponent = (svgComponent: string): string => {

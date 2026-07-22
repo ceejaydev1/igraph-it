@@ -3,40 +3,106 @@ import { View, Text, TextInput, TouchableOpacity, ScrollView, StyleSheet, Platfo
 import { COLORS, SPACING, RADIUS, TYPOGRAPHY, SHADOWS } from '@/constants/theme';
 import ColorPickerPopover from './ColorPickerPopover';
 
-// ─── Mutual exclusion for MiniSwatch popovers ──────────────────────────────
-// Fill / Font / Line color (and any other MiniSwatch) share one "which swatch
-// is open" slot, so opening one (e.g. Fill Color) closes whichever other one
-// (e.g. Font Color) was already open — matches how draw.io / Lucidchart never
-// show two color popovers at once.
-let activeSwatchId: symbol | null = null;
-const activeSwatchListeners = new Set<() => void>();
+/** Small dark hover label, same look as the shape-tile tooltip in
+ *  ShapesPanel, so users know what each icon-only control does before
+ *  clicking it — matches draw.io / Lucidchart's toolbar tooltips. Web only:
+ *  there's no hover concept on touch, and every control this wraps already
+ *  only renders in the desktop web layout. Hides itself on mousedown so it
+ *  doesn't sit on top of a dropdown menu the click just opened. */
+export function Tooltip({ label, children }: { label: string; children: React.ReactNode }) {
+  const [hovered, setHovered] = useState(false);
 
-function setActiveSwatch(id: symbol | null) {
-  activeSwatchId = id;
-  activeSwatchListeners.forEach((l) => l());
+  if (Platform.OS !== 'web') return <>{children}</>;
+
+  return (
+    <div
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      onMouseDown={() => setHovered(false)}
+      style={{ position: 'relative', display: 'inline-flex' }}
+    >
+      {children}
+      {hovered && (
+        <div
+          style={{
+            position: 'absolute',
+            top: '100%',
+            left: '50%',
+            transform: 'translateX(-50%)',
+            marginTop: 8,
+            backgroundColor: '#1a1f36',
+            color: '#ffffff',
+            padding: '4px 10px',
+            borderRadius: 6,
+            fontSize: 11,
+            fontWeight: 500,
+            pointerEvents: 'none',
+            zIndex: 1000,
+            whiteSpace: 'nowrap',
+            boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+          }}
+        >
+          {label}
+          <div
+            style={{
+              position: 'absolute',
+              top: -6,
+              left: '50%',
+              transform: 'translateX(-50%)',
+              width: 0,
+              height: 0,
+              borderLeft: '6px solid transparent',
+              borderRight: '6px solid transparent',
+              borderBottom: '6px solid #1a1f36',
+            }}
+          />
+        </div>
+      )}
+    </div>
+  );
 }
 
-function useExclusiveOpen(): [boolean, () => void, () => void] {
-  const idRef = useRef<symbol | null>(null);
-  if (idRef.current === null) idRef.current = Symbol('swatch');
+// ─── Mutual exclusion for popovers/menus ───────────────────────────────────
+// A pool of same-kind popups (all MiniSwatches, or all Dropdowns) share one
+// "which one is open" slot, so opening one closes whichever other one in
+// that same pool was already open — matches how draw.io / Lucidchart never
+// show two color popovers, or two dropdown menus, open at once. Each pool
+// is independent (opening a color popover doesn't close an open dropdown),
+// but every member *within* a pool competes for the same slot.
+function createExclusiveOpenPool(debugName: string) {
+  let activeId: symbol | null = null;
+  const listeners = new Set<() => void>();
 
-  const [, tick] = useState(0);
-  useEffect(() => {
-    const listener = () => tick((t) => t + 1);
-    activeSwatchListeners.add(listener);
-    return () => {
-      activeSwatchListeners.delete(listener);
-      // Unmounting while open (e.g. selection changed) shouldn't leave a
-      // dangling "active" slot that nothing can ever reclaim.
-      if (activeSwatchId === idRef.current) setActiveSwatch(null);
-    };
-  }, []);
+  const setActive = (id: symbol | null) => {
+    activeId = id;
+    listeners.forEach((l) => l());
+  };
 
-  const isOpen = activeSwatchId === idRef.current;
-  const open = () => setActiveSwatch(idRef.current);
-  const close = () => { if (activeSwatchId === idRef.current) setActiveSwatch(null); };
-  return [isOpen, open, close];
+  return function useExclusiveOpen(): [boolean, () => void, () => void] {
+    const idRef = useRef<symbol | null>(null);
+    if (idRef.current === null) idRef.current = Symbol(debugName);
+
+    const [, tick] = useState(0);
+    useEffect(() => {
+      const listener = () => tick((t) => t + 1);
+      listeners.add(listener);
+      return () => {
+        listeners.delete(listener);
+        // Unmounting while open (e.g. selection changed) shouldn't leave a
+        // dangling "active" slot that nothing can ever reclaim.
+        if (activeId === idRef.current) setActive(null);
+      };
+    }, []);
+
+    const isOpen = activeId === idRef.current;
+    const open = () => setActive(idRef.current);
+    const close = () => { if (activeId === idRef.current) setActive(null); };
+    return [isOpen, open, close];
+  };
 }
+
+const useExclusiveOpen = createExclusiveOpenPool('swatch');
+const useExclusiveDropdown = createExclusiveOpenPool('dropdown');
 
 export const Row = ({ children, style }: { children: React.ReactNode; style?: any }) => (
   <View style={[rowStyles.row, style]}>{children}</View>
@@ -157,6 +223,13 @@ export function MiniSwatch({
 }) {
   const [open, doOpen, close] = useExclusiveOpen();
   const bg = value && value !== 'none' ? value : COLORS.white;
+
+  // Deselecting the shape/edge this swatch controls (disabled flips to
+  // true) shouldn't leave its popover hanging open with nothing left to
+  // apply a color change to.
+  useEffect(() => {
+    if (disabled && open) close();
+  }, [disabled, open, close]);
 
   const handlePress = () => {
     if (disabled) return;
@@ -287,14 +360,24 @@ export function Dropdown<T extends string>({
   onChange,
   placeholder = 'mixed',
   renderValue,
+  itemTooltips = false,
 }: {
   value: T | undefined;
   options: { key: T; label: string }[];
   onChange: (key: T) => void;
   placeholder?: string;
   renderValue?: (key: T) => React.ReactNode;
+  /** Shows each option's `label` as a hover tooltip — for icon-only
+   *  (renderValue) dropdowns like Connection/Waypoints, where the list item
+   *  itself no longer shows any text, so there'd otherwise be no way to
+   *  tell what each symbol means before picking it. */
+  itemTooltips?: boolean;
 }) {
-  const [open, setOpen] = useState(false);
+  // Shared pool: opening this dropdown closes any other Dropdown that was
+  // already open (Font Family, Line Style, Connection, Waypoints, ...) —
+  // otherwise, e.g., opening Waypoints while Connection's menu is still open
+  // left both hanging open at once.
+  const [open, doOpen, close] = useExclusiveDropdown();
   const current = options.find((o) => o.key === value);
 
   return (
@@ -302,7 +385,11 @@ export function Dropdown<T extends string>({
     // above any sibling fields that come after it (needed on Android; iOS/web
     // generally respect the absolute position regardless).
     <View style={[rowStyles.dropdownWrap, open && rowStyles.dropdownWrapOpen]}>
-      <TouchableOpacity style={rowStyles.dropdownTrigger} onPress={() => setOpen((o) => !o)} activeOpacity={0.7}>
+      <TouchableOpacity
+        style={rowStyles.dropdownTrigger}
+        onPress={() => (open ? close() : doOpen())}
+        activeOpacity={0.7}
+      >
         {current && renderValue ? (
           renderValue(current.key)
         ) : (
@@ -313,20 +400,71 @@ export function Dropdown<T extends string>({
       {open && (
         <View style={rowStyles.dropdownMenu}>
           {options.map((o) => (
-            <TouchableOpacity
+            <DropdownOption
               key={o.key}
-              style={rowStyles.dropdownItem}
+              label={o.label}
+              showTooltip={itemTooltips && !!renderValue}
               onPress={() => {
                 onChange(o.key);
-                setOpen(false);
+                close();
               }}
             >
               {renderValue ? renderValue(o.key) : <Text style={rowStyles.dropdownItemText}>{o.label}</Text>}
-            </TouchableOpacity>
+            </DropdownOption>
           ))}
         </View>
       )}
     </View>
+  );
+}
+
+/** One row inside an open Dropdown's menu — pulled out of Dropdown itself
+ *  only so the optional hover tooltip (web-only, right of the item so it
+ *  can't collide with the row above/below) doesn't clutter that function. */
+function DropdownOption({
+  label,
+  showTooltip,
+  onPress,
+  children,
+}: {
+  label: string;
+  showTooltip: boolean;
+  onPress: () => void;
+  children: React.ReactNode;
+}) {
+  const [hovered, setHovered] = useState(false);
+  const webHoverProps =
+    Platform.OS === 'web' && showTooltip
+      ? { onMouseEnter: () => setHovered(true), onMouseLeave: () => setHovered(false) }
+      : {};
+
+  return (
+    <TouchableOpacity style={rowStyles.dropdownItem} onPress={onPress} {...webHoverProps}>
+      {children}
+      {Platform.OS === 'web' && showTooltip && hovered && (
+        <div
+          style={{
+            position: 'absolute',
+            top: '50%',
+            left: '100%',
+            transform: 'translateY(-50%)',
+            marginLeft: 8,
+            backgroundColor: '#1a1f36',
+            color: '#ffffff',
+            padding: '4px 10px',
+            borderRadius: 6,
+            fontSize: 11,
+            fontWeight: 500,
+            pointerEvents: 'none',
+            zIndex: 1000,
+            whiteSpace: 'nowrap',
+            boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+          }}
+        >
+          {label}
+        </div>
+      )}
+    </TouchableOpacity>
   );
 }
 

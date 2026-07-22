@@ -141,7 +141,12 @@ export const UMLReturnMsgShape: React.FC<ShapeProps> = ({
 // Shared frame for the alt/opt/loop/par/break combined-fragment shapes:
 // an unfilled rect with a small pentagon "tag" in the top-left corner
 // holding the operator label - matches each *ShapeCanvas exactly (fixed
-// pixel tag size, not proportional to width/height).
+// pixel tag size 20/35, not proportional to width/height) at normal canvas
+// sizes. But the shapes panel renders these at a much shorter height
+// (~26-32px) than that fixed 35px tag, which the viewBox then clips at the
+// bottom — so the tag geometry is capped to whatever height is actually
+// available, only kicking in below the 35+4px it needs, leaving on-canvas
+// rendering (height comfortably above that) pixel-identical to before.
 const FragmentFrame: React.FC<ShapeProps & { label: string; tagWidth: number; textX: number; dashedDivider?: boolean }> = ({
   width,
   height,
@@ -151,21 +156,26 @@ const FragmentFrame: React.FC<ShapeProps & { label: string; tagWidth: number; te
   tagWidth,
   textX,
   dashedDivider,
-}) => (
-  <Svg width={width} height={height} viewBox={`0 0 ${width} ${height}`}>
-    <Rect x={2} y={2} width={width - 4} height={height - 4} fill="none" stroke={color} strokeWidth={strokeWidth} />
-    <Path
-      d={`M2,2 L${tagWidth},2 L${tagWidth + 8},20 L${tagWidth + 8},35 L2,35 L2,2`}
-      fill="none"
-      stroke={color}
-      strokeWidth={strokeWidth}
-    />
-    <SvgText x={textX} y={22} fontSize={10} fill={color} textAnchor="middle">{label}</SvgText>
-    {dashedDivider && (
-      <Line x1={2} y1={height / 2} x2={width - 2} y2={height / 2} stroke={color} strokeWidth={strokeWidth} strokeDasharray="6,4" />
-    )}
-  </Svg>
-);
+}) => {
+  const tagH = Math.min(35, height - 4);
+  const cutY = (tagH * 20) / 35;
+  const textY = (tagH * 22) / 35;
+  return (
+    <Svg width={width} height={height} viewBox={`0 0 ${width} ${height}`}>
+      <Rect x={2} y={2} width={width - 4} height={height - 4} fill="none" stroke={color} strokeWidth={strokeWidth} />
+      <Path
+        d={`M2,2 L${tagWidth},2 L${tagWidth + 8},${cutY} L${tagWidth + 8},${tagH} L2,${tagH} L2,2`}
+        fill="none"
+        stroke={color}
+        strokeWidth={strokeWidth}
+      />
+      <SvgText x={textX} y={textY} fontSize={10} fill={color} textAnchor="middle">{label}</SvgText>
+      {dashedDivider && (
+        <Line x1={2} y1={height / 2} x2={width - 2} y2={height / 2} stroke={color} strokeWidth={strokeWidth} strokeDasharray="6,4" />
+      )}
+    </Svg>
+  );
+};
 
 // ─── 7. ALT Fragment ─────────────────────────────────────────────────────
 
