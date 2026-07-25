@@ -23,7 +23,7 @@ app.set('trust proxy', 1);
 const allowedOrigins = [
 
   'https://igraph-backend.onrender.com',
-  'https://igraph-it-1b6y.vercel.app',
+  'https://igraphit.vercel.app',
   
   'http://localhost:3001',
   'http://localhost:5000',
