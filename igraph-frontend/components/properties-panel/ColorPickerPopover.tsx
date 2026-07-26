@@ -149,6 +149,7 @@ export default function ColorPickerPopover({ value, onChange, onClose, title = '
     if (!norm) return;
     const { r, g, b } = hexToRgb(norm);
     setHsv(rgbToHsv(r, g, b));
+    setHexText(norm.replace('#', ''));
     onChange(norm);
   };
 
@@ -277,7 +278,12 @@ export default function ColorPickerPopover({ value, onChange, onClose, title = '
               borderRadius: RADIUS.md,
               marginTop: 12,
               cursor: 'crosshair',
-              background: `hsl(${hsv.h}, 100%, 50%)`,
+              // backgroundColor, not the `background` shorthand — `background`
+              // resets backgroundImage as a side effect, and since the gradient
+              // string below never changes value, React skips re-applying it on
+              // updates, so a shorthand here would wipe the gradient out on the
+              // very next color change until the popover remounted.
+              backgroundColor: `hsl(${hsv.h}, 100%, 50%)`,
               backgroundImage:
                 'linear-gradient(to top, #000, rgba(0,0,0,0)), linear-gradient(to right, #fff, rgba(255,255,255,0))',
               userSelect: 'none',

@@ -17,6 +17,12 @@ import { Svg, Path, Circle, Rect} from 'react-native-svg';
 
 const { height: SCREEN_HEIGHT, width: SCREEN_WIDTH } = Dimensions.get('window');
 
+// Same fix as PropertiesPanel: without this, dragging one of this sheet's
+// ScrollViews past its own edge chains the leftover gesture into bouncing
+// the whole page behind it. overscroll-behavior isn't an RN style prop, but
+// react-native-web passes unrecognized CSS properties straight through.
+const WEB_SCROLL_CONTAIN = Platform.OS === 'web' ? { overscrollBehavior: 'contain' as const } : undefined;
+
 // ─── Icons ────────────────────────────────────────────────────────────────────
 
 const SearchIcon = ({ color = '#94a3b8' }: { color?: string }) => (
@@ -328,6 +334,7 @@ export default function ShapesBottomPanel({
           horizontal
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={styles.tabsScrollContent}
+          style={WEB_SCROLL_CONTAIN}
         >
           {DIAGRAM_TABS.map((tab) => (
             <TouchableOpacity
@@ -355,7 +362,7 @@ export default function ShapesBottomPanel({
             horizontal
             pagingEnabled
             showsHorizontalScrollIndicator={false}
-            style={styles.shapesScroll}
+            style={[styles.shapesScroll, WEB_SCROLL_CONTAIN]}
             contentContainerStyle={[
               styles.shapesContent,
               { height: tileHeight + 2 },

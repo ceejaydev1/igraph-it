@@ -16,6 +16,7 @@ import {
   Animated,
 } from 'react-native';
 import { useRouter } from 'expo-router';
+import { useFocusEffect } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Svg, Path, Rect, Circle } from 'react-native-svg';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -686,7 +687,10 @@ export default function SavedDiagrams() {
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
 
-  const [savedDiagrams, setSavedDiagrams] = useState<any[]>([]);
+  // Lazily seeded from the same in-memory cache userAccount.tsx writes to —
+  // this screen and the account screen's "N saved" both otherwise start
+  // empty and fetch on mount/focus, flashing "0 saved diagrams" on remount.
+  const [savedDiagrams, setSavedDiagrams] = useState<any[]>(() => authService.getCachedDiagrams() ?? []);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -711,9 +715,15 @@ export default function SavedDiagrams() {
 
   const cardWidth = isMobile ? width - SPACING.xxl * 2 - SPACING.sm : isTablet ? (width - 44) / 2 : 300;
 
-  useEffect(() => {
-    loadSavedDiagrams();
-  }, []);
+  // freezeOnBlur (see app/(tabs)/_layout.tsx) means navigating away just
+  // freezes this screen instead of unmounting it, so a mount-only effect
+  // never re-fires when coming back — useFocusEffect re-runs on every
+  // return to this tab, matching the same fix used in userAccount.tsx.
+  useFocusEffect(
+    useCallback(() => {
+      loadSavedDiagrams();
+    }, [])
+  );
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -752,10 +762,15 @@ export default function SavedDiagrams() {
 
       if (result.success && result.data) {
         console.log(`✅ Found ${result.data.length} saved diagrams`);
+        authService.setCachedDiagrams(result.data);
         setSavedDiagrams(result.data);
       } else {
         console.warn(`⚠️ No diagrams found or API error:`, result.message);
-        setSavedDiagrams([]);
+        // Don't blank out an already-shown (cached) list over a transient
+        // API error — only clear it if there was never anything to show.
+        if (!authService.getCachedDiagrams()) {
+          setSavedDiagrams([]);
+        }
         if (result.message) {
           setError(result.message);
         }
@@ -763,7 +778,9 @@ export default function SavedDiagrams() {
     } catch (error: any) {
       console.error('❌ Failed to load diagrams:', error);
       setError(error.message || 'Failed to load saved diagrams');
-      setSavedDiagrams([]);
+      if (!authService.getCachedDiagrams()) {
+        setSavedDiagrams([]);
+      }
     } finally {
       setLoading(false);
     }
@@ -976,7 +993,10 @@ export default function SavedDiagrams() {
       {loading ? (
         <ScrollView
           showsVerticalScrollIndicator={false}
-          contentContainerStyle={styles.scrollContent}
+          contentContainerStyle={[
+            styles.scrollContent,
+            { paddingBottom: isDesktop ? 32 : 120 },
+          ]}
         >
           <SavedDiagramsGridSkeleton
             isDesktop={isDesktop}
@@ -989,6 +1009,7 @@ export default function SavedDiagrams() {
         showsVerticalScrollIndicator={false}
         contentContainerStyle={[
           styles.scrollContent,
+          { paddingBottom: isDesktop ? 32 : 120 },
           savedDiagrams.length === 0 && styles.emptyScrollContent,
         ]}
         refreshControl={
@@ -1139,7 +1160,12 @@ const styles = StyleSheet.create({
 
   scrollContent: {
     flexGrow: 1,
-    padding: SPACING.xl,
+    paddingHorizontal: SPACING.xl,
+    paddingTop: SPACING.xl,
+    // Bottom clearance is set per-screen-size where this style is used (see
+    // the ScrollViews below) — Navbar floats as an absolutely-positioned bar
+    // docked to the bottom on mobile/tablet, so a flat padding here isn't
+    // enough; without extra room the last row of cards renders underneath it.
   },
   emptyScrollContent: {
     flexGrow: 1,

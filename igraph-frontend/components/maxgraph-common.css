@@ -8,12 +8,21 @@
   fill: rgba(76, 111, 255, 0.12) !important;
 }
 
-/* ⭐ FORCE BLUE RUBBER BAND (selection rectangle) */
+/* ⭐ FORCE BLUE RUBBER BAND (selection rectangle) — drag on empty canvas to
+   draw this box; anything it touches is selected together, so Delete/
+   Backspace removes them all at once. 1px border @ 10% fill was correct but
+   nearly invisible against the dotted grid background — bumped to a
+   thicker, more saturated look so the drag is unmistakable while it's
+   happening, not just after you let go and see what got selected. */
 .mxRubberband {
+  position: absolute !important;
+  overflow: hidden !important;
   border-color: #4c6fff !important;
-  background: rgba(76, 111, 255, 0.1) !important;
+  background: rgba(76, 111, 255, 0.18) !important;
   border-style: solid !important;
-  border-width: 1px !important;
+  border-width: 2px !important;
+  border-radius: 2px !important;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.6) !important;
 }
 
 /* ⭐ FORCE BLUE CONNECTION POINTS */

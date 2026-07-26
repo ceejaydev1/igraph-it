@@ -46,11 +46,11 @@ const EmptySearchIcon = () => (
   </Svg>
 );
 
-const ChevronIcon = ({ up }: { up: boolean }) => (
+const ChevronIcon = ({ up, color = '#3b5bdb' }: { up: boolean; color?: string }) => (
   <Svg width={18} height={18} viewBox="0 0 24 24" fill="none">
     <Path
       d={up ? 'M18 15L12 9L6 15' : 'M6 9L12 15L18 9'}
-      stroke="#3b5bdb"
+      stroke={color}
       strokeWidth={2}
       strokeLinecap="round"
       strokeLinejoin="round"
@@ -231,6 +231,54 @@ const REFERENCE_DATA: ReferenceTerm[] = [
 
 const CATEGORIES: Category[] = ['All', 'UML', 'SDLC', 'General Terms'];
 
+// Mirrors Home screen's TYPE_COLORS so the same category reads as the same color across screens.
+const CATEGORY_COLORS: Record<Exclude<Category, 'All'>, { primary: string; light: string }> = {
+  UML: { primary: '#4c6fff', light: '#eef2ff' },
+  SDLC: { primary: '#10b981', light: '#ecfdf5' },
+  'General Terms': { primary: '#8b5cf6', light: '#f5f3ff' },
+};
+
+// ── Term card ──────────────────────────────────────────
+const ReferenceCard = ({
+  item,
+  isExpanded,
+  onToggle,
+}: {
+  item: ReferenceTerm;
+  isExpanded: boolean;
+  onToggle: () => void;
+}) => {
+  const [isHovered, setIsHovered] = useState(false);
+  const colors = CATEGORY_COLORS[item.category];
+
+  return (
+    <Pressable
+      onPress={onToggle}
+      style={({ pressed }) => [
+        styles.card,
+        isHovered && styles.cardHovered,
+        pressed && styles.cardPressed,
+      ]}
+      // @ts-ignore - React Native Web specific props
+      onMouseEnter={() => setIsHovered(true)}
+      onMouseLeave={() => setIsHovered(false)}
+    >
+      <View style={styles.cardHeader}>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.cardTerm}>{item.term}</Text>
+          <View style={[styles.categoryBadge, { backgroundColor: colors.light }]}>
+            <Text style={[styles.categoryBadgeText, { color: colors.primary }]}>
+              {item.category}
+            </Text>
+          </View>
+        </View>
+        <ChevronIcon up={isExpanded} color={colors.primary} />
+      </View>
+      {isExpanded && <Text style={styles.cardDefinition}>{item.definition}</Text>}
+    </Pressable>
+  );
+};
+
 // ── Component ──────────────────────────────────────────
 export default function LearningReference() {
   const [search, setSearch] = useState('');
@@ -341,27 +389,14 @@ export default function LearningReference() {
               <Text style={styles.emptyText}>Try adjusting your search or category</Text>
             </View>
           ) : (
-            filteredTerms.map((item) => {
-              const isExpanded = expandedId === item.id;
-              return (
-                <Pressable
-                  key={item.id}
-                  onPress={() => toggleExpand(item.id)}
-                  style={styles.card}
-                >
-                  <View style={styles.cardHeader}>
-                    <View style={{ flex: 1 }}>
-                      <Text style={styles.cardTerm}>{item.term}</Text>
-                      <Text style={styles.cardCategory}>{item.category}</Text>
-                    </View>
-                    <ChevronIcon up={isExpanded} />
-                  </View>
-                  {isExpanded && (
-                    <Text style={styles.cardDefinition}>{item.definition}</Text>
-                  )}
-                </Pressable>
-              );
-            })
+            filteredTerms.map((item) => (
+              <ReferenceCard
+                key={item.id}
+                item={item}
+                isExpanded={expandedId === item.id}
+                onToggle={() => toggleExpand(item.id)}
+              />
+            ))
           )}
         </View>
       </ScrollView>
@@ -506,6 +541,20 @@ const styles = StyleSheet.create({
     padding: 14,
     borderWidth: 1,
     borderColor: '#e2e8f0',
+    shadowColor: '#0f172a',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.04,
+    shadowRadius: 6,
+    elevation: 1,
+  },
+  cardHovered: {
+    borderColor: '#c7d2fe',
+    shadowOpacity: 0.1,
+    shadowRadius: 10,
+    elevation: 3,
+  },
+  cardPressed: {
+    opacity: 0.92,
   },
   cardHeader: {
     flexDirection: 'row',
@@ -516,10 +565,17 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#1a1f36',
   },
-  cardCategory: {
-    fontSize: 12,
-    color: '#3b5bdb',
-    marginTop: 2,
+  categoryBadge: {
+    alignSelf: 'flex-start',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 8,
+    marginTop: 6,
+  },
+  categoryBadgeText: {
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 0.2,
   },
   cardDefinition: {
     marginTop: 10,

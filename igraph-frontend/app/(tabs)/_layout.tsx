@@ -14,7 +14,7 @@ export default function TabLayout() {
   const router = useRouter();
   const pathname = usePathname();
   const [userData, setUserData] = useState({
-    fullName: 'User',
+    fullName: '',
     email: '',
     profilePicture: null as string | null,
   });
@@ -23,6 +23,19 @@ export default function TabLayout() {
   const isCreateScreen = pathname === '/(tabs)/create';
 
   useEffect(() => {
+    const applyUser = (user: any) => {
+      // Leave fullName as whatever the server/cache actually has (including
+      // '') rather than forcing the literal word 'User' in here — Navbar's
+      // own getDisplayName already falls back fullName -> email prefix ->
+      // 'User', and hardcoding 'User' at this layer short-circuited that
+      // email-prefix step even when a perfectly good email was available.
+      setUserData({
+        fullName: user?.fullName || '',
+        email: user?.email || '',
+        profilePicture: user?.profilePicture || null,
+      });
+    };
+
     const loadUserData = async () => {
       try {
         const token = await authService.getAccessToken();
@@ -31,36 +44,25 @@ export default function TabLayout() {
           setIsReady(true);
           return;
         }
-        let user = await authService.getCachedUser();
-        
-        if (user) {
-          setUserData({
-            fullName: user.fullName || 'User',
-            email: user.email || '',
-            profilePicture: user.profilePicture || null,
-          });
+
+        // verifyToken() goes through the shared axios instance, which
+        // auto-refreshes an expired access token (15 min TTL) and retries.
+        // The previous raw fetch() here had no such retry — an expired
+        // token on a fresh page load (when the old in-memory-only cache is
+        // always empty) silently failed and left the navbar stuck on the
+        // generic "User" placeholder for the rest of the session.
+        const result = await authService.verifyToken();
+        if (result.success && result.data?.user) {
+          authService.setCachedUser(result.data.user);
+          applyUser(result.data.user);
         } else {
-          // Only fetch if cache is empty (shouldn't happen since we pre-loaded)
-          const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'https://igraph-backend.onrender.com';
-          const response = await fetch(`${API_BASE_URL}/api/auth/me`, {
-            headers: { Authorization: `Bearer ${token}` },
-          });
-          
-          if (response.ok) {
-            const data = await response.json();
-            if (data.success && data.data.user) {
-              user = data.data.user;
-              authService.setCachedUser(user);
-              setUserData({
-                fullName: user.fullName || 'User',
-                email: user.email || '',
-                profilePicture: user.profilePicture || null,
-              });
-            }
-          }
+          const cached = await authService.getCachedUser();
+          if (cached) applyUser(cached);
         }
       } catch (error) {
         console.error('Error loading user data:', error);
+        const cached = await authService.getCachedUser();
+        if (cached) applyUser(cached);
       } finally {
         setIsReady(true);
       }

@@ -185,7 +185,11 @@ export const CylinderShape: React.FC<ShapeProps> = ({
   strokeWidth = 2,
 }) => {
   const rx = (width - 4) / 2;
-  const ry = 6;
+  // Capped at 6 (unchanged at normal sizes) but scales down below that so the
+  // cap doesn't swallow the whole shape when rendered small — a fixed ry=6
+  // left barely any straight side visible under ~30px tall, reading as a
+  // plain ellipse instead of a cylinder.
+  const ry = Math.min(6, height * 0.22);
   const cx = width / 2;
   const topCy = ry + 2;
   const botCy = height - ry - 2;

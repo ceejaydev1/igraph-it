@@ -20,6 +20,7 @@ import {
   UIManager,
 } from 'react-native';
 import { useRouter } from 'expo-router';
+import { useFocusEffect } from '@react-navigation/native';
 import { Svg, Path, Circle, Rect } from 'react-native-svg';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { initializeApp, getApps, FirebaseApp } from 'firebase/app';
@@ -268,10 +269,10 @@ const AlertCircleIcon = () => (
   </Svg>
 );
 
-const ProfileIcon = () => (
+const ProfileIcon = ({ color = '#000000' }: { color?: string }) => (
   <Svg width={24} height={24} viewBox="0 0 24 24" fill="none">
-    <Circle cx="12" cy="8" r="4" stroke="#4c6fff" strokeWidth={2} />
-    <Path d="M20 21V19C20 16.8 18.2 15 16 15H8C5.8 15 4 16.8 4 19V21" stroke="#4c6fff" strokeWidth={2} strokeLinecap="round" />
+    <Circle cx="12" cy="8" r="4" stroke={color} strokeWidth={2} />
+    <Path d="M20 21V19C20 16.8 18.2 15 16 15H8C5.8 15 4 16.8 4 19V21" stroke={color} strokeWidth={2} strokeLinecap="round" />
   </Svg>
 );
 
@@ -283,7 +284,9 @@ const EditIcon = ({ color = '#4c6fff' }: { color?: string }) => (
 );
 
 // ANIMATED CHEVRON
-// Rotates 0deg -> 90deg: right-pointing ">" becomes a down-pointing "v" when expanded.
+// Collapsed = down-pointing "v" (signals "expands in place"), expanded = up-pointing "^".
+// Deliberately never rests at the right-pointing ">" used by ChevronRight on the
+// navigate-away rows, so an accordion row can't be mistaken for a navigation row.
 
 const AnimatedChevron = ({ expanded, color }: { expanded: boolean; color: string }) => {
   const spinValue = useRef(new Animated.Value(expanded ? 1 : 0)).current;
@@ -298,7 +301,7 @@ const AnimatedChevron = ({ expanded, color }: { expanded: boolean; color: string
 
   const spin = spinValue.interpolate({
     inputRange: [0, 1],
-    outputRange: ['0deg', '90deg'],
+    outputRange: ['90deg', '-90deg'],
   });
 
   return (
@@ -1255,7 +1258,11 @@ export default function UserAccount() {
     authProvider: 'email' as 'email' | 'google' | null,
     hasPassword: true,
   });
-  const [savedDiagrams, setSavedDiagrams] = useState<any[]>([]);
+  // Lazily seeded from the in-memory cache so switching to another tab and
+  // back (a remount, since this screen doesn't otherwise persist the list)
+  // shows the last-known count immediately instead of flashing "0 saved
+  // diagrams" while loadSavedDiagrams()'s fetch is still in flight.
+  const [savedDiagrams, setSavedDiagrams] = useState<any[]>(() => authService.getCachedDiagrams() ?? []);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
@@ -1276,10 +1283,18 @@ export default function UserAccount() {
     setToast((prev) => ({ ...prev, visible: false }));
   }, []);
 
-  useEffect(() => {
-    loadUserData();
-    loadSavedDiagrams();
-  }, []);
+  // Every screen in this tab layout uses freezeOnBlur (see app/(tabs)/_layout.tsx),
+  // so navigating away just freezes this screen rather than unmounting it —
+  // a plain mount-only useEffect never re-fires when coming back to this tab,
+  // which is exactly how the saved-diagrams count (and profile data) went
+  // stale after saving/deleting a diagram somewhere else and returning here.
+  // useFocusEffect re-runs every time this screen becomes focused again.
+  useFocusEffect(
+    useCallback(() => {
+      loadUserData();
+      loadSavedDiagrams();
+    }, [])
+  );
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -1290,11 +1305,30 @@ export default function UserAccount() {
   // LOAD USER DATA
 
   const loadUserData = async () => {
+    let usedCache = false;
     try {
       const token = await authService.getAccessToken();
       if (!token) {
         router.replace('/(auth)/signin');
         return;
+      }
+
+      // Show whatever's already cached (from this session's navbar load, or
+      // a prior visit) immediately instead of holding the whole page behind
+      // a live network round trip every single time — verifyToken() below
+      // still runs to confirm/refresh it, just without keeping the skeleton
+      // up for a request that, on a cold backend, can take tens of seconds.
+      const cached = await authService.getCachedUser();
+      if (cached) {
+        usedCache = true;
+        setUserData({
+          fullName: cached.fullName || '',
+          email: cached.email || '',
+          username: cached.username || '',
+          authProvider: cached.authProvider || 'email',
+          hasPassword: cached.hasPassword !== false,
+        });
+        setLoading(false);
       }
 
       // Goes through the shared axios instance so an expired access token
@@ -1318,15 +1352,17 @@ export default function UserAccount() {
         const stillHasToken = await authService.getAccessToken();
         if (!stillHasToken) {
           router.replace('/(auth)/signin');
-        } else {
+        } else if (!usedCache) {
           await useCachedUserAsFallback();
           showToast('Failed to load user data. Pull down to refresh.', true);
         }
       }
     } catch (error) {
       console.error('Failed to load user data:', error);
-      await useCachedUserAsFallback();
-      showToast('Failed to load user data. Pull down to refresh.', true);
+      if (!usedCache) {
+        await useCachedUserAsFallback();
+        showToast('Failed to load user data. Pull down to refresh.', true);
+      }
     } finally {
       setLoading(false);
     }
@@ -1498,7 +1534,7 @@ export default function UserAccount() {
                 accessibilityState={{ expanded: isProfileExpanded }}
               >
                 <View style={styles.profileExpandableHeaderLeft}>
-                  <ProfileIcon />
+                  <ProfileIcon color={COLORS.gray700} />
                   <View style={styles.actionContent}>
                     <Text style={[styles.actionTitle, { fontSize: isMobile ? 15 : 16 }]}>Profile</Text>
                     <Text style={[styles.actionDescription, { fontSize: isMobile ? 11 : 12 }]}>

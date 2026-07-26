@@ -796,6 +796,36 @@ export const IGRAPH_STYLE_MAP: Record<string, string> = {
   'UMLMultiplicityNShape': 'igraph.umlMultiplicityN',
 };
 
+// Shapes that are really "a line, optionally with an arrowhead" rather than a
+// box/circle/etc — used both for the connector quick-style toolbar (dashed +
+// arrowhead toggles) and for giving them 2 endpoint handles instead of the
+// usual 8 box-resize handles. See DiagramCanvas.tsx and
+// maxgraph-universal-handler.ts. First pass: Standard + FDD ('flow-line'
+// shares Standard's connector-arrow class, so Flowchart's Flow Line comes
+// along for free); other categories' connector shapes (Use Case
+// associations, Class relationships, etc.) aren't included yet.
+export const CONNECTOR_SHAPE_IDS = new Set(['connector-arrow', 'control', 'mechanism', 'fdd-interface', 'flow-line']);
+
+// The style keys those ids render as (via IGRAPH_ID_STYLE_MAP below), so a
+// cell can be recognized as a connector shape from its own persisted style —
+// not from the shapeId tag DiagramCanvas.tsx/create.tsx stamp on at creation
+// time, which lives in an in-memory WeakMap and is gone the moment a cell
+// survives a reload (page refresh, a saved diagram being reopened, even a
+// dev hot-reload): none of those round-trip the tag, but style.shape is a
+// real maxGraph style property that's always in the saved/loaded XML.
+// Each of these 4 keys is unique to this connector set (no other shape id
+// maps to them), so this lookup can't false-positive on an unrelated shape.
+export const CONNECTOR_STYLE_KEYS = new Set(
+  [...CONNECTOR_SHAPE_IDS].map((id) => IGRAPH_ID_STYLE_MAP[id]).filter(Boolean)
+);
+
+export function isConnectorCell(cell: { getStyle?: () => any } | null | undefined): boolean {
+  if (!cell?.getStyle) return false;
+  const style = cell.getStyle();
+  const shapeKey = typeof style === 'string' ? undefined : style?.shape;
+  return !!shapeKey && CONNECTOR_STYLE_KEYS.has(shapeKey);
+}
+
 // ─── HELPER FUNCTIONS ────────────────────────────────────────────────────────
 
 export const getShapesForDiagram = (diagramType: string): ShapeDefinition[] => {

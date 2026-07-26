@@ -318,6 +318,100 @@ export const IGRAPH_PERIMETERS: Record<string, CellStateStyle['perimeter']> = {
 };
 
 // ════════════════════════════════════════════════════════════════════════════
+// CONNECTOR BEND SUPPORT
+//
+// Shared by every "line, optionally with an arrowhead" shape (Standard's
+// Connector, FDD's Control/Mechanism/Interface, Flowchart's Flow Line via
+// the same class as Connector) so a single optional bend point paints the
+// same way everywhere. The bend point is set by ConnectorBendHandle in
+// maxgraph-universal-handler.ts and stored as bendDx/bendDy — an offset in
+// local (unrotated) coordinates from the shape's own center. It's a plain
+// style property (not a real, TS-typed CellStateStyle key), but maxGraph's
+// style system round-trips arbitrary keys through save/load the same as any
+// other style value, so this doesn't need special persistence handling.
+// ════════════════════════════════════════════════════════════════════════════
+
+interface ConnectorPoints {
+  start: { x: number; y: number };
+  bend: { x: number; y: number };
+  end: { x: number; y: number };
+  isBent: boolean;
+}
+
+function getConnectorPoints(
+  style: CellStateStyle | null | undefined,
+  x: number, y: number, w: number, h: number,
+  inset: number = 2,
+): ConnectorPoints {
+  const cy = y + h / 2;
+  const s = style as Record<string, unknown> | null | undefined;
+  const bendDx = typeof s?.bendDx === 'number' ? s.bendDx : 0;
+  const bendDy = typeof s?.bendDy === 'number' ? s.bendDy : 0;
+  return {
+    start: { x: x + inset, y: cy },
+    end: { x: x + w - inset, y: cy },
+    bend: { x: x + w / 2 + bendDx, y: cy + bendDy },
+    isBent: bendDx !== 0 || bendDy !== 0,
+  };
+}
+
+// Draws (and fills/strokes) a triangle whose tip sits at `tip`, pointing
+// along the tip->towards direction, with its base pulled back from the tip
+// by `depth`. Returns the base's center point, so callers can end/start a
+// line stroke exactly there instead of overlapping the triangle.
+function triangleAt(
+  c: AbstractCanvas2D,
+  tip: { x: number; y: number },
+  towards: { x: number; y: number },
+  depth: number,
+  halfWidth: number,
+): { x: number; y: number } {
+  const dx = towards.x - tip.x;
+  const dy = towards.y - tip.y;
+  const len = Math.hypot(dx, dy) || 1;
+  const ux = dx / len;
+  const uy = dy / len;
+  const px = -uy;
+  const py = ux;
+  const baseX = tip.x + ux * depth;
+  const baseY = tip.y + uy * depth;
+  c.begin();
+  c.moveTo(tip.x, tip.y);
+  c.lineTo(baseX + px * halfWidth, baseY + py * halfWidth);
+  c.lineTo(baseX - px * halfWidth, baseY - py * halfWidth);
+  c.close();
+  c.fillAndStroke();
+  return { x: baseX, y: baseY };
+}
+
+// Draws a straight-or-single-bend line from pts.start through pts.bend (if
+// bent) to pts.end, with an optional arrowhead at the end whose angle
+// follows the actual final segment — not assumed horizontal, since a bent
+// line's last segment usually isn't.
+function paintConnectorLine(
+  c: AbstractCanvas2D,
+  pts: ConnectorPoints,
+  showArrow: boolean,
+  arrowDepth: number,
+  arrowHalfWidth: number,
+  dashedLine: boolean = false,
+) {
+  const { start, bend, end, isBent } = pts;
+  const lineEnd = showArrow
+    ? triangleAt(c, end, isBent ? bend : start, arrowDepth, arrowHalfWidth)
+    : end;
+
+  if (dashedLine) c.setDashed(true);
+  if (dashedLine) c.setDashPattern('8 4');
+  c.begin();
+  c.moveTo(start.x, start.y);
+  if (isBent) c.lineTo(bend.x, bend.y);
+  c.lineTo(lineEnd.x, lineEnd.y);
+  c.stroke();
+  if (dashedLine) c.setDashed(false);
+}
+
+// ════════════════════════════════════════════════════════════════════════════
 // FDD SHAPES - Canvas implementations
 // ════════════════════════════════════════════════════════════════════════════
 
@@ -396,7 +490,6 @@ class FDD_OutputShapeCanvas extends Shape {
 // ─── 4. CONTROL CONNECTOR ──────────────────────────────────────────────
 class FDD_ControlShapeCanvas extends Shape {
   paintBackground(c: AbstractCanvas2D, x: number, y: number, w: number, h: number) {
-    const cy = y + h / 2;
     c.setStrokeColor(this.stroke);
     c.setStrokeWidth(this.strokeWidth);
     // maxGraph's SVG renderer floors any actually-drawn stroke to 1px
@@ -406,23 +499,19 @@ class FDD_ControlShapeCanvas extends Shape {
     // invisible.
     if (this.strokeWidth <= 0) c.setStrokeColor('none');
     c.setFillColor(this.fill);
-    c.begin();
-    c.moveTo(x + 2, cy);
-    c.lineTo(x + w - 12, cy);
-    c.stroke();
-    c.begin();
-    c.moveTo(x + w - 2, cy);
-    c.lineTo(x + w - 12, cy - 6);
-    c.lineTo(x + w - 12, cy + 6);
-    c.close();
-    c.fillAndStroke();
+    // Reuses the edge-style 'endArrow' key (endArrow: 'none' = no arrowhead)
+    // even though this is a vertex, not an edge — it's the same convention
+    // the quick-style toolbar's Arrow toggle already uses for every other
+    // connector-style shape, so one flag means the same thing everywhere.
+    const showArrow = this.style?.endArrow !== 'none';
+    const pts = getConnectorPoints(this.style, x, y, w, h);
+    paintConnectorLine(c, pts, showArrow, 10, 6);
   }
 }
 
 // ─── 5. MECHANISM ──────────────────────────────────────────────────────
 class FDD_MechanismShapeCanvas extends Shape {
   paintBackground(c: AbstractCanvas2D, x: number, y: number, w: number, h: number) {
-    const cy = y + h / 2;
     c.setStrokeColor(this.stroke);
     c.setStrokeWidth(this.strokeWidth);
     // maxGraph's SVG renderer floors any actually-drawn stroke to 1px
@@ -432,26 +521,18 @@ class FDD_MechanismShapeCanvas extends Shape {
     // invisible.
     if (this.strokeWidth <= 0) c.setStrokeColor('none');
     c.setFillColor(this.fill);
-    c.setDashed(true);
-    c.setDashPattern('8 4');
-    c.begin();
-    c.moveTo(x + 2, cy);
-    c.lineTo(x + w - 12, cy);
-    c.stroke();
-    c.setDashed(false);
-    c.begin();
-    c.moveTo(x + w - 2, cy);
-    c.lineTo(x + w - 12, cy - 6);
-    c.lineTo(x + w - 12, cy + 6);
-    c.close();
-    c.fillAndStroke();
+    // Always dashed by design (IDEF0 convention for Mechanism arrows) —
+    // the quick-style toolbar's Dashed toggle has no visible effect here,
+    // same as it wouldn't for any shape that hardcodes its own dash state.
+    const showArrow = this.style?.endArrow !== 'none';
+    const pts = getConnectorPoints(this.style, x, y, w, h);
+    paintConnectorLine(c, pts, showArrow, 10, 6, true);
   }
 }
 
 // ─── 6. INTERFACE CONNECTOR ─────────────────────────────────────────────
 class FDD_InterfaceShapeCanvas extends Shape {
   paintBackground(c: AbstractCanvas2D, x: number, y: number, w: number, h: number) {
-    const cy = y + h / 2;
     const arrowSize = 6;
     const arrowWidth = 12;
     c.setStrokeColor(this.stroke);
@@ -463,22 +544,27 @@ class FDD_InterfaceShapeCanvas extends Shape {
     // invisible.
     if (this.strokeWidth <= 0) c.setStrokeColor('none');
     c.setFillColor(this.fill);
-    c.begin();
-    c.moveTo(x + 2, cy);
-    c.lineTo(x + arrowWidth, cy - arrowSize);
-    c.lineTo(x + arrowWidth, cy + arrowSize);
-    c.close();
-    c.fillAndStroke();
-    c.begin();
-    c.moveTo(x + w - 2, cy);
-    c.lineTo(x + w - arrowWidth, cy - arrowSize);
-    c.lineTo(x + w - arrowWidth, cy + arrowSize);
-    c.close();
-    c.fillAndStroke();
-    c.begin();
-    c.moveTo(x + arrowWidth, cy);
-    c.lineTo(x + w - arrowWidth, cy);
-    c.stroke();
+    const showArrow = this.style?.endArrow !== 'none';
+    const pts = getConnectorPoints(this.style, x, y, w, h);
+
+    if (showArrow) {
+      // Each notch points along its own adjacent segment's direction (the
+      // first segment for the start notch, the last for the end notch),
+      // not assumed horizontal, so bending still looks right.
+      const leftBase = triangleAt(c, pts.start, pts.isBent ? pts.bend : pts.end, arrowWidth, arrowSize);
+      const rightBase = triangleAt(c, pts.end, pts.isBent ? pts.bend : pts.start, arrowWidth, arrowSize);
+      c.begin();
+      c.moveTo(leftBase.x, leftBase.y);
+      if (pts.isBent) c.lineTo(pts.bend.x, pts.bend.y);
+      c.lineTo(rightBase.x, rightBase.y);
+      c.stroke();
+    } else {
+      c.begin();
+      c.moveTo(pts.start.x, pts.start.y);
+      if (pts.isBent) c.lineTo(pts.bend.x, pts.bend.y);
+      c.lineTo(pts.end.x, pts.end.y);
+      c.stroke();
+    }
   }
 }
 
@@ -2273,7 +2359,6 @@ class ActorShapeCanvas extends Shape {
 
 class ConnectorArrowShapeCanvas extends Shape {
   paintBackground(c: AbstractCanvas2D, x: number, y: number, w: number, h: number) {
-    const cy = y + h / 2;
     c.setStrokeColor(this.stroke);
     c.setStrokeWidth(this.strokeWidth);
     // maxGraph's SVG renderer floors any actually-drawn stroke to 1px
@@ -2283,13 +2368,9 @@ class ConnectorArrowShapeCanvas extends Shape {
     // invisible.
     if (this.strokeWidth <= 0) c.setStrokeColor('none');
     c.setFillColor(this.fill);
-    c.begin(); c.moveTo(x + 2, cy); c.lineTo(x + w - 10, cy); c.stroke();
-    c.begin();
-    c.moveTo(x + w - 10, cy - 5);
-    c.lineTo(x + w - 2, cy);
-    c.lineTo(x + w - 10, cy + 5);
-    c.close();
-    c.fill();
+    const showArrow = this.style?.endArrow !== 'none';
+    const pts = getConnectorPoints(this.style, x, y, w, h);
+    paintConnectorLine(c, pts, showArrow, 8, 5);
   }
 }
 

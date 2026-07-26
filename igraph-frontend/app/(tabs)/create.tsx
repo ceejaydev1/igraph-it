@@ -29,6 +29,7 @@ import { ICONS } from '../../constants/icons';
 import { COLORS, SPACING } from '@/constants/theme';
 import { IGRAPH_ID_STYLE_MAP } from '@/components/maxgraph-custom-shapes';
 import { getShapeDefinitionById } from '@/constants/shapes';
+import { tagShapeRole } from '@/utils/flowchartRules';
 import * as authService from '../../services/authService';
 import { useSave } from '../../contexts/SaveContext';
 
@@ -740,6 +741,7 @@ export default function CreateScreen() {
           styleObject,
         );
       }
+      tagShapeRole(cell, shapeId);
 
       graph.setSelectionCell(cell);
       console.log(`✅ Added "${shapeId}" as "${styleKey}" at (${x}, ${y})`);
@@ -936,14 +938,6 @@ export default function CreateScreen() {
 
     if (!graphInstance) {
       console.log('❌ No graphInstance');
-      isSavingRef.current = false;
-      return;
-    }
-
-    const container = graphInstance.container;
-    if (!container) {
-      console.log('❌ No container');
-      notify('Error', 'Could not access diagram canvas.');
       isSavingRef.current = false;
       return;
     }
@@ -2086,6 +2080,8 @@ export default function CreateScreen() {
               <ShapesPanel
                 onSelectShape={handleAddShape}
                 isGraphReady={isGraphReady}
+                activeDiagramType={activeUmlType}
+                onDiagramTypeChange={setActiveUmlType}
               />
             </View>
           )}

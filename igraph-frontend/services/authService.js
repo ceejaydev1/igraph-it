@@ -172,6 +172,9 @@ export const clearTokens = async () => {
   await storage.removeItem('accessToken');
   await storage.removeItem('refreshToken');
   await storage.removeItem('lastRoute');
+  await storage.removeItem(CACHED_USER_KEY);
+  cachedUserData = null;
+  cacheTimestamp = null;
   if (Platform.OS === 'web') {
     localStorage.removeItem('user');
     localStorage.removeItem(AUTH_PERSIST_KEY);
@@ -204,7 +207,18 @@ export const getLastRoute = async () => {
   return await storage.getItem('lastRoute');
 };
 
-// 🚀 FIX: CACHING LAYER
+// CACHING LAYER
+//
+// `cachedUserData` alone is an in-memory module variable, which starts out
+// null on every fresh page load/app launch — so on a cold start it can never
+// actually serve as the fallback callers reach for when a live fetch fails.
+// (That's exactly what was happening: an expired access token right after
+// reload → the "get real data" call fails → falls back to this cache → cache
+// is empty because nothing's had a chance to populate it yet → name shows as
+// the generic "User" placeholder instead of the real name.) Backing it with
+// the same durable `storage` tokens already use means a fallback read after
+// reload can find what the *previous* session cached, not just this one.
+const CACHED_USER_KEY = 'cachedUser';
 
 let cachedUserData = null;
 let cacheTimestamp = null;
@@ -217,12 +231,38 @@ export const getCachedUser = async () => {
       return cachedUserData;
     }
   }
+  try {
+    const stored = await storage.getItem(CACHED_USER_KEY);
+    if (stored) {
+      const parsed = JSON.parse(stored);
+      cachedUserData = parsed;
+      cacheTimestamp = Date.now();
+      return parsed;
+    }
+  } catch (_) {
+    // Corrupt/unparseable cache — ignore and fall through to null.
+  }
   return null;
 };
 
 export const setCachedUser = (data) => {
   cachedUserData = data;
   cacheTimestamp = Date.now();
+  storage.setItem(CACHED_USER_KEY, JSON.stringify(data)).catch(() => {});
+};
+
+// Same idea for the saved-diagrams list: userAccount.tsx and savedDiagrams.tsx
+// both start from an empty array and fetch on mount/focus, so switching to
+// another tab and back (a remount, since neither screen persists this list
+// itself) showed "0 saved diagrams" for a moment before the real count came
+// back in. In-memory only (not worth persisting across app restarts the way
+// the user cache is) — just enough to survive a same-session remount.
+let cachedDiagrams = null;
+
+export const getCachedDiagrams = () => cachedDiagrams;
+
+export const setCachedDiagrams = (diagrams) => {
+  cachedDiagrams = diagrams;
 };
 
 // Decodes the uid claim out of the stored access token without a network
@@ -642,6 +682,9 @@ export const updateProfile = async (data) => {
 export const getUserDiagrams = async () => {
   try {
     const response = await api.get('/diagrams/user');
+    if (response.data?.success && response.data?.data) {
+      setCachedDiagrams(response.data.data);
+    }
     return response.data;
   } catch (error) {
     console.error('Get user diagrams error:', error.response?.data || error.message);

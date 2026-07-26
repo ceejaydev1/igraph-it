@@ -14,7 +14,8 @@ import {
   Animated,
 } from 'react-native';
 import { useRouter } from 'expo-router';
-import { Svg, Path, Circle, Rect } from 'react-native-svg';
+import { Svg, Path, Circle } from 'react-native-svg';
+import { DIAGRAM_ICON_MAP, GenericDiagramGlyph } from '../../constants/diagramTypeIcons';
 
 // Enable LayoutAnimation on Android (safe check)
 if (Platform.OS === 'android') {
@@ -148,10 +149,8 @@ const CardSkeleton = ({ cardWidth }: { cardWidth: number }) => {
 };
 
 const HomeGridSkeleton = () => {
-  const { width } = useWindowDimensions();
-  const isDesktop = width >= 1024;
-  const cardWidth = width < 768 ? width - 32 : width < 1024 ? (width - 44) / 2 : 300;
-  
+  const { cardWidth, numColumns } = useResponsiveLayout();
+
   return (
     <View style={styles.skeletonContainer}>
       <DotGrid />
@@ -163,9 +162,9 @@ const HomeGridSkeleton = () => {
           <Shimmer width={80} height={36} borderRadius={20} />
         </View>
       </View>
-      
+
       <View style={styles.skeletonGrid}>
-        {[...Array(isDesktop ? 12 : 6)].map((_, i) => (
+        {[...Array(numColumns * 3)].map((_, i) => (
           <CardSkeleton key={i} cardWidth={cardWidth} />
         ))}
       </View>
@@ -213,14 +212,6 @@ const PinIcon = ({ color = '#94a3b8' }: { color?: string }) => (
   </Svg>
 );
 
-const PreviewGlyph = ({ color }: { color: string }) => (
-  <Svg width={38} height={38} viewBox="0 0 24 24" fill="none">
-    <Rect x="3" y="3" width="8" height="8" rx="2" stroke={color} strokeWidth={1.6} />
-    <Rect x="13" y="3" width="8" height="8" rx="2" stroke={color} strokeWidth={1.6} />
-    <Rect x="8" y="13" width="8" height="8" rx="2" stroke={color} strokeWidth={1.6} />
-    <Path d="M7 11V13M17 11V13M11 7H13" stroke={color} strokeWidth={1.6} strokeLinecap="round" />
-  </Svg>
-);
 
 const TabButton = React.memo(({ 
   label, 
@@ -264,6 +255,7 @@ const DiagramCard = React.memo(({
   const { width } = useWindowDimensions();
   const isDesktop = width >= 1024;
   const colors = TYPE_COLORS[type];
+  const Glyph = DIAGRAM_ICON_MAP[title] ?? GenericDiagramGlyph;
   const [isHovered, setIsHovered] = useState(false);
   const scaleAnim = useRef(new Animated.Value(1)).current;
   const shadowAnim = useRef(new Animated.Value(0)).current;
@@ -322,7 +314,7 @@ const DiagramCard = React.memo(({
           isDesktop && styles.cardPreviewDesktop,
           { backgroundColor: colors.light }
         ]}>
-          <PreviewGlyph color={colors.primary} />
+          <Glyph color={colors.primary} />
           {isHovered && (
             <View style={[styles.hoverOverlay, { backgroundColor: colors.primary + '0F' }]} />
           )}
@@ -367,21 +359,28 @@ const useFilteredDiagrams = (activeTab: TabType, searchQuery: string) => {
   }, [activeTab, searchQuery]);
 };
 
+const GRID_GAP = 12;
+const MAX_CARD_WIDTH = 320;
+
 const useResponsiveLayout = () => {
   const { width } = useWindowDimensions();
-  
-  return useMemo(() => ({
-    isMobile: width < 768,
-    isTablet: width >= 768 && width < 1024,
-    isDesktop: width >= 1024,
-    cardWidth: width < 768 
-      ? width - 32 
-      : width < 1024 
-        ? (width - 44) / 2 
-        : 300,
-    containerPadding: width < 768 ? 16 : width < 1024 ? 24 : 32,
-    numColumns: width < 768 ? 1 : width < 1024 ? 2 : 3,
-  }), [width]);
+
+  return useMemo(() => {
+    const isMobile = width < 768;
+    const isTablet = width >= 768 && width < 1024;
+    const isDesktop = width >= 1024;
+    const isWide = width >= 1440;
+
+    const containerPadding = isMobile ? 16 : isTablet ? 24 : 32;
+    const numColumns = isMobile ? 1 : isTablet ? 2 : isWide ? 4 : 3;
+
+    const availableWidth = width - containerPadding * 2 - GRID_GAP * (numColumns - 1);
+    const cardWidth = isMobile
+      ? availableWidth
+      : Math.min(MAX_CARD_WIDTH, availableWidth / numColumns);
+
+    return { isMobile, isTablet, isDesktop, isWide, cardWidth, containerPadding, numColumns };
+  }, [width]);
 };
 
 export default function Home() {
@@ -554,9 +553,8 @@ export default function Home() {
         numColumns={layout.numColumns}
         key={layout.numColumns} // Force re-render when columns change
         columnWrapperStyle={layout.numColumns > 1 ? {
-          gap: 12,
+          gap: GRID_GAP,
           justifyContent: 'center',
-          marginBottom: 4,
         } : undefined}
         initialNumToRender={6}
         maxToRenderPerBatch={6}
@@ -777,7 +775,7 @@ const styles = StyleSheet.create({
     paddingBottom: 32,
   },
   gridItem: {
-    marginBottom: 4,
+    marginBottom: GRID_GAP,
     alignSelf: 'center',
   },
   
@@ -836,11 +834,13 @@ const styles = StyleSheet.create({
     color: '#0f172a',
     marginBottom: 6,
     lineHeight: 20,
+    minHeight: 40, // reserves space for 2 lines so badges align across a row regardless of title length
     letterSpacing: -0.2,
   },
   cardTitleDesktop: {
     fontSize: 16,
     lineHeight: 22,
+    minHeight: 44,
   },
   cardMetaRow: {
     flexDirection: 'row',

@@ -13,6 +13,9 @@ import {
   VertexHandlerConfig,
   EdgeHandlerConfig,
   CellState,
+  CellOverlay,
+  ImageBox,
+  CellHighlight,
 } from '@maxgraph/core';
 
 import type {
@@ -23,6 +26,7 @@ import type {
   AlignValue,
   VAlignValue,
   WhiteSpaceValue,
+  Cell,
 } from '@maxgraph/core';
 
 import {
@@ -33,7 +37,9 @@ import {
   isUmlClassCompartmentCell,
 } from './maxgraph-custom-shapes';
 import { UniversalVertexHandler } from './maxgraph-universal-handler';
-import { getShapeDefinitionById } from '@/constants/shapes';
+import { getShapeDefinitionById, getShapesForDiagram, DIAGRAM_SHAPES, ShapeDefinition, isConnectorCell } from '@/constants/shapes';
+import { ShapePreview } from '@/components/shapes/ShapeIcon';
+import { tagShapeRole, getShapeRole, validateDiagram, FlowchartIssue } from '@/utils/flowchartRules';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -45,9 +51,27 @@ const MAJOR_EVERY = 5;
 const BLACK = '#1a1f36';
 const BLUE = '#4c6fff';
 
+// Small badge icons for flowchart-validation cell overlays — inlined as data
+// URIs so no image asset is needed for a first-pass feature.
+const FLOWCHART_ERROR_ICON =
+  "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 16 16'><circle cx='8' cy='8' r='8' fill='%23ef4444'/><rect x='7' y='3' width='2' height='6' rx='1' fill='white'/><rect x='7' y='11' width='2' height='2' rx='1' fill='white'/></svg>";
+const FLOWCHART_WARNING_ICON =
+  "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 16 16'><path d='M8 1L15 14H1Z' fill='%23f59e0b'/><rect x='7' y='6' width='2' height='4' rx='1' fill='white'/><rect x='7' y='11' width='2' height='2' rx='1' fill='white'/></svg>";
+// Same red/yellow used above for the outline CellHighlight draws around a
+// flagged shape — one visual language for "this cell has an issue."
+const FLOWCHART_ERROR_COLOR = '#ef4444';
+const FLOWCHART_WARNING_COLOR = '#f59e0b';
+
 const DROP_W = 120;
 const DROP_H = 60;
 const NEW_SHAPE_SPACING = 160;
+
+// isConnectorCell (constants/shapes.ts) is shared with
+// maxgraph-universal-handler.ts, which uses it to give these shapes 3
+// endpoint/move handles instead of the usual 8 box-resize handles. It reads
+// the cell's own persisted style rather than the shapeId tag stamped on at
+// creation time (see tagShapeRole below), so it still works after a reload —
+// the tag lives in an in-memory WeakMap that a fresh page load never refills.
 
 // Drop size comes from the shape's own definition (constants/shapes.ts) so
 // its real proportions survive onto the canvas — an oval stays an oval, an
@@ -719,11 +743,36 @@ const WebCanvas = forwardRef<DiagramCanvasHandle, DiagramCanvasProps>(({ onReady
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [selectedCell, setSelectedCell] = useState<any>(null);
+  const [flowchartIssues, setFlowchartIssues] = useState<FlowchartIssue[]>([]);
+  // Defaults open (not collapsed behind a click) so the actual "what's wrong"
+  // messages are visible the moment an issue appears, not just a bare count.
+  const [showIssuesList, setShowIssuesList] = useState(true);
+  // One CellHighlight shape per flagged cell — a colored outline around the
+  // shape itself (red for error, yellow for warning), separate from the
+  // small corner-badge overlay. Rebuilt on every validation pass; torn down
+  // on unmount in initGraph's cleanup below.
+  const issueHighlightsRef = useRef<CellHighlight[]>([]);
+
+  // Draw.io-style picker: clicking a directional arrow opens a grid of shapes
+  // instead of immediately cloning the source shape, so the user chooses what
+  // connects next. x/y are in the same coordinate space as graphDivRef (the
+  // arrow buttons' own container), so the popup can share their positioning.
+  const [shapePicker, setShapePicker] = useState<{
+    x: number;
+    y: number;
+    sourceCell: any;
+    dir: { dx: number; dy: number };
+    rotation: number;
+    geo: { x: number; y: number; width: number; height: number };
+    scale: number;
+  } | null>(null);
+
 
   const onReadyRef = useRef(onReady);
   const onChangeRef = useRef(onChange);
   const onSelectionChangeRef = useRef(onSelectionChange);
   const onZoomChangeRef = useRef(onZoomChange);
+  const validationTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => { onReadyRef.current = onReady; }, [onReady]);
   useEffect(() => { onChangeRef.current = onChange; }, [onChange]);
@@ -791,6 +840,24 @@ const WebCanvas = forwardRef<DiagramCanvasHandle, DiagramCanvasProps>(({ onReady
       console.error('Selection change error:', error);
     }
   }, []);
+
+  // Dismissing the shape picker without picking anything should behave like
+  // clicking empty canvas — the source shape's selection outline/handles go
+  // away too, instead of staying selected with nothing left to act on them.
+  const dismissShapePicker = useCallback(() => {
+    setShapePicker(null);
+    graphRef.current?.clearSelection();
+    handleSelectionChange();
+  }, [handleSelectionChange]);
+
+  useEffect(() => {
+    if (!shapePicker) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') dismissShapePicker();
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [shapePicker, dismissShapePicker]);
 
   const registerShapeStyles = useCallback((graph: Graph) => {
     const stylesheet = graph.getStylesheet();
@@ -1345,6 +1412,85 @@ const WebCanvas = forwardRef<DiagramCanvasHandle, DiagramCanvasProps>(({ onReady
   }, []);
 
   // ════════════════════════════════════════════════════════════════════════════
+  // ⭐ DIAGRAM VALIDATION (every diagram type, desktop only — see
+  // utils/flowchartRules.ts for the full per-type rule set)
+  // ════════════════════════════════════════════════════════════════════════════
+
+  const clearIssueHighlights = useCallback(() => {
+    issueHighlightsRef.current.forEach((h) => h.destroy());
+    issueHighlightsRef.current = [];
+  }, []);
+
+  const runFlowchartValidation = useCallback(() => {
+    const graph = graphRef.current;
+    if (!graph) return;
+
+    if (isMobile) {
+      graph.clearCellOverlays(null);
+      clearIssueHighlights();
+      setFlowchartIssues((prev) => (prev.length ? [] : prev));
+      return;
+    }
+
+    const issues = validateDiagram(graph, umlType);
+
+    graph.clearCellOverlays(null);
+    issues.forEach((issue) => {
+      // Graph-wide issues (e.g. "no start terminator") aren't any one cell's
+      // fault — they only ever appear in the summary list, not as a badge.
+      if (!issue.cell) return;
+      const icon = new ImageBox(
+        issue.severity === 'error' ? FLOWCHART_ERROR_ICON : FLOWCHART_WARNING_ICON,
+        16,
+        16,
+      );
+      graph.addCellOverlay(issue.cell, new CellOverlay(icon, issue.message, 'right', 'top'));
+    });
+
+    // Colored outline per flagged cell — red wins over yellow when a shape
+    // has both an error and a warning, since the harder rule is the more
+    // important one to fix first. Skipped for real edges and for
+    // connector/line shapes dropped from the Shapes panel (Connector, Flow
+    // Line, Control, Mechanism, Interface) — an outline drawn along a thin
+    // line looks like a rendering glitch rather than a flagged shape; the
+    // corner-badge overlay above still covers those.
+    clearIssueHighlights();
+    const worstSeverityByCell = new Map<Cell, FlowchartIssue['severity']>();
+    issues.forEach((issue) => {
+      if (!issue.cell) return;
+      if (issue.cell.isEdge() || isConnectorCell(issue.cell)) return;
+      const existing = worstSeverityByCell.get(issue.cell);
+      if (existing !== 'error') worstSeverityByCell.set(issue.cell, issue.severity);
+    });
+    worstSeverityByCell.forEach((severity, cell) => {
+      const state = graph.getView().getState(cell);
+      if (!state) return;
+      const highlight = new CellHighlight(
+        graph,
+        severity === 'error' ? FLOWCHART_ERROR_COLOR : FLOWCHART_WARNING_COLOR,
+        3,
+      );
+      highlight.highlight(state);
+      issueHighlightsRef.current.push(highlight);
+    });
+
+    setFlowchartIssues(issues);
+  }, [umlType, isMobile, clearIssueHighlights]);
+
+  // Called from the model CHANGE listener inside initGraph, which is set up once
+  // and shouldn't be torn down/rebuilt just because umlType changed — so it reads
+  // the latest validator through a ref rather than being an initGraph dependency.
+  const runFlowchartValidationRef = useRef(runFlowchartValidation);
+  useEffect(() => { runFlowchartValidationRef.current = runFlowchartValidation; }, [runFlowchartValidation]);
+
+  // Re-run immediately (not just on the next model change) when the active
+  // diagram type or desktop/mobile switches — e.g. leaving the Flowchart tab
+  // should clear its overlays/banner right away, not wait for the next edit.
+  useEffect(() => {
+    runFlowchartValidation();
+  }, [runFlowchartValidation]);
+
+  // ════════════════════════════════════════════════════════════════════════════
   // ⭐ FIXED: Handle drop with proper shape styles
   // ════════════════════════════════════════════════════════════════════════════
 
@@ -1396,6 +1542,7 @@ const WebCanvas = forwardRef<DiagramCanvasHandle, DiagramCanvasProps>(({ onReady
           fullStyle,
         );
       }
+      tagShapeRole(cell, shapeId);
 
       graph.clearSelection();
       setTimeout(() => {
@@ -1407,6 +1554,92 @@ const WebCanvas = forwardRef<DiagramCanvasHandle, DiagramCanvasProps>(({ onReady
     } catch (err) {
       console.error('Drop error:', err);
     }
+  }, [handleSelectionChange]);
+
+  // ════════════════════════════════════════════════════════════════════════════
+  // ⭐ Create a new shape adjacent to `sourceCell`, connected by an edge.
+  // With no shapeId, clones the source's own style/size (used when there's
+  // nothing to pick from). With a shapeId, uses that shape's own default
+  // style/size instead — so choosing "Decision" from the picker gets a real
+  // diamond, not the source shape's box stretched into one.
+  // ════════════════════════════════════════════════════════════════════════════
+
+  const createShapeInDirection = useCallback((
+    sourceCell: any,
+    dir: { dx: number; dy: number },
+    rotation: number,
+    geo: { x: number; y: number; width: number; height: number },
+    scale: number,
+    shapeId?: string,
+  ) => {
+    const graph = graphRef.current;
+    if (!graph) return;
+
+    const { w: newW, h: newH } = shapeId ? getDropSize(shapeId) : { w: geo.width, h: geo.height };
+
+    const sourceCenterX = geo.x + geo.width / 2;
+    const sourceCenterY = geo.y + geo.height / 2;
+    const halfSourceExtent = dir.dx !== 0 ? geo.width / 2 : geo.height / 2;
+    const halfNewExtent = dir.dx !== 0 ? newW / 2 : newH / 2;
+    const gap = NEW_SHAPE_SPACING / scale;
+    const distance = halfSourceExtent + gap + halfNewExtent;
+
+    const rotatedOffset = rotateVector(dir.dx * distance, dir.dy * distance, rotation);
+    const roundedX = Math.round((sourceCenterX + rotatedOffset.x - newW / 2) / GRID_SIZE) * GRID_SIZE;
+    const roundedY = Math.round((sourceCenterY + rotatedOffset.y - newH / 2) / GRID_SIZE) * GRID_SIZE;
+
+    let newCell: any;
+    if (shapeId === 'class-box' || (!shapeId && isUmlClassContainerCell(sourceCell))) {
+      newCell = insertUmlClassCell(graph, roundedX, roundedY, newW, newH);
+    } else {
+      let shapeStyle: CellStateStyle;
+      if (shapeId) {
+        const styleKey = IGRAPH_ID_STYLE_MAP[shapeId] ?? 'igraph.rectangle';
+        shapeStyle = {
+          ...getShapeStyle(styleKey),
+          fontColor: BLACK,
+          fontSize: 12,
+          align: 'center' as AlignValue,
+          verticalAlign: 'middle' as VAlignValue,
+          whiteSpace: 'wrap' as WhiteSpaceValue,
+        };
+      } else {
+        // Legacy "clone" path — keep the source cell's own style (its chosen
+        // colors included), just applied to a freshly created cell.
+        const sourceStyle = sourceCell.getStyle();
+        const styleObj = typeof sourceStyle === 'string' ? {} : (sourceStyle ?? {});
+        const newShapeKey = styleObj.shape || 'igraph.rectangle';
+        const newShapePerimeter = IGRAPH_PERIMETERS[newShapeKey];
+        shapeStyle = {
+          shape: newShapeKey,
+          fillColor: styleObj.fillColor || '#ffffff',
+          strokeColor: styleObj.strokeColor || BLACK,
+          strokeWidth: styleObj.strokeWidth || 2,
+          fontColor: styleObj.fontColor || BLACK,
+          fontSize: styleObj.fontSize || 12,
+          align: (styleObj.align as AlignValue) || 'center',
+          verticalAlign: (styleObj.verticalAlign as VAlignValue) || 'middle',
+          whiteSpace: (styleObj.whiteSpace as WhiteSpaceValue) || 'wrap',
+          ...(newShapePerimeter ? { perimeter: newShapePerimeter } : {}),
+        };
+      }
+
+      newCell = graph.insertVertex(null, null, '', roundedX, roundedY, newW, newH, shapeStyle);
+    }
+    tagShapeRole(newCell, shapeId ?? getShapeRole(sourceCell));
+
+    const edgeStyle = {
+      strokeColor: BLACK,
+      strokeWidth: 2,
+      edgeStyle: 'orthogonalEdgeStyle',
+    };
+    graph.insertEdge(null, null, '', sourceCell, newCell, edgeStyle);
+
+    graph.clearSelection();
+    setTimeout(() => {
+      graph.setSelectionCell(newCell);
+      handleSelectionChange();
+    }, 10);
   }, [handleSelectionChange]);
 
   // ════════════════════════════════════════════════════════════════════════════
@@ -1450,6 +1683,13 @@ const WebCanvas = forwardRef<DiagramCanvasHandle, DiagramCanvasProps>(({ onReady
       const geo = cell.getGeometry();
       if (!geo) return;
 
+      // Connector/line shapes get their own endpoint + midpoint drag handles
+      // (see UniversalVertexHandler) instead of these "add adjacent shape"
+      // arrows — for a thin line, up/down/left/right branching doesn't read
+      // the same way it does for a box, and the two UIs would otherwise
+      // visually collide right on top of each other.
+      const isConnector = isConnectorCell(cell);
+
       const view = graph.getView();
       const scale = view.getScale();
 
@@ -1478,117 +1718,64 @@ const WebCanvas = forwardRef<DiagramCanvasHandle, DiagramCanvasProps>(({ onReady
         { dx: 1, dy: 0, label: 'right' },
       ];
 
-      directions.forEach((dir) => {
-        const div = document.createElement('div');
-        const offset = rotateVector(dir.dx * (w / 2 + spacing), dir.dy * (h / 2 + spacing), rotation);
-        const x = cx + offset.x;
-        const y = cy + offset.y;
+      if (!isConnector) {
+        directions.forEach((dir) => {
+          const div = document.createElement('div');
+          const offset = rotateVector(dir.dx * (w / 2 + spacing), dir.dy * (h / 2 + spacing), rotation);
+          const x = cx + offset.x;
+          const y = cy + offset.y;
 
-        div.style.position = 'absolute';
-        div.style.left = (x - arrowSize / 2) + 'px';
-        div.style.top = (y - arrowSize / 2) + 'px';
-        div.style.width = arrowSize + 'px';
-        div.style.height = arrowSize + 'px';
-        div.style.cursor = 'pointer';
-        div.style.pointerEvents = 'all';
-        div.style.zIndex = '10';
-        div.style.display = 'flex';
-        div.style.alignItems = 'center';
-        div.style.justifyContent = 'center';
-        div.style.color = restColor;
-        div.style.transition = 'color 0.15s ease, transform 0.15s ease';
-        div.style.userSelect = 'none';
-
-        div.innerHTML = createArrowSVG(dir.label, arrowSize, rotation);
-
-        div.addEventListener('mouseenter', () => {
-          div.style.color = hoverColor;
-          div.style.transform = 'scale(1.25)';
-        });
-        div.addEventListener('mouseleave', () => {
+          div.style.position = 'absolute';
+          div.style.left = (x - arrowSize / 2) + 'px';
+          div.style.top = (y - arrowSize / 2) + 'px';
+          div.style.width = arrowSize + 'px';
+          div.style.height = arrowSize + 'px';
+          div.style.cursor = 'pointer';
+          div.style.pointerEvents = 'all';
+          div.style.zIndex = '10';
+          div.style.display = 'flex';
+          div.style.alignItems = 'center';
+          div.style.justifyContent = 'center';
           div.style.color = restColor;
-          div.style.transform = 'scale(1)';
-        });
+          div.style.transition = 'color 0.15s ease, transform 0.15s ease';
+          div.style.userSelect = 'none';
 
-        div.addEventListener('click', (e) => {
-          e.stopPropagation();
-          e.preventDefault();
+          div.innerHTML = createArrowSVG(dir.label, arrowSize, rotation);
 
-          const style = cell.getStyle();
-          const styleObj = typeof style === 'string' ? {} : style;
-          
-          // Rotate the direction to match where the arrow is actually drawn
-          // (rotated with the shape), not the shape's unrotated local axes.
-          const rotatedDir = rotateVector(dir.dx, dir.dy, rotation);
-          const newX = geo.x + rotatedDir.x * (geo.width / 2 + NEW_SHAPE_SPACING / scale);
-          const newY = geo.y + rotatedDir.y * (geo.height / 2 + NEW_SHAPE_SPACING / scale);
+          div.addEventListener('mouseenter', () => {
+            div.style.color = hoverColor;
+            div.style.transform = 'scale(1.25)';
+          });
+          div.addEventListener('mouseleave', () => {
+            div.style.color = restColor;
+            div.style.transform = 'scale(1)';
+          });
 
-          const roundedX = Math.round(newX / GRID_SIZE) * GRID_SIZE;
-          const roundedY = Math.round(newY / GRID_SIZE) * GRID_SIZE;
+          div.addEventListener('click', (e) => {
+            e.stopPropagation();
+            e.preventDefault();
 
-          // Use the same style as the original cell. A class container needs
-          // its own container+compartments tree (a plain vertex here would
-          // only clone the outer box, losing the 3 editable sections), so it
-          // gets the same special-cased helper used when first dropping one.
-          let newCell: any;
-          if (isUmlClassContainerCell(cell)) {
-            newCell = insertUmlClassCell(graph, roundedX, roundedY, geo.width, geo.height);
-          } else {
-            const newShapeKey = styleObj.shape || 'igraph.rectangle';
-            const newShapePerimeter = IGRAPH_PERIMETERS[newShapeKey];
-            const shapeStyle: CellStateStyle = {
-              shape: newShapeKey,
-              fillColor: styleObj.fillColor || '#ffffff',
-              strokeColor: styleObj.strokeColor || BLACK,
-              strokeWidth: styleObj.strokeWidth || 2,
-              fontColor: styleObj.fontColor || BLACK,
-              fontSize: styleObj.fontSize || 12,
-              align: (styleObj.align as AlignValue) || 'center',
-              verticalAlign: (styleObj.verticalAlign as VAlignValue) || 'middle',
-              whiteSpace: (styleObj.whiteSpace as WhiteSpaceValue) || 'wrap',
-              ...(newShapePerimeter ? { perimeter: newShapePerimeter } : {}),
-            };
-
-            newCell = graph.insertVertex(
-              null,
-              null,
-              '',
-              roundedX,
-              roundedY,
-              geo.width,
-              geo.height,
-              shapeStyle,
-            );
-          }
-
-          const edgeStyle = {
-            strokeColor: BLACK,
-            strokeWidth: 2,
-            edgeStyle: 'orthogonalEdgeStyle',
-          };
-
-          graph.insertEdge(
-            null,
-            null,
-            '',
-            cell,
-            newCell,
-            edgeStyle,
-          );
-
-          graph.clearSelection();
-          setTimeout(() => {
-            graph.setSelectionCell(newCell);
-            handleSelectionChange();
+            // Draw.io-style: don't create anything yet — open a picker of
+            // shapes the user can choose to connect next. x/y anchor the
+            // popup at the same spot as the arrow itself. setShapePicker has a
+            // stable identity (a useState setter), so it's safe to reach for
+            // here without adding it to setupClickArrows's own dependencies.
+            setShapePicker({
+              x,
+              y,
+              sourceCell: cell,
+              dir: { dx: dir.dx, dy: dir.dy },
+              rotation,
+              geo: { x: geo.x, y: geo.y, width: geo.width, height: geo.height },
+              scale,
+            });
             removeArrowButtons();
-          }, 10);
+          });
 
-          console.log(`✅ Created new shape ${dir.label} of selected cell`);
+          container.appendChild(div);
+          arrowDivs.push(div);
         });
-
-        container.appendChild(div);
-        arrowDivs.push(div);
-      });
+      }
 
       // Mobile-only: a floating delete button pinned diagonally past the
       // shape's top-left corner. Desktop has the physical Delete/Backspace
@@ -1794,6 +1981,11 @@ const WebCanvas = forwardRef<DiagramCanvasHandle, DiagramCanvasProps>(({ onReady
 
       const geo = cell.getGeometry();
       if (!geo) return;
+
+      // Connector/line shapes don't get "add adjacent shape" arrows at all
+      // (see the matching check in createArrowButtons) — no hover preview
+      // for a UI that isn't there once selected.
+      if (isConnectorCell(cell)) return;
 
       const view = graph.getView();
 
@@ -2030,6 +2222,8 @@ const WebCanvas = forwardRef<DiagramCanvasHandle, DiagramCanvasProps>(({ onReady
           fill: rgba(76, 111, 255, 0.08) !important;
         }
         .mxRubberband {
+          position: absolute !important;
+          overflow: hidden !important;
           border-color: ${BLUE} !important;
           background: rgba(76, 111, 255, 0.1) !important;
         }
@@ -2129,11 +2323,22 @@ const WebCanvas = forwardRef<DiagramCanvasHandle, DiagramCanvasProps>(({ onReady
         handleSelectionChange();
       });
 
+      // maxGraph's KeyHandler only reacts to a keystroke when the currently
+      // focused DOM element is inside graph.container (or the graph is
+      // editing a label) — see isGraphEvent in KeyHandler. Selecting a shape
+      // doesn't move browser focus on its own, so if focus was last on the
+      // toolbar, a text input, the color picker, etc., clicking a shape
+      // would select it but Backspace/Delete would silently do nothing
+      // until something explicitly refocused the canvas. Reclaiming focus
+      // on every click keeps Delete/Backspace/arrow-nudge working right
+      // after you click a shape, regardless of what had focus before.
       graph.addListener('click', () => {
+        graphDiv.focus();
         setTimeout(handleSelectionChange, 10);
       });
 
       graph.addListener('cellClick', () => {
+        graphDiv.focus();
         setTimeout(handleSelectionChange, 10);
       });
 
@@ -2147,6 +2352,21 @@ const WebCanvas = forwardRef<DiagramCanvasHandle, DiagramCanvasProps>(({ onReady
         // default there instead of gated behind a key that doesn't exist.
         panningHandler.useLeftButtonForPanning = isMobile;
         panningHandler.ignoreCell = false;
+        // maxGraph has two built-in two-finger behaviors that were fighting
+        // our own RAF-driven pinch-to-zoom below over the same view scale/
+        // translate on every pinch, producing the jumpy/jittery zoom:
+        //  1. isForcePanningEvent force-starts a pan on ANY multi-touch
+        //     mousedown (see PanningHandler.forcePanningHandler) regardless
+        //     of ignoreCell — a "two-finger drag pans" shortcut we never
+        //     asked for.
+        //  2. pinchEnabled (default true) drives PanningHandler's own zoom
+        //     off Safari's native gesturestart/gesturechange events, which
+        //     fire in parallel with the touchmove events our pinch handler
+        //     already reads.
+        // Our pinch handler is the single source of truth for a two-finger
+        // touch, so both of maxGraph's are switched off here.
+        panningHandler.isForcePanningEvent = () => false;
+        panningHandler.setPinchEnabled(false);
       }
 
       new RubberBandHandler(graph);
@@ -2291,6 +2511,11 @@ const WebCanvas = forwardRef<DiagramCanvasHandle, DiagramCanvasProps>(({ onReady
           const xml = new ModelXmlSerializer(graph.getDataModel()).export();
           onChangeRef.current?.(xml);
         } catch (_) { }
+
+        // Debounced so a drag/resize (many CHANGE events in a row) doesn't
+        // re-run validation and rebuild every overlay on each intermediate frame.
+        if (validationTimerRef.current) clearTimeout(validationTimerRef.current);
+        validationTimerRef.current = setTimeout(() => runFlowchartValidationRef.current?.(), 150);
       });
 
       const dropTarget = wrapper;
@@ -2330,6 +2555,7 @@ const WebCanvas = forwardRef<DiagramCanvasHandle, DiagramCanvasProps>(({ onReady
         repaintGrid();
         graphDiv.focus();
         setTimeout(handleSelectionChange, 100);
+        runFlowchartValidationRef.current?.();
       }, 150));
 
       repaintGrid();
@@ -2341,6 +2567,7 @@ const WebCanvas = forwardRef<DiagramCanvasHandle, DiagramCanvasProps>(({ onReady
       return () => {
         destroyed = true;
         timers.forEach(clearTimeout);
+        if (validationTimerRef.current) clearTimeout(validationTimerRef.current);
         ro.disconnect();
         dropTarget.removeEventListener('dragover', onDragOver);
         dropTarget.removeEventListener('dragleave', onDragLeave);
@@ -2349,8 +2576,11 @@ const WebCanvas = forwardRef<DiagramCanvasHandle, DiagramCanvasProps>(({ onReady
         keyHandler.onDestroy();
         if (cleanupClickArrows) cleanupClickArrows();
         if (pinchRafId !== null) cancelAnimationFrame(pinchRafId);
+        issueHighlightsRef.current.forEach((h) => h.destroy());
+        issueHighlightsRef.current = [];
         graph.destroy();
         graphRef.current = null;
+        setFlowchartIssues([]);
       };
     } catch (err: any) {
       console.error('❌ maxGraph init error:', err);
@@ -2457,6 +2687,157 @@ const WebCanvas = forwardRef<DiagramCanvasHandle, DiagramCanvasProps>(({ onReady
           `}</style>
         </div>
       )}
+
+      {!isMobile && !error && !loading && flowchartIssues.length > 0 && (() => {
+        const errorCount = flowchartIssues.filter((i) => i.severity === 'error').length;
+        const warningCount = flowchartIssues.length - errorCount;
+        return (
+          // Top-center, not a corner — the right edge is where the Properties
+          // panel docks (and the left edge is where the Shapes panel opens), so
+          // either corner gets covered by them. Center stays clear of both.
+          <div style={{
+            position: 'absolute',
+            top: 12,
+            left: '50%',
+            transform: 'translateX(-50%)',
+            zIndex: 5,
+            fontFamily: 'system-ui, sans-serif',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+          }}>
+            <div
+              onClick={() => setShowIssuesList((prev) => !prev)}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 8,
+                backgroundColor: '#ffffff',
+                border: '1px solid #e2e8f0',
+                borderRadius: 20,
+                padding: '6px 12px',
+                boxShadow: '0 2px 8px rgba(15, 23, 42, 0.08)',
+                cursor: 'pointer',
+                userSelect: 'none',
+              }}
+            >
+              {errorCount > 0 && (
+                <span style={{ fontSize: 12, fontWeight: 700, color: '#ef4444' }}>❌ {errorCount}</span>
+              )}
+              {warningCount > 0 && (
+                <span style={{ fontSize: 12, fontWeight: 700, color: '#f59e0b' }}>⚠️ {warningCount}</span>
+              )}
+              <span style={{ fontSize: 11, color: '#94a3b8' }}>{showIssuesList ? '▲' : '▼'}</span>
+            </div>
+
+            {showIssuesList && (
+              <div style={{
+                marginTop: 6,
+                maxWidth: 320,
+                maxHeight: 260,
+                overflowY: 'auto',
+                backgroundColor: '#ffffff',
+                border: '1px solid #e2e8f0',
+                borderRadius: 10,
+                boxShadow: '0 4px 16px rgba(15, 23, 42, 0.1)',
+                padding: 8,
+              }}>
+                {flowchartIssues.map((issue, i) => (
+                  <div
+                    key={i}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'flex-start',
+                      gap: 8,
+                      padding: '6px 8px',
+                      borderRadius: 6,
+                      cursor: issue.cell ? 'pointer' : 'default',
+                    }}
+                    onClick={() => {
+                      if (!issue.cell) return;
+                      graphRef.current?.setSelectionCell(issue.cell);
+                      graphRef.current?.scrollCellToVisible(issue.cell);
+                    }}
+                  >
+                    <span style={{ fontSize: 13, marginTop: 1 }}>{issue.severity === 'error' ? '❌' : '⚠️'}</span>
+                    <span style={{ fontSize: 12, color: '#334155', lineHeight: 1.4 }}>{issue.message}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        );
+      })()}
+
+      {shapePicker && (() => {
+        const pickerShapes = getShapesForDiagram(umlType).length
+          ? getShapesForDiagram(umlType)
+          : DIAGRAM_SHAPES['Standard'];
+        // 34px is the smallest these shape components render crisply at —
+        // ShapesPanel's own icons are 40-48px; going much below ~34 (as a
+        // first pass here did, at 22px) makes thin curved strokes (ellipse,
+        // diamond) look aliased/blurry rather than compact.
+        const cellSize = 34;
+        const popupWidth = cellSize * 4 + 8 * 2 + 2 * 3; // 4 cols + padding + gaps
+        return (
+          <>
+            {/* Backdrop — closes the picker on an outside click without
+                creating anything, same as dismissing draw.io's grid. */}
+            <div
+              onClick={dismissShapePicker}
+              style={{ position: 'absolute', inset: 0, zIndex: 8 }}
+            />
+            <div
+              style={{
+                position: 'absolute',
+                left: Math.max(8, shapePicker.x - popupWidth / 2),
+                top: shapePicker.y + 12,
+                width: popupWidth,
+                zIndex: 9,
+                backgroundColor: '#ffffff',
+                border: '1px solid #e2e8f0',
+                borderRadius: 8,
+                boxShadow: '0 8px 24px rgba(15, 23, 42, 0.16)',
+                padding: 8,
+                display: 'grid',
+                gridTemplateColumns: 'repeat(4, 1fr)',
+                gap: 2,
+              }}
+            >
+              {pickerShapes.map((shape: ShapeDefinition) => (
+                <div
+                  key={shape.id}
+                  title={shape.label}
+                  onClick={() => {
+                    createShapeInDirection(
+                      shapePicker.sourceCell,
+                      shapePicker.dir,
+                      shapePicker.rotation,
+                      shapePicker.geo,
+                      shapePicker.scale,
+                      shape.id,
+                    );
+                    setShapePicker(null);
+                  }}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    width: cellSize,
+                    height: cellSize,
+                    borderRadius: 5,
+                    cursor: 'pointer',
+                  }}
+                  onMouseEnter={(e) => { (e.currentTarget as HTMLDivElement).style.backgroundColor = '#eef2ff'; }}
+                  onMouseLeave={(e) => { (e.currentTarget as HTMLDivElement).style.backgroundColor = 'transparent'; }}
+                >
+                  <ShapePreview name={shape.svgComponent} showLabel={false} width={26} height={17} strokeWidth={1.3} />
+                </div>
+              ))}
+            </div>
+          </>
+        );
+      })()}
     </div>
   );
 });

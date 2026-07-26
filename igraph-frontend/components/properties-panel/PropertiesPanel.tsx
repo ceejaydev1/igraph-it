@@ -30,6 +30,14 @@ const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 // growing the sheet to fit everything at once).
 const MOBILE_SHEET_HEIGHT = Math.min(300, SCREEN_HEIGHT * 0.38);
 
+// Dragging this ScrollView past its own top/bottom would otherwise "chain"
+// the leftover gesture to the page behind it — the classic mobile-web bug
+// where scrolling a nested panel to its limit and continuing to drag bounces
+// the whole screen instead of just stopping. overscroll-behavior isn't a
+// React Native style prop, but react-native-web passes unrecognized CSS
+// properties straight through, so this is safe web-only.
+const WEB_SCROLL_CONTAIN = Platform.OS === 'web' ? { overscrollBehavior: 'contain' as const } : undefined;
+
 interface PropertiesPanelProps {
   graph: any; // maxGraph Graph instance
   visible?: boolean; // optional external override (e.g. force-hide on mobile)
@@ -289,7 +297,7 @@ export default function PropertiesPanel({ graph, visible = true, forceOpen = fal
 
         <ScrollView
           ref={scrollRef}
-          style={styles.tabContent}
+          style={[styles.tabContent, WEB_SCROLL_CONTAIN]}
           contentContainerStyle={styles.tabContentInner}
           showsVerticalScrollIndicator={Platform.OS === 'web'}
           keyboardShouldPersistTaps="handled"
@@ -358,7 +366,7 @@ export default function PropertiesPanel({ graph, visible = true, forceOpen = fal
           when everything is expanded and the content is taller than the panel. */}
       <ScrollView
         ref={scrollRef}
-        style={styles.tabContent}
+        style={[styles.tabContent, WEB_SCROLL_CONTAIN]}
         contentContainerStyle={styles.tabContentInner}
         showsVerticalScrollIndicator={Platform.OS === 'web'}
         keyboardShouldPersistTaps="handled"

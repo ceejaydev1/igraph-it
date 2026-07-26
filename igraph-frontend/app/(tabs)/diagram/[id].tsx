@@ -15,6 +15,7 @@ import {
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Svg, Path, Circle } from 'react-native-svg';
 import { WebView } from 'react-native-webview';
+import { DIAGRAM_ICON_MAP, GenericDiagramGlyph } from '../../../constants/diagramTypeIcons';
 
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -189,24 +190,23 @@ const CheckIcon: React.FC<IconProps> = ({ color }) => (
 interface DiagramPlaceholderProps {
   color: string;
   label: string;
+  title: string;
 }
 
-const DiagramPlaceholder: React.FC<DiagramPlaceholderProps> = ({ color, label }) => (
-  <View style={placeholderStyles.container}>
-    <View style={[placeholderStyles.imageBox, { backgroundColor: `${color}15`, borderColor: `${color}30` }]}>
-      <Svg width={32} height={32} viewBox="0 0 24 24" fill="none">
-        <Path
-          d="M4 16L8.586 11.414C9.367 10.633 10.633 10.633 11.414 11.414L16 16M14 14L15.586 12.414C16.367 11.633 17.633 11.633 18.414 12.414L20 14M14 8H14.01M6 20H18C19.1046 20 20 19.1046 20 18V6C20 4.89543 19.1046 4 18 4H6C4.89543 4 4 4.89543 4 6V18C4 19.1046 4.89543 20 6 20Z"
-          stroke={color}
-          strokeWidth={1.5}
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        />
-      </Svg>
-      <Text style={[placeholderStyles.text, { color }]} numberOfLines={2}>{label}</Text>
+// Dashed border + tint keep this reading as "placeholder, not final artwork" — but the
+// glyph inside is the same per-type icon used on the Home grid, so it's a placeholder
+// specific to this diagram rather than the generic "image failed to load" convention.
+const DiagramPlaceholder: React.FC<DiagramPlaceholderProps> = ({ color, label, title }) => {
+  const Icon = DIAGRAM_ICON_MAP[title] ?? GenericDiagramGlyph;
+  return (
+    <View style={placeholderStyles.container}>
+      <View style={[placeholderStyles.imageBox, { backgroundColor: `${color}15`, borderColor: `${color}30` }]}>
+        <Icon color={color} />
+        <Text style={[placeholderStyles.text, { color }]} numberOfLines={2}>{label}</Text>
+      </View>
     </View>
-  </View>
-);
+  );
+};
 
 const placeholderStyles = StyleSheet.create({
   container: {
@@ -307,6 +307,27 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videoId, color }) => {
   );
 };
 
+// Placeholder video ID shared by every entry in DIAGRAM_CONTENT until real tutorial
+// videos are recorded — routes here instead of embedding a real (if unrelated) video.
+const VideoOffIcon: React.FC<IconProps> = ({ color }) => (
+  <Svg width={28} height={28} viewBox="0 0 24 24" fill="none">
+    <Path
+      d="M15 10l5-3v10l-5-3M4 6h9a2 2 0 012 2v8a2 2 0 01-2 2H4a2 2 0 01-2-2V8a2 2 0 012-2z"
+      stroke={color}
+      strokeWidth={1.5}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+  </Svg>
+);
+
+const VideoComingSoon: React.FC<{ color: string }> = ({ color }) => (
+  <View style={[videoStyles.container, videoStyles.comingSoon, { backgroundColor: `${color}15`, borderColor: `${color}30` }]}>
+    <VideoOffIcon color={color} />
+    <Text style={[videoStyles.thumbnailText, { color }]}>Tutorial video coming soon</Text>
+  </View>
+);
+
 const videoStyles = StyleSheet.create({
   container: {
     width: '100%',
@@ -314,6 +335,13 @@ const videoStyles = StyleSheet.create({
     borderRadius: 12,
     overflow: 'hidden',
     backgroundColor: '#1a1f36',
+  },
+  comingSoon: {
+    borderWidth: 1.5,
+    borderStyle: 'dashed',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 10,
   },
   thumbnail: {
     flex: 1,
@@ -557,13 +585,14 @@ const keyPointsStyles = StyleSheet.create({
   },
 });
 
-// ─── SDLC Feedback Form Component ────────────────────────────────────────────
+// ─── Learning Feedback Form Component (both UML and SDLC diagrams) ──────────
 
 interface FeedbackFormProps {
   color: string;
+  diagramType: 'UML' | 'SDLC';
 }
 
-const SDLCFeedbackForm: React.FC<FeedbackFormProps> = ({ color }) => {
+const LearningFeedbackForm: React.FC<FeedbackFormProps> = ({ color, diagramType }) => {
   const [feedback, setFeedback] = useState('');
 
   const handleSubmit = () => {
@@ -584,10 +613,12 @@ const SDLCFeedbackForm: React.FC<FeedbackFormProps> = ({ color }) => {
     setFeedback('');
   };
 
+  const question = diagramType === 'SDLC' ? 'What did you learn in this SDLC?' : 'What did you learn in this diagram?';
+
   return (
     <View style={feedbackStyles.container}>
       <Text style={[feedbackStyles.title, { color }]}>
-        What did you learn in this SDLC?
+        {question}
       </Text>
       <TextInput
         style={[feedbackStyles.input, { borderColor: '#e2e8f0' }]}
@@ -665,6 +696,7 @@ const DiagramDetail: React.FC = () => {
   const diagramId = parseInt(id ?? '1', 10);
   const content = DIAGRAM_CONTENT[diagramId];
   const colors = content ? TYPE_CONFIG[content.type] : TYPE_CONFIG.UML;
+  const hasRealVideo = content ? content.videoId !== PLACEHOLDER_VIDEO_ID : false;
 
   const headerOpacity = scrollY.interpolate({
     inputRange: [0, 80],
@@ -709,32 +741,32 @@ const DiagramDetail: React.FC = () => {
     );
   }
 
-  // Desktop: sticky sidebar with video, key points, and feedback (NO diagram preview)
+  // Desktop: sticky sidebar with just the video (NO diagram preview). Key Points and
+  // the feedback form live in the main column below, in the same order as mobile —
+  // see renderDesktopContent — since "Key Points to Remember" reads as a recap of
+  // what was just read, not a preview to show before the sections.
   const renderDesktopSidebar = () => {
     if (!isDesktop) return null;
-    
+
     return (
       <View style={[styles.sidebar, styles.sidebarDesktop]}>
         <View style={styles.videoWrap}>
           <Text style={[styles.sectionLabel, { color: colors.primary }]}>Video Tutorial</Text>
-          <VideoPlayer videoId={content.videoId} color={colors.primary} />
+          {hasRealVideo ? (
+            <VideoPlayer videoId={content.videoId} color={colors.primary} />
+          ) : (
+            <VideoComingSoon color={colors.primary} />
+          )}
         </View>
-        
-        {content.keyPoints && (
-          <KeyPoints points={content.keyPoints} color={colors.primary} />
-        )}
-        
-        {content.type === 'SDLC' && (
-          <SDLCFeedbackForm color={colors.primary} />
-        )}
       </View>
     );
   };
 
-  // Desktop: main content column
+  // Desktop: main content column — same order as mobile (Sections, Steps, Key
+  // Points, Feedback) so the two layouts tell the same story, not just the same words.
   const renderDesktopContent = () => {
     if (!isDesktop) return null;
-    
+
     return (
       <View style={styles.contentColumnDesktop}>
         {content.sections.map((section, i) => (
@@ -745,10 +777,16 @@ const DiagramDetail: React.FC = () => {
             color={colors.primary}
           />
         ))}
-        
+
         {content.steps && (
           <StepsList steps={content.steps} color={colors.primary} />
         )}
+
+        {content.keyPoints && (
+          <KeyPoints points={content.keyPoints} color={colors.primary} />
+        )}
+
+        <LearningFeedbackForm color={colors.primary} diagramType={content.type} />
       </View>
     );
   };
@@ -776,9 +814,7 @@ const DiagramDetail: React.FC = () => {
           <KeyPoints points={content.keyPoints} color={colors.primary} />
         )}
         
-        {content.type === 'SDLC' && (
-          <SDLCFeedbackForm color={colors.primary} />
-        )}
+        <LearningFeedbackForm color={colors.primary} diagramType={content.type} />
       </View>
     );
   };
@@ -855,14 +891,18 @@ const DiagramDetail: React.FC = () => {
                 resizeMode="contain"
               />
             ) : (
-              <DiagramPlaceholder color={colors.primary} label={content.imageAlt} />
+              <DiagramPlaceholder color={colors.primary} label={content.imageAlt} title={content.title} />
             )}
             
             {/* Video directly below diagram on mobile/tablet only */}
             {!isDesktop && (
               <View style={styles.videoWrap}>
                 <Text style={[styles.sectionLabel, { color: colors.primary }]}>Video Tutorial</Text>
-                <VideoPlayer videoId={content.videoId} color={colors.primary} />
+                {hasRealVideo ? (
+                  <VideoPlayer videoId={content.videoId} color={colors.primary} />
+                ) : (
+                  <VideoComingSoon color={colors.primary} />
+                )}
               </View>
             )}
           </View>
