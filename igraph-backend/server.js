@@ -8,6 +8,7 @@ const compression = require('compression');
 
 const authRoutes = require('./routes/authRoutes');
 const diagramRoutes = require('./routes/diagramRoutes');
+const feedbackRoutes = require('./routes/feedbackRoutes');
 
 const app = express();
 
@@ -175,6 +176,7 @@ app.get('/', (req, res) => {
 
 app.use('/api/auth', authRoutes);
 app.use('/api/diagrams', diagramRoutes);
+app.use('/api/feedback', feedbackRoutes);
 
 app.use((req, res) => {
   res.status(404).json({
