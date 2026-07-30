@@ -239,60 +239,70 @@ interface Page {
 
 const generatePageId = () => `page_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`;
 
-// Renders `html` into a hidden iframe on this same page and prints that
-// iframe, instead of the old window.open()-based popup. window.open() is
-// unreliable once the app is installed as a PWA — iOS in particular blocks
-// or silently kicks the user out to Safari when a standalone PWA tries to
-// open a new top-level window — and an in-page iframe means the user never
-// leaves the Create Diagram screen in the first place, so there's nothing
-// to "return to" after Print or Cancel.
-function printHtmlInHiddenIframe(html: string): boolean {
-  if (typeof document === 'undefined') return false;
+// Prints `bodyHtml` by injecting it into THIS page (as a sibling of the
+// React root) and calling window.print() on the top-level window itself —
+// not window.open() (blocked/kicks a standalone PWA out to Safari on iOS)
+// and not an iframe's contentWindow.print() (tried that first: Android
+// Chrome doesn't scope printing to a sub-frame at all — it silently prints
+// the top-level page regardless of the iframe's size/visibility/content,
+// which is why the printed output was the app's own toolbar and canvas
+// instead of this generated page). Print-only CSS hides everything else on
+// the page and reveals just the injected content, so the *actual* window
+// being printed only ever shows what's meant to be printed.
+function printHtmlInPage(bodyHtml: string, documentTitle: string): boolean {
+  if (typeof document === 'undefined' || typeof window === 'undefined') return false;
 
-  const iframe = document.createElement('iframe');
-  // A 0×0 iframe is invisible on desktop, but Android Chrome's print
-  // pipeline won't scope printing to a frame with no real layout box — it
-  // silently falls back to printing the top-level page instead (the create
-  // screen's own toolbar/canvas, not this generated document). Giving it an
-  // actual size and pushing it off-screen keeps it invisible while still
-  // being a real, printable layout target on every platform.
-  iframe.style.position = 'fixed';
-  iframe.style.top = '0';
-  iframe.style.left = '-10000px';
-  iframe.style.width = '8.5in';
-  iframe.style.height = '11in';
-  iframe.style.border = '0';
-  document.body.appendChild(iframe);
+  const style = document.createElement('style');
+  style.id = 'igraph-print-style';
+  style.textContent = `
+    #igraph-print-root { display: none; }
+    @media print {
+      body > *:not(#igraph-print-root) { display: none !important; }
+      #igraph-print-root {
+        display: flex !important;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        position: fixed;
+        inset: 0;
+        background: #fff;
+        padding: 0.4in;
+        box-sizing: border-box;
+      }
+      #igraph-print-root .print-name { position: absolute; top: 0.2in; left: 0.2in; font: 600 13px Helvetica, Arial, sans-serif; color: #1a1f36; }
+      #igraph-print-root .print-title { position: absolute; top: 0.2in; left: 0; right: 0; margin: 0; font: 600 20px Helvetica, Arial, sans-serif; color: #1a1f36; text-align: center; }
+      #igraph-print-root img { max-width: 100%; max-height: 90vh; object-fit: contain; }
+      /* Same reasoning as the old @page rule: leaves no room for Chrome's
+         own header/footer (date, title, url, page number) to draw into. */
+      @page { margin: 0; }
+    }
+  `;
+
+  const root = document.createElement('div');
+  root.id = 'igraph-print-root';
+  root.innerHTML = bodyHtml;
+
+  document.head.appendChild(style);
+  document.body.appendChild(root);
+
+  const originalTitle = document.title;
+  document.title = documentTitle;
 
   const cleanup = () => {
-    if (iframe.parentNode) iframe.parentNode.removeChild(iframe);
+    style.remove();
+    root.remove();
+    document.title = originalTitle;
+    window.removeEventListener('afterprint', cleanup);
   };
 
-  const doc = iframe.contentDocument;
-  if (!doc) {
-    cleanup();
-    return false;
-  }
-  doc.open();
-  doc.write(html);
-  doc.close();
+  window.addEventListener('afterprint', cleanup);
+  // 'afterprint' is the normal signal the dialog closed (Print or Cancel),
+  // but some mobile browsers don't fire it reliably, so a timeout
+  // backstops the cleanup either way.
+  setTimeout(cleanup, 60000);
 
-  iframe.onload = () => {
-    setTimeout(() => {
-      const win = iframe.contentWindow;
-      if (!win) {
-        cleanup();
-        return;
-      }
-      // 'afterprint' is the normal signal the dialog closed (Print or
-      // Cancel), but iOS Safari doesn't always fire it for framed content,
-      // so a timeout backstops the cleanup either way.
-      win.onafterprint = cleanup;
-      win.focus();
-      win.print();
-      setTimeout(cleanup, 60000);
-    }, 300);
-  };
+  // Let the browser paint the injected content before invoking print.
+  setTimeout(() => window.print(), 50);
 
   return true;
 }
@@ -2166,35 +2176,14 @@ export default function CreateScreen() {
 
       if (format === 'pdf') {
         const dataUrl = canvas.toDataURL('image/png');
-        const pdfHtml = `
-          <html>
-            <head>
-              <title>${escapeHtml(name)}</title>
-              <style>
-                @page { margin: 0; }
-                body { margin: 0; padding: 20px; display: flex; justify-content: center; align-items: center; min-height: 100vh; background: white; font-family: system-ui, sans-serif; }
-                .container { text-align: center; }
-                h1 { font-size: 18px; color: #333; margin-bottom: 20px; }
-                img { max-width: 100%; max-height: 90vh; object-fit: contain; border: 1px solid #e2e8f0; border-radius: 8px; }
-                @media print {
-                  body { padding: 0; }
-                  h1 { display: none; }
-                  img { border: none; max-height: 100vh; }
-                }
-              </style>
-            </head>
-            <body>
-              <div class="container">
-                <h1>${escapeHtml(name)}</h1>
-                <img src="${dataUrl}" alt="Diagram" />
-              </div>
-            </body>
-          </html>
+        const pdfBodyHtml = `
+          <h1 class="print-title">${escapeHtml(name)}</h1>
+          <img src="${dataUrl}" alt="Diagram" />
         `;
 
-        if (!printHtmlInHiddenIframe(pdfHtml)) {
-          // No iframe document access (extremely rare) — fall back to a direct file download.
-          downloadFile(pdfHtml, `${name}.pdf.html`, 'text/html');
+        if (!printHtmlInPage(pdfBodyHtml, name)) {
+          // No document access (extremely rare) — fall back to a direct file download.
+          downloadFile(pdfBodyHtml, `${name}.pdf.html`, 'text/html');
           notify(
             'PDF Export',
             'The PDF dialog will open. Please select "Save as PDF" in the print dialog.'
@@ -2282,38 +2271,13 @@ export default function CreateScreen() {
 
     const nameHtml = printName.trim() ? `<div class="print-name">${escapeHtml(printName.trim())}</div>` : '';
     const titleHtml = printTitle.trim() ? `<h1 class="print-title">${escapeHtml(printTitle.trim())}</h1>` : '';
-
-    const html = `
-      <html>
-        <head>
-          <title>${escapeHtml(printTitle.trim() || printName.trim() || diagramName || 'Diagram')}</title>
-          <style>
-            /* margin: 0 on @page leaves no space for Chrome's own header/footer
-               (date, title, url, page number) to draw into, so it prints blank
-               instead of a checkbox we can't reach from here; padding on body
-               recreates the page inset that used to live in the @page margin.
-               No size property here on purpose - Chrome only trusts a stylesheet's
-               @page margin when its size matches the paper size picked in
-               the dialog. Declaring one tied to Letter meant switching to
-               Legal/A4/etc. no longer matched, so Chrome fell back to its
-               own default margins and the header/footer came back. Leaving
-               size unset makes margin: 0 apply no matter what paper is picked. */
-            @page { margin: 0; }
-            body { margin: 0; padding: 0.4in; box-sizing: border-box; background: white; position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100vh; width: 100%; }
-            .print-name { position: absolute; top: 0.2in; left: 0.2in; font: 600 13px Helvetica, Arial, sans-serif; color: #1a1f36; }
-            .print-title { position: absolute; top: 0.2in; left: 0; right: 0; margin: 0; font: 600 20px Helvetica, Arial, sans-serif; color: #1a1f36; text-align: center; }
-            img { max-width: 100%; max-height: 90vh; object-fit: contain; }
-          </style>
-        </head>
-        <body>
-          ${nameHtml}
-          ${titleHtml}
-          <img src="${printPreviewUrl}" alt="Diagram" />
-        </body>
-      </html>
+    const bodyHtml = `
+      ${nameHtml}
+      ${titleHtml}
+      <img src="${printPreviewUrl}" alt="Diagram" />
     `;
 
-    if (!printHtmlInHiddenIframe(html)) {
+    if (!printHtmlInPage(bodyHtml, printTitle.trim() || printName.trim() || diagramName || 'Diagram')) {
       Alert.alert('Error', 'Could not prepare the print preview.');
     }
 
