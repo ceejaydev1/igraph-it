@@ -33,6 +33,7 @@ import {
 } from 'firebase/auth';
 import * as WebBrowser from 'expo-web-browser';
 import * as authService from '@/services/authService';
+import { markNewUserForOnboarding } from '@/utils/onboardingTour';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -830,6 +831,7 @@ export default function SignUp() {
       const apiResult = await authService.googleAuth(idToken);
 
       if (apiResult.success) {
+        if (apiResult.data?.isNewUser) markNewUserForOnboarding();
         setShowSuccessAnimation(true);
         showSuccessPopup('Welcome!', 'Your Google account has been successfully signed up.', '', '');
         setTimeout(() => { router.replace('/(tabs)/home'); }, 400);

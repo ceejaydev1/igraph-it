@@ -43,6 +43,42 @@ export const resetTour = (tourId: string) => {
   }
 };
 
+// Onboarding auto-plays only for someone who just created an account, never
+// for a returning sign-in — a fresh browser/device otherwise looks identical
+// to a brand-new signup (no tour-seen keys either way), which used to make
+// the tour auto-start for existing users too. The two real "account just
+// created" checkpoints (see verify-otp.tsx and the Google-signup branch of
+// authService.googleAuth's callers) set this; the tour chain's own Finish
+// step clears it, so it can't outlive one full run through.
+const NEW_USER_KEY = 'igraphit_new_user_onboarding';
+
+export const markNewUserForOnboarding = () => {
+  if (!isWeb()) return;
+  try {
+    window.localStorage.setItem(NEW_USER_KEY, 'true');
+  } catch {
+    // Ignore — worst case this signup doesn't get the auto-played tour.
+  }
+};
+
+export const clearNewUserOnboarding = () => {
+  if (!isWeb()) return;
+  try {
+    window.localStorage.removeItem(NEW_USER_KEY);
+  } catch {
+    // Ignore.
+  }
+};
+
+const isNewUserPendingOnboarding = (): boolean => {
+  if (!isWeb()) return false;
+  try {
+    return window.localStorage.getItem(NEW_USER_KEY) === 'true';
+  } catch {
+    return false;
+  }
+};
+
 // Shared look/feel so every tab's tour reads as one product, not four
 // separately-configured popovers.
 const THEME: Config = {
@@ -77,7 +113,15 @@ let pendingTourId: string | null = null;
 
 export const startTour = (tourId: string, steps: DriveStep[], options: StartTourOptions = {}) => {
   if (!isWeb() || steps.length === 0) return;
-  if (!options.force && hasSeenTour(tourId)) return;
+  // `force` is only ever passed by the tour chain's own hand-off (already
+  // gated on the new-user flag being what started the chain in the first
+  // place) and by the manual "Replay tour" button (which should always
+  // work, new user or not) — so only the unforced, auto-play path needs
+  // the new-user check.
+  if (!options.force) {
+    if (!isNewUserPendingOnboarding()) return;
+    if (hasSeenTour(tourId)) return;
+  }
 
   // Give the screen's own mount/focus effects a tick to finish rendering
   // before driver.js goes looking for the step elements in the DOM.

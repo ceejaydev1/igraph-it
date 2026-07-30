@@ -47,6 +47,7 @@ import {
 
 import * as authService from '../../services/authService';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { markNewUserForOnboarding } from '../../utils/onboardingTour';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -627,6 +628,7 @@ export default function SignIn() {
           const idToken = await result.user.getIdToken();
           const apiResult = await authService.googleAuth(idToken);
           if (apiResult.success) {
+            if (apiResult.data?.isNewUser) markNewUserForOnboarding();
             setShowSuccessAnimation(true);
             setTimeout(() => { router.replace('/(tabs)/home'); }, 400);
           } else {
@@ -766,6 +768,7 @@ export default function SignIn() {
       const apiResult = await authService.googleAuth(idToken);
 
       if (apiResult.success) {
+        if (apiResult.data?.isNewUser) markNewUserForOnboarding();
         setShowSuccessAnimation(true);
         setTimeout(() => { router.replace('/(tabs)/home'); }, 400);
       } else {

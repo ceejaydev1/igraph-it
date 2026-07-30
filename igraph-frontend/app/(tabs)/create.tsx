@@ -239,58 +239,101 @@ interface Page {
 
 const generatePageId = () => `page_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`;
 
-// Prints `bodyHtml` by injecting it into THIS page (as a sibling of the
-// React root) and calling window.print() on the top-level window itself —
-// not window.open() (blocked/kicks a standalone PWA out to Safari on iOS)
-// and not an iframe's contentWindow.print() (tried that first: Android
-// Chrome doesn't scope printing to a sub-frame at all — it silently prints
-// the top-level page regardless of the iframe's size/visibility/content,
-// which is why the printed output was the app's own toolbar and canvas
-// instead of this generated page). Print-only CSS hides everything else on
-// the page and reveals just the injected content, so the *actual* window
-// being printed only ever shows what's meant to be printed.
+// Prints `bodyHtml` on the current top-level window — not window.open()
+// (blocked/kicks a standalone PWA out to Safari on iOS) and not an iframe's
+// contentWindow.print() (tried that first: Android Chrome doesn't scope
+// printing to a sub-frame at all — it silently prints the top-level page
+// regardless of the iframe's size/visibility/content).
+//
+// A prior version of this tried to physically detach the rest of the page's
+// DOM instead of hiding it, on a hunch that Android's print preview wasn't
+// honoring @media print — that broke worse: React still owns those nodes
+// (including this very Print modal's own portal), so ripping them out from
+// under it mid-render threw a real `removeChild` crash.
+//
+// The @media-print-only version that replaced that (hiding everything via
+// `body > *:not(#igraph-print-root) { display: none }` scoped inside
+// `@media print`) had the same root-cause bug as the iframe attempt: on
+// this Android Chrome build, whatever snapshot the print/PDF pipeline
+// renders from doesn't honor a stylesheet rule inserted this close to the
+// print() call.
+//
+// The version after that swapped the stylesheet for an always-on, fixed,
+// viewport-covering, max-z-index overlay — no `@media print` gate to skip,
+// just whatever was already on screen. Still wrong output: the preview
+// kept showing the live editor underneath. Root cause is `position: fixed`
+// itself — this print pipeline's paginated layout pass doesn't reliably
+// place fixed-position content into the printed page; a fixed element
+// appended last in the DOM instead behaves like it's anchored past the end
+// of the (much taller, scrollable) app content, so it never lands on the
+// one page that gets rendered.
+//
+// This version drops fixed positioning entirely. Every real child of
+// <body> (the RN Web app root, any portaled modals) gets `display: none`
+// set directly as an inline style — not a stylesheet rule, so there's no
+// separate resource for the print pipeline to snapshot stale — and the
+// print root is a plain, static, normal-flow block. With everything else
+// hidden and nothing relying on fixed/absolute placement, whatever layout
+// pass the pipeline runs has only one thing left to paint.
 function printHtmlInPage(bodyHtml: string, documentTitle: string): boolean {
   if (typeof document === 'undefined' || typeof window === 'undefined') return false;
 
-  const style = document.createElement('style');
-  style.id = 'igraph-print-style';
+  let style = document.getElementById('igraph-print-style') as HTMLStyleElement | null;
+  if (!style) {
+    style = document.createElement('style');
+    style.id = 'igraph-print-style';
+    document.head.appendChild(style);
+  }
   style.textContent = `
-    #igraph-print-root { display: none; }
-    @media print {
-      body > *:not(#igraph-print-root) { display: none !important; }
-      #igraph-print-root {
-        display: flex !important;
-        flex-direction: column;
-        align-items: center;
-        justify-content: center;
-        position: fixed;
-        inset: 0;
-        background: #fff;
-        padding: 0.4in;
-        box-sizing: border-box;
-      }
-      #igraph-print-root .print-name { position: absolute; top: 0.2in; left: 0.2in; font: 600 13px Helvetica, Arial, sans-serif; color: #1a1f36; }
-      #igraph-print-root .print-title { position: absolute; top: 0.2in; left: 0; right: 0; margin: 0; font: 600 20px Helvetica, Arial, sans-serif; color: #1a1f36; text-align: center; }
-      #igraph-print-root img { max-width: 100%; max-height: 90vh; object-fit: contain; }
-      /* Same reasoning as the old @page rule: leaves no room for Chrome's
-         own header/footer (date, title, url, page number) to draw into. */
-      @page { margin: 0; }
+    #igraph-print-root {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      background: #fff;
+      padding: 0.4in;
+      box-sizing: border-box;
     }
+    #igraph-print-root .print-name { position: absolute; top: 0.2in; left: 0.2in; font: 600 13px Helvetica, Arial, sans-serif; color: #1a1f36; }
+    #igraph-print-root .print-title { position: absolute; top: 0.2in; left: 0; right: 0; margin: 0; font: 600 20px Helvetica, Arial, sans-serif; color: #1a1f36; text-align: center; }
+    #igraph-print-root img { max-width: 100%; max-height: 90vh; object-fit: contain; }
+    @media print { @page { margin: 0; } }
   `;
 
-  const root = document.createElement('div');
-  root.id = 'igraph-print-root';
+  let root = document.getElementById('igraph-print-root');
+  if (!root) {
+    root = document.createElement('div');
+    root.id = 'igraph-print-root';
+    document.body.appendChild(root);
+  }
   root.innerHTML = bodyHtml;
 
-  document.head.appendChild(style);
-  document.body.appendChild(root);
+  // Hide every other real element under <body> imperatively — `!important`
+  // so it wins over whatever class-based display value RN Web already gave
+  // it — instead of leaning on a stylesheet or @media rule this pipeline
+  // has been shown not to pick up reliably.
+  const hiddenSiblings: { el: HTMLElement; display: string }[] = [];
+  Array.from(document.body.children).forEach((child) => {
+    if (child === root) return;
+    const el = child as HTMLElement;
+    hiddenSiblings.push({ el, display: el.style.display });
+    el.style.setProperty('display', 'none', 'important');
+  });
 
   const originalTitle = document.title;
   document.title = documentTitle;
 
   const cleanup = () => {
-    style.remove();
-    root.remove();
+    root!.remove();
+    style!.remove();
+    hiddenSiblings.forEach(({ el, display }) => {
+      if (display) {
+        el.style.setProperty('display', display);
+      } else {
+        el.style.removeProperty('display');
+      }
+    });
     document.title = originalTitle;
     window.removeEventListener('afterprint', cleanup);
   };
@@ -301,8 +344,15 @@ function printHtmlInPage(bodyHtml: string, documentTitle: string): boolean {
   // backstops the cleanup either way.
   setTimeout(cleanup, 60000);
 
-  // Let the browser paint the injected content before invoking print.
-  setTimeout(() => window.print(), 50);
+  // Force a synchronous layout read before printing so the browser can't
+  // defer applying the hidden/visible split — nothing left to race against
+  // but this actually being painted.
+  void root.offsetHeight;
+
+  // Two rAFs (not setTimeout) — long enough for the browser to paint the
+  // injected content, short enough to stay inside the same user-gesture
+  // activation window print() needs on stricter mobile browsers.
+  requestAnimationFrame(() => requestAnimationFrame(() => window.print()));
 
   return true;
 }
@@ -2277,11 +2327,14 @@ export default function CreateScreen() {
       <img src="${printPreviewUrl}" alt="Diagram" />
     `;
 
+    // Close the modal before touching the DOM ourselves, not after — lets
+    // React's own unmount of this modal's portal happen on its own, instead
+    // of interleaving with our injected print content.
+    closePrintModal();
+
     if (!printHtmlInPage(bodyHtml, printTitle.trim() || printName.trim() || diagramName || 'Diagram')) {
       Alert.alert('Error', 'Could not prepare the print preview.');
     }
-
-    closePrintModal();
   };
 
   const closePrintModal = () => {

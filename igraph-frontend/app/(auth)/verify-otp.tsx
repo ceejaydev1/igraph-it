@@ -17,6 +17,7 @@ import {
 import { useRouter, useLocalSearchParams, Stack } from 'expo-router';
 import { Svg, Circle, Rect, Path } from 'react-native-svg';
 import * as authService from '../../services/authService';
+import { markNewUserForOnboarding } from '../../utils/onboardingTour';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 const OTP_LENGTH = 6;
@@ -432,6 +433,12 @@ export default function VerifyOTP() {
             });
           }, 1200);
         } else {
+          // This is the one point that reliably means "brand-new account" —
+          // signUp() alone doesn't (never verified), and the sign-in right
+          // after this looks identical to any other sign-in. Flags this
+          // browser so the onboarding tour auto-plays once, starting on
+          // Home right after they sign in. See utils/onboardingTour.ts.
+          markNewUserForOnboarding();
           setShowSuccessModal(true);
         }
       } else {
