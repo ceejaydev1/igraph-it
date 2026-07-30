@@ -6,6 +6,9 @@ export interface ShapeDefinition {
   width: number;
   height: number;
   category: 'UML' | 'SDLC';
+  // Pre-filled cell text on drop/insert (e.g. System Boundary's "App") —
+  // most shapes omit this and start blank, same as before.
+  defaultLabel?: string;
 }
 
 export const DIAGRAM_TABS = [
@@ -117,15 +120,15 @@ export const DIAGRAM_SHAPES: Record<string, ShapeDefinition[]> = {
   // ═══════════════════════════════════════════════════════════════════════════
   'Fishbone Diagram': [
     { id: 'fishbone-spine', svgComponent: 'FishboneSpineShape', label: 'Spine', description: 'Central backbone', width: 120, height: 20, category: 'UML' },
-    { id: 'fishbone-head', svgComponent: 'FishboneHeadShape', label: 'Fish Head', description: 'Problem/Effect', width: 80, height: 60, category: 'UML' },
+    { id: 'fishbone-head', svgComponent: 'FishboneHeadShape', label: 'Fish Head', description: 'Problem/Effect', width: 120, height: 90, category: 'UML' },
     { id: 'fishbone-problem', svgComponent: 'FishboneProblemShape', label: 'Effect Box', description: 'Problem being analyzed', width: 140, height: 60, category: 'UML' },
-    { id: 'fishbone-cause-top', svgComponent: 'FishboneCauseTopShape', label: 'Main Cause (Top)', description: 'Cause category above spine', width: 60, height: 50, category: 'UML' },
-    { id: 'fishbone-cause-bottom', svgComponent: 'FishboneCauseBottomShape', label: 'Main Cause (Bottom)', description: 'Cause category below spine', width: 60, height: 50, category: 'UML' },
-    { id: 'fishbone-sub-top', svgComponent: 'FishboneSubCauseTopShape', label: 'Sub-Cause (Top)', description: 'Specific cause above spine', width: 50, height: 40, category: 'UML' },
-    { id: 'fishbone-sub-bottom', svgComponent: 'FishboneSubCauseBottomShape', label: 'Sub-Cause (Bottom)', description: 'Specific cause below spine', width: 50, height: 40, category: 'UML' },
-    { id: 'fishbone-tertiary', svgComponent: 'FishboneTertiaryShape', label: 'Tertiary Cause', description: 'Third-level cause', width: 40, height: 30, category: 'UML' },
-    { id: 'fishbone-arrow', svgComponent: 'FishboneArrowShape', label: 'Cause Arrow', description: 'Cause link arrow', width: 60, height: 30, category: 'UML' },
-    { id: 'fishbone-dashed-arrow', svgComponent: 'FishboneDashedArrowShape', label: 'Possible Cause', description: 'Possible cause link', width: 60, height: 30, category: 'UML' },
+    { id: 'fishbone-cause-top', svgComponent: 'FishboneCauseTopShape', label: 'Main Cause (Top)', description: 'Cause category above spine', width: 100, height: 80, category: 'UML' },
+    { id: 'fishbone-cause-bottom', svgComponent: 'FishboneCauseBottomShape', label: 'Main Cause (Bottom)', description: 'Cause category below spine', width: 100, height: 80, category: 'UML' },
+    { id: 'fishbone-sub-top', svgComponent: 'FishboneSubCauseTopShape', label: 'Sub-Cause (Top)', description: 'Specific cause above spine', width: 80, height: 60, category: 'UML' },
+    { id: 'fishbone-sub-bottom', svgComponent: 'FishboneSubCauseBottomShape', label: 'Sub-Cause (Bottom)', description: 'Specific cause below spine', width: 80, height: 60, category: 'UML' },
+    { id: 'fishbone-tertiary', svgComponent: 'FishboneTertiaryShape', label: 'Tertiary Cause', description: 'Third-level cause', width: 60, height: 45, category: 'UML' },
+    { id: 'fishbone-arrow', svgComponent: 'FishboneArrowShape', label: 'Cause Arrow', description: 'Cause link arrow', width: 90, height: 45, category: 'UML' },
+    { id: 'fishbone-dashed-arrow', svgComponent: 'FishboneDashedArrowShape', label: 'Possible Cause', description: 'Possible cause link', width: 90, height: 45, category: 'UML' },
     { id: 'fishbone-category', svgComponent: 'FishboneCategoryShape', label: 'Category Box', description: 'Category label', width: 80, height: 40, category: 'UML' },
     { id: 'fishbone-bubble', svgComponent: 'FishboneBubbleShape', label: 'Cause Bubble', description: 'Cause/Reason bubble', width: 60, height: 40, category: 'UML' },
     { id: 'fishbone-note', svgComponent: 'FishboneNoteShape', label: 'Note', description: 'Comment/note', width: 100, height: 70, category: 'UML' },
@@ -157,7 +160,7 @@ export const DIAGRAM_SHAPES: Record<string, ShapeDefinition[]> = {
   'Use Case Diagram': [
     { id: 'uc-actor', svgComponent: 'UMLActorShape', label: 'Actor', description: 'System user', width: 60, height: 80, category: 'UML' },
     { id: 'use-case', svgComponent: 'UMLUseCaseShape', label: 'Use Case', description: 'System functionality', width: 120, height: 60, category: 'UML' },
-    { id: 'system-boundary', svgComponent: 'UMLSystemBoundaryShape', label: 'System Boundary', description: 'System scope', width: 200, height: 150, category: 'UML' },
+    { id: 'system-boundary', svgComponent: 'UMLSystemBoundaryShape', label: 'System Boundary', description: 'System scope', width: 340, height: 280, category: 'UML', defaultLabel: 'App' },
     { id: 'uc-association', svgComponent: 'UMLAssociationShape', label: 'Association', description: 'Communication', width: 80, height: 20, category: 'UML' },
     { id: 'uc-include', svgComponent: 'UMLIncludeShape', label: 'Include', description: 'Mandatory behavior', width: 80, height: 40, category: 'UML' },
     { id: 'uc-extend', svgComponent: 'UMLExtendShape', label: 'Extend', description: 'Optional behavior', width: 80, height: 40, category: 'UML' },
@@ -190,9 +193,9 @@ export const DIAGRAM_SHAPES: Record<string, ShapeDefinition[]> = {
   // 9. SEQUENCE DIAGRAM
   // ═══════════════════════════════════════════════════════════════════════════
   'Sequence Diagram': [
-    { id: 'seq-actor', svgComponent: 'UMLActorShape', label: 'Actor', description: 'Interaction initiator', width: 60, height: 80, category: 'UML' },
-    { id: 'seq-lifeline', svgComponent: 'UMLLifelineShape', label: 'Lifeline', description: 'Object timeline', width: 100, height: 160, category: 'UML' },
-    { id: 'seq-activation', svgComponent: 'UMLActivationShape', label: 'Activation', description: 'Execution period', width: 16, height: 80, category: 'UML' },
+    { id: 'seq-actor', svgComponent: 'UMLActorShape', label: 'Actor', description: 'Interaction initiator, with its own lifeline', width: 70, height: 200, category: 'UML', defaultLabel: 'Actor' },
+    { id: 'seq-lifeline', svgComponent: 'UMLLifelineShape', label: 'Lifeline', description: 'Object timeline', width: 100, height: 200, category: 'UML' },
+    { id: 'seq-activation', svgComponent: 'UMLActivationShape', label: 'Activation', description: 'Execution period', width: 16, height: 160, category: 'UML' },
     { id: 'seq-destroy', svgComponent: 'UMLDestroyShape', label: 'Destroy', description: 'Object deletion (X)', width: 30, height: 30, category: 'UML' },
     { id: 'seq-sync-msg', svgComponent: 'UMLSyncMsgShape', label: 'Sync Message', description: 'Blocking call', width: 80, height: 40, category: 'UML' },
     { id: 'seq-async-msg', svgComponent: 'UMLAsyncMsgShape', label: 'Async Message', description: 'Non-blocking call', width: 80, height: 40, category: 'UML' },
@@ -462,7 +465,15 @@ export const IGRAPH_ID_STYLE_MAP: Record<string, string> = {
   'connector-arrow': 'igraph.connectorArrow',
 
   // ─── Flowchart ──────────────────────────────────────────────────────────
-  'terminator': 'igraph.roundedRectangle',
+  // 'terminator' must stay 'igraph.ellipse' — matching its EllipseShape
+  // definition above and the *other* copy of this exact map in
+  // components/maxgraph-custom-shapes.ts, which is the one DiagramCanvas.tsx
+  // actually imports and uses to style newly-created cells. This file's copy
+  // had drifted to 'igraph.roundedRectangle', which meant every Terminator a
+  // user actually drops on the canvas never matched what this map thought
+  // its style was — breaking isConnectorCell/getShapeIdFromStyle's reverse
+  // lookup (both defined in this file) for every Start/End shape.
+  'terminator': 'igraph.ellipse',
   'process': 'igraph.rectangle',
   'decision': 'igraph.diamond',
   'io': 'igraph.parallelogram',
@@ -562,7 +573,7 @@ export const IGRAPH_ID_STYLE_MAP: Record<string, string> = {
   'act-constraint': 'igraph.umlConstraint',
 
   // ─── Sequence ───────────────────────────────────────────────────────────
-  'seq-actor': 'igraph.umlActor',
+  'seq-actor': 'igraph.seqActor',
   'seq-lifeline': 'igraph.umlLifeline',
   'seq-activation': 'igraph.umlActivation',
   'seq-destroy': 'igraph.umlDestroy',
@@ -577,7 +588,7 @@ export const IGRAPH_ID_STYLE_MAP: Record<string, string> = {
   'seq-note': 'igraph.umlNote',
 
   // ─── Class ──────────────────────────────────────────────────────────────
-  'class-box': 'igraph.umlClass',
+  'class-box': 'igraph.umlClassContainer',
   'class-association': 'igraph.umlAssociation',
   'class-directed': 'igraph.umlDirectedAssociation',
   'class-aggregation': 'igraph.umlAggregation',
@@ -796,15 +807,40 @@ export const IGRAPH_STYLE_MAP: Record<string, string> = {
   'UMLMultiplicityNShape': 'igraph.umlMultiplicityN',
 };
 
-// Shapes that are really "a line, optionally with an arrowhead" rather than a
-// box/circle/etc — used both for the connector quick-style toolbar (dashed +
-// arrowhead toggles) and for giving them 2 endpoint handles instead of the
-// usual 8 box-resize handles. See DiagramCanvas.tsx and
-// maxgraph-universal-handler.ts. First pass: Standard + FDD ('flow-line'
-// shares Standard's connector-arrow class, so Flowchart's Flow Line comes
-// along for free); other categories' connector shapes (Use Case
-// associations, Class relationships, etc.) aren't included yet.
-export const CONNECTOR_SHAPE_IDS = new Set(['connector-arrow', 'control', 'mechanism', 'fdd-interface', 'flow-line']);
+// Shapes that are really "a line between two other shapes" rather than a
+// box/circle/etc — inserted as real (initially floating) maxGraph edges
+// instead of vertices (see handleAddShape in create.tsx and handleDrop in
+// DiagramCanvas.tsx), so the user can drag either end onto a shape and have
+// maxGraph actually connect them, with a magnet-style snap-to-nearby-shape
+// on drop (findNearbyVertex in DiagramCanvas.tsx). Every one of these has a
+// matching paintEdgeShape override in maxgraph-custom-shapes.ts so it still
+// renders its own arrowhead/diamond/dashed style once it's an edge.
+//
+// Deliberately excludes Schematic's Wire Connection / No Connection — those
+// are small fixed junction-dot/crossing glyphs meant to sit at a single
+// point on a wire, not a stretchable line between two shapes, even though
+// their paint function happens to draw a short line.
+export const CONNECTOR_SHAPE_IDS = new Set([
+  // Standard / Flowchart
+  'connector-arrow', 'flow-line',
+  // Functional Decomposition Diagram
+  'control', 'mechanism', 'fdd-interface',
+  // Data Flow Diagram
+  'dfd-data-flow', 'dfd-bidirectional',
+  // Entity Relationship Diagram
+  'erd-connector',
+  // Fishbone Diagram
+  'fishbone-arrow', 'fishbone-dashed-arrow',
+  // Use Case Diagram
+  'uc-association', 'uc-include', 'uc-extend', 'uc-generalization', 'uc-note-connector',
+  // Activity Diagram
+  'act-control-flow', 'act-object-flow',
+  // Sequence Diagram
+  'seq-sync-msg', 'seq-async-msg', 'seq-return-msg',
+  // Class Diagram
+  'class-association', 'class-directed', 'class-aggregation', 'class-composition',
+  'class-dependency', 'class-generalization', 'class-note-connector',
+]);
 
 // The style keys those ids render as (via IGRAPH_ID_STYLE_MAP below), so a
 // cell can be recognized as a connector shape from its own persisted style —
@@ -813,8 +849,10 @@ export const CONNECTOR_SHAPE_IDS = new Set(['connector-arrow', 'control', 'mecha
 // survives a reload (page refresh, a saved diagram being reopened, even a
 // dev hot-reload): none of those round-trip the tag, but style.shape is a
 // real maxGraph style property that's always in the saved/loaded XML.
-// Each of these 4 keys is unique to this connector set (no other shape id
-// maps to them), so this lookup can't false-positive on an unrelated shape.
+// Several ids intentionally share one style/class (e.g. 'uc-generalization'
+// and 'class-generalization' both render as igraph.umlGeneralization), which
+// this Set naturally collapses to one entry — that's fine, they're meant to
+// be recognized identically.
 export const CONNECTOR_STYLE_KEYS = new Set(
   [...CONNECTOR_SHAPE_IDS].map((id) => IGRAPH_ID_STYLE_MAP[id]).filter(Boolean)
 );
@@ -824,6 +862,29 @@ export function isConnectorCell(cell: { getStyle?: () => any } | null | undefine
   const style = cell.getStyle();
   const shapeKey = typeof style === 'string' ? undefined : style?.shape;
   return !!shapeKey && CONNECTOR_STYLE_KEYS.has(shapeKey);
+}
+
+// Reverse of IGRAPH_ID_STYLE_MAP, for the same reload problem described
+// above but for shape *role* lookups (flowchartRules.ts's getShapeRole)
+// rather than just "is this a connector". Object.entries walks the map in
+// declaration order, so where two ids intentionally share a style (Standard's
+// 'rectangle' and Flowchart's 'process' both render as igraph.rectangle,
+// 'rounded-rectangle'/'terminator' both render as igraph.roundedRectangle,
+// etc.), whichever id is declared later wins — every diagram-specific
+// section is declared after Standard, so a diagram-specific role (Process,
+// Terminator, Decision...) is recovered in preference to the generic
+// Standard shape it collides with, which is overwhelmingly the more common
+// real case.
+const STYLE_TO_IGRAPH_ID: Record<string, string> = {};
+for (const [id, styleShape] of Object.entries(IGRAPH_ID_STYLE_MAP)) {
+  STYLE_TO_IGRAPH_ID[styleShape] = id;
+}
+
+export function getShapeIdFromStyle(cell: { getStyle?: () => any } | null | undefined): string | undefined {
+  if (!cell?.getStyle) return undefined;
+  const style = cell.getStyle();
+  const shapeKey = typeof style === 'string' ? undefined : style?.shape;
+  return shapeKey ? STYLE_TO_IGRAPH_ID[shapeKey] : undefined;
 }
 
 // ─── HELPER FUNCTIONS ────────────────────────────────────────────────────────

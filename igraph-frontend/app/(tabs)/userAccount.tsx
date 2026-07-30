@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import {
   View,
   Text,
@@ -26,6 +26,9 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { initializeApp, getApps, FirebaseApp } from 'firebase/app';
 import { getAuth, signOut as firebaseSignOut, GoogleAuthProvider, signInWithPopup, Auth } from 'firebase/auth';
 import * as authService from '../../services/authService';
+import { useSave } from '../../contexts/SaveContext';
+import { useOnboardingTour } from '../../hooks/useOnboardingTour';
+import { ACCOUNT_TOUR_ID, getAccountTourSteps } from '../../utils/tours';
 
 // authService.logout() only clears iGraph IT's own tokens/session — it can't
 // touch Google's own browser session, but it should at least drop Firebase's
@@ -649,6 +652,7 @@ const ChangePasswordModal = ({
   const isDesktop = windowWidth >= 1024;
   const isMobile = windowWidth < 768;
   const modalWidth = isDesktop ? 460 : isMobile ? windowWidth - 32 : 420;
+  const { onFlushDraft } = useSave();
 
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
@@ -690,6 +694,11 @@ const ChangePasswordModal = ({
         handleClose();
         onSuccess();
         setTimeout(async () => {
+          // Signing out replaces the whole (tabs) route group, unmounting
+          // the create screen (and any in-progress diagram edits) rather
+          // than just backgrounding it — flush its draft to local storage
+          // first so that isn't a race. See onFlushDraft in SaveContext.tsx.
+          await onFlushDraft?.();
           await authService.logout();
           router.replace('/(auth)/signin');
         }, 900);
@@ -1247,6 +1256,7 @@ export default function UserAccount() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { width: windowWidth } = useWindowDimensions();
+  const { onFlushDraft } = useSave();
 
   const isDesktop = windowWidth >= 1024;
   const isMobile = windowWidth < 768;
@@ -1307,8 +1317,8 @@ export default function UserAccount() {
   const loadUserData = async () => {
     let usedCache = false;
     try {
-      const token = await authService.getAccessToken();
-      if (!token) {
+      const signedIn = await authService.hasActiveSession();
+      if (!signedIn) {
         router.replace('/(auth)/signin');
         return;
       }
@@ -1346,11 +1356,13 @@ export default function UserAccount() {
           hasPassword: hasPassword !== false,
         });
       } else {
-        // verifyToken() already clears tokens when the session is truly
-        // expired/invalid (401 after a failed refresh); anything else is
-        // a transient failure, so don't boot the user out for that.
-        const stillHasToken = await authService.getAccessToken();
-        if (!stillHasToken) {
+        // verifyToken() already clears tokens/cache when the session is
+        // truly expired/invalid (401 after a failed refresh) — hasActiveSession()
+        // will correctly read as false right after that happens. Anything
+        // else (network blip, etc.) leaves the session/cache intact, so it's
+        // a transient failure and shouldn't boot the user out.
+        const stillSignedIn = await authService.hasActiveSession();
+        if (!stillSignedIn) {
           router.replace('/(auth)/signin');
         } else if (!usedCache) {
           await useCachedUserAsFallback();
@@ -1386,8 +1398,8 @@ export default function UserAccount() {
 
   const loadSavedDiagrams = async () => {
     try {
-      const token = await authService.getAccessToken();
-      if (!token) return;
+      const signedIn = await authService.hasActiveSession();
+      if (!signedIn) return;
 
       const result = await authService.getUserDiagrams();
       if (result.success && result.data) {
@@ -1401,8 +1413,8 @@ export default function UserAccount() {
   // UPDATE PROFILE (name only)
 
   const handleUpdateProfile = async (data: { fullName: string }) => {
-    const token = await authService.getAccessToken();
-    if (!token) {
+    const signedIn = await authService.hasActiveSession();
+    if (!signedIn) {
       showToast('Session expired. Please sign in again.', true);
       router.replace('/(auth)/signin');
       throw new Error('No access token');
@@ -1434,6 +1446,11 @@ export default function UserAccount() {
   const handleSignOutConfirm = async () => {
     setSignOutLoading(true);
     try {
+      // Signing out replaces the whole (tabs) route group, unmounting the
+      // create screen (and any in-progress diagram edits) rather than just
+      // backgrounding it — flush its draft to local storage first so that
+      // isn't a race. See onFlushDraft in SaveContext.tsx.
+      await onFlushDraft?.();
       await authService.logout();
       if (firebaseAuth) {
         // Best-effort: clears this tab's cached Firebase credential. Can't
@@ -1472,6 +1489,9 @@ export default function UserAccount() {
   const avatarColor = getAvatarColor(userData.email);
   const avatarInitials = getInitialsFromName(userData.fullName, userData.email);
 
+  const accountTourSteps = useMemo(() => getAccountTourSteps({ router }), [router]);
+  useOnboardingTour(ACCOUNT_TOUR_ID, accountTourSteps, !loading);
+
   if (loading) {
     return <SkeletonLoader />;
   }
@@ -1503,7 +1523,7 @@ export default function UserAccount() {
           }
         >
           {/* Profile Card */}
-          <View style={[styles.profileCard, { marginBottom: SPACING.xxxl }]}>
+          <View nativeID="tour-account-profile" style={[styles.profileCard, { marginBottom: SPACING.xxxl }]}>
             <View style={styles.profileBanner}>
               <View style={styles.profileInfo}>
                 <View style={[styles.avatar, styles.avatarPlaceholder, { backgroundColor: avatarColor }]}>
@@ -1525,7 +1545,7 @@ export default function UserAccount() {
           {/* Action Cards */}
           <View style={[styles.actionsGrid, { gap: isDesktop ? SPACING.lg : SPACING.md }]}>
             {/* Profile Expandable Card */}
-            <View style={styles.profileExpandableCard}>
+            <View nativeID="tour-account-settings" style={styles.profileExpandableCard}>
               <Pressable
                 style={({ pressed }) => [styles.profileExpandableHeader, pressed && styles.actionCardPressed]}
                 onPress={toggleProfileExpanded}
@@ -1592,6 +1612,7 @@ export default function UserAccount() {
             </View>
 
             <Pressable
+              nativeID="tour-account-saved"
               style={({ pressed }) => [styles.actionCard, pressed && styles.actionCardPressed]}
               onPress={() => router.push('/(tabs)/savedDiagrams')}
               accessibilityRole="button"
@@ -1606,6 +1627,7 @@ export default function UserAccount() {
             </Pressable>
 
             <Pressable
+              nativeID="tour-account-privacy"
               style={({ pressed }) => [styles.actionCard, pressed && styles.actionCardPressed]}
               onPress={() => router.push('/(tabs)/privacy')}
               accessibilityRole="button"
@@ -1620,6 +1642,7 @@ export default function UserAccount() {
             </Pressable>
 
             <Pressable
+              nativeID="tour-account-about"
               style={({ pressed }) => [styles.actionCard, pressed && styles.actionCardPressed]}
               onPress={() => router.push('/(tabs)/aboutUs')}
               accessibilityRole="button"

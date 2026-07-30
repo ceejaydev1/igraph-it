@@ -15,7 +15,9 @@ import {
   CellState,
   CellOverlay,
   ImageBox,
-  CellHighlight,
+  Geometry,
+  Point,
+  Clipboard,
 } from '@maxgraph/core';
 
 import type {
@@ -35,11 +37,14 @@ import {
   IGRAPH_PERIMETERS,
   isUmlClassContainerCell,
   isUmlClassCompartmentCell,
+  isDfdDataStoreContainerCell,
+  isDfdDataStoreCompartmentCell,
+  isUmlLifelineCell,
 } from './maxgraph-custom-shapes';
 import { UniversalVertexHandler } from './maxgraph-universal-handler';
-import { getShapeDefinitionById, getShapesForDiagram, DIAGRAM_SHAPES, ShapeDefinition, isConnectorCell } from '@/constants/shapes';
+import { getShapeDefinitionById, getShapesForDiagram, DIAGRAM_SHAPES, ShapeDefinition, isConnectorCell, CONNECTOR_SHAPE_IDS } from '@/constants/shapes';
 import { ShapePreview } from '@/components/shapes/ShapeIcon';
-import { tagShapeRole, getShapeRole, validateDiagram, FlowchartIssue } from '@/utils/flowchartRules';
+import { tagShapeRole, getShapeRole, validateDiagram, FlowchartIssue, IssueSeverity } from '@/utils/flowchartRules';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -54,13 +59,48 @@ const BLUE = '#4c6fff';
 // Small badge icons for flowchart-validation cell overlays — inlined as data
 // URIs so no image asset is needed for a first-pass feature.
 const FLOWCHART_ERROR_ICON =
-  "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 16 16'><circle cx='8' cy='8' r='8' fill='%23ef4444'/><rect x='7' y='3' width='2' height='6' rx='1' fill='white'/><rect x='7' y='11' width='2' height='2' rx='1' fill='white'/></svg>";
+  "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='18' height='18' viewBox='0 0 18 18'><circle cx='9' cy='9' r='8' fill='%23ef4444' stroke='white' stroke-width='1.25'/><rect x='8.1' y='4.5' width='1.8' height='6' rx='0.9' fill='white'/><circle cx='9' cy='13' r='1.1' fill='white'/></svg>";
 const FLOWCHART_WARNING_ICON =
-  "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 16 16'><path d='M8 1L15 14H1Z' fill='%23f59e0b'/><rect x='7' y='6' width='2' height='4' rx='1' fill='white'/><rect x='7' y='11' width='2' height='2' rx='1' fill='white'/></svg>";
-// Same red/yellow used above for the outline CellHighlight draws around a
-// flagged shape — one visual language for "this cell has an issue."
-const FLOWCHART_ERROR_COLOR = '#ef4444';
-const FLOWCHART_WARNING_COLOR = '#f59e0b';
+  "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='18' height='18' viewBox='0 0 18 18'><path d='M9 1.6L17 15.5H1Z' fill='%23f59e0b' stroke='white' stroke-width='1.25' stroke-linejoin='round'/><rect x='8.1' y='7' width='1.8' height='4.4' rx='0.9' fill='white'/><circle cx='9' cy='13' r='1.05' fill='white'/></svg>";
+const FLOWCHART_INFO_ICON =
+  "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='18' height='18' viewBox='0 0 18 18'><circle cx='9' cy='9' r='8' fill='%233b82f6' stroke='white' stroke-width='1.25'/><circle cx='9' cy='5.6' r='1.15' fill='white'/><rect x='8.1' y='8.2' width='1.8' height='5.4' rx='0.9' fill='white'/></svg>";
+
+const severityColor = (severity: IssueSeverity): string =>
+  severity === 'error' ? '#ef4444' : severity === 'warning' ? '#f59e0b' : '#3b82f6';
+
+/** Small inline severity glyph for the summary pill/issue list — same shape
+ *  language as the cell-overlay icons above (circle=error/info, triangle=
+ *  warning) so the two places an issue shows up read as one visual system,
+ *  instead of the raw ❌/⚠️ emoji this used to render (inconsistent across
+ *  platforms/fonts and the main thing that made this feel unpolished). */
+function SeverityIcon({ severity, size = 14 }: { severity: IssueSeverity; size?: number }) {
+  const color = severityColor(severity);
+  if (severity === 'warning') {
+    return (
+      <svg width={size} height={size} viewBox="0 0 18 18" fill="none">
+        <path d="M9 1.6L17 15.5H1Z" fill={color} />
+        <rect x="8.1" y="7" width="1.8" height="4.4" rx="0.9" fill="#fff" />
+        <circle cx="9" cy="13" r="1.05" fill="#fff" />
+      </svg>
+    );
+  }
+  return (
+    <svg width={size} height={size} viewBox="0 0 18 18" fill="none">
+      <circle cx="9" cy="9" r="8" fill={color} />
+      {severity === 'info' ? (
+        <>
+          <circle cx="9" cy="5.6" r="1.15" fill="#fff" />
+          <rect x="8.1" y="8.2" width="1.8" height="5.4" rx="0.9" fill="#fff" />
+        </>
+      ) : (
+        <>
+          <rect x="8.1" y="4.5" width="1.8" height="6" rx="0.9" fill="#fff" />
+          <circle cx="9" cy="13" r="1.1" fill="#fff" />
+        </>
+      )}
+    </svg>
+  );
+}
 
 const DROP_W = 120;
 const DROP_H = 60;
@@ -182,6 +222,233 @@ function clientToGraphCoords(
   return { x, y };
 }
 
+// Model-space (not screen-space) distance in graph units within which a
+// connector's dropped endpoint "magnet-snaps" onto a nearby shape — chosen
+// close enough that a deliberate drop lands, not so wide that an unrelated
+// shape two grid squares away gets attached by accident. Exported so
+// create.tsx's handleAddShape (tap-to-add, used by the mobile Shapes sheet)
+// applies the exact same snap radius as this file's own handleDrop
+// (desktop drag-and-drop) — one connector-attach behavior, not two that can
+// quietly drift apart.
+export const CONNECTOR_SNAP_DISTANCE = 24;
+
+// Finds the vertex nearest a point, for magnet-attaching a freshly-dropped
+// connector's endpoint (see handleDrop below and create.tsx's
+// handleAddShape). Deliberately works in model coordinates (each vertex's
+// own geometry) rather than converting to view/screen pixels via
+// graph.getCellAt — that would need re-deriving from the current scale/pan,
+// while comparing against geometry directly is correct at any zoom level
+// and doesn't depend on what's currently scrolled into view. Distance to a
+// cell is 0 when the point already lands inside its bounds, so a drop
+// directly on top of a shape always attaches, not just a near-miss.
+export function findNearbyVertex(graph: Graph, x: number, y: number, threshold: number): any {
+  const parent = graph.getDefaultParent();
+  const vertices = graph.getChildVertices(parent);
+  let best: any = null;
+  let bestDistance = Infinity;
+
+  for (const cell of vertices) {
+    const geo = cell.getGeometry();
+    if (!geo) continue;
+    const dx = Math.max(geo.x - x, 0, x - (geo.x + geo.width));
+    const dy = Math.max(geo.y - y, 0, y - (geo.y + geo.height));
+    const distance = Math.hypot(dx, dy);
+    if (distance <= threshold && distance < bestDistance) {
+      best = cell;
+      bestDistance = distance;
+    }
+  }
+
+  return best;
+}
+
+// Finds whichever shape sits immediately to one side of the drop point
+// along a single axis — "immediately" meaning its span on the OTHER axis
+// actually brackets the drop point (so a shape that's merely somewhere off
+// to that side, but not in the same row/column, doesn't count), and closest
+// among those. Distance-unbounded on purpose: unlike findNearbyVertex's
+// small fixed snap radius, this is how two shapes that are simply "next to
+// each other" get found regardless of exactly how far apart they are.
+function findBracketingVertex(
+  vertices: any[],
+  centerX: number,
+  centerY: number,
+  direction: 'left' | 'right' | 'up' | 'down',
+): any {
+  let best: any = null;
+  let bestGap = Infinity;
+  for (const cell of vertices) {
+    if (isConnectorCell(cell)) continue;
+    const geo = cell.getGeometry();
+    if (!geo) continue;
+
+    if (direction === 'left' || direction === 'right') {
+      if (centerY < geo.y || centerY > geo.y + geo.height) continue;
+      const gap = direction === 'left' ? centerX - (geo.x + geo.width) : geo.x - centerX;
+      if (gap >= 0 && gap < bestGap) { bestGap = gap; best = cell; }
+    } else {
+      if (centerX < geo.x || centerX > geo.x + geo.width) continue;
+      const gap = direction === 'up' ? centerY - (geo.y + geo.height) : geo.y - centerY;
+      if (gap >= 0 && gap < bestGap) { bestGap = gap; best = cell; }
+    }
+  }
+  return best;
+}
+
+// A dropped connector's two endpoints should attach to whichever pair of
+// shapes it actually landed between — side by side "(shape) (shape)", or
+// stacked "(shape) / (shape)" — regardless of exactly how far apart those
+// shapes are. Previously this only ever projected a fixed-length line
+// (the connector's own default width) out from the drop's center and
+// snapped whichever end happened to land within a small fixed radius of a
+// shape — so it only worked when the two shapes happened to be spaced
+// almost exactly that far apart; any other spacing left the connector
+// dangling on one or both ends (an on-canvas error badge, not just a
+// cosmetic miss). This instead looks outward in all 4 directions for the
+// shape that actually brackets the drop point in each, and connects
+// whichever axis found a complete pair (horizontal wins on tie, matching
+// the original left-right default). Falls back to the old fixed-length
+// floating segment, still with its small magnet-snap radius, only when
+// neither axis finds two shapes to bridge.
+export function findConnectorDropEndpoints(
+  graph: Graph,
+  centerX: number,
+  centerY: number,
+  reach: number,
+): {
+  startPoint: { x: number; y: number };
+  endPoint: { x: number; y: number };
+  sourceCell: any;
+  targetCell: any;
+} {
+  const vertices = graph.getChildVertices(graph.getDefaultParent());
+
+  const leftCell = findBracketingVertex(vertices, centerX, centerY, 'left');
+  const rightCell = findBracketingVertex(vertices, centerX, centerY, 'right');
+  if (leftCell && rightCell) {
+    const lGeo = leftCell.getGeometry();
+    const rGeo = rightCell.getGeometry();
+    return {
+      startPoint: { x: lGeo.x + lGeo.width, y: centerY },
+      endPoint: { x: rGeo.x, y: centerY },
+      sourceCell: leftCell,
+      targetCell: rightCell,
+    };
+  }
+
+  const upCell = findBracketingVertex(vertices, centerX, centerY, 'up');
+  const downCell = findBracketingVertex(vertices, centerX, centerY, 'down');
+  if (upCell && downCell) {
+    const uGeo = upCell.getGeometry();
+    const dGeo = downCell.getGeometry();
+    return {
+      startPoint: { x: centerX, y: uGeo.y + uGeo.height },
+      endPoint: { x: centerX, y: dGeo.y },
+      sourceCell: upCell,
+      targetCell: downCell,
+    };
+  }
+
+  const half = reach / 2;
+  const hStart = { x: centerX - half, y: centerY };
+  const hEnd = { x: centerX + half, y: centerY };
+  const hSource = findNearbyVertex(graph, hStart.x, hStart.y, CONNECTOR_SNAP_DISTANCE);
+  const hTargetCandidate = findNearbyVertex(graph, hEnd.x, hEnd.y, CONNECTOR_SNAP_DISTANCE);
+  const hTarget = hTargetCandidate && hTargetCandidate !== hSource ? hTargetCandidate : null;
+  return { startPoint: hStart, endPoint: hEnd, sourceCell: hSource, targetCell: hTarget };
+}
+
+// Sequence Diagram message arrows (Sync/Async/Return) are meant to span
+// however far apart the two participants actually are — not the connector
+// shape's own arbitrary default width. The generic connector-drop snap
+// above places the far end at a fixed offset from the drop point, so it
+// only reaches the other lifeline/activation by coincidence; if the two
+// participants are spaced any differently than that default width, the far
+// end lands short (or past) the target and never actually connects (looks
+// exactly like the arrowhead stopping in mid-air before the activation
+// bar). This instead looks at what's actually there: every lifeline/actor/
+// activation whose vertical span covers the drop point's height, and picks
+// whichever one sits immediately to the left and right of the drop point,
+// however far apart they really are.
+const SEQUENCE_TIMELINE_STYLES = new Set([
+  'igraph.umlLifeline',
+  'igraph.umlActivation',
+  'igraph.seqActor',
+  'igraph.ucActor',
+]);
+
+export const SEQUENCE_MESSAGE_SHAPE_IDS = new Set(['seq-sync-msg', 'seq-async-msg', 'seq-return-msg']);
+
+function getCellStyleShapeName(cell: any): string | undefined {
+  const style = cell?.getStyle?.();
+  return typeof style === 'object' ? style?.shape : undefined;
+}
+
+// A message connected to both a source and target cell with no fixed
+// entry/exit point uses maxGraph's "floating" routing, which recomputes the
+// connection point from the shapes' relative positions on every redraw —
+// not from wherever the user actually dropped/dragged the arrow. Against
+// two tall lifeline/activation bars that rarely share the same vertical
+// center, that recompute visibly snaps the message to a different height
+// than the one it was just placed at. Pinning exitY/entryY (fractions of
+// the connected cell's own height) to the actual drop height fixes the
+// connection to that exact spot instead, the same way dragging an edge
+// endpoint onto one of a shape's own fixed connection points would.
+export function sequenceMessageConnectionStyle(
+  sourceCell: any,
+  targetCell: any,
+  dropY: number,
+): Partial<CellStateStyle> {
+  const style: Partial<CellStateStyle> & Record<string, unknown> = {};
+  const sourceGeo = sourceCell?.getGeometry();
+  if (sourceGeo && sourceGeo.height > 0) {
+    style.exitX = 1;
+    style.exitY = Math.min(1, Math.max(0, (dropY - sourceGeo.y) / sourceGeo.height));
+    style.exitDx = 0;
+    style.exitDy = 0;
+  }
+  const targetGeo = targetCell?.getGeometry();
+  if (targetGeo && targetGeo.height > 0) {
+    style.entryX = 0;
+    style.entryY = Math.min(1, Math.max(0, (dropY - targetGeo.y) / targetGeo.height));
+    style.entryDx = 0;
+    style.entryDy = 0;
+  }
+  return style;
+}
+
+export function findSequenceMessageEndpoints(
+  graph: Graph,
+  dropX: number,
+  dropY: number,
+): { source: any; target: any } {
+  const parent = graph.getDefaultParent();
+  const candidates = graph
+    .getChildVertices(parent)
+    .filter((cell: any) => {
+      const shape = getCellStyleShapeName(cell);
+      if (!shape || !SEQUENCE_TIMELINE_STYLES.has(shape)) return false;
+      const geo = cell.getGeometry();
+      return !!geo && dropY >= geo.y && dropY <= geo.y + geo.height;
+    })
+    .sort((a: any, b: any) => (a.getGeometry()?.x ?? 0) - (b.getGeometry()?.x ?? 0));
+
+  let source: any = null;
+  let target: any = null;
+  for (const cell of candidates) {
+    const geo = cell.getGeometry();
+    if (!geo) continue;
+    const center = geo.x + geo.width / 2;
+    if (center <= dropX) {
+      source = cell;
+    } else {
+      target = cell;
+      break;
+    }
+  }
+  return { source, target };
+}
+
 interface DiagramCanvasProps {
   onReady?: (graph: any) => void;
   onChange?: (xml: string) => void;
@@ -204,6 +471,12 @@ export interface DiagramCanvasHandle {
   // (the model was never touched), it just re-triggers that measurement so
   // the existing content actually gets painted again once visible.
   refresh: () => void;
+  // Gates local interaction for a "view" or "comment" collaborator — the
+  // real enforcement is always the backend's save/socket permission checks
+  // (this can't be trusted as a security boundary, it's just UX), but a
+  // viewer's canvas shouldn't even let them try to drag/edit a shape that
+  // any resulting save would just get rejected for anyway.
+  setReadOnly: (readOnly: boolean) => void;
 }
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -226,6 +499,33 @@ export function getShapeStyle(styleKey: string): CellStateStyle {
 
   // Special styles for specific shapes (match what's in maxgraph-custom-shapes.ts)
   const specialStyles: Record<string, Partial<CellStateStyle>> = {
+    // The name label belongs inside the small header box at the top of the
+    // shape (see UMLLifelineShapeCanvas), not centered on the whole tall
+    // dashed lifeline below it — base's align:center/verticalAlign:middle
+    // would otherwise land the text in the middle of the dashed line.
+    // header there is a fixed 30px regardless of the cell's own height, so
+    // a fixed spacingTop here reliably lands inside it too.
+    'igraph.umlLifeline': {
+      shape: 'igraph.umlLifeline',
+      fillColor: '#ffffff',
+      strokeColor: BLACK,
+      strokeWidth: 2,
+      verticalAlign: 'top' as VAlignValue,
+      align: 'center' as AlignValue,
+      spacingTop: 6,
+    },
+    // Same reasoning as umlLifeline just above: the name belongs just below
+    // the stick figure's fixed-height header (see UMLSeqActorShapeCanvas),
+    // not centered on the whole tall shape where the dashed lifeline runs.
+    'igraph.seqActor': {
+      shape: 'igraph.seqActor',
+      fillColor: 'transparent',
+      strokeColor: BLACK,
+      strokeWidth: 2,
+      verticalAlign: 'top' as VAlignValue,
+      align: 'center' as AlignValue,
+      spacingTop: 68,
+    },
     // ERD Shapes
     'igraph.erdRelationship': {
       shape: 'igraph.erdRelationship',
@@ -333,11 +633,17 @@ export function getShapeStyle(styleKey: string): CellStateStyle {
       strokeColor: BLACK,
       strokeWidth: 2,
     },
+    // Title sits at the top of the frame (standard UML system-boundary
+    // notation), not centered where the use cases inside it go.
     'igraph.umlSystemBoundary': {
       shape: 'igraph.umlSystemBoundary',
       fillColor: 'transparent',
       strokeColor: BLACK,
       strokeWidth: 2,
+      verticalAlign: 'top' as VAlignValue,
+      align: 'center' as AlignValue,
+      fontStyle: 1,
+      spacingTop: 10,
     },
     'igraph.umlAssociation': {
       shape: 'igraph.umlAssociation',
@@ -645,20 +951,26 @@ export function insertUmlClassCell(graph: Graph, x: number, y: number, w: number
 const CLASS_COMPARTMENT_LINE_HEIGHT = 17;
 const CLASS_COMPARTMENT_V_PADDING = 12;
 
-// Runs when a compartment's edit is committed (see the CellEditorHandler
-// override below for why Enter reaches here as a newline instead of
-// stopping the edit). Grows/shrinks just the edited compartment to fit its
-// line count, shifts every compartment below it down/up by the same delta,
-// and grows/shrinks the container by that delta too — the other
-// compartments' own heights are left untouched, per the chosen behavior.
-function resizeClassCompartmentToFitText(graph: Graph, cell: any) {
+// Runs both live (on every keystroke while a compartment is mid-edit — see
+// the CellEditorHandler.resize patch below, so pressing Enter grows the box
+// immediately instead of waiting for the edit to commit) and once more on
+// commit (see the LABEL_CHANGED listener below, as a catch-all for any edit
+// path that doesn't go through the patched resize, e.g. a pasted multi-line
+// value). `liveValue` carries the textarea's in-progress text during an
+// active edit, since the cell's own value doesn't update until commit —
+// omit it to fall back to the committed value.
+// Grows/shrinks just the edited compartment to fit its line count, shifts
+// every compartment below it down/up by the same delta, and grows/shrinks
+// the container by that delta too — the other compartments' own heights
+// are left untouched, per the chosen behavior.
+function resizeClassCompartmentToFitText(graph: Graph, cell: any, liveValue?: string) {
   const container = cell.getParent();
   const geo = cell.getGeometry();
   if (!container || !geo) return;
   const containerGeo = container.getGeometry();
   if (!containerGeo) return;
 
-  const value = (cell.getValue() as string) ?? '';
+  const value = liveValue ?? (cell.getValue() as string) ?? '';
   const lineCount = Math.max(1, value.split('\n').length);
   const desired = lineCount * CLASS_COMPARTMENT_LINE_HEIGHT + CLASS_COMPARTMENT_V_PADDING;
   const delta = desired - geo.height;
@@ -730,6 +1042,182 @@ function syncClassCompartmentsToContainer(graph: Graph, container: any) {
 }
 
 // ════════════════════════════════════════════════════════════════════════════
+// ⭐ DFD DATA STORE SHAPE — container + 2 independently-editable compartments
+// ════════════════════════════════════════════════════════════════════════════
+//
+// Same trick as insertUmlClassCell above: a single-cell data store can only
+// carry one label for the whole shape, but the real notation has an ID box
+// and a Name box. This builds a container (just the Yourdon/Gane-Sarson
+// outline) holding 2 ordinary vertex children — so each is independently
+// double-click-editable for free, side by side instead of stacked.
+const DFD_DATA_STORE_ID_RATIO = 0.28;
+
+export function insertDfdDataStoreCell(
+  graph: Graph,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  variant: 'yourdon' | 'gs' = 'yourdon',
+) {
+  const idW = Math.round(w * DFD_DATA_STORE_ID_RATIO);
+  const nameW = Math.max(20, w - idW);
+
+  const container = graph.insertVertex(null, null, '', x, y, w, h, {
+    shape: variant === 'gs' ? 'igraph.dfdDataStoreGSContainer' : 'igraph.dfdDataStoreContainer',
+    fillColor: '#ffffff',
+    strokeColor: BLACK,
+    strokeWidth: 2,
+  });
+
+  const idCell = graph.insertVertex(container, null, '', 0, 0, idW, h, {
+    shape: 'igraph.dfdCompartmentDivider',
+    strokeColor: BLACK,
+    strokeWidth: 2,
+    fontColor: BLACK,
+    fontSize: 12,
+    align: 'center' as AlignValue,
+    verticalAlign: 'middle' as VAlignValue,
+    whiteSpace: 'wrap' as WhiteSpaceValue,
+    movable: false,
+    resizable: false,
+  });
+  const nameCell = graph.insertVertex(container, null, '', idW, 0, nameW, h, {
+    shape: 'igraph.dfdCompartmentPlain',
+    strokeColor: BLACK,
+    strokeWidth: 2,
+    fontColor: BLACK,
+    fontSize: 12,
+    align: 'center' as AlignValue,
+    verticalAlign: 'middle' as VAlignValue,
+    whiteSpace: 'wrap' as WhiteSpaceValue,
+    spacingLeft: 6,
+    movable: false,
+    resizable: false,
+  });
+
+  [idCell, nameCell].forEach((c) => c.setConnectable(false));
+
+  return container;
+}
+
+// Runs when the user drag-resizes a data store container's own handles.
+// Compartments are `resizable: false`, so without this they'd keep their old
+// width/proportions and stop tiling the container. Keeps both compartments
+// spanning the container's new height, rescaling their widths
+// proportionally so they still exactly tile its new width side by side.
+function syncDfdDataStoreCompartmentsToContainer(graph: Graph, container: any) {
+  const containerGeo = container.getGeometry();
+  if (!containerGeo) return;
+
+  const children = graph
+    .getChildCells(container, true, false)
+    .filter((c: any) => isDfdDataStoreCompartmentCell(c))
+    .sort((a: any, b: any) => (a.getGeometry()?.x ?? 0) - (b.getGeometry()?.x ?? 0));
+  if (children.length === 0) return;
+
+  const oldTotalWidth = children.reduce((sum: number, c: any) => sum + (c.getGeometry()?.width ?? 0), 0);
+  if (oldTotalWidth <= 0) return;
+  const scale = containerGeo.width / oldTotalWidth;
+
+  graph.batchUpdate(() => {
+    const model = graph.getDataModel();
+    let cursorX = 0;
+    children.forEach((c: any) => {
+      const geo = c.getGeometry()!.clone();
+      geo.height = containerGeo.height;
+      geo.width = Math.max(20, Math.round(geo.width * scale));
+      geo.x = cursorX;
+      geo.y = 0;
+      model.setGeometry(c, geo);
+      cursorX += geo.width;
+    });
+  });
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// ⭐ SEQUENCE LIFELINE — growable object-name header
+// ════════════════════════════════════════════════════════════════════════════
+//
+// The lifeline's name header used to be a hardcoded 30px regardless of how
+// long the object's name was, so a long name either overflowed the box or
+// got clipped. Runs on every label edit: estimates how many wrapped lines
+// the new name needs at the header's actual width, and if that's taller
+// than the header's current height, grows just the header (via a
+// per-cell `headerHeight` style override UMLLifelineShapeCanvas reads) and
+// the total cell height by the same delta — so the dashed lifeline below
+// keeps its own length instead of being eaten by the header's growth.
+const LIFELINE_MIN_HEADER = 30;
+const LIFELINE_LINE_HEIGHT = 16;
+const LIFELINE_V_PADDING = 10;
+const LIFELINE_AVG_CHAR_WIDTH = 7;
+
+function estimateLifelineHeaderHeight(value: string, headerWidth: number): number {
+  const usableWidth = Math.max(20, headerWidth - 12);
+  const charsPerLine = Math.max(4, Math.floor(usableWidth / LIFELINE_AVG_CHAR_WIDTH));
+  const lines = value
+    .split('\n')
+    .reduce((sum, line) => sum + Math.max(1, Math.ceil(line.length / charsPerLine)), 0);
+  return Math.max(LIFELINE_MIN_HEADER, lines * LIFELINE_LINE_HEIGHT + LIFELINE_V_PADDING);
+}
+
+// Finds which compartment child a point (in graph coordinates) actually
+// falls into, given the axis the container stacks its compartments along
+// ('y' for Class's name/attributes/methods, 'x' for the Data Store's
+// ID/Name). Used to redirect a double-click that maxGraph resolved to the
+// *container* cell (its shape node can end up on top of a child's at the
+// exact tile boundary, or after certain redraw orders) to the actual
+// compartment the user clicked on, instead of silently editing the
+// container's own (invisible, never-shown) label.
+function findCompartmentAtPoint(
+  graph: Graph,
+  container: any,
+  graphX: number,
+  graphY: number,
+  axis: 'x' | 'y',
+  isCompartment: (cell: any) => boolean,
+): any {
+  const containerGeo = container.getGeometry();
+  if (!containerGeo) return null;
+
+  const children = graph
+    .getChildCells(container, true, false)
+    .filter((c: any) => isCompartment(c))
+    .sort((a: any, b: any) => (a.getGeometry()?.[axis] ?? 0) - (b.getGeometry()?.[axis] ?? 0));
+  if (children.length === 0) return null;
+
+  const local = axis === 'y' ? graphY - containerGeo.y : graphX - containerGeo.x;
+  const hit = children.find((c: any) => {
+    const g = c.getGeometry();
+    if (!g) return false;
+    const start = g[axis];
+    const size = axis === 'y' ? g.height : g.width;
+    return local >= start && local < start + size;
+  });
+  return hit ?? children[children.length - 1];
+}
+
+function resizeLifelineHeaderToFitText(graph: Graph, cell: any, liveValue?: string) {
+  const geo = cell.getGeometry();
+  const style = cell.getStyle();
+  if (!geo || typeof style !== 'object') return;
+
+  const currentHeader = typeof style.headerHeight === 'number' ? style.headerHeight : LIFELINE_MIN_HEADER;
+  const value = liveValue ?? (cell.getValue() as string) ?? '';
+  const desired = estimateLifelineHeaderHeight(value, geo.width * 0.8);
+  const delta = desired - currentHeader;
+  if (Math.abs(delta) < 1) return;
+
+  graph.batchUpdate(() => {
+    const model = graph.getDataModel();
+    model.setStyle(cell, { ...style, headerHeight: desired });
+    const newGeo = geo.clone();
+    newGeo.height += delta;
+    model.setGeometry(cell, newGeo);
+  });
+}
+
+// ════════════════════════════════════════════════════════════════════════════
 // ⭐ MAIN WEBCANVAS COMPONENT
 // ════════════════════════════════════════════════════════════════════════════
 
@@ -738,6 +1226,15 @@ const WebCanvas = forwardRef<DiagramCanvasHandle, DiagramCanvasProps>(({ onReady
   const gridCanvasRef = useRef<HTMLCanvasElement>(null);
   const graphDivRef = useRef<HTMLDivElement>(null);
   const graphRef = useRef<Graph | null>(null);
+  // Mobile's own label-editing overlay (see openMobileEditor below) — a
+  // single always-mounted <textarea>, hidden until needed and repositioned/
+  // refocused imperatively rather than conditionally rendered, so focusing
+  // it stays inside the same synchronous call stack as the double-tap that
+  // opened it (a React state update + re-render in between would break the
+  // "trusted user gesture" requirement mobile browsers have for raising the
+  // on-screen keyboard).
+  const mobileEditorRef = useRef<HTMLTextAreaElement | null>(null);
+  const mobileEditingCellRef = useRef<any | null>(null);
 
   const [isDragOver, setIsDragOver] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -747,11 +1244,12 @@ const WebCanvas = forwardRef<DiagramCanvasHandle, DiagramCanvasProps>(({ onReady
   // Defaults open (not collapsed behind a click) so the actual "what's wrong"
   // messages are visible the moment an issue appears, not just a bare count.
   const [showIssuesList, setShowIssuesList] = useState(true);
-  // One CellHighlight shape per flagged cell — a colored outline around the
-  // shape itself (red for error, yellow for warning), separate from the
-  // small corner-badge overlay. Rebuilt on every validation pass; torn down
-  // on unmount in initGraph's cleanup below.
-  const issueHighlightsRef = useRef<CellHighlight[]>([]);
+  // Tapping/clicking a validation badge (see runFlowchartValidation) shows
+  // its message in this popup instead of relying only on the native
+  // hover tooltip — hover has no equivalent on touch, so mobile needs an
+  // explicit show/dismiss path. Positioned relative to graphDivRef's own
+  // container, same coordinate space as the shape picker below.
+  const [issuePopup, setIssuePopup] = useState<{ x: number; y: number; message: string } | null>(null);
 
   // Draw.io-style picker: clicking a directional arrow opens a grid of shapes
   // instead of immediately cloning the source shape, so the user chooses what
@@ -786,7 +1284,37 @@ const WebCanvas = forwardRef<DiagramCanvasHandle, DiagramCanvasProps>(({ onReady
       try {
         new ModelXmlSerializer(graph.getDataModel()).import(xml);
         graph.clearSelection();
-        (graph.getPlugin('FitPlugin') as FitPlugin | null)?.fit();
+
+        // Deferred one frame on purpose: fitCenter()/center() below read
+        // graph.container.clientWidth/clientHeight, and on this direct-load
+        // path (fresh navigation straight to /create?diagramId=...) that can
+        // still report a stale/too-small size the instant the model import
+        // finishes — the container is present but the surrounding flex
+        // layout (shapes panel, properties panel) hasn't necessarily finished
+        // settling yet. That produced e.g. a fit computed against a near-
+        // content-sized box, landing on ~100% instead of the real fit scale.
+        // Reading the size from inside requestAnimationFrame guarantees a
+        // layout pass has actually run first.
+        requestAnimationFrame(() => {
+          if (graphRef.current !== graph) return; // torn down/replaced before this fired
+          if (isMobile) {
+            // A diagram authored on desktop can have been left zoomed/panned
+            // anywhere — FitPlugin's zoom-to-fit would then open it at
+            // whatever arbitrary scale makes it fit, varying by diagram size.
+            // Mobile should instead always open the same way a blank canvas
+            // does: 100% zoom, diagram centered in the viewport.
+            graph.getView().setScale(1);
+            graph.center(true, true);
+          } else {
+            // fit() (used pre-existing elsewhere) only aligns the diagram's
+            // top-left near the container's border — it was never centering
+            // horizontally/vertically, so a diagram authored on mobile (or
+            // panned off to a corner) opened on desktop looking off-center.
+            // fitCenter() does the same fit-to-container scaling but actually
+            // centers the result, matching mobile's now-centered open.
+            (graph.getPlugin('FitPlugin') as FitPlugin | null)?.fitCenter();
+          }
+        });
       } catch (e) {
         console.error('Failed to load diagram XML:', e);
       }
@@ -795,12 +1323,29 @@ const WebCanvas = forwardRef<DiagramCanvasHandle, DiagramCanvasProps>(({ onReady
       const graph = graphRef.current;
       if (!graph) return;
       try {
+        // A frozen/hidden tab collapses its container to 0×0 (display:none),
+        // and maxGraph only re-measures its own container on an explicit
+        // sizeDidChange() call — nothing here does that automatically once
+        // the tab becomes visible again. Without it, the graph's own SVG can
+        // stay stuck at whatever (possibly zero) size it last measured while
+        // hidden, so every shape is still there in the model but invisible —
+        // exactly what "my shape disappeared after switching tabs" looks
+        // like. view.revalidate() alone (the previous version of this
+        // method) only reprocesses already-invalidated cell states; it
+        // doesn't force that container re-measurement the way sizeDidChange
+        // does.
+        (graph as any).sizeDidChange();
         graph.getView().revalidate();
         resizeGridCanvas();
         repaintGrid();
       } catch (e) {
         console.error('Failed to refresh diagram view:', e);
       }
+    },
+    setReadOnly: (readOnly: boolean) => {
+      const graph = graphRef.current;
+      if (!graph) return;
+      graph.setEnabled(!readOnly);
     },
     // Deps stay [] (matching the original loadXml-only handle): resizeGridCanvas/
     // repaintGrid are declared further down this component and would be a
@@ -840,6 +1385,98 @@ const WebCanvas = forwardRef<DiagramCanvasHandle, DiagramCanvasProps>(({ onReady
       console.error('Selection change error:', error);
     }
   }, []);
+
+  // ─── Mobile label editor (custom overlay, not maxGraph's CellEditorHandler) ──
+  // Hides the textarea and, unless cancelled, writes its value back onto the
+  // cell being edited. Reads mobileEditingCellRef rather than taking the cell
+  // as a parameter so blur/Escape/Enter can all call this the same way
+  // without each needing to know which cell is active.
+  const commitMobileEdit = useCallback((cancel: boolean) => {
+    const graph = graphRef.current;
+    const textarea = mobileEditorRef.current;
+    const cell = mobileEditingCellRef.current;
+    if (!textarea) return;
+
+    textarea.style.display = 'none';
+    mobileEditingCellRef.current = null;
+
+    if (!cancel && graph && cell) {
+      graph.getDataModel().setValue(cell, textarea.value);
+    }
+    graphDivRef.current?.focus();
+  }, []);
+
+  // Positions the overlay textarea over `cell`'s current on-screen bounds and
+  // focuses it. Must be called synchronously from within the same touch/click
+  // event handler that triggered editing (see the DOUBLE_CLICK listener in
+  // initGraph) — deferring even to a microtask would make the mobile browser
+  // treat the resulting focus() as un-trusted and refuse to raise the
+  // keyboard, which is exactly the bug this whole overlay exists to avoid.
+  const openMobileEditor = useCallback((cell: any) => {
+    const graph = graphRef.current;
+    const textarea = mobileEditorRef.current;
+    if (!graph || !textarea) return;
+
+    const view = graph.getView();
+    const state = view.getState(cell);
+    if (!state) return;
+
+    // If a different cell was already being edited (shouldn't normally
+    // happen — blur commits it first — but guards against a stray call).
+    if (mobileEditingCellRef.current && mobileEditingCellRef.current !== cell) {
+      commitMobileEdit(false);
+    }
+
+    const isEdge = typeof cell.isEdge === 'function' && cell.isEdge();
+    let boxX: number;
+    let boxY: number;
+    let boxW: number;
+    let boxH: number;
+    if (isEdge) {
+      // Edges have no fixed "body" to size a box from — anchor on the
+      // label's existing rendered position if there's already a label,
+      // otherwise the edge's default label anchor (its midpoint).
+      const minW = 70;
+      const minH = 26;
+      const bbox = (state as any).text?.boundingBox;
+      if (bbox) {
+        boxX = bbox.x;
+        boxY = bbox.y;
+        boxW = Math.max(minW, bbox.width);
+        boxH = Math.max(minH, bbox.height);
+      } else {
+        const cx = state.absoluteOffset?.x ?? state.x + state.width / 2;
+        const cy = state.absoluteOffset?.y ?? state.y + state.height / 2;
+        boxX = cx - minW / 2;
+        boxY = cy - minH / 2;
+        boxW = minW;
+        boxH = minH;
+      }
+    } else {
+      boxX = state.x;
+      boxY = state.y;
+      boxW = state.width;
+      boxH = state.height;
+    }
+
+    const value = cell.getValue();
+    const style = state.style ?? {};
+    const scale = view.getScale();
+
+    mobileEditingCellRef.current = cell;
+    textarea.value = typeof value === 'string' ? value : '';
+    textarea.style.left = `${boxX}px`;
+    textarea.style.top = `${boxY}px`;
+    textarea.style.width = `${boxW}px`;
+    textarea.style.height = `${boxH}px`;
+    textarea.style.fontSize = `${Math.max(10, (style.fontSize ?? 12) * scale)}px`;
+    textarea.style.color = (style.fontColor as string) ?? '#1a1f36';
+    textarea.style.textAlign = (style.align as string) ?? 'center';
+    textarea.style.display = 'block';
+
+    textarea.focus();
+    textarea.select();
+  }, [commitMobileEdit]);
 
   // Dismissing the shape picker without picking anything should behave like
   // clicking empty canvas — the source shape's selection outline/handles go
@@ -1354,6 +1991,7 @@ const WebCanvas = forwardRef<DiagramCanvasHandle, DiagramCanvasProps>(({ onReady
       'igraph.display': { ...base, shape: 'igraph.display' },
       'igraph.annotation': { ...base, shape: 'igraph.annotation' },
       'igraph.ucActor': { ...base, shape: 'igraph.ucActor' },
+      'igraph.seqActor': { ...base, shape: 'igraph.seqActor' },
       'igraph.umlUseCase': { ...base, shape: 'igraph.umlUseCase' },
       'igraph.umlSystemBoundary': { ...base, shape: 'igraph.umlSystemBoundary' },
       'igraph.umlAssociation': { ...base, shape: 'igraph.umlAssociation' },
@@ -1412,70 +2050,55 @@ const WebCanvas = forwardRef<DiagramCanvasHandle, DiagramCanvasProps>(({ onReady
   }, []);
 
   // ════════════════════════════════════════════════════════════════════════════
-  // ⭐ DIAGRAM VALIDATION (every diagram type, desktop only — see
+  // ⭐ DIAGRAM VALIDATION (every diagram type, desktop AND mobile — see
   // utils/flowchartRules.ts for the full per-type rule set)
   // ════════════════════════════════════════════════════════════════════════════
-
-  const clearIssueHighlights = useCallback(() => {
-    issueHighlightsRef.current.forEach((h) => h.destroy());
-    issueHighlightsRef.current = [];
-  }, []);
 
   const runFlowchartValidation = useCallback(() => {
     const graph = graphRef.current;
     if (!graph) return;
 
-    if (isMobile) {
-      graph.clearCellOverlays(null);
-      clearIssueHighlights();
-      setFlowchartIssues((prev) => (prev.length ? [] : prev));
-      return;
-    }
-
     const issues = validateDiagram(graph, umlType);
 
+    // Badge only — no colored outline around the shape itself. The badge's
+    // own message shows on hover via the native tooltip (graph.setTooltips
+    // is enabled in initGraph) on desktop; a tap/click on the badge also
+    // fires the CLICK listener below, which shows the same message in
+    // issuePopup — the only way to see it on touch, where there's no hover.
     graph.clearCellOverlays(null);
     issues.forEach((issue) => {
       // Graph-wide issues (e.g. "no start terminator") aren't any one cell's
       // fault — they only ever appear in the summary list, not as a badge.
       if (!issue.cell) return;
       const icon = new ImageBox(
-        issue.severity === 'error' ? FLOWCHART_ERROR_ICON : FLOWCHART_WARNING_ICON,
-        16,
-        16,
+        issue.severity === 'error'
+          ? FLOWCHART_ERROR_ICON
+          : issue.severity === 'warning'
+            ? FLOWCHART_WARNING_ICON
+            : FLOWCHART_INFO_ICON,
+        18,
+        18,
       );
-      graph.addCellOverlay(issue.cell, new CellOverlay(icon, issue.message, 'right', 'top'));
-    });
-
-    // Colored outline per flagged cell — red wins over yellow when a shape
-    // has both an error and a warning, since the harder rule is the more
-    // important one to fix first. Skipped for real edges and for
-    // connector/line shapes dropped from the Shapes panel (Connector, Flow
-    // Line, Control, Mechanism, Interface) — an outline drawn along a thin
-    // line looks like a rendering glitch rather than a flagged shape; the
-    // corner-badge overlay above still covers those.
-    clearIssueHighlights();
-    const worstSeverityByCell = new Map<Cell, FlowchartIssue['severity']>();
-    issues.forEach((issue) => {
-      if (!issue.cell) return;
-      if (issue.cell.isEdge() || isConnectorCell(issue.cell)) return;
-      const existing = worstSeverityByCell.get(issue.cell);
-      if (existing !== 'error') worstSeverityByCell.set(issue.cell, issue.severity);
-    });
-    worstSeverityByCell.forEach((severity, cell) => {
-      const state = graph.getView().getState(cell);
-      if (!state) return;
-      const highlight = new CellHighlight(
-        graph,
-        severity === 'error' ? FLOWCHART_ERROR_COLOR : FLOWCHART_WARNING_COLOR,
-        3,
-      );
-      highlight.highlight(state);
-      issueHighlightsRef.current.push(highlight);
+      const overlay = new CellOverlay(icon, issue.message, 'right', 'top');
+      overlay.addListener(InternalEvent.CLICK, (_sender: unknown, evt: { getProperty: (key: string) => unknown; consume: () => void }) => {
+        const rawEvent = evt.getProperty('event') as MouseEvent | TouchEvent | undefined;
+        const point = rawEvent && 'changedTouches' in rawEvent && rawEvent.changedTouches.length
+          ? rawEvent.changedTouches[0]
+          : (rawEvent as MouseEvent | undefined);
+        const containerEl = graphDivRef.current;
+        if (point && containerEl) {
+          const rect = containerEl.getBoundingClientRect();
+          setIssuePopup({ x: point.clientX - rect.left, y: point.clientY - rect.top, message: issue.message });
+        } else {
+          setIssuePopup({ x: 0, y: 0, message: issue.message });
+        }
+        evt.consume();
+      });
+      graph.addCellOverlay(issue.cell, overlay);
     });
 
     setFlowchartIssues(issues);
-  }, [umlType, isMobile, clearIssueHighlights]);
+  }, [umlType]);
 
   // Called from the model CHANGE listener inside initGraph, which is set up once
   // and shouldn't be torn down/rebuilt just because umlType changed — so it reads
@@ -1517,24 +2140,72 @@ const WebCanvas = forwardRef<DiagramCanvasHandle, DiagramCanvasProps>(({ onReady
       let cell: any;
       if (shapeId === 'class-box') {
         cell = insertUmlClassCell(graph, cx, cy, dropW, dropH);
+      } else if (shapeId === 'dfd-data-store' || shapeId === 'dfd-data-store-gs') {
+        cell = insertDfdDataStoreCell(graph, cx, cy, dropW, dropH, shapeId === 'dfd-data-store-gs' ? 'gs' : 'yourdon');
+      } else if (CONNECTOR_SHAPE_IDS.has(shapeId)) {
+        // Connector/line shapes represent a connection, not a box — insert
+        // as a real edge so the user can drag either end onto a shape and
+        // have maxGraph actually connect them, same as any other edge. If
+        // an end lands on or near an existing shape at drop time, attach it
+        // immediately (magnet-style) instead of leaving it floating (see
+        // findConnectorDropEndpoints above) — same as the matching branch in
+        // create.tsx's handleAddShape and ConnectorArrowShapeCanvas.paintEdgeShape.
+        const styleObject: CellStateStyle = {
+          ...getShapeStyle(styleKey),
+          fontColor: BLACK,
+          fontSize: 12,
+          labelBackgroundColor: CANVAS_BG,
+        };
+
+        let sourceCell: any;
+        let targetCell: any;
+        let startPoint: { x: number; y: number };
+        let endPoint: { x: number; y: number };
+
+        if (SEQUENCE_MESSAGE_SHAPE_IDS.has(shapeId)) {
+          const dropY = cy + dropH / 2;
+          const found = findSequenceMessageEndpoints(graph, x, dropY);
+          sourceCell = found.source;
+          targetCell = found.target;
+          const sourceGeo = sourceCell?.getGeometry();
+          const targetGeo = targetCell?.getGeometry();
+          startPoint = sourceGeo ? { x: sourceGeo.x + sourceGeo.width, y: dropY } : { x: cx, y: dropY };
+          endPoint = targetGeo ? { x: targetGeo.x, y: dropY } : { x: cx + dropW, y: dropY };
+          Object.assign(styleObject, sequenceMessageConnectionStyle(sourceCell, targetCell, dropY));
+        } else {
+          const found = findConnectorDropEndpoints(graph, cx + dropW / 2, cy + dropH / 2, dropW);
+          startPoint = found.startPoint;
+          endPoint = found.endPoint;
+          sourceCell = found.sourceCell;
+          targetCell = found.targetCell;
+        }
+
+        cell = graph.insertEdge(null, null, '', sourceCell, targetCell, styleObject);
+        const geometry = new Geometry(0, 0, 0, 0);
+        geometry.setTerminalPoint(new Point(startPoint.x, startPoint.y), true);
+        geometry.setTerminalPoint(new Point(endPoint.x, endPoint.y), false);
+        graph.getDataModel().setGeometry(cell, geometry);
       } else {
         // ⭐ CRITICAL FIX: Use getShapeStyle to get the proper style
         const styleObject = getShapeStyle(styleKey);
 
-        // Add text properties
+        // Add text properties. Defaults come first so a shape with its own
+        // label-position override (e.g. igraph.umlLifeline's verticalAlign:
+        // 'top', to keep the name inside its header box instead of centered
+        // on the whole tall shape) wins instead of being clobbered here.
         const fullStyle: CellStateStyle = {
-          ...styleObject,
-          fontColor: BLACK,
-          fontSize: 12,
           align: 'center' as AlignValue,
           verticalAlign: 'middle' as VAlignValue,
           whiteSpace: 'wrap' as WhiteSpaceValue,
+          ...styleObject,
+          fontColor: BLACK,
+          fontSize: 12,
         };
 
         cell = graph.insertVertex(
           null,
           null,
-          '',
+          getShapeDefinitionById(shapeId)?.defaultLabel ?? '',
           cx,
           cy,
           dropW,
@@ -1591,17 +2262,28 @@ const WebCanvas = forwardRef<DiagramCanvasHandle, DiagramCanvasProps>(({ onReady
     let newCell: any;
     if (shapeId === 'class-box' || (!shapeId && isUmlClassContainerCell(sourceCell))) {
       newCell = insertUmlClassCell(graph, roundedX, roundedY, newW, newH);
+    } else if (
+      shapeId === 'dfd-data-store' || shapeId === 'dfd-data-store-gs' ||
+      (!shapeId && isDfdDataStoreContainerCell(sourceCell))
+    ) {
+      const sourceStyle = !shapeId ? sourceCell.getStyle() : undefined;
+      const isGS = shapeId === 'dfd-data-store-gs' ||
+        (!shapeId && typeof sourceStyle === 'object' && sourceStyle?.shape === 'igraph.dfdDataStoreGSContainer');
+      newCell = insertDfdDataStoreCell(graph, roundedX, roundedY, newW, newH, isGS ? 'gs' : 'yourdon');
     } else {
       let shapeStyle: CellStateStyle;
       if (shapeId) {
         const styleKey = IGRAPH_ID_STYLE_MAP[shapeId] ?? 'igraph.rectangle';
+        // Alignment defaults come first so a shape with its own label-
+        // position override (e.g. igraph.umlLifeline's verticalAlign:
+        // 'top') wins instead of being clobbered here.
         shapeStyle = {
-          ...getShapeStyle(styleKey),
-          fontColor: BLACK,
-          fontSize: 12,
           align: 'center' as AlignValue,
           verticalAlign: 'middle' as VAlignValue,
           whiteSpace: 'wrap' as WhiteSpaceValue,
+          ...getShapeStyle(styleKey),
+          fontColor: BLACK,
+          fontSize: 12,
         };
       } else {
         // Legacy "clone" path — keep the source cell's own style (its chosen
@@ -1632,6 +2314,8 @@ const WebCanvas = forwardRef<DiagramCanvasHandle, DiagramCanvasProps>(({ onReady
       strokeColor: BLACK,
       strokeWidth: 2,
       edgeStyle: 'orthogonalEdgeStyle',
+      fontColor: BLACK,
+      labelBackgroundColor: CANVAS_BG,
     };
     graph.insertEdge(null, null, '', sourceCell, newCell, edgeStyle);
 
@@ -1833,7 +2517,15 @@ const WebCanvas = forwardRef<DiagramCanvasHandle, DiagramCanvasProps>(({ onReady
       const selection = graph.getSelectionCells();
       const selected = selection.length === 1 ? selection[0] : null;
 
-      if (selected && selected.isVertex && selected.isVertex()) {
+      // Connector/line cells are real edges now (see handleAddShape/
+      // handleDrop), so this used to be vertex-only and silently skipped
+      // them — on mobile (no physical Delete key) that meant a selected
+      // connector had no way to be removed at all, since createArrowButtons
+      // is what renders the floating trash button below. It already skips
+      // the directional "add adjacent shape" arrows for connector-styled
+      // cells via isConnectorCell, so allowing edges through here only adds
+      // the delete button, not those arrows.
+      if (selected && ((selected.isVertex && selected.isVertex()) || (selected.isEdge && selected.isEdge()))) {
         if (currentArrowCell !== selected) {
           removeArrowButtons();
           currentArrowCell = selected;
@@ -2165,7 +2857,38 @@ const WebCanvas = forwardRef<DiagramCanvasHandle, DiagramCanvasProps>(({ onReady
       gc.width = wrapper.offsetWidth;
       gc.height = wrapper.offsetHeight;
 
-      const ro = new ResizeObserver(() => { resizeGridCanvas(); repaintGrid(); });
+      // Native ResizeObserver, not the focus-event timing DiagramCanvasHandle.
+      // refresh() used to rely on alone — it's the browser telling us the
+      // container's real post-layout size, guaranteed to fire exactly when
+      // a hidden (display:none, 0×0) tab becomes visible again and settles
+      // to its real size, however many reflow passes that actually takes.
+      // Calling the graph's own sizeDidChange() here (not just resizing the
+      // grid background canvas) is what makes the graph re-measure its
+      // container and actually redraw at the right size — without it, a
+      // shape dropped before switching away can come back looking like it
+      // vanished, when it was only ever the SVG still sized/painted for the
+      // container's collapsed dimensions.
+      const ro = new ResizeObserver(() => {
+        resizeGridCanvas();
+        repaintGrid();
+        // Skipped while a label is being edited: on mobile, the on-screen
+        // keyboard opening shrinks the viewport, which fires this same
+        // ResizeObserver. sizeDidChange() re-measures and rebuilds the
+        // graph's cell view states — and maxGraph's own CellEditorHandler
+        // has its own `window: 'resize'` listener that checks whether the
+        // editing cell still has a valid state, closing the editor if not.
+        // If our rebuild here ran first and momentarily left that state
+        // null, the editor saw that and immediately called stopEditing() —
+        // which is why the keyboard popped up and vanished right after
+        // double-tapping a shape. The container's real resize once editing
+        // ends will still fire this observer again, so nothing is lost by
+        // waiting.
+        const graph = graphRef.current as any;
+        if (graph?.isEditing?.()) return;
+        if (wrapper.offsetWidth > 0 && wrapper.offsetHeight > 0) {
+          graph?.sizeDidChange();
+        }
+      });
       ro.observe(wrapper);
 
       InternalEvent.disableContextMenu(graphDiv);
@@ -2183,9 +2906,22 @@ const WebCanvas = forwardRef<DiagramCanvasHandle, DiagramCanvasProps>(({ onReady
       const graph = new Graph(graphDiv);
       graphRef.current = graph;
 
+      // Off by default in maxGraph (TooltipHandler.enabled starts false) —
+      // needed so hovering a validation badge (see runFlowchartValidation)
+      // actually shows its message via the native tooltip. Only fires for
+      // real mouse hover (TooltipHandler ignores touch events by design),
+      // which is why the badge's CLICK listener also shows the same
+      // message in issuePopup — that's the path touch/mobile actually uses.
+      graph.setTooltips(true);
+
       const defaultEdgeStyle = graph.getStylesheet().getDefaultEdgeStyle();
       defaultEdgeStyle.strokeColor = BLACK;
       defaultEdgeStyle.strokeWidth = 2;
+      // Opaque label background so a label sits "in-line" on the connector
+      // (the stroke appears to break around the text, e.g. "---- Yes ---->")
+      // instead of the text floating over an unbroken line.
+      defaultEdgeStyle.fontColor = BLACK;
+      defaultEdgeStyle.labelBackgroundColor = CANVAS_BG;
 
       const stylesheet = graph.getStylesheet();
       const edgeStyleNames = ['defaultEdge', 'edgeStyle', 'roundedEdge', 'orthogonalEdge', 'entityRelation', 'arrow', 'connector'];
@@ -2193,6 +2929,8 @@ const WebCanvas = forwardRef<DiagramCanvasHandle, DiagramCanvasProps>(({ onReady
         const style = stylesheet.styles.get(styleName);
         if (style) {
           style.strokeColor = BLACK;
+          style.fontColor = BLACK;
+          style.labelBackgroundColor = CANVAS_BG;
           stylesheet.styles.set(styleName, style);
         }
       });
@@ -2275,14 +3013,15 @@ const WebCanvas = forwardRef<DiagramCanvasHandle, DiagramCanvasProps>(({ onReady
       graph.setCellsDeletable(true);
       graph.setPanning(true);
 
-      // ─── UML Class compartments ────────────────────────────────────────
+      // ─── UML Class compartments / Sequence Lifeline ────────────────────
       // Enter normally commits/stops editing everywhere (setEnterStopsCell
       // Editing above) so a shape's whole label stays a quick single line.
-      // A class compartment (name/attributes/methods) legitimately needs
-      // multiple lines (e.g. one attribute per line), so Enter there should
-      // insert a newline instead — overriding isStopEditingEvent to return
-      // false for Enter on those cells lets the keystroke fall through to
-      // the editor's native (browser) newline behavior untouched.
+      // A class compartment (name/attributes/methods) or a lifeline's
+      // object-name header legitimately needs multiple lines (one attribute
+      // per line; a long object/class name that wraps), so Enter there
+      // should insert a newline instead — overriding isStopEditingEvent to
+      // return false for Enter on those cells lets the keystroke fall
+      // through to the editor's native (browser) newline behavior untouched.
       const cellEditorHandler = graph.getPlugin('CellEditorHandler') as any;
       if (cellEditorHandler) {
         const defaultIsStopEditingEvent = cellEditorHandler.isStopEditingEvent.bind(cellEditorHandler);
@@ -2290,7 +3029,7 @@ const WebCanvas = forwardRef<DiagramCanvasHandle, DiagramCanvasProps>(({ onReady
           const editingCell = cellEditorHandler.getEditingCell?.();
           if (
             editingCell &&
-            isUmlClassCompartmentCell(editingCell) &&
+            (isUmlClassCompartmentCell(editingCell) || isUmlLifelineCell(editingCell)) &&
             evt.keyCode === 13 &&
             !evt.ctrlKey &&
             !evt.shiftKey
@@ -2298,6 +3037,32 @@ const WebCanvas = forwardRef<DiagramCanvasHandle, DiagramCanvasProps>(({ onReady
             return false;
           }
           return defaultIsStopEditingEvent(evt);
+        };
+
+        // CellEditorHandler already calls resize() on every keystroke on its
+        // own (autoSize, default true — see its installListeners) to keep
+        // the floating textarea's own size matched to its content. Growing
+        // the underlying CELL happens here too, piggybacking on that same
+        // per-keystroke call, so pressing Enter inside a compartment (or the
+        // Lifeline's name) grows the box live, right as the newline lands,
+        // instead of only once the edit commits. The cell's own value isn't
+        // updated yet mid-edit — getCurrentValue reads the textarea's actual
+        // in-progress text instead.
+        const defaultResize = cellEditorHandler.resize.bind(cellEditorHandler);
+        cellEditorHandler.resize = (...args: unknown[]) => {
+          const editingCell = cellEditorHandler.getEditingCell?.();
+          if (editingCell) {
+            const state = graph.getView().getState(editingCell);
+            const liveValue = state ? cellEditorHandler.getCurrentValue(state) : undefined;
+            if (typeof liveValue === 'string') {
+              if (isUmlClassCompartmentCell(editingCell)) {
+                resizeClassCompartmentToFitText(graph, editingCell, liveValue);
+              } else if (isUmlLifelineCell(editingCell)) {
+                resizeLifelineHeaderToFitText(graph, editingCell, liveValue);
+              }
+            }
+          }
+          return defaultResize(...args);
         };
       }
 
@@ -2308,6 +3073,9 @@ const WebCanvas = forwardRef<DiagramCanvasHandle, DiagramCanvasProps>(({ onReady
         if (cell && isUmlClassCompartmentCell(cell)) {
           resizeClassCompartmentToFitText(graph, cell);
         }
+        if (cell && isUmlLifelineCell(cell)) {
+          resizeLifelineHeaderToFitText(graph, cell);
+        }
       });
 
       // Dragging a class container's own resize handle needs its
@@ -2316,7 +3084,67 @@ const WebCanvas = forwardRef<DiagramCanvasHandle, DiagramCanvasProps>(({ onReady
         const resized = evt.getProperty('cells') as any[] | undefined;
         resized?.forEach((cell) => {
           if (isUmlClassContainerCell(cell)) syncClassCompartmentsToContainer(graph, cell);
+          if (isDfdDataStoreContainerCell(cell)) syncDfdDataStoreCompartmentsToContainer(graph, cell);
         });
+      });
+
+      // A double-click/tap that lands exactly on a compartment tile boundary
+      // (or otherwise resolves to the container instead of the compartment
+      // under the cursor) would silently start editing the container's own
+      // label — which has no visible box/text style, so it looks like the
+      // click just did nothing. Redirect to whichever compartment the point
+      // actually falls in, on both platforms, before deciding what to edit.
+      graph.addListener(InternalEvent.DOUBLE_CLICK, (_sender: any, evt: any) => {
+        const cell = evt.getProperty('cell');
+        if (!cell) return;
+
+        let targetCell = cell;
+        let axis: 'x' | 'y' | null = null;
+        let isCompartment: ((c: any) => boolean) | null = null;
+        if (isUmlClassContainerCell(cell)) {
+          axis = 'y';
+          isCompartment = isUmlClassCompartmentCell;
+        } else if (isDfdDataStoreContainerCell(cell)) {
+          axis = 'x';
+          isCompartment = isDfdDataStoreCompartmentCell;
+        }
+
+        const rawEvent = evt.getProperty('event') as MouseEvent | TouchEvent | undefined;
+        const point = rawEvent && 'changedTouches' in rawEvent && rawEvent.changedTouches.length
+          ? rawEvent.changedTouches[0]
+          : (rawEvent as MouseEvent | undefined);
+
+        if (axis && isCompartment) {
+          const containerEl = graphDivRef.current;
+          if (!point || !containerEl) return;
+          const { x, y } = clientToGraphCoords(graph, point.clientX, point.clientY, containerEl);
+          const found = findCompartmentAtPoint(graph, cell, x, y, axis, isCompartment);
+          if (!found) return;
+          targetCell = found;
+        }
+
+        // Mobile: skip maxGraph's own CellEditorHandler entirely in favor of
+        // our own overlay (openMobileEditor) — its resize/focus wiring
+        // fights the on-screen keyboard opening (which resizes the
+        // viewport), which is what made the keyboard flash and vanish
+        // immediately after double-tapping a shape. Lucidchart and draw.io
+        // sidestep the same class of bug the same way: a custom positioned
+        // input focused synchronously in the touch handler, instead of the
+        // graph library's built-in editor.
+        if (isMobile) {
+          evt.consume();
+          openMobileEditor(targetCell);
+          return;
+        }
+
+        // Desktop only needs to actually intervene for the compartment
+        // redirect above — everything else falls through to maxGraph's own
+        // default dblClick handling (event left unconsumed), which calls
+        // startEditingAtCell(cell) itself.
+        if (targetCell !== cell) {
+          evt.consume();
+          graph.startEditingAtCell(targetCell, rawEvent instanceof MouseEvent ? rawEvent : undefined);
+        }
       });
 
       graph.getSelectionModel().addListener(InternalEvent.CHANGE, () => {
@@ -2332,12 +3160,21 @@ const WebCanvas = forwardRef<DiagramCanvasHandle, DiagramCanvasProps>(({ onReady
       // until something explicitly refocused the canvas. Reclaiming focus
       // on every click keeps Delete/Backspace/arrow-nudge working right
       // after you click a shape, regardless of what had focus before.
+      //
+      // Skipped while the graph is editing a label: a double-tap on mobile
+      // starts editing (focusing the label's own input, which is what pops
+      // the on-screen keyboard) and also fires this same 'click'/'cellClick'
+      // event a beat later — stealing focus back to graphDiv closed the
+      // editor's input immediately, so the keyboard appeared and vanished
+      // almost instantly instead of staying up to type in.
       graph.addListener('click', () => {
+        if (graph.isEditing()) return;
         graphDiv.focus();
         setTimeout(handleSelectionChange, 10);
       });
 
       graph.addListener('cellClick', () => {
+        if (graph.isEditing()) return;
         graphDiv.focus();
         setTimeout(handleSelectionChange, 10);
       });
@@ -2388,6 +3225,28 @@ const WebCanvas = forwardRef<DiagramCanvasHandle, DiagramCanvasProps>(({ onReady
       keyHandler.bindControlKey(65, () => graph.selectAll(undefined, true));
       keyHandler.bindKey(27, () => graph.clearSelection());
 
+      // Ctrl+C / Ctrl+V — duplicate the selected shape(s). A Class shape or
+      // Data Store is really a container cell plus its compartment children
+      // (see insertUmlClassCell/insertDfdDataStoreCell above); if the user's
+      // selection happens to be one of those compartments rather than the
+      // container itself (clicking a compartment selects it individually,
+      // same as any other cell), copy its container instead — otherwise
+      // Ctrl+C/Ctrl+V on a Class shape would paste just one lone label box
+      // instead of duplicating the whole shape.
+      keyHandler.bindControlKey(67, () => {
+        const selected = graph.getSelectionCells();
+        if (!selected.length) return;
+        const targets = new Set<any>();
+        selected.forEach((cell: any) => {
+          const isCompartment = isUmlClassCompartmentCell(cell) || isDfdDataStoreCompartmentCell(cell);
+          targets.add(isCompartment ? cell.getParent() : cell);
+        });
+        Clipboard.copy(graph, Array.from(targets));
+      });
+      keyHandler.bindControlKey(86, () => {
+        Clipboard.paste(graph);
+      });
+
       const nudge = (dx: number, dy: number) => {
         const cells = graph.getSelectionCells();
         if (cells.length) graph.moveCells(cells, dx, dy);
@@ -2407,23 +3266,41 @@ const WebCanvas = forwardRef<DiagramCanvasHandle, DiagramCanvasProps>(({ onReady
       }, graphDiv);
 
       // ─── Pinch-to-zoom (mobile) ──────────────────────────────────────────
-      // Two-finger pinch zooms around the midpoint between the fingers,
-      // keeping whatever's under them fixed on screen (same math as
-      // scroll-to-cursor zoom, just driven by touch distance instead of a
-      // wheel delta). A single finger is left alone so maxGraph's own
-      // touch-as-mouse handling still drives panning/selection/move.
-      let pinchStartDistance = 0;
-      let pinchStartScale = 1;
+      // Two-finger pinch snaps through the same fixed zoom levels as the
+      // +/- buttons in app/(tabs)/create.tsx (one step per gesture), instead
+      // of scaling continuously to whatever the raw finger-distance ratio
+      // says — free-scaling with two fingers felt fiddly/imprecise to nail a
+      // specific zoom level. Each step re-centers the view via
+      // graph.zoomTo(scale, true), the same call the buttons make, rather
+      // than anchoring under the fingers. A single finger is left alone so
+      // maxGraph's own touch-as-mouse handling still drives panning/
+      // selection/move.
+      const PINCH_ZOOM_STEPS = [50, 75, 100, 125, 150, 200, 300, 400];
+      const nearestZoomStepIndex = (percent: number): number => {
+        let closest = 0;
+        let minDiff = Infinity;
+        PINCH_ZOOM_STEPS.forEach((step, index) => {
+          const diff = Math.abs(step - percent);
+          if (diff < minDiff) {
+            minDiff = diff;
+            closest = index;
+          }
+        });
+        return closest;
+      };
+      // A pinch has to change finger distance by this fraction before it
+      // counts as "one zoom step" — small enough to feel responsive, large
+      // enough that finger tremor alone doesn't trigger a step.
+      const PINCH_STEP_RATIO = 1.2;
+
+      let pinchBaseDistance = 0;
+      let pinchStepIndex = 0;
       // Raw touchmove fires far more often than the screen can usefully
-      // repaint at, and every one of those events was synchronously calling
-      // scaleAndTranslate (each triggering a full grid repaint + React zoom-
-      // label state update) — that pileup, plus zero smoothing of finger-
-      // tremor noise in the raw distance ratio, is what made pinch feel
-      // dizzying/jumpy compared to the desktop wheel path (which only gets
-      // one coarse step per wheel tick). Coalescing to one applied update per
-      // animation frame fixes both: at most 60 view updates/sec no matter how
-      // many touchmoves land in between, and each one uses the latest finger
-      // positions rather than every intermediate jitter.
+      // repaint at. Coalescing to one applied update per animation frame
+      // keeps that pileup from queuing up multiple zoom steps at once: at
+      // most 60 checks/sec no matter how many touchmoves land in between,
+      // each one using the latest finger positions rather than every
+      // intermediate jitter.
       let pendingPinchTouches: TouchList | null = null;
       let pinchRafId: number | null = null;
 
@@ -2436,62 +3313,59 @@ const WebCanvas = forwardRef<DiagramCanvasHandle, DiagramCanvasProps>(({ onReady
       const applyPinchFrame = () => {
         pinchRafId = null;
         const touches = pendingPinchTouches;
-        if (!touches || touches.length !== 2 || pinchStartDistance <= 0) return;
+        if (!touches || touches.length !== 2 || pinchBaseDistance <= 0) return;
 
-        const factor = touchDistance(touches) / pinchStartDistance;
-        const newScale = Math.min(4, Math.max(0.1, pinchStartScale * factor));
+        const distance = touchDistance(touches);
+        const ratio = distance / pinchBaseDistance;
 
-        const rect = graphDiv.getBoundingClientRect();
-        const midX = (touches[0].clientX + touches[1].clientX) / 2 - rect.left;
-        const midY = (touches[0].clientY + touches[1].clientY) / 2 - rect.top;
-
-        const view = graph.getView();
-        const oldScale = view.getScale();
-        const oldTranslate = view.getTranslate();
-
-        // Graph-space point currently under the fingers' midpoint, and the
-        // translate needed to keep that same point under it at the new scale.
-        const graphX = midX / oldScale - oldTranslate.x;
-        const graphY = midY / oldScale - oldTranslate.y;
-        view.scaleAndTranslate(newScale, midX / newScale - graphX, midY / newScale - graphY);
+        if (ratio >= PINCH_STEP_RATIO && pinchStepIndex < PINCH_ZOOM_STEPS.length - 1) {
+          pinchStepIndex += 1;
+          graph.zoomTo(PINCH_ZOOM_STEPS[pinchStepIndex] / 100, true);
+          pinchBaseDistance = distance;
+        } else if (ratio <= 1 / PINCH_STEP_RATIO && pinchStepIndex > 0) {
+          pinchStepIndex -= 1;
+          graph.zoomTo(PINCH_ZOOM_STEPS[pinchStepIndex] / 100, true);
+          pinchBaseDistance = distance;
+        }
       };
 
-      graphDiv.addEventListener('touchstart', (e: TouchEvent) => {
+      const onPinchTouchStart = (e: TouchEvent) => {
         if (e.touches.length === 2) {
-          pinchStartDistance = touchDistance(e.touches);
-          pinchStartScale = graph.getView().getScale();
+          pinchBaseDistance = touchDistance(e.touches);
+          pinchStepIndex = nearestZoomStepIndex(Math.round(graph.getView().getScale() * 100));
         }
-      }, { passive: true });
-
-      graphDiv.addEventListener('touchmove', (e: TouchEvent) => {
-        if (e.touches.length !== 2 || pinchStartDistance <= 0) return;
+      };
+      const onPinchTouchMove = (e: TouchEvent) => {
+        if (e.touches.length !== 2 || pinchBaseDistance <= 0) return;
         e.preventDefault();
         pendingPinchTouches = e.touches;
         if (pinchRafId === null) {
           pinchRafId = requestAnimationFrame(applyPinchFrame);
         }
-      }, { passive: false });
-
-      graphDiv.addEventListener('touchend', (e: TouchEvent) => {
+      };
+      const onPinchTouchEnd = (e: TouchEvent) => {
         if (e.touches.length < 2) {
-          pinchStartDistance = 0;
+          pinchBaseDistance = 0;
           pendingPinchTouches = null;
           if (pinchRafId !== null) {
             cancelAnimationFrame(pinchRafId);
             pinchRafId = null;
           }
         }
-      }, { passive: true });
+      };
+      graphDiv.addEventListener('touchstart', onPinchTouchStart, { passive: true });
+      graphDiv.addEventListener('touchmove', onPinchTouchMove, { passive: false });
+      graphDiv.addEventListener('touchend', onPinchTouchEnd, { passive: true });
 
       let spaceDown = false;
-      graphDiv.addEventListener('keydown', (e: KeyboardEvent) => {
+      const onSpaceKeyDown = (e: KeyboardEvent) => {
         if (e.code === 'Space' && !spaceDown) {
           spaceDown = true;
           if (panningHandler) panningHandler.useLeftButtonForPanning = true;
           graphDiv.style.cursor = 'grab';
         }
-      });
-      graphDiv.addEventListener('keyup', (e: KeyboardEvent) => {
+      };
+      const onSpaceKeyUp = (e: KeyboardEvent) => {
         if (e.code === 'Space') {
           spaceDown = false;
           // Releasing space returns to this platform's baseline, not
@@ -2499,7 +3373,9 @@ const WebCanvas = forwardRef<DiagramCanvasHandle, DiagramCanvasProps>(({ onReady
           if (panningHandler) panningHandler.useLeftButtonForPanning = isMobile;
           graphDiv.style.cursor = 'default';
         }
-      });
+      };
+      graphDiv.addEventListener('keydown', onSpaceKeyDown);
+      graphDiv.addEventListener('keyup', onSpaceKeyUp);
 
       const reportZoom = () => onZoomChangeRef.current?.(Math.round(graph.getView().getScale() * 100));
       graph.getView().addListener('scale', () => { repaintGrid(); reportZoom(); });
@@ -2539,11 +3415,12 @@ const WebCanvas = forwardRef<DiagramCanvasHandle, DiagramCanvasProps>(({ onReady
       dropTarget.addEventListener('dragleave', onDragLeave);
       dropTarget.addEventListener('drop', onDrop);
 
-      graphDiv.addEventListener('keydown', (e: KeyboardEvent) => {
+      const onEnterKeyDown = (e: KeyboardEvent) => {
         if (e.key === 'Enter') {
           e.stopPropagation();
         }
-      });
+      };
+      graphDiv.addEventListener('keydown', onEnterKeyDown);
 
       setupHoverUI(graph);
 
@@ -2572,12 +3449,27 @@ const WebCanvas = forwardRef<DiagramCanvasHandle, DiagramCanvasProps>(({ onReady
         dropTarget.removeEventListener('dragover', onDragOver);
         dropTarget.removeEventListener('dragleave', onDragLeave);
         dropTarget.removeEventListener('drop', onDrop);
-        graphDiv.removeEventListener('keydown', () => { });
+        // These were previously never removed (the old code here even passed
+        // a brand-new anonymous function to removeEventListener, which can
+        // never match the original listener — a silent no-op). Since
+        // graphDiv/wrapper are the same persistent DOM nodes across every
+        // initGraph re-run (only this effect's body re-executes, not the
+        // JSX), any leftover listener here stacked a duplicate on top of the
+        // next run's — each pinch gesture then drove every stacked pinch
+        // handler at once, each computing scale from its own stale
+        // pinchBaseDistance/pinchStepIndex closure and fighting over the
+        // same graph.zoomTo() calls. That's what produced the runaway/
+        // erratic zoom (shape ballooning and jumping to a random position on
+        // a normal two-finger pinch).
+        graphDiv.removeEventListener('touchstart', onPinchTouchStart);
+        graphDiv.removeEventListener('touchmove', onPinchTouchMove);
+        graphDiv.removeEventListener('touchend', onPinchTouchEnd);
+        graphDiv.removeEventListener('keydown', onSpaceKeyDown);
+        graphDiv.removeEventListener('keyup', onSpaceKeyUp);
+        graphDiv.removeEventListener('keydown', onEnterKeyDown);
         keyHandler.onDestroy();
         if (cleanupClickArrows) cleanupClickArrows();
         if (pinchRafId !== null) cancelAnimationFrame(pinchRafId);
-        issueHighlightsRef.current.forEach((h) => h.destroy());
-        issueHighlightsRef.current = [];
         graph.destroy();
         graphRef.current = null;
         setFlowchartIssues([]);
@@ -2588,7 +3480,7 @@ const WebCanvas = forwardRef<DiagramCanvasHandle, DiagramCanvasProps>(({ onReady
       setLoading(false);
       return undefined;
     }
-  }, [repaintGrid, resizeGridCanvas, handleDrop, registerShapeStyles, handleSelectionChange, setupHoverUI, setupClickArrows, isMobile]);
+  }, [repaintGrid, resizeGridCanvas, handleDrop, registerShapeStyles, handleSelectionChange, setupHoverUI, setupClickArrows, isMobile, openMobileEditor]);
 
   useEffect(() => {
     const cleanup = initGraph();
@@ -2621,6 +3513,39 @@ const WebCanvas = forwardRef<DiagramCanvasHandle, DiagramCanvasProps>(({ onReady
           inset: 0,
           zIndex: 1,
           outline: 'none',
+        }}
+      />
+
+      {/* Mobile's label-editing overlay — see openMobileEditor/commitMobileEdit
+          above. Always mounted (never conditionally rendered) so it can be
+          focused synchronously from the DOUBLE_CLICK handler; hidden via
+          direct style mutation instead of an isEditing-gated render. */}
+      <textarea
+        ref={mobileEditorRef}
+        style={{
+          position: 'absolute',
+          display: 'none',
+          zIndex: 5,
+          resize: 'none',
+          boxSizing: 'border-box',
+          border: `2px solid ${BLUE}`,
+          borderRadius: 4,
+          padding: '2px 4px',
+          margin: 0,
+          background: '#ffffff',
+          fontFamily: 'inherit',
+          lineHeight: 1.2,
+          outline: 'none',
+        }}
+        onBlur={() => commitMobileEdit(false)}
+        onKeyDown={(e) => {
+          if (e.key === 'Escape') {
+            e.preventDefault();
+            commitMobileEdit(true);
+          } else if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault();
+            commitMobileEdit(false);
+          }
         }}
       />
 
@@ -2688,14 +3613,20 @@ const WebCanvas = forwardRef<DiagramCanvasHandle, DiagramCanvasProps>(({ onReady
         </div>
       )}
 
-      {!isMobile && !error && !loading && flowchartIssues.length > 0 && (() => {
+      {!error && !loading && flowchartIssues.length > 0 && (() => {
         const errorCount = flowchartIssues.filter((i) => i.severity === 'error').length;
-        const warningCount = flowchartIssues.length - errorCount;
+        const warningCount = flowchartIssues.filter((i) => i.severity === 'warning').length;
+        const infoCount = flowchartIssues.length - errorCount - warningCount;
+        const counts: { severity: IssueSeverity; count: number }[] = [
+          { severity: 'error', count: errorCount },
+          { severity: 'warning', count: warningCount },
+          { severity: 'info', count: infoCount },
+        ].filter((c) => c.count > 0);
         return (
           // Top-center, not a corner — the right edge is where the Properties
           // panel docks (and the left edge is where the Shapes panel opens), so
           // either corner gets covered by them. Center stays clear of both.
-          <div style={{
+          <div id="tour-create-issues" style={{
             position: 'absolute',
             top: 12,
             left: '50%',
@@ -2711,56 +3642,71 @@ const WebCanvas = forwardRef<DiagramCanvasHandle, DiagramCanvasProps>(({ onReady
               style={{
                 display: 'flex',
                 alignItems: 'center',
-                gap: 8,
+                gap: 10,
                 backgroundColor: '#ffffff',
-                border: '1px solid #e2e8f0',
-                borderRadius: 20,
-                padding: '6px 12px',
-                boxShadow: '0 2px 8px rgba(15, 23, 42, 0.08)',
+                border: '1px solid #e6eaf2',
+                borderRadius: 999,
+                padding: '7px 10px 7px 14px',
+                boxShadow: '0 1px 2px rgba(15, 23, 42, 0.04), 0 6px 16px rgba(15, 23, 42, 0.08)',
                 cursor: 'pointer',
                 userSelect: 'none',
               }}
             >
-              {errorCount > 0 && (
-                <span style={{ fontSize: 12, fontWeight: 700, color: '#ef4444' }}>❌ {errorCount}</span>
-              )}
-              {warningCount > 0 && (
-                <span style={{ fontSize: 12, fontWeight: 700, color: '#f59e0b' }}>⚠️ {warningCount}</span>
-              )}
-              <span style={{ fontSize: 11, color: '#94a3b8' }}>{showIssuesList ? '▲' : '▼'}</span>
+              {counts.map(({ severity, count }, idx) => (
+                <div key={severity} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  {idx > 0 && <div style={{ width: 1, height: 14, background: '#e6eaf2' }} />}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                    <SeverityIcon severity={severity} size={14} />
+                    <span style={{ fontSize: 12.5, fontWeight: 700, color: '#334155', fontVariantNumeric: 'tabular-nums' }}>
+                      {count}
+                    </span>
+                  </div>
+                </div>
+              ))}
+              <svg
+                width={10} height={10} viewBox="0 0 10 10" fill="none"
+                style={{ transform: showIssuesList ? 'rotate(180deg)' : 'none', transition: 'transform 0.15s ease' }}
+              >
+                <path d="M1.5 3.5L5 7L8.5 3.5" stroke="#94a3b8" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
             </div>
 
             {showIssuesList && (
               <div style={{
-                marginTop: 6,
-                maxWidth: 320,
+                marginTop: 8,
+                width: 320,
                 maxHeight: 260,
                 overflowY: 'auto',
                 backgroundColor: '#ffffff',
-                border: '1px solid #e2e8f0',
-                borderRadius: 10,
-                boxShadow: '0 4px 16px rgba(15, 23, 42, 0.1)',
-                padding: 8,
+                border: '1px solid #e6eaf2',
+                borderRadius: 12,
+                boxShadow: '0 1px 2px rgba(15, 23, 42, 0.04), 0 12px 28px rgba(15, 23, 42, 0.12)',
+                padding: 6,
               }}>
                 {flowchartIssues.map((issue, i) => (
                   <div
                     key={i}
-                    style={{
-                      display: 'flex',
-                      alignItems: 'flex-start',
-                      gap: 8,
-                      padding: '6px 8px',
-                      borderRadius: 6,
-                      cursor: issue.cell ? 'pointer' : 'default',
-                    }}
                     onClick={() => {
                       if (!issue.cell) return;
                       graphRef.current?.setSelectionCell(issue.cell);
                       graphRef.current?.scrollCellToVisible(issue.cell);
                     }}
+                    onMouseEnter={(e) => { if (issue.cell) e.currentTarget.style.backgroundColor = '#f8fafc'; }}
+                    onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'transparent'; }}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'flex-start',
+                      gap: 9,
+                      padding: '8px 10px',
+                      borderRadius: 8,
+                      cursor: issue.cell ? 'pointer' : 'default',
+                      transition: 'background-color 0.1s ease',
+                    }}
                   >
-                    <span style={{ fontSize: 13, marginTop: 1 }}>{issue.severity === 'error' ? '❌' : '⚠️'}</span>
-                    <span style={{ fontSize: 12, color: '#334155', lineHeight: 1.4 }}>{issue.message}</span>
+                    <div style={{ marginTop: 1, flexShrink: 0 }}>
+                      <SeverityIcon severity={issue.severity} size={15} />
+                    </div>
+                    <span style={{ fontSize: 12.5, color: '#334155', lineHeight: 1.45 }}>{issue.message}</span>
                   </div>
                 ))}
               </div>
@@ -2768,6 +3714,38 @@ const WebCanvas = forwardRef<DiagramCanvasHandle, DiagramCanvasProps>(({ onReady
           </div>
         );
       })()}
+
+      {issuePopup && (
+        <>
+          {/* Backdrop — dismisses the popup on an outside tap/click, same
+              pattern as the shape picker below. */}
+          <div
+            onClick={() => setIssuePopup(null)}
+            style={{ position: 'absolute', inset: 0, zIndex: 9 }}
+          />
+          <div
+            style={{
+              position: 'absolute',
+              left: issuePopup.x,
+              top: issuePopup.y,
+              transform: 'translate(-50%, calc(-100% - 10px))',
+              zIndex: 10,
+              maxWidth: 240,
+              backgroundColor: '#1e293b',
+              color: '#ffffff',
+              fontSize: 12,
+              lineHeight: 1.4,
+              padding: '8px 10px',
+              borderRadius: 8,
+              boxShadow: '0 4px 16px rgba(15, 23, 42, 0.25)',
+              fontFamily: 'system-ui, sans-serif',
+              pointerEvents: 'none',
+            }}
+          >
+            {issuePopup.message}
+          </div>
+        </>
+      )}
 
       {shapePicker && (() => {
         const pickerShapes = getShapesForDiagram(umlType).length

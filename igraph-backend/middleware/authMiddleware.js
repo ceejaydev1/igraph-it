@@ -3,17 +3,24 @@ const { getUserById } = require('../models/userModel');
 
 const protect = async (req, res, next) => {
   try {
-    //Extract token from Authorization header
+    // Extract token from the Authorization header (native) or, failing that,
+    // the access_token cookie (web — httpOnly, so this is the only way the
+    // server ever sees it; the browser attaches it automatically).
     const authHeader = req.headers.authorization;
+    let token = null;
 
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      token = authHeader.split(' ')[1];
+    } else if (req.cookies && req.cookies.access_token) {
+      token = req.cookies.access_token;
+    }
+
+    if (!token) {
       return res.status(401).json({
         success: false,
         message: 'Access denied. No token provided.'
       });
     }
-
-    const token = authHeader.split(' ')[1]; 
 
     // 2. Verify the token
     let decoded;

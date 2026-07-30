@@ -384,6 +384,96 @@ function triangleAt(
   return { x: baseX, y: baseY };
 }
 
+// ════════════════════════════════════════════════════════════════════════════
+// EDGE-MODE CONNECTOR RENDERING — shared by every connector/line shape's
+// paintEdgeShape (see ConnectorArrowShapeCanvas below for why this exists:
+// these shapes are now inserted as real maxGraph edges instead of vertices,
+// so the user can drag either end onto a shape and have maxGraph actually
+// connect them). Same visual vocabulary as triangleAt/paintConnectorLine
+// above (tip/towards/depth/halfWidth), just driven by an edge's own resolved
+// points (source, any waypoints, target) instead of a synthesized box — one
+// small set of primitives instead of each shape hand-rolling box math that
+// only worked for a horizontal line.
+// ════════════════════════════════════════════════════════════════════════════
+
+// Same triangle as triangleAt, but stroke-only (no fill) — the "open"
+// arrowhead several UML relationships use (dependency, async message,
+// return message) instead of a solid filled one.
+function openTriangleAt(
+  c: AbstractCanvas2D,
+  tip: { x: number; y: number },
+  towards: { x: number; y: number },
+  depth: number,
+  halfWidth: number,
+): { x: number; y: number } {
+  const dx = towards.x - tip.x;
+  const dy = towards.y - tip.y;
+  const len = Math.hypot(dx, dy) || 1;
+  const ux = dx / len;
+  const uy = dy / len;
+  const px = -uy;
+  const py = ux;
+  const baseX = tip.x + ux * depth;
+  const baseY = tip.y + uy * depth;
+  c.begin();
+  c.moveTo(tip.x, tip.y);
+  c.lineTo(baseX + px * halfWidth, baseY + py * halfWidth);
+  c.lineTo(baseX - px * halfWidth, baseY - py * halfWidth);
+  c.close();
+  c.stroke();
+  return { x: baseX, y: baseY };
+}
+
+// A diamond whose near tip sits at `tip` — aggregation's (hollow, via a
+// white fill) and composition's (solid, via a black fill) relationship
+// marker. Fill color is the only difference between the two, already
+// handled by getShapeStyle's per-style fillColor, not by this function.
+function diamondAt(
+  c: AbstractCanvas2D,
+  tip: { x: number; y: number },
+  towards: { x: number; y: number },
+  depth: number,
+  halfWidth: number,
+): { x: number; y: number } {
+  const dx = towards.x - tip.x;
+  const dy = towards.y - tip.y;
+  const len = Math.hypot(dx, dy) || 1;
+  const ux = dx / len;
+  const uy = dy / len;
+  const px = -uy;
+  const py = ux;
+  const midX = tip.x + ux * depth;
+  const midY = tip.y + uy * depth;
+  const farX = tip.x + ux * depth * 2;
+  const farY = tip.y + uy * depth * 2;
+  c.begin();
+  c.moveTo(tip.x, tip.y);
+  c.lineTo(midX + px * halfWidth, midY + py * halfWidth);
+  c.lineTo(farX, farY);
+  c.lineTo(midX - px * halfWidth, midY - py * halfWidth);
+  c.close();
+  c.fillAndStroke();
+  return { x: farX, y: farY };
+}
+
+// Strokes a line through every point maxGraph resolved for this edge
+// (source → any user-dragged waypoints → target), starting/ending at
+// `from`/`to` instead of pts[0]/pts[last] so a trimmed-back marker base
+// (from triangleAt/openTriangleAt/diamondAt) can be spliced in without the
+// stroke overlapping it.
+function edgeLine(
+  c: AbstractCanvas2D,
+  from: { x: number; y: number },
+  pts: Point[],
+  to: { x: number; y: number },
+) {
+  c.begin();
+  c.moveTo(from.x, from.y);
+  for (let i = 1; i < pts.length - 1; i++) c.lineTo(pts[i].x, pts[i].y);
+  c.lineTo(to.x, to.y);
+  c.stroke();
+}
+
 // Draws a straight-or-single-bend line from pts.start through pts.bend (if
 // bent) to pts.end, with an optional arrowhead at the end whose angle
 // follows the actual final segment — not assumed horizontal, since a bent
@@ -507,6 +597,19 @@ class FDD_ControlShapeCanvas extends Shape {
     const pts = getConnectorPoints(this.style, x, y, w, h);
     paintConnectorLine(c, pts, showArrow, 10, 6);
   }
+
+  paintEdgeShape(c: AbstractCanvas2D, pts: Point[]) {
+    if (pts.length < 2) return;
+    c.setStrokeColor(this.stroke);
+    c.setStrokeWidth(this.strokeWidth);
+    if (this.strokeWidth <= 0) c.setStrokeColor('none');
+    c.setFillColor(this.fill);
+    const showArrow = this.style?.endArrow !== 'none';
+    const end = pts[pts.length - 1];
+    const before = pts[pts.length - 2] ?? pts[0];
+    const lineEnd = showArrow ? triangleAt(c, end, before, 10, 6) : end;
+    edgeLine(c, pts[0], pts, lineEnd);
+  }
 }
 
 // ─── 5. MECHANISM ──────────────────────────────────────────────────────
@@ -527,6 +630,22 @@ class FDD_MechanismShapeCanvas extends Shape {
     const showArrow = this.style?.endArrow !== 'none';
     const pts = getConnectorPoints(this.style, x, y, w, h);
     paintConnectorLine(c, pts, showArrow, 10, 6, true);
+  }
+
+  paintEdgeShape(c: AbstractCanvas2D, pts: Point[]) {
+    if (pts.length < 2) return;
+    c.setStrokeColor(this.stroke);
+    c.setStrokeWidth(this.strokeWidth);
+    if (this.strokeWidth <= 0) c.setStrokeColor('none');
+    c.setFillColor(this.fill);
+    const showArrow = this.style?.endArrow !== 'none';
+    const end = pts[pts.length - 1];
+    const before = pts[pts.length - 2] ?? pts[0];
+    const lineEnd = showArrow ? triangleAt(c, end, before, 10, 6) : end;
+    c.setDashed(true);
+    c.setDashPattern('6 4');
+    edgeLine(c, pts[0], pts, lineEnd);
+    c.setDashed(false);
   }
 }
 
@@ -564,6 +683,27 @@ class FDD_InterfaceShapeCanvas extends Shape {
       if (pts.isBent) c.lineTo(pts.bend.x, pts.bend.y);
       c.lineTo(pts.end.x, pts.end.y);
       c.stroke();
+    }
+  }
+
+  paintEdgeShape(c: AbstractCanvas2D, pts: Point[]) {
+    if (pts.length < 2) return;
+    const arrowSize = 6;
+    const arrowWidth = 12;
+    c.setStrokeColor(this.stroke);
+    c.setStrokeWidth(this.strokeWidth);
+    if (this.strokeWidth <= 0) c.setStrokeColor('none');
+    c.setFillColor(this.fill);
+    const showArrow = this.style?.endArrow !== 'none';
+    const start = pts[0];
+    const end = pts[pts.length - 1];
+
+    if (showArrow) {
+      const leftBase = triangleAt(c, start, pts[1] ?? end, arrowWidth, arrowSize);
+      const rightBase = triangleAt(c, end, pts[pts.length - 2] ?? start, arrowWidth, arrowSize);
+      edgeLine(c, leftBase, pts, rightBase);
+    } else {
+      edgeLine(c, start, pts, end);
     }
   }
 }
@@ -685,6 +825,18 @@ class DFDDataFlowShapeCanvas extends Shape {
     c.close();
     c.fill();
   }
+
+  paintEdgeShape(c: AbstractCanvas2D, pts: Point[]) {
+    if (pts.length < 2) return;
+    c.setStrokeColor(this.stroke);
+    c.setStrokeWidth(this.strokeWidth);
+    if (this.strokeWidth <= 0) c.setStrokeColor('none');
+    c.setFillColor(this.fill);
+    const end = pts[pts.length - 1];
+    const before = pts[pts.length - 2] ?? pts[0];
+    const lineEnd = triangleAt(c, end, before, 10, 5);
+    edgeLine(c, pts[0], pts, lineEnd);
+  }
 }
 
 class DFDDataStoreShapeCanvas extends Shape {
@@ -727,6 +879,64 @@ class DFDDataStoreGSShapeCanvas extends Shape {
     c.moveTo(x + w * 0.2, y + 2);
     c.lineTo(x + w * 0.2, y + h - 2);
     c.stroke();
+  }
+}
+
+// ─── DFD Data Store — container + 2 independently-editable compartments ────
+// A plain single-cell data store can only carry one label for the whole
+// shape, but the real Yourdon/Gane-Sarson notation has two distinct parts:
+// a small ID box and a larger Name box. These containers paint just the
+// shape's own outline (Yourdon's two open horizontal lines, or Gane-Sarson's
+// full rectangle) with no text of their own — the two compartment children
+// (DFDCompartmentDividerShapeCanvas/DFDCompartmentPlainShapeCanvas below)
+// each carry their own label and are independently double-click-editable,
+// same trick as the Class Diagram's container/compartment split above.
+class DFDDataStoreContainerShapeCanvas extends Shape {
+  paintBackground(c: AbstractCanvas2D, x: number, y: number, w: number, h: number) {
+    const y1 = y + h * 0.2;
+    const y2 = y + h * 0.8;
+    c.setStrokeColor(this.stroke);
+    c.setStrokeWidth(this.strokeWidth);
+    if (this.strokeWidth <= 0) c.setStrokeColor('none');
+    c.begin();
+    c.moveTo(x + 2, y1);
+    c.lineTo(x + w - 2, y1);
+    c.stroke();
+    c.begin();
+    c.moveTo(x + 2, y2);
+    c.lineTo(x + w - 2, y2);
+    c.stroke();
+  }
+}
+
+class DFDDataStoreGSContainerShapeCanvas extends Shape {
+  paintBackground(c: AbstractCanvas2D, x: number, y: number, w: number, h: number) {
+    c.setFillColor(this.fill);
+    c.setStrokeColor(this.stroke);
+    c.setStrokeWidth(this.strokeWidth);
+    if (this.strokeWidth <= 0) c.setStrokeColor('none');
+    c.rect(x + 2, y + 2, w - 4, h - 4);
+    c.fillAndStroke();
+  }
+}
+
+// The ID compartment (left, narrow): paints only its own right-edge divider.
+class DFDCompartmentDividerShapeCanvas extends Shape {
+  paintBackground(c: AbstractCanvas2D, x: number, y: number, w: number, h: number) {
+    c.setStrokeColor(this.stroke);
+    c.setStrokeWidth(this.strokeWidth);
+    if (this.strokeWidth <= 0) c.setStrokeColor('none');
+    c.begin();
+    c.moveTo(x + w, y + 2);
+    c.lineTo(x + w, y + h - 2);
+    c.stroke();
+  }
+}
+
+// The Name compartment (right, wide) — no border of its own, just the label.
+class DFDCompartmentPlainShapeCanvas extends Shape {
+  paintBackground() {
+    // Intentionally empty.
   }
 }
 
@@ -775,6 +985,21 @@ class DFDBidirectionalShapeCanvas extends Shape {
     c.lineTo(x + w - arrow - 2, cy + 5);
     c.close();
     c.fill();
+  }
+
+  paintEdgeShape(c: AbstractCanvas2D, pts: Point[]) {
+    if (pts.length < 2) return;
+    c.setStrokeColor(this.stroke);
+    c.setStrokeWidth(this.strokeWidth);
+    if (this.strokeWidth <= 0) c.setStrokeColor('none');
+    c.setFillColor(this.fill);
+    const start = pts[0];
+    const end = pts[pts.length - 1];
+    const afterStart = pts[1] ?? end;
+    const beforeEnd = pts[pts.length - 2] ?? start;
+    const lineStart = triangleAt(c, start, afterStart, 10, 5);
+    const lineEnd = triangleAt(c, end, beforeEnd, 10, 5);
+    edgeLine(c, lineStart, pts, lineEnd);
   }
 }
 
@@ -1049,6 +1274,18 @@ class FishboneArrowShapeCanvas extends Shape {
     c.close();
     c.fillAndStroke();
   }
+
+  paintEdgeShape(c: AbstractCanvas2D, pts: Point[]) {
+    if (pts.length < 2) return;
+    c.setStrokeColor(this.stroke);
+    c.setStrokeWidth(this.strokeWidth);
+    if (this.strokeWidth <= 0) c.setStrokeColor('none');
+    c.setFillColor(this.fill);
+    const end = pts[pts.length - 1];
+    const before = pts[pts.length - 2] ?? pts[0];
+    const lineEnd = triangleAt(c, end, before, 10, 6);
+    edgeLine(c, pts[0], pts, lineEnd);
+  }
 }
 
 class FishboneDashedArrowShapeCanvas extends Shape {
@@ -1077,6 +1314,21 @@ class FishboneDashedArrowShapeCanvas extends Shape {
     c.lineTo(x + w - arrow - 2, cy + arrow / 2);
     c.close();
     c.fillAndStroke();
+  }
+
+  paintEdgeShape(c: AbstractCanvas2D, pts: Point[]) {
+    if (pts.length < 2) return;
+    c.setStrokeColor(this.stroke);
+    c.setStrokeWidth(this.strokeWidth);
+    if (this.strokeWidth <= 0) c.setStrokeColor('none');
+    c.setFillColor(this.fill);
+    const end = pts[pts.length - 1];
+    const before = pts[pts.length - 2] ?? pts[0];
+    const lineEnd = triangleAt(c, end, before, 10, 6);
+    c.setDashed(true);
+    c.setDashPattern('6 4');
+    edgeLine(c, pts[0], pts, lineEnd);
+    c.setDashed(false);
   }
 }
 
@@ -1749,6 +2001,21 @@ class UMLIncludeShapeCanvas extends Shape {
     c.close();
     c.fill();
   }
+
+  paintEdgeShape(c: AbstractCanvas2D, pts: Point[]) {
+    if (pts.length < 2) return;
+    c.setStrokeColor(this.stroke);
+    c.setStrokeWidth(this.strokeWidth);
+    if (this.strokeWidth <= 0) c.setStrokeColor('none');
+    c.setFillColor(this.fill);
+    const end = pts[pts.length - 1];
+    const before = pts[pts.length - 2] ?? pts[0];
+    const lineEnd = triangleAt(c, end, before, 12, 5);
+    c.setDashed(true);
+    c.setDashPattern('6 4');
+    edgeLine(c, pts[0], pts, lineEnd);
+    c.setDashed(false);
+  }
 }
 
 class UMLExtendShapeCanvas extends Shape {
@@ -1777,6 +2044,21 @@ class UMLExtendShapeCanvas extends Shape {
     c.lineTo(x + arrow + 2, cy + 5);
     c.close();
     c.fill();
+  }
+
+  paintEdgeShape(c: AbstractCanvas2D, pts: Point[]) {
+    if (pts.length < 2) return;
+    c.setStrokeColor(this.stroke);
+    c.setStrokeWidth(this.strokeWidth);
+    if (this.strokeWidth <= 0) c.setStrokeColor('none');
+    c.setFillColor(this.fill);
+    const start = pts[0];
+    const after = pts[1] ?? pts[pts.length - 1];
+    const lineStart = triangleAt(c, start, after, 12, 5);
+    c.setDashed(true);
+    c.setDashPattern('6 4');
+    edgeLine(c, lineStart, pts, pts[pts.length - 1]);
+    c.setDashed(false);
   }
 }
 
@@ -1863,6 +2145,18 @@ class UMLControlFlowShapeCanvas extends Shape {
     c.close();
     c.fill();
   }
+
+  paintEdgeShape(c: AbstractCanvas2D, pts: Point[]) {
+    if (pts.length < 2) return;
+    c.setStrokeColor(this.stroke);
+    c.setStrokeWidth(this.strokeWidth);
+    if (this.strokeWidth <= 0) c.setStrokeColor('none');
+    c.setFillColor(this.fill);
+    const end = pts[pts.length - 1];
+    const before = pts[pts.length - 2] ?? pts[0];
+    const lineEnd = triangleAt(c, end, before, 10, 5);
+    edgeLine(c, pts[0], pts, lineEnd);
+  }
 }
 
 class UMLObjectFlowShapeCanvas extends Shape {
@@ -1891,6 +2185,21 @@ class UMLObjectFlowShapeCanvas extends Shape {
     c.lineTo(x + w - arrow - 2, cy + 5);
     c.close();
     c.fill();
+  }
+
+  paintEdgeShape(c: AbstractCanvas2D, pts: Point[]) {
+    if (pts.length < 2) return;
+    c.setStrokeColor(this.stroke);
+    c.setStrokeWidth(this.strokeWidth);
+    if (this.strokeWidth <= 0) c.setStrokeColor('none');
+    c.setFillColor(this.fill);
+    const end = pts[pts.length - 1];
+    const before = pts[pts.length - 2] ?? pts[0];
+    const lineEnd = triangleAt(c, end, before, 10, 5);
+    c.setDashed(true);
+    c.setDashPattern('6 4');
+    edgeLine(c, pts[0], pts, lineEnd);
+    c.setDashed(false);
   }
 }
 
@@ -1971,6 +2280,18 @@ class UMLSyncMsgShapeCanvas extends Shape {
     c.close();
     c.fill();
   }
+
+  paintEdgeShape(c: AbstractCanvas2D, pts: Point[]) {
+    if (pts.length < 2) return;
+    c.setStrokeColor(this.stroke);
+    c.setStrokeWidth(this.strokeWidth);
+    if (this.strokeWidth <= 0) c.setStrokeColor('none');
+    c.setFillColor(this.fill);
+    const end = pts[pts.length - 1];
+    const before = pts[pts.length - 2] ?? pts[0];
+    const lineEnd = triangleAt(c, end, before, 12, 6);
+    edgeLine(c, pts[0], pts, lineEnd);
+  }
 }
 
 class UMLAsyncMsgShapeCanvas extends Shape {
@@ -1995,6 +2316,17 @@ class UMLAsyncMsgShapeCanvas extends Shape {
     c.lineTo(x + w - arrow - 2, cy + 6);
     c.close();
     c.stroke();
+  }
+
+  paintEdgeShape(c: AbstractCanvas2D, pts: Point[]) {
+    if (pts.length < 2) return;
+    c.setStrokeColor(this.stroke);
+    c.setStrokeWidth(this.strokeWidth);
+    if (this.strokeWidth <= 0) c.setStrokeColor('none');
+    const end = pts[pts.length - 1];
+    const before = pts[pts.length - 2] ?? pts[0];
+    const lineEnd = openTriangleAt(c, end, before, 12, 6);
+    edgeLine(c, pts[0], pts, lineEnd);
   }
 }
 
@@ -2026,6 +2358,18 @@ class UMLCompositionShapeCanvas extends Shape {
     c.lineTo(x + 2 + d, cy + d);
     c.close();
     c.fill();
+  }
+
+  paintEdgeShape(c: AbstractCanvas2D, pts: Point[]) {
+    if (pts.length < 2) return;
+    c.setStrokeColor(this.stroke);
+    c.setStrokeWidth(this.strokeWidth);
+    if (this.strokeWidth <= 0) c.setStrokeColor('none');
+    c.setFillColor(this.fill);
+    const start = pts[0];
+    const after = pts[1] ?? pts[pts.length - 1];
+    const lineStart = diamondAt(c, start, after, 14, 14);
+    edgeLine(c, lineStart, pts, pts[pts.length - 1]);
   }
 }
 
@@ -2358,6 +2702,9 @@ class ActorShapeCanvas extends Shape {
 }
 
 class ConnectorArrowShapeCanvas extends Shape {
+  // Legacy path: older diagrams (saved before connector shapes were real
+  // edges) still have these as plain vertices with a fixed w/h box — keep
+  // rendering those exactly as before.
   paintBackground(c: AbstractCanvas2D, x: number, y: number, w: number, h: number) {
     c.setStrokeColor(this.stroke);
     c.setStrokeWidth(this.strokeWidth);
@@ -2371,6 +2718,32 @@ class ConnectorArrowShapeCanvas extends Shape {
     const showArrow = this.style?.endArrow !== 'none';
     const pts = getConnectorPoints(this.style, x, y, w, h);
     paintConnectorLine(c, pts, showArrow, 8, 5);
+  }
+
+  // Current path: these shapes are now inserted as real edges (see
+  // handleAddShape/handleDrop) so the user can drag either end onto another
+  // shape and have maxGraph actually connect them — something a vertex can
+  // never do. Shape.paint() calls this instead of paintBackground whenever
+  // the cell is an edge (points.length > 0), passing the real, already
+  // source/target-resolved polyline rather than a fixed box, so this also
+  // renders any waypoints the user drags in along the way.
+  paintEdgeShape(c: AbstractCanvas2D, pts: Point[]) {
+    if (pts.length < 2) return;
+    c.setStrokeColor(this.stroke);
+    c.setStrokeWidth(this.strokeWidth);
+    if (this.strokeWidth <= 0) c.setStrokeColor('none');
+
+    const start = pts[0];
+    const end = pts[pts.length - 1];
+    const before = pts.length > 1 ? pts[pts.length - 2] : start;
+    const showArrow = this.style?.endArrow !== 'none';
+    const lineEnd = showArrow ? triangleAt(c, end, before, 8, 5) : end;
+
+    c.begin();
+    c.moveTo(start.x, start.y);
+    for (let i = 1; i < pts.length - 1; i++) c.lineTo(pts[i].x, pts[i].y);
+    c.lineTo(lineEnd.x, lineEnd.y);
+    c.stroke();
   }
 }
 
@@ -3142,6 +3515,14 @@ class ERDConnectorShape extends Shape {
     if (this.strokeWidth <= 0) c.setStrokeColor('none');
     c.begin(); c.moveTo(x + 2, cy); c.lineTo(x + w - 2, cy); c.stroke();
   }
+
+  paintEdgeShape(c: AbstractCanvas2D, pts: Point[]) {
+    if (pts.length < 2) return;
+    c.setStrokeColor(this.stroke);
+    c.setStrokeWidth(this.strokeWidth);
+    if (this.strokeWidth <= 0) c.setStrokeColor('none');
+    edgeLine(c, pts[0], pts, pts[pts.length - 1]);
+  }
 }
 
 // ─── Arrow Shapes ──────────────────────────────────────────────────────
@@ -3782,6 +4163,14 @@ class UMLAssociationShapeCanvas extends Shape {
     c.lineTo(x + w - 2, cy);
     c.stroke();
   }
+
+  paintEdgeShape(c: AbstractCanvas2D, pts: Point[]) {
+    if (pts.length < 2) return;
+    c.setStrokeColor(this.stroke);
+    c.setStrokeWidth(this.strokeWidth);
+    if (this.strokeWidth <= 0) c.setStrokeColor('none');
+    edgeLine(c, pts[0], pts, pts[pts.length - 1]);
+  }
 }
 
 class UMLGeneralizationShapeCanvas extends Shape {
@@ -3806,6 +4195,17 @@ class UMLGeneralizationShapeCanvas extends Shape {
     c.lineTo(x + w - s - 2, cy + s / 2);
     c.close();
     c.stroke();
+  }
+
+  paintEdgeShape(c: AbstractCanvas2D, pts: Point[]) {
+    if (pts.length < 2) return;
+    c.setStrokeColor(this.stroke);
+    c.setStrokeWidth(this.strokeWidth);
+    if (this.strokeWidth <= 0) c.setStrokeColor('none');
+    const end = pts[pts.length - 1];
+    const before = pts[pts.length - 2] ?? pts[0];
+    const lineEnd = openTriangleAt(c, end, before, 14, 7);
+    edgeLine(c, pts[0], pts, lineEnd);
   }
 }
 
@@ -3854,6 +4254,17 @@ class UMLNoteConnectorShapeCanvas extends Shape {
     c.moveTo(x + 2, cy);
     c.lineTo(x + w - 2, cy);
     c.stroke();
+    c.setDashed(false);
+  }
+
+  paintEdgeShape(c: AbstractCanvas2D, pts: Point[]) {
+    if (pts.length < 2) return;
+    c.setStrokeColor(this.stroke);
+    c.setStrokeWidth(this.strokeWidth);
+    if (this.strokeWidth <= 0) c.setStrokeColor('none');
+    c.setDashed(true);
+    c.setDashPattern('6 4');
+    edgeLine(c, pts[0], pts, pts[pts.length - 1]);
     c.setDashed(false);
   }
 }
@@ -3966,9 +4377,70 @@ class UMLSwimlaneShapeCanvas extends Shape {
 
 // ─── Sequence Shapes ──────────────────────────────────────────────────────
 
+// The stickman many students actually reach for as a sequence diagram's
+// actor (instead of the boxed-object Lifeline below): a fixed-height header
+// holds the stick figure, exactly like UMLLifelineShapeCanvas's fixed
+// object-name header below, so growing the shape for a longer dashed
+// lifeline never stretches/distorts the figure. Falls back to a plain
+// stickman (no line) if the cell is ever resized down to header height or
+// shorter.
+//
+// The "Actor" name label (see igraph.seqActor's spacingTop in getShapeStyle,
+// DiagramCanvas.tsx) sits in its own band directly below the figure, so the
+// dashed lifeline has to start below THAT label band too — not right under
+// the figure's feet — or the line would run straight through the label text.
+const SEQ_ACTOR_FIGURE_HEIGHT = 64;
+const SEQ_ACTOR_LABEL_BAND = 24;
+
+class UMLSeqActorShapeCanvas extends Shape {
+  paintBackground(c: AbstractCanvas2D, x: number, y: number, w: number, h: number) {
+    const figureHeight = Math.min(SEQ_ACTOR_FIGURE_HEIGHT, h);
+    const lineStart = Math.min(SEQ_ACTOR_FIGURE_HEIGHT + SEQ_ACTOR_LABEL_BAND, h);
+    const cx = x + w / 2;
+    const headR = Math.min(w, figureHeight) * 0.22;
+    const headCY = y + headR + 2;
+    c.setStrokeColor(this.stroke);
+    c.setStrokeWidth(this.strokeWidth);
+    // maxGraph's SVG renderer floors any actually-drawn stroke to 1px
+    // (SvgCanvas2D.minStrokeWidth), so strokeWidth=0 alone still paints a
+    // hairline. Dropping the stroke color to 'none' instead skips the
+    // stroke draw entirely, which is the only way to make width 0 truly
+    // invisible.
+    if (this.strokeWidth <= 0) c.setStrokeColor('none');
+    c.ellipse(cx - headR, headCY - headR, headR * 2, headR * 2);
+    c.stroke();
+    const bodyTop = headCY + headR;
+    const bodyBot = y + figureHeight * 0.75;
+    c.begin(); c.moveTo(cx, bodyTop); c.lineTo(cx, bodyBot); c.stroke();
+    c.begin(); c.moveTo(x + w * 0.25, bodyTop + (bodyBot - bodyTop) * 0.3);
+    c.lineTo(x + w * 0.75, bodyTop + (bodyBot - bodyTop) * 0.3); c.stroke();
+    c.begin(); c.moveTo(cx, bodyBot); c.lineTo(x + w * 0.25, y + figureHeight - 2); c.stroke();
+    c.begin(); c.moveTo(cx, bodyBot); c.lineTo(x + w * 0.75, y + figureHeight - 2); c.stroke();
+
+    if (h > lineStart) {
+      c.setDashed(true);
+      c.setDashPattern('6 4');
+      c.begin();
+      c.moveTo(cx, y + lineStart);
+      c.lineTo(cx, y + h - 2);
+      c.stroke();
+      c.setDashed(false);
+    }
+  }
+}
+
 class UMLLifelineShapeCanvas extends Shape {
   paintBackground(c: AbstractCanvas2D, x: number, y: number, w: number, h: number) {
-    const header = Math.min(50, h * 0.15);
+    // headerHeight is a per-cell style override (see resizeLifelineHeader
+    // ToFitText in DiagramCanvas.tsx) rather than always-30, so the
+    // object-name box can grow taller to fit a longer name instead of
+    // clipping/overflowing it — but still defaults to a constant 30
+    // regardless of h when the name is short, same reasoning as before:
+    // a proportional height can't be matched by a style's spacingTop, which
+    // is always literal pixels, not a fraction.
+    const styleHeaderHeight = (this.style as (CellStateStyle & { headerHeight?: number }) | undefined)?.headerHeight;
+    const headerHeight = typeof styleHeaderHeight === 'number' ? styleHeaderHeight : 30;
+    const header = Math.min(headerHeight, h);
     const cx = x + w / 2;
     c.setFillColor(this.fill);
     c.setStrokeColor(this.stroke);
@@ -3993,8 +4465,6 @@ class UMLLifelineShapeCanvas extends Shape {
 
 class UMLActivationShapeCanvas extends Shape {
   paintBackground(c: AbstractCanvas2D, x: number, y: number, w: number, h: number) {
-    const barW = Math.min(16, w * 0.4);
-    const xPos = x + (w - barW) / 2;
     c.setFillColor(this.fill);
     c.setStrokeColor(this.stroke);
     c.setStrokeWidth(this.strokeWidth);
@@ -4004,7 +4474,11 @@ class UMLActivationShapeCanvas extends Shape {
     // stroke draw entirely, which is the only way to make width 0 truly
     // invisible.
     if (this.strokeWidth <= 0) c.setStrokeColor('none');
-    c.rect(xPos, y + 2, barW, h - 4);
+    // Fills its own bounding box (minus a hairline inset for the stroke)
+    // instead of a fixed fraction of it — a fraction left the selection
+    // handles (which track the bounding box) floating well outside the
+    // visibly-painted bar, with empty space the user could grab but not see.
+    c.rect(x + 1, y + 2, w - 2, h - 4);
     c.fillAndStroke();
   }
 }
@@ -4056,6 +4530,20 @@ class UMLReturnMsgShapeCanvas extends Shape {
     c.lineTo(x + arrow + 2, cy + 6);
     c.close();
     c.stroke();
+  }
+
+  paintEdgeShape(c: AbstractCanvas2D, pts: Point[]) {
+    if (pts.length < 2) return;
+    c.setStrokeColor(this.stroke);
+    c.setStrokeWidth(this.strokeWidth);
+    if (this.strokeWidth <= 0) c.setStrokeColor('none');
+    const start = pts[0];
+    const after = pts[1] ?? pts[pts.length - 1];
+    const lineStart = openTriangleAt(c, start, after, 12, 6);
+    c.setDashed(true);
+    c.setDashPattern('6 4');
+    edgeLine(c, lineStart, pts, pts[pts.length - 1]);
+    c.setDashed(false);
   }
 }
 
@@ -4291,6 +4779,17 @@ class UMLDirectedAssociationShapeCanvas extends Shape {
     c.close();
     c.stroke();
   }
+
+  paintEdgeShape(c: AbstractCanvas2D, pts: Point[]) {
+    if (pts.length < 2) return;
+    c.setStrokeColor(this.stroke);
+    c.setStrokeWidth(this.strokeWidth);
+    if (this.strokeWidth <= 0) c.setStrokeColor('none');
+    const end = pts[pts.length - 1];
+    const before = pts[pts.length - 2] ?? pts[0];
+    const lineEnd = openTriangleAt(c, end, before, 14, 6);
+    edgeLine(c, pts[0], pts, lineEnd);
+  }
 }
 
 class UMLAggregationShapeCanvas extends Shape {
@@ -4317,6 +4816,18 @@ class UMLAggregationShapeCanvas extends Shape {
     c.lineTo(x + 2 + d, cy + d);
     c.close();
     c.fillAndStroke();
+  }
+
+  paintEdgeShape(c: AbstractCanvas2D, pts: Point[]) {
+    if (pts.length < 2) return;
+    c.setStrokeColor(this.stroke);
+    c.setStrokeWidth(this.strokeWidth);
+    if (this.strokeWidth <= 0) c.setStrokeColor('none');
+    c.setFillColor(this.fill);
+    const start = pts[0];
+    const after = pts[1] ?? pts[pts.length - 1];
+    const lineStart = diamondAt(c, start, after, 14, 14);
+    edgeLine(c, lineStart, pts, pts[pts.length - 1]);
   }
 }
 
@@ -4345,6 +4856,20 @@ class UMLDependencyShapeCanvas extends Shape {
     c.lineTo(x + w - arrow - 2, cy + 6);
     c.close();
     c.stroke();
+  }
+
+  paintEdgeShape(c: AbstractCanvas2D, pts: Point[]) {
+    if (pts.length < 2) return;
+    c.setStrokeColor(this.stroke);
+    c.setStrokeWidth(this.strokeWidth);
+    if (this.strokeWidth <= 0) c.setStrokeColor('none');
+    const end = pts[pts.length - 1];
+    const before = pts[pts.length - 2] ?? pts[0];
+    const lineEnd = openTriangleAt(c, end, before, 14, 6);
+    c.setDashed(true);
+    c.setDashPattern('6 4');
+    edgeLine(c, pts[0], pts, lineEnd);
+    c.setDashed(false);
   }
 }
 
@@ -4429,6 +4954,10 @@ const SHAPE_REGISTRY: Record<string, typeof Shape> = {
   'igraph.dfdDataFlow': DFDDataFlowShapeCanvas,
   'igraph.dfdDataStore': DFDDataStoreShapeCanvas,
   'igraph.dfdDataStoreGS': DFDDataStoreGSShapeCanvas,
+  'igraph.dfdDataStoreContainer': DFDDataStoreContainerShapeCanvas,
+  'igraph.dfdDataStoreGSContainer': DFDDataStoreGSContainerShapeCanvas,
+  'igraph.dfdCompartmentDivider': DFDCompartmentDividerShapeCanvas,
+  'igraph.dfdCompartmentPlain': DFDCompartmentPlainShapeCanvas,
   'igraph.dfdExternalEntity': DFDExternalEntityShapeCanvas,
   'igraph.dfdBidirectional': DFDBidirectionalShapeCanvas,
   'igraph.dfdBoundary': DFDBoundaryShapeCanvas,
@@ -4494,6 +5023,7 @@ const SHAPE_REGISTRY: Record<string, typeof Shape> = {
   'igraph.umlConstraint': UMLConstraintShapeCanvas,
 
   // ─── Sequence Shapes ──────────────────────────────────────────────────
+  'igraph.seqActor': UMLSeqActorShapeCanvas,
   'igraph.umlLifeline': UMLLifelineShapeCanvas,
   'igraph.umlActivation': UMLActivationShapeCanvas,
   'igraph.umlDestroy': UMLDestroyShapeCanvas,
@@ -4640,6 +5170,23 @@ export function isUmlClassCompartmentCell(cell: any): boolean {
   return shape === 'igraph.classCompartmentDivider' || shape === 'igraph.classCompartmentPlain';
 }
 
+export function isDfdDataStoreContainerCell(cell: any): boolean {
+  const style = cell?.getStyle?.();
+  const shape = typeof style === 'object' ? style?.shape : undefined;
+  return shape === 'igraph.dfdDataStoreContainer' || shape === 'igraph.dfdDataStoreGSContainer';
+}
+
+export function isDfdDataStoreCompartmentCell(cell: any): boolean {
+  const style = cell?.getStyle?.();
+  const shape = typeof style === 'object' ? style?.shape : undefined;
+  return shape === 'igraph.dfdCompartmentDivider' || shape === 'igraph.dfdCompartmentPlain';
+}
+
+export function isUmlLifelineCell(cell: any): boolean {
+  const style = cell?.getStyle?.();
+  return typeof style === 'object' && style?.shape === 'igraph.umlLifeline';
+}
+
 // ─── ID to Style Map ─────────────────────────────────────────────────────────
 
 export const IGRAPH_ID_STYLE_MAP: Record<string, string> = {
@@ -4771,7 +5318,7 @@ export const IGRAPH_ID_STYLE_MAP: Record<string, string> = {
   'act-constraint': 'igraph.umlConstraint',
 
   // ─── Sequence ───────────────────────────────────────────────────────────
-  'seq-actor': 'igraph.ucActor',
+  'seq-actor': 'igraph.seqActor',
   'seq-lifeline': 'igraph.umlLifeline',
   'seq-activation': 'igraph.umlActivation',
   'seq-destroy': 'igraph.umlDestroy',

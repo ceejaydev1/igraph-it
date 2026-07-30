@@ -1,5 +1,6 @@
 const { db } = require('../config/firebase');
 const { v4: uuidv4 } = require('uuid');
+const { getAccessLevel, canView, canEdit } = require('../utils/diagramAccess');
 
 const COLLECTION = 'diagrams';
 
@@ -38,17 +39,24 @@ const saveDiagram = async (req, res) => {
       }
 
       const existingData = existingDoc.data();
+      const accessLevel = getAccessLevel(existingData, userId);
 
-      if (existingData.user_id !== userId) {
-        console.log(`❌ User ${userId} does not own diagram ${id}`);
+      if (!canEdit(accessLevel)) {
+        console.log(`❌ User ${userId} does not have edit access to diagram ${id} (level: ${accessLevel})`);
         return res.status(403).json({
           success: false,
           message: 'You do not have permission to update this diagram.',
         });
       }
 
+      // Renaming is an owner/edit_share-level action (matches renameDiagram
+      // below) — a plain 'edit' collaborator can save content changes here
+      // but shouldn't be able to rename the diagram out from under everyone
+      // else just because the title field rides along in the same save call.
+      const canRename = accessLevel === 'owner' || accessLevel === 'edit_share';
+
       await db.collection(COLLECTION).doc(id).update({
-        name: name.trim(),
+        ...(canRename ? { name: name.trim() } : {}),
         xml: xml,
         preview_image: previewImage || null,
         type: type || 'General',
@@ -65,7 +73,7 @@ const saveDiagram = async (req, res) => {
         data: {
           diagram: {
             id,
-            name: name.trim(),
+            name: canRename ? name.trim() : existingData.name,
             type: type || 'General',
             created_at: existingData.created_at,
           },
@@ -127,13 +135,16 @@ const getSavedDiagrams = async (req, res) => {
 
     console.log(`📋 Fetching diagrams for user: ${userId}`);
 
-    const snapshot = await db.collection(COLLECTION)
-      .where('user_id', '==', userId)
-      .orderBy('updated_at', 'desc')
-      .get();
+    // Two separate queries, merged here, rather than one compound query —
+    // Firestore can't OR across different fields (user_id vs an
+    // array-contains on collaborator_ids) in a single query.
+    const [ownedSnapshot, sharedSnapshot] = await Promise.all([
+      db.collection(COLLECTION).where('user_id', '==', userId).get(),
+      db.collection(COLLECTION).where('collaborator_ids', 'array-contains', userId).get(),
+    ]);
 
     const diagrams = [];
-    snapshot.forEach(doc => {
+    ownedSnapshot.forEach((doc) => {
       const data = doc.data();
       diagrams.push({
         id: data.diagram_id,
@@ -142,8 +153,26 @@ const getSavedDiagrams = async (req, res) => {
         previewImage: data.preview_image || null,
         created_at: data.created_at,
         updated_at: data.updated_at,
+        isOwner: true,
+        accessLevel: 'owner',
       });
     });
+    sharedSnapshot.forEach((doc) => {
+      const data = doc.data();
+      const collaborator = (data.collaborators || []).find((c) => c.user_id === userId);
+      diagrams.push({
+        id: data.diagram_id,
+        name: data.name,
+        type: data.type || 'General',
+        previewImage: data.preview_image || null,
+        created_at: data.created_at,
+        updated_at: data.updated_at,
+        isOwner: false,
+        accessLevel: collaborator?.permission || 'view',
+      });
+    });
+
+    diagrams.sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime());
 
     console.log(`✅ Found ${diagrams.length} diagrams for user ${userId}`);
 
@@ -178,8 +207,9 @@ const getDiagram = async (req, res) => {
     }
 
     const data = doc.data();
+    const accessLevel = getAccessLevel(data, userId);
 
-    if (data.user_id !== userId) {
+    if (!canView(accessLevel)) {
       return res.status(403).json({
         success: false,
         message: 'You do not have permission to view this diagram.',
@@ -198,6 +228,13 @@ const getDiagram = async (req, res) => {
         activePageId: data.active_page_id || null,
         created_at: data.created_at,
         updated_at: data.updated_at,
+        // Lets the frontend gate its own UI (read-only viewer for 'view',
+        // hide rename/delete unless owner, etc.) without a second round trip.
+        accessLevel,
+        // So the "Request permission" banner can show "Request sent" instead
+        // of the button again after a reload, rather than only for the rest
+        // of this one session.
+        hasPendingAccessRequest: (data.access_requests || []).some((r) => r.user_id === userId),
       },
     });
   } catch (error) {

@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useRef } from 'react';
+import React, { useState, useMemo, useRef, useEffect } from 'react';
 import {
   View,
   Text,
@@ -10,8 +10,14 @@ import {
   Platform,
   UIManager,
   useWindowDimensions,
+  Keyboard,
+  Animated,
+  Easing,
 } from 'react-native';
 import { Svg, Path, Circle } from 'react-native-svg';
+import { useRouter } from 'expo-router';
+import { useOnboardingTour } from '../../hooks/useOnboardingTour';
+import { REFERENCE_TOUR_ID, getReferenceTourSteps } from '../../utils/tours';
 
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
   UIManager.setLayoutAnimationEnabledExperimental(true);
@@ -46,10 +52,15 @@ const EmptySearchIcon = () => (
   </Svg>
 );
 
-const ChevronIcon = ({ up, color = '#3b5bdb' }: { up: boolean; color?: string }) => (
+// No default color — every call site passes colors.primary explicitly, and a
+// silent fallback here would just mask the day a call site forgets to.
+// Always points down — ReferenceCard spins it with Animated on expand/collapse
+// rather than swapping a second up/down path, the same idiom ShapesPanel.tsx
+// already uses for its own category-expand arrow.
+const ChevronIcon = ({ color }: { color: string }) => (
   <Svg width={18} height={18} viewBox="0 0 24 24" fill="none">
     <Path
-      d={up ? 'M18 15L12 9L6 15' : 'M6 9L12 15L18 9'}
+      d="M6 9L12 15L18 9"
       stroke={color}
       strokeWidth={2}
       strokeLinecap="round"
@@ -241,41 +252,102 @@ const CATEGORY_COLORS: Record<Exclude<Category, 'All'>, { primary: string; light
 // ── Term card ──────────────────────────────────────────
 const ReferenceCard = ({
   item,
+  index,
   isExpanded,
   onToggle,
 }: {
   item: ReferenceTerm;
+  index: number;
   isExpanded: boolean;
   onToggle: () => void;
 }) => {
   const [isHovered, setIsHovered] = useState(false);
   const colors = CATEGORY_COLORS[item.category];
 
+  // Entrance: fades/slides in once per mount, staggered by list position —
+  // capped at 10 so a long filtered list doesn't leave the last cards
+  // waiting a second before they're even visible.
+  const mountAnim = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    Animated.timing(mountAnim, {
+      toValue: 1,
+      duration: 320,
+      delay: Math.min(index, 10) * 35,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: true,
+    }).start();
+    // Runs once per mount only — re-fires naturally if filtering unmounts
+    // and later remounts this card, which reads as a nice "it's back" cue.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Chevron spin — same rotate-a-down-arrow idiom as ShapesPanel.tsx's own
+  // category-expand arrow, so both screens share one interaction language.
+  const chevronSpin = useRef(new Animated.Value(isExpanded ? 1 : 0)).current;
+  useEffect(() => {
+    Animated.timing(chevronSpin, {
+      toValue: isExpanded ? 1 : 0,
+      duration: 220,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: true,
+    }).start();
+  }, [isExpanded]);
+  const chevronRotate = chevronSpin.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '180deg'] });
+
+  // Tactile press feedback, same spring values as the diagram detail page's
+  // Shapes Used badges — a light touch since these cards are already large
+  // tap targets, not the primary signal (hover/pressed opacity still carry that).
+  const pressScale = useRef(new Animated.Value(1)).current;
+  const handlePressIn = () => {
+    Animated.spring(pressScale, { toValue: 0.985, useNativeDriver: true, speed: 30, bounciness: 4 }).start();
+  };
+  const handlePressOut = () => {
+    Animated.spring(pressScale, { toValue: 1, useNativeDriver: true, speed: 20, bounciness: 6 }).start();
+  };
+
   return (
-    <Pressable
-      onPress={onToggle}
-      style={({ pressed }) => [
-        styles.card,
-        isHovered && styles.cardHovered,
-        pressed && styles.cardPressed,
-      ]}
-      // @ts-ignore - React Native Web specific props
-      onMouseEnter={() => setIsHovered(true)}
-      onMouseLeave={() => setIsHovered(false)}
+    <Animated.View
+      style={{
+        opacity: mountAnim,
+        transform: [
+          { translateY: mountAnim.interpolate({ inputRange: [0, 1], outputRange: [10, 0] }) },
+          { scale: pressScale },
+        ],
+      }}
     >
-      <View style={styles.cardHeader}>
-        <View style={{ flex: 1 }}>
-          <Text style={styles.cardTerm}>{item.term}</Text>
-          <View style={[styles.categoryBadge, { backgroundColor: colors.light }]}>
-            <Text style={[styles.categoryBadgeText, { color: colors.primary }]}>
-              {item.category}
-            </Text>
+      <Pressable
+        onPress={onToggle}
+        onPressIn={handlePressIn}
+        onPressOut={handlePressOut}
+        style={({ pressed }) => [
+          styles.card,
+          isHovered && styles.cardHovered,
+          pressed && styles.cardPressed,
+        ]}
+        accessibilityRole="button"
+        accessibilityLabel={`${item.term}, ${item.category}`}
+        accessibilityHint={isExpanded ? 'Collapses the definition' : 'Expands the definition'}
+        accessibilityState={{ expanded: isExpanded }}
+        // @ts-ignore - React Native Web specific props
+        onMouseEnter={() => setIsHovered(true)}
+        onMouseLeave={() => setIsHovered(false)}
+      >
+        <View style={styles.cardHeader}>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.cardTerm}>{item.term}</Text>
+            <View style={[styles.categoryBadge, { backgroundColor: colors.light }]}>
+              <Text style={[styles.categoryBadgeText, { color: colors.primary }]}>
+                {item.category}
+              </Text>
+            </View>
           </View>
+          <Animated.View style={{ transform: [{ rotate: chevronRotate }] }}>
+            <ChevronIcon color={colors.primary} />
+          </Animated.View>
         </View>
-        <ChevronIcon up={isExpanded} color={colors.primary} />
-      </View>
-      {isExpanded && <Text style={styles.cardDefinition}>{item.definition}</Text>}
-    </Pressable>
+        {isExpanded && <Text style={styles.cardDefinition}>{item.definition}</Text>}
+      </Pressable>
+    </Animated.View>
   );
 };
 
@@ -287,11 +359,20 @@ export default function LearningReference() {
   const inputRef = useRef<TextInput>(null);
   const { width } = useWindowDimensions();
   const isDesktop = width >= 1024;
+  const router = useRouter();
+
+  const referenceTourSteps = useMemo(() => getReferenceTourSteps({ router }), [router]);
+  useOnboardingTour(REFERENCE_TOUR_ID, referenceTourSteps);
 
   const filteredTerms = useMemo(() => {
+    const query = search.trim().toLowerCase();
     return REFERENCE_DATA.filter((item) => {
       const matchesCategory = activeCategory === 'All' || item.category === activeCategory;
-      const matchesSearch = item.term.toLowerCase().includes(search.trim().toLowerCase());
+      // Matches the definition too, not just the term name — someone
+      // searching a concept they half-remember ("iterative", "sprint")
+      // shouldn't have to already know the exact term title to find it.
+      const matchesSearch =
+        item.term.toLowerCase().includes(query) || item.definition.toLowerCase().includes(query);
       return matchesCategory && matchesSearch;
     });
   }, [search, activeCategory]);
@@ -307,6 +388,14 @@ export default function LearningReference() {
     if (Platform.OS === 'web') inputRef.current?.focus();
   };
 
+  // Live filtering already does the actual search on every keystroke — this
+  // just confirms the action (dismisses the keyboard) so "Search" on the
+  // keyboard/the button isn't a dead end. Matches Home screen's identical
+  // handleSearchSubmit, which this search bar was copied from.
+  const handleSearchSubmit = () => {
+    Keyboard.dismiss();
+  };
+
   return (
     <View style={styles.container}>
       <DotGrid />
@@ -314,7 +403,7 @@ export default function LearningReference() {
       {/* Header — centered */}
       <View style={styles.headerSection}>
         {/* Search Bar — same pattern as Home screen */}
-        <View style={styles.searchBarContainer}>
+        <View nativeID="tour-reference-search" style={styles.searchBarContainer}>
           <View style={styles.searchBar}>
             <TextInput
               ref={inputRef}
@@ -325,19 +414,25 @@ export default function LearningReference() {
               onChangeText={setSearch}
               autoCapitalize="none"
               returnKeyType="search"
-              onSubmitEditing={() => Platform.OS !== 'web' && undefined}
+              onSubmitEditing={handleSearchSubmit}
+              accessibilityLabel="Search reference terms"
             />
             {search.length > 0 && (
               <Pressable
                 onPress={handleClearSearch}
                 style={({ pressed }) => [styles.clearButton, pressed && styles.clearButtonPressed]}
                 hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                accessibilityRole="button"
+                accessibilityLabel="Clear search"
               >
                 <ClearIcon />
               </Pressable>
             )}
             <Pressable
               style={({ pressed }) => [styles.searchButton, pressed && styles.searchButtonPressed]}
+              onPress={handleSearchSubmit}
+              accessibilityRole="button"
+              accessibilityLabel="Search"
             >
               <SearchIcon />
             </Pressable>
@@ -345,7 +440,7 @@ export default function LearningReference() {
         </View>
 
         {/* Category Filter Tabs — centered, wraps instead of horizontal scroll */}
-        <View style={styles.tabsRow}>
+        <View nativeID="tour-reference-categories" style={styles.tabsRow}>
           {CATEGORIES.map((cat) => {
             const isActive = activeCategory === cat;
             return (
@@ -353,6 +448,9 @@ export default function LearningReference() {
                 key={cat}
                 onPress={() => setActiveCategory(cat)}
                 style={[styles.categoryChip, isActive && styles.categoryChipActive]}
+                accessibilityRole="tab"
+                accessibilityLabel={`${cat} category`}
+                accessibilityState={{ selected: isActive }}
               >
                 <Text style={[styles.categoryChipText, isActive && styles.categoryChipTextActive]}>
                   {cat}
@@ -381,7 +479,7 @@ export default function LearningReference() {
           { paddingBottom: isDesktop ? 32 : 120 },
         ]}
       >
-        <View style={styles.listInner}>
+        <View nativeID="tour-reference-list" style={styles.listInner}>
           {filteredTerms.length === 0 ? (
             <View style={styles.emptyState}>
               <EmptySearchIcon />
@@ -389,10 +487,11 @@ export default function LearningReference() {
               <Text style={styles.emptyText}>Try adjusting your search or category</Text>
             </View>
           ) : (
-            filteredTerms.map((item) => (
+            filteredTerms.map((item, index) => (
               <ReferenceCard
                 key={item.id}
                 item={item}
+                index={index}
                 isExpanded={expandedId === item.id}
                 onToggle={() => toggleExpand(item.id)}
               />
@@ -559,6 +658,7 @@ const styles = StyleSheet.create({
   cardHeader: {
     flexDirection: 'row',
     alignItems: 'center',
+    gap: 12,
   },
   cardTerm: {
     fontSize: 15,

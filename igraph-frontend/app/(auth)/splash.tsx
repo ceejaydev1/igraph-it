@@ -9,8 +9,143 @@ import {
   Platform,
   Image,
 } from 'react-native';
+import Svg, { Circle, Rect, Polygon, Line, G } from 'react-native-svg';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
+
+const AnimatedLine = Animated.createAnimatedComponent(Line);
+const AnimatedG = Animated.createAnimatedComponent(G);
+
+// ─── Mini flowchart loader ──────────────────────────────────────────────────
+// The loading indicator is a tiny flowchart assembling itself — Terminator →
+// Process → Decision → Terminator, the app's own Flowchart shape vocabulary —
+// instead of a generic progress bar. Every other main screen ties back into
+// what this app actually does (the node/marker motif in the diagram detail
+// screen, the dashed "placeholder, not final artwork" language); this makes
+// the very first thing a user sees do the same.
+const LOADER_WIDTH = 280;
+const LOADER_HEIGHT = 64;
+const NODE_Y = 32;
+const NODE_XS = [20, 100, 180, 260];
+const TERM_R = 9;
+const RECT_W = 34;
+const RECT_H = 20;
+const DIAMOND_HALF_W = 15;
+const DIAMOND_HALF_H = 11;
+
+// Line endpoints sit at each shape's edge, not its center, so the connecting
+// lines visually terminate against the shapes instead of running under them.
+const SEGMENTS = [
+  { x1: NODE_XS[0] + TERM_R, x2: NODE_XS[1] - RECT_W / 2 },
+  { x1: NODE_XS[1] + RECT_W / 2, x2: NODE_XS[2] - DIAMOND_HALF_W },
+  { x1: NODE_XS[2] + DIAMOND_HALF_W, x2: NODE_XS[3] - TERM_R },
+];
+
+function diamondPoints(cx: number, cy: number): string {
+  return `${cx},${cy - DIAMOND_HALF_H} ${cx + DIAMOND_HALF_W},${cy} ${cx},${cy + DIAMOND_HALF_H} ${cx - DIAMOND_HALF_W},${cy}`;
+}
+
+// Composed by hand (translate to origin, scale, translate back) rather than
+// relying on an SVG "transform-origin" prop, so the shape scales around its
+// own center point instead of the SVG canvas's (0,0) corner.
+function popTransform(cx: number, cy: number, scale: number): string {
+  return `translate(${cx} ${cy}) scale(${scale}) translate(${-cx} ${-cy})`;
+}
+
+interface DiagramLoaderProps {
+  progressValue: Animated.Value;
+}
+
+// Each segment "draws" across its own third of the total progress, and the
+// node at its far end pops in — with a slight overshoot, not a flat fade —
+// right as the line reaches it: a small "connection made" beat instead of a
+// featureless percentage tick. The starting Terminator is solid from frame
+// one (it represents "loading has begun," not something to wait for); a
+// faint outline of the full destination shape is visible throughout so the
+// diagram being built is legible immediately, not appearing out of empty
+// space.
+const DiagramLoader: React.FC<DiagramLoaderProps> = ({ progressValue }) => {
+  const seg1Draw = progressValue.interpolate({ inputRange: [0, 0.32], outputRange: [0, 1], extrapolate: 'clamp' });
+  const seg2Draw = progressValue.interpolate({ inputRange: [0.34, 0.64], outputRange: [0, 1], extrapolate: 'clamp' });
+  const seg3Draw = progressValue.interpolate({ inputRange: [0.66, 0.96], outputRange: [0, 1], extrapolate: 'clamp' });
+
+  const node1Opacity = progressValue.interpolate({ inputRange: [0.26, 0.34], outputRange: [0, 1], extrapolate: 'clamp' });
+  const node2Opacity = progressValue.interpolate({ inputRange: [0.58, 0.66], outputRange: [0, 1], extrapolate: 'clamp' });
+  const node3Opacity = progressValue.interpolate({ inputRange: [0.9, 0.98], outputRange: [0, 1], extrapolate: 'clamp' });
+
+  const node1Pop = progressValue.interpolate({
+    inputRange: [0.26, 0.31, 0.38],
+    outputRange: [popTransform(NODE_XS[1], NODE_Y, 0.3), popTransform(NODE_XS[1], NODE_Y, 1.18), popTransform(NODE_XS[1], NODE_Y, 1)],
+    extrapolate: 'clamp',
+  });
+  const node2Pop = progressValue.interpolate({
+    inputRange: [0.58, 0.63, 0.7],
+    outputRange: [popTransform(NODE_XS[2], NODE_Y, 0.3), popTransform(NODE_XS[2], NODE_Y, 1.18), popTransform(NODE_XS[2], NODE_Y, 1)],
+    extrapolate: 'clamp',
+  });
+  const node3Pop = progressValue.interpolate({
+    inputRange: [0.9, 0.95, 1],
+    outputRange: [popTransform(NODE_XS[3], NODE_Y, 0.3), popTransform(NODE_XS[3], NODE_Y, 1.18), popTransform(NODE_XS[3], NODE_Y, 1)],
+    extrapolate: 'clamp',
+  });
+
+  // Soft pulse behind the whole diagram once it's fully connected — echoes
+  // the glow the old bar had, just moved onto shapes instead of a fill.
+  const completeGlow = progressValue.interpolate({ inputRange: [0.97, 1], outputRange: [0, 1], extrapolate: 'clamp' });
+
+  const seg1Length = SEGMENTS[0].x2 - SEGMENTS[0].x1;
+  const seg2Length = SEGMENTS[1].x2 - SEGMENTS[1].x1;
+  const seg3Length = SEGMENTS[2].x2 - SEGMENTS[2].x1;
+
+  return (
+    <View style={styles.loaderWrap}>
+      <Animated.View style={[styles.loaderGlow, { opacity: completeGlow }]} pointerEvents="none" />
+      <Svg width={LOADER_WIDTH} height={LOADER_HEIGHT}>
+        <Circle cx={NODE_XS[0]} cy={NODE_Y} r={TERM_R} fill="none" stroke="rgba(255,255,255,0.18)" strokeWidth={1.5} />
+        <Rect x={NODE_XS[1] - RECT_W / 2} y={NODE_Y - RECT_H / 2} width={RECT_W} height={RECT_H} rx={5} fill="none" stroke="rgba(255,255,255,0.18)" strokeWidth={1.5} />
+        <Polygon points={diamondPoints(NODE_XS[2], NODE_Y)} fill="none" stroke="rgba(255,255,255,0.18)" strokeWidth={1.5} />
+        <Circle cx={NODE_XS[3]} cy={NODE_Y} r={TERM_R} fill="none" stroke="rgba(255,255,255,0.18)" strokeWidth={1.5} />
+
+        <Line x1={SEGMENTS[0].x1} x2={SEGMENTS[0].x2} y1={NODE_Y} y2={NODE_Y} stroke="rgba(255,255,255,0.12)" strokeWidth={2.5} strokeLinecap="round" />
+        <Line x1={SEGMENTS[1].x1} x2={SEGMENTS[1].x2} y1={NODE_Y} y2={NODE_Y} stroke="rgba(255,255,255,0.12)" strokeWidth={2.5} strokeLinecap="round" />
+        <Line x1={SEGMENTS[2].x1} x2={SEGMENTS[2].x2} y1={NODE_Y} y2={NODE_Y} stroke="rgba(255,255,255,0.12)" strokeWidth={2.5} strokeLinecap="round" />
+
+        <AnimatedLine
+          x1={SEGMENTS[0].x1} x2={SEGMENTS[0].x2} y1={NODE_Y} y2={NODE_Y}
+          stroke="#4c6fff" strokeWidth={2.5} strokeLinecap="round"
+          strokeDasharray={`${seg1Length}, ${seg1Length}`}
+          strokeDashoffset={seg1Draw.interpolate({ inputRange: [0, 1], outputRange: [seg1Length, 0] })}
+        />
+        <AnimatedLine
+          x1={SEGMENTS[1].x1} x2={SEGMENTS[1].x2} y1={NODE_Y} y2={NODE_Y}
+          stroke="#4c6fff" strokeWidth={2.5} strokeLinecap="round"
+          strokeDasharray={`${seg2Length}, ${seg2Length}`}
+          strokeDashoffset={seg2Draw.interpolate({ inputRange: [0, 1], outputRange: [seg2Length, 0] })}
+        />
+        <AnimatedLine
+          x1={SEGMENTS[2].x1} x2={SEGMENTS[2].x2} y1={NODE_Y} y2={NODE_Y}
+          stroke="#4c6fff" strokeWidth={2.5} strokeLinecap="round"
+          strokeDasharray={`${seg3Length}, ${seg3Length}`}
+          strokeDashoffset={seg3Draw.interpolate({ inputRange: [0, 1], outputRange: [seg3Length, 0] })}
+        />
+
+        <Circle cx={NODE_XS[0]} cy={NODE_Y} r={TERM_R} fill="#4c6fff" />
+
+        <AnimatedG transform={node1Pop} opacity={node1Opacity}>
+          <Rect x={NODE_XS[1] - RECT_W / 2} y={NODE_Y - RECT_H / 2} width={RECT_W} height={RECT_H} rx={5} fill="#4c6fff" />
+        </AnimatedG>
+
+        <AnimatedG transform={node2Pop} opacity={node2Opacity}>
+          <Polygon points={diamondPoints(NODE_XS[2], NODE_Y)} fill="#4c6fff" />
+        </AnimatedG>
+
+        <AnimatedG transform={node3Pop} opacity={node3Opacity}>
+          <Circle cx={NODE_XS[3]} cy={NODE_Y} r={TERM_R} fill="#4c6fff" />
+        </AnimatedG>
+      </Svg>
+    </View>
+  );
+};
 
 interface SplashScreenProps {
   onFinish?: () => void;
@@ -25,7 +160,7 @@ export default function CreativeSplashScreen({
   // animation of its own) because it needs to continue seamlessly from the
   // OS/PWA launch icon that was already on screen — animating it in from
   // hidden made it flicker (vanish, then pop back in with a jump). Only the
-  // dark backdrop and the extra content (title, progress bar) fade in
+  // dark backdrop and the extra content (title, diagram loader) fade in
   // around/after the already-visible logo.
   const titleOpacity = useRef(new Animated.Value(0)).current;
   const titleTranslateY = useRef(new Animated.Value(20)).current;
@@ -79,11 +214,6 @@ export default function CreativeSplashScreen({
       return () => clearTimeout(timer);
     }
   }, [progress, onFinish]);
-
-  const progressWidthInterpolated = animatedProgress.interpolate({
-    inputRange: [0, 1],
-    outputRange: ['0%', '100%'],
-  });
 
   const horizontalLines = Array.from({ length: 12 }).map((_, i) => ({
     key: `h-${i}`,
@@ -156,17 +286,7 @@ export default function CreativeSplashScreen({
             { opacity: backdropFadeIn },
           ]}
         >
-          <View style={styles.progressBarWrapper}>
-            <View style={styles.progressBarTrack}>
-              <Animated.View
-                style={[
-                  styles.progressBarFill,
-                  { width: progressWidthInterpolated },
-                ]}
-              />
-            </View>
-            <View style={styles.progressBarGlow} />
-          </View>
+          <DiagramLoader progressValue={animatedProgress} />
         </Animated.View>
       </View>
     </View>
@@ -269,52 +389,34 @@ const styles = StyleSheet.create({
     width: '100%',
     alignItems: 'center',
   },
-  progressBarWrapper: {
-    width: 280,
-    position: 'relative',
+  loaderWrap: {
+    width: LOADER_WIDTH,
+    height: LOADER_HEIGHT,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  progressBarTrack: {
-    width: '100%',
-    height: 6,
-    backgroundColor: 'rgba(255, 255, 255, 0.12)',
-    borderRadius: 3,
-    overflow: 'hidden',
-    ...Platform.select({
-      ios: {
-        shadowColor: '#4c6fff',
-        shadowOffset: { width: 0, height: 0 },
-        shadowOpacity: 0.3,
-        shadowRadius: 4,
-      },
-      android: {
-        elevation: 2,
-      },
-    }),
-  },
-  progressBarFill: {
-    height: '100%',
-    backgroundColor: '#4c6fff',
-    borderRadius: 3,
-    ...Platform.select({
-      ios: {
-        shadowColor: '#4c6fff',
-        shadowOffset: { width: 0, height: 0 },
-        shadowOpacity: 0.5,
-        shadowRadius: 6,
-      },
-      android: {
-        elevation: 3,
-      },
-    }),
-  },
-  progressBarGlow: {
+  // Approximates a soft radial glow behind the completed diagram — RN has no
+  // real radial gradient without an extra dependency, so a large, softly-
+  // shadowed/blurred translucent blob stands in for one.
+  loaderGlow: {
     position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    borderRadius: 3,
-    backgroundColor: 'rgba(76, 111, 255, 0.2)',
-    opacity: 0.5,
+    top: -14,
+    left: 8,
+    right: 8,
+    bottom: -14,
+    borderRadius: 32,
+    backgroundColor: 'rgba(76, 111, 255, 0.28)',
+    ...Platform.select({
+      web: { filter: 'blur(20px)' } as any,
+      ios: {
+        shadowColor: '#4c6fff',
+        shadowOffset: { width: 0, height: 0 },
+        shadowOpacity: 0.7,
+        shadowRadius: 20,
+      },
+      android: {
+        elevation: 4,
+      },
+    }),
   },
 });

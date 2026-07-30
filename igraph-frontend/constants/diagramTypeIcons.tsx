@@ -121,11 +121,26 @@ const WaterfallGlyph = ({ color }: { color: string }) => (
   </Svg>
 );
 
+// Deliberately a different silhouette from WaterfallGlyph's thin single-line
+// staircase, not a small addition to it — three overlapping phase bars
+// cascading diagonally, since overlapping/interleaved phases (each one
+// starting before the last one fully ends) are exactly what distinguishes
+// the modified variant from strict, non-overlapping Waterfall.
+const ModifiedWaterfallGlyph = ({ color }: { color: string }) => (
+  <Svg width={38} height={38} viewBox="0 0 24 24" fill="none">
+    <Rect x="1" y="2" width="14" height="6" rx="1.4" stroke={color} strokeWidth={1.6} />
+    <Rect x="7" y="9" width="14" height="6" rx="1.4" stroke={color} strokeWidth={1.6} />
+    <Rect x="13" y="16" width="10" height="6" rx="1.4" stroke={color} strokeWidth={1.6} />
+  </Svg>
+);
+
+// Starburst radiating from a single point, since Big Bang has no distinct
+// planning/design phases — development just explodes outward from an idea.
 const BigBangGlyph = ({ color }: { color: string }) => (
   <Svg width={38} height={38} viewBox="0 0 24 24" fill="none">
-    <Circle cx="12" cy="12" r="3.5" stroke={color} strokeWidth={1.6} />
+    <Circle cx="12" cy="12" r="2.4" fill={color} />
     <Path
-      d="M12 2V6M12 18V22M2 12H6M18 12H22M4.9 4.9L7.5 7.5M16.5 16.5L19.1 19.1M19.1 4.9L16.5 7.5M7.5 16.5L4.9 19.1"
+      d="M12 2V6M12 18V22M2 12H6M18 12H22M4.9 4.9L7.6 7.6M16.4 16.4L19.1 19.1M19.1 4.9L16.4 7.6M7.6 16.4L4.9 19.1"
       stroke={color}
       strokeWidth={1.6}
       strokeLinecap="round"
@@ -203,6 +218,7 @@ export const DIAGRAM_ICON_MAP: Record<string, React.FC<{ color: string }>> = {
   'Sequence Diagram': SequenceGlyph,
   'Class Diagram': ClassGlyph,
   'Waterfall Model': WaterfallGlyph,
+  'Modified Waterfall Model': ModifiedWaterfallGlyph,
   'Big Bang Model': BigBangGlyph,
   'Prototype Model': PrototypeGlyph,
   'Agile Model': AgileGlyph,

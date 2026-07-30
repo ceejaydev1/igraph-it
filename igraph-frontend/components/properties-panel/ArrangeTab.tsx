@@ -1,16 +1,14 @@
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { Geometry } from '@maxgraph/core';
-import { COLORS, SPACING, RADIUS } from '@/constants/theme';
+import { COLORS, SPACING } from '@/constants/theme';
 import { applyStylePatch, getCommonGeoValue, getCommonStyleValue } from './PropertiesPanel';
 import {
   CollapsibleSection,
-  CheckboxRow,
   NumberStepper,
   ActionButton,
   InlineField,
 } from './shared';
-import { SizeIcon } from './icons';
 
 interface TabProps {
   graph: any;
@@ -58,8 +56,6 @@ function reorderStep(graph: any, cells: any[], direction: 1 | -1) {
 }
 
 export default function ArrangeTab({ graph, cells }: TabProps) {
-  const [constrainProportions, setConstrainProportions] = React.useState(false);
-
   const x = getCommonGeoValue(cells, 'x') as number | undefined;
   const y = getCommonGeoValue(cells, 'y') as number | undefined;
   const width = getCommonGeoValue(cells, 'width') as number | undefined;
@@ -68,23 +64,8 @@ export default function ArrangeTab({ graph, cells }: TabProps) {
   const flipH = getCommonStyleValue(cells, 'flipH') as number | undefined;
   const flipV = getCommonStyleValue(cells, 'flipV') as number | undefined;
 
-  const aspect = width && height ? width / height : undefined;
-
-  const handleWidthChange = (n: number) => {
-    if (constrainProportions && aspect && height !== undefined) {
-      applyGeoPatch(graph, cells, { width: n, height: Math.round(n / aspect) });
-    } else {
-      applyGeoPatch(graph, cells, { width: n });
-    }
-  };
-
-  const handleHeightChange = (n: number) => {
-    if (constrainProportions && aspect && width !== undefined) {
-      applyGeoPatch(graph, cells, { height: n, width: Math.round(n * aspect) });
-    } else {
-      applyGeoPatch(graph, cells, { height: n });
-    }
-  };
+  const handleWidthChange = (n: number) => applyGeoPatch(graph, cells, { width: n });
+  const handleHeightChange = (n: number) => applyGeoPatch(graph, cells, { height: n });
 
   const patchStyle = (p: Record<string, any>) => applyStylePatch(graph, cells, p);
 
@@ -110,9 +91,6 @@ export default function ArrangeTab({ graph, cells }: TabProps) {
       {/* ─── Size / Position ──────────────────────────────────────────── */}
       <CollapsibleSection title="Size / Position" defaultOpen>
         <View style={styles.sizeRow}>
-          <View style={styles.sizeIcon}>
-            <SizeIcon />
-          </View>
           <View style={styles.pairItem}>
             <NumberStepper
               label="Width"
@@ -136,12 +114,6 @@ export default function ArrangeTab({ graph, cells }: TabProps) {
             />
           </View>
         </View>
-
-        <CheckboxRow
-          checked={constrainProportions}
-          onToggle={() => setConstrainProportions((v) => !v)}
-          label="Constrain Proportions"
-        />
 
         <Text style={styles.subLabel}>Position</Text>
         <View style={styles.pairRow}>
@@ -203,16 +175,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'flex-end',
     gap: SPACING.sm,
-  },
-  sizeIcon: {
-    width: 28,
-    height: 30,
-    borderRadius: RADIUS.sm,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: SPACING.md,
   },
   subLabel: {
     fontSize: 13,

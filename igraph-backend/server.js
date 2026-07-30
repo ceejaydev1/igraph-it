@@ -3,12 +3,15 @@ require('dotenv').config();
 const express = require('express');
 const helmet = require('helmet');
 const cors = require('cors');
+const cookieParser = require('cookie-parser');
 const rateLimit = require('express-rate-limit');
 const compression = require('compression');
 
 const authRoutes = require('./routes/authRoutes');
 const diagramRoutes = require('./routes/diagramRoutes');
 const feedbackRoutes = require('./routes/feedbackRoutes');
+const { verifyCsrfToken } = require('./middleware/csrfMiddleware');
+const { attachCollabSocket } = require('./services/collabSocket');
 
 const app = express();
 
@@ -78,6 +81,7 @@ const corsOptions = {
     'Accept',
     'Origin',
     'Access-Control-Allow-Origin',
+    'X-CSRF-Token',
   ],
   exposedHeaders: ['Content-Length', 'X-Request-Id', 'Content-Type'],
   maxAge: 86400,
@@ -106,7 +110,7 @@ app.use((req, res, next) => {
       res.header('Access-Control-Allow-Origin', origin);
       res.header('Access-Control-Allow-Credentials', 'true');
       res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS, PATCH');
-      res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, Accept, Origin');
+      res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, Accept, Origin, X-CSRF-Token');
       res.header('Access-Control-Expose-Headers', 'Content-Length, X-Request-Id');
     }
   }
@@ -118,6 +122,7 @@ app.use((req, res, next) => {
   next();
 });
 
+app.use(cookieParser());
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 app.use(compression());
@@ -174,6 +179,11 @@ app.get('/', (req, res) => {
   });
 });
 
+// Double-submit CSRF check for the cookie-backed auth model — self-exempts
+// GET/HEAD/OPTIONS and any request with no Origin header (native), so it's
+// safe to apply globally rather than duplicating it per router.
+app.use(verifyCsrfToken);
+
 app.use('/api/auth', authRoutes);
 app.use('/api/diagrams', diagramRoutes);
 app.use('/api/feedback', feedbackRoutes);
@@ -213,12 +223,19 @@ app.use((err, req, res, next) => {
 
 // START SERVER
 
-app.listen(PORT, '0.0.0.0', () => {
+const httpServer = app.listen(PORT, '0.0.0.0', () => {
   console.log(`✅ iGraph IT Backend running on port ${PORT}`);
   console.log(`🌍 Environment: ${process.env.NODE_ENV || 'development'}`);
   console.log(`📦 JSON limit: 50mb`);
   console.log(`🔒 CORS enabled for ${allowedOrigins.length} origins`);
   console.log(`📡 Local: http://localhost:${PORT}`);
 });
+
+// Real-time collaborative editing (see services/collabSocket.js) — attached
+// to the same underlying HTTP server so it shares the one Render web
+// service/port rather than needing its own. Reuses corsOptions.origin
+// (same allowed-origins/localhost/Netlify check as the REST API above)
+// instead of duplicating that logic.
+attachCollabSocket(httpServer, corsOptions.origin);
 
 module.exports = app;

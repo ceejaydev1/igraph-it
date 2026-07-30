@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, ScrollView, StyleSheet, Platform } from 'react-native';
+import { Svg, Path } from 'react-native-svg';
 import { COLORS, SPACING, RADIUS, TYPOGRAPHY, SHADOWS } from '@/constants/theme';
 import ColorPickerPopover from './ColorPickerPopover';
 
@@ -111,11 +112,15 @@ export const Row = ({ children, style }: { children: React.ReactNode; style?: an
 export const Field = ({
   label,
   children,
+  style,
 }: {
   label: string;
   children: React.ReactNode;
+  /** Extra style for the wrapper — e.g. a raised zIndex so a dropdown
+   *  nested inside can float over sibling rows that come after it. */
+  style?: any;
 }) => (
-  <View style={rowStyles.field}>
+  <View style={[rowStyles.field, style]}>
     <Text style={rowStyles.label}>{label}</Text>
     {children}
   </View>
@@ -207,6 +212,7 @@ export function MiniSwatch({
   title,
   allowNone,
   onRequestOpen,
+  size = 26,
 }: {
   value: string | undefined;
   onChange: (hex: string) => void;
@@ -220,6 +226,9 @@ export function MiniSwatch({
    *  useSidebarColorPicker so the picker can render full-panel-width at the
    *  tab's root instead of a tiny box hanging off the swatch. */
   onRequestOpen?: (config: { value: string | undefined; onChange: (hex: string) => void; title?: string; allowNone?: boolean }) => void;
+  /** Override the default 26x26 size — e.g. to match a taller sibling control
+   *  (NumberStepper's 32px-tall spinBox) when the swatch sits in the same row. */
+  size?: number;
 }) {
   const [open, doOpen, close] = useExclusiveOpen();
   const bg = value && value !== 'none' ? value : COLORS.white;
@@ -243,12 +252,14 @@ export function MiniSwatch({
   return (
     <View>
       <TouchableOpacity
-        style={[rowStyles.miniSwatch, { backgroundColor: bg }, disabled && rowStyles.miniSwatchDisabled]}
+        style={[rowStyles.miniSwatch, { width: size, height: size, backgroundColor: bg }, disabled && rowStyles.miniSwatchDisabled]}
         onPress={handlePress}
         activeOpacity={0.8}
         disabled={disabled}
       >
-        <Text style={rowStyles.miniSwatchPencil}>✎</Text>
+        <View style={rowStyles.miniSwatchPencilBadge}>
+          <Text style={rowStyles.miniSwatchPencil}>✎</Text>
+        </View>
       </TouchableOpacity>
       {!onRequestOpen && open && (
         <ColorPickerPopover
@@ -335,14 +346,20 @@ export function CollapsibleSection({
   title,
   defaultOpen = true,
   children,
+  style,
 }: {
   title: string;
   defaultOpen?: boolean;
   children: React.ReactNode;
+  /** Extra style for the outer wrapper — e.g. a raised zIndex so a dropdown
+   *  nested inside can float over sibling sections/fields that come after
+   *  it (plain nested zIndex doesn't escape past ancestors that don't also
+   *  carry it). */
+  style?: any;
 }) {
   const [open, setOpen] = useState(defaultOpen);
   return (
-    <View style={rowStyles.collapsibleSection}>
+    <View style={[rowStyles.collapsibleSection, style]}>
       <TouchableOpacity style={rowStyles.collapsibleHeader} onPress={() => setOpen((o) => !o)} activeOpacity={0.7}>
         <Text style={rowStyles.collapsibleChevron}>{open ? '▾' : '▸'}</Text>
         <Text style={rowStyles.collapsibleTitle}>{title}</Text>
@@ -488,35 +505,83 @@ const THEME_PRESETS: { fill: string; stroke: string }[] = [
   { fill: '#ffe6cc', stroke: '#d79b00' },
 ];
 
-// Swatch width (40) + row gap (8) — used to compute page-snap offsets below.
+// Swatch width (40) + column gap (8) — used to compute page-snap offsets below.
 const PRESET_ITEM_SIZE = 48;
-const PRESET_PAGE_SIZE = 8;
-// One snap point per group of 8, so a swipe lands cleanly on "next 8"
-// instead of stopping mid-row wherever the drag happened to end.
+const PRESET_ROWS = 2;
+const PRESET_COLS_PER_PAGE = 4;
+const PRESET_PAGE_SIZE = PRESET_ROWS * PRESET_COLS_PER_PAGE;
+// One snap point per page of 4 columns, so a swipe lands cleanly on "next 4
+// columns" instead of stopping mid-column wherever the drag happened to end.
 const PRESET_SNAP_OFFSETS = Array.from(
   { length: Math.ceil(THEME_PRESETS.length / PRESET_PAGE_SIZE) },
-  (_, i) => i * PRESET_PAGE_SIZE * PRESET_ITEM_SIZE,
+  (_, i) => i * PRESET_COLS_PER_PAGE * PRESET_ITEM_SIZE,
 );
 
-export function PresetSwatchGrid({ onSelect }: { onSelect: (fill: string, stroke: string) => void }) {
+function PresetArrowIcon({ direction, color }: { direction: 'left' | 'right'; color: string }) {
+  const d = direction === 'left' ? 'M15 6L9 12L15 18' : 'M9 6L15 12L9 18';
   return (
-    <ScrollView
-      horizontal
-      showsHorizontalScrollIndicator={false}
-      style={rowStyles.presetWrap}
-      contentContainerStyle={rowStyles.presetRow}
-      snapToOffsets={PRESET_SNAP_OFFSETS}
-      decelerationRate="fast"
-    >
-      {THEME_PRESETS.map((p, i) => (
-        <TouchableOpacity
-          key={i}
-          style={[rowStyles.presetSwatch, { backgroundColor: p.fill, borderColor: p.stroke }]}
-          onPress={() => onSelect(p.fill, p.stroke)}
-          activeOpacity={0.8}
-        />
-      ))}
-    </ScrollView>
+    <Svg width={16} height={16} viewBox="0 0 24 24" fill="none">
+      <Path d={d} stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+    </Svg>
+  );
+}
+
+export function PresetSwatchGrid({ onSelect }: { onSelect: (fill: string, stroke: string) => void }) {
+  const scrollRef = useRef<ScrollView>(null);
+  const [page, setPage] = useState(0);
+  const lastPage = PRESET_SNAP_OFFSETS.length - 1;
+
+  const goToPage = (target: number) => {
+    const clamped = Math.max(0, Math.min(lastPage, target));
+    setPage(clamped);
+    scrollRef.current?.scrollTo({ x: PRESET_SNAP_OFFSETS[clamped], animated: true });
+  };
+
+  return (
+    <View style={rowStyles.presetOuter}>
+      <TouchableOpacity
+        onPress={() => goToPage(page - 1)}
+        disabled={page === 0}
+        style={[rowStyles.presetArrowBtn, page === 0 && rowStyles.presetArrowBtnDisabled]}
+      >
+        <PresetArrowIcon direction="left" color={page === 0 ? COLORS.gray300 : COLORS.gray500} />
+      </TouchableOpacity>
+
+      <ScrollView
+        ref={scrollRef}
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        style={rowStyles.presetWrap}
+        contentContainerStyle={rowStyles.presetGrid}
+        snapToOffsets={PRESET_SNAP_OFFSETS}
+        decelerationRate="fast"
+        onMomentumScrollEnd={(e) => {
+          const x = e.nativeEvent.contentOffset.x;
+          let nearest = 0;
+          PRESET_SNAP_OFFSETS.forEach((offset, idx) => {
+            if (Math.abs(offset - x) < Math.abs(PRESET_SNAP_OFFSETS[nearest] - x)) nearest = idx;
+          });
+          setPage(nearest);
+        }}
+      >
+        {THEME_PRESETS.map((p, i) => (
+          <TouchableOpacity
+            key={i}
+            style={[rowStyles.presetSwatch, { backgroundColor: p.fill, borderColor: p.stroke }]}
+            onPress={() => onSelect(p.fill, p.stroke)}
+            activeOpacity={0.8}
+          />
+        ))}
+      </ScrollView>
+
+      <TouchableOpacity
+        onPress={() => goToPage(page + 1)}
+        disabled={page === lastPage}
+        style={[rowStyles.presetArrowBtn, page === lastPage && rowStyles.presetArrowBtnDisabled]}
+      >
+        <PresetArrowIcon direction="right" color={page === lastPage ? COLORS.gray300 : COLORS.gray500} />
+      </TouchableOpacity>
+    </View>
   );
 }
 
@@ -756,9 +821,21 @@ const rowStyles = StyleSheet.create({
   miniSwatchDisabled: {
     opacity: 0.4,
   },
+  // Small translucent-white badge behind the pencil glyph so it stays
+  // legible regardless of the swatch's own fill color (a plain gray glyph
+  // nearly disappeared against darker/saturated swatches).
+  miniSwatchPencilBadge: {
+    width: 14,
+    height: 14,
+    borderRadius: 7,
+    backgroundColor: 'rgba(255,255,255,0.85)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   miniSwatchPencil: {
-    fontSize: 9,
-    color: COLORS.gray500,
+    fontSize: 10,
+    lineHeight: 12,
+    color: COLORS.gray800,
   },
   palette: {
     flexDirection: 'row',
@@ -890,16 +967,46 @@ const rowStyles = StyleSheet.create({
     fontSize: 13,
     color: COLORS.gray900,
   },
-  presetWrap: {
-    marginBottom: SPACING.md,
-  },
-  // Single scrollable row instead of a paginated multi-row grid — all
-  // presets reachable by swiping, no page arrows/dots needed.
-  presetRow: {
+  // Centers the arrows + grid as a unit within the (wider) panel.
+  presetOuter: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-    paddingRight: 8,
+    justifyContent: 'center',
+    gap: 4,
+    marginBottom: SPACING.md,
+  },
+  presetArrowBtn: {
+    width: 24,
+    height: 24,
+    flexShrink: 0,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  presetArrowBtnDisabled: {
+    opacity: 0.4,
+  },
+  // Width pinned to exactly 4 columns (40 + 8 gap, x4, minus the trailing
+  // gap) so a page shows 4x2 swatches with no partial next-column peeking;
+  // swiping snaps cleanly to the next full page of 8. `overflow: hidden` +
+  // flexShrink/flexGrow: 0 force the hard clip — without it the browser can
+  // size the scroll viewport to fit its content instead of the fixed box,
+  // which is what let the next column's swatch peek through on the edge.
+  presetWrap: {
+    width: 184,
+    height: 88,
+    flexShrink: 0,
+    flexGrow: 0,
+    overflow: 'hidden',
+  },
+  // Column-major wrap: swatches fill top-to-bottom (2 rows) then wrap into
+  // the next column to the right, so the grid reads as 4 columns x 2 rows
+  // per page, with further pages reachable by swiping horizontally.
+  presetGrid: {
+    flexDirection: 'column',
+    flexWrap: 'wrap',
+    height: 88,
+    rowGap: 8,
+    columnGap: 8,
   },
   presetSwatch: {
     width: 40,

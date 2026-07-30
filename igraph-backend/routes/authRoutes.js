@@ -15,6 +15,7 @@ const {
   validateSetPassword
 } = require('../middleware/validationMiddleware');
 const { protect } = require('../middleware/authMiddleware');
+const { issueCsrfToken } = require('../middleware/csrfMiddleware');
 
 // ENVIRONMENT
 
@@ -170,6 +171,14 @@ const changePasswordLimiters = LAB_ACTIVE
 // ROUTES
 
 router.get('/ping', authController.ping);
+
+// Issues the double-submit CSRF cookie/token pair the web frontend echoes
+// back as X-CSRF-Token on state-changing requests. GET, so it's naturally
+// exempt from csrfMiddleware's own check — no special-casing needed there.
+router.get('/csrf-token', (req, res) => {
+  const csrfToken = issueCsrfToken(req, res);
+  res.status(200).json({ success: true, data: { csrfToken } });
+});
 
 // Registration & Verification
 router.post('/signup',     ...authLimiters,      validateSignup, authController.signup);

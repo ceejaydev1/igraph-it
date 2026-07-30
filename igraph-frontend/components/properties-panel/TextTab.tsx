@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
-import { View, Text, TouchableOpacity, ScrollView, StyleSheet, Platform } from 'react-native';
-import { COLORS, SPACING, RADIUS, TYPOGRAPHY } from '@/constants/theme';
+import React from 'react';
+import { View, Text, StyleSheet, Platform } from 'react-native';
+import { COLORS, SPACING } from '@/constants/theme';
 import { applyStylePatch, getCommonStyleValue } from './PropertiesPanel';
 import {
   Field,
@@ -32,25 +32,23 @@ interface TabProps {
 }
 
 const FONT_FAMILIES = ['Helvetica', 'Arial', 'Verdana', 'Georgia', 'Times New Roman', 'Courier New'];
+const FONT_FAMILY_OPTIONS = FONT_FAMILIES.map((f) => ({ key: f, label: f }));
 
-type LabelPosition = 'center' | 'top' | 'bottom' | 'left' | 'right';
-const LABEL_POSITIONS: { key: LabelPosition; align: string; verticalAlign: string; label: string }[] = [
-  { key: 'center', align: 'center', verticalAlign: 'middle', label: 'Center' },
-  { key: 'top', align: 'center', verticalAlign: 'top', label: 'Top' },
-  { key: 'bottom', align: 'center', verticalAlign: 'bottom', label: 'Bottom' },
-  { key: 'left', align: 'left', verticalAlign: 'middle', label: 'Left' },
-  { key: 'right', align: 'right', verticalAlign: 'middle', label: 'Right' },
-];
-
-type WritingDirection = 'auto' | 'ltr' | 'rtl';
-const WRITING_DIRECTIONS: { key: WritingDirection; label: string }[] = [
-  { key: 'auto', label: 'Automatic' },
-  { key: 'ltr', label: 'Left-to-Right' },
-  { key: 'rtl', label: 'Right-to-Left' },
-];
+/** Renders the font name label set in that font itself (e.g. "Times New Roman"
+ *  actually shown in Times New Roman) — matches the toolbar's font menu and
+ *  how draw.io / Lucidchart preview fonts in their font pickers. */
+function FontFamilyLabel({ family }: { family: string }) {
+  return (
+    <Text
+      numberOfLines={1}
+      style={[styles.fontFamilyLabel, Platform.OS === 'web' ? { fontFamily: family } : null]}
+    >
+      {family}
+    </Text>
+  );
+}
 
 export default function TextTab({ graph, cells }: TabProps) {
-  const [fontMenuOpen, setFontMenuOpen] = useState(false);
   const { openPicker, activePicker } = useSidebarColorPicker();
 
   const fontFamily = getCommonStyleValue(cells, 'fontFamily') as string | undefined;
@@ -64,7 +62,6 @@ export default function TextTab({ graph, cells }: TabProps) {
   const strokeColor = getCommonStyleValue(cells, 'labelBorderColor') as string | undefined;
   const shadow = getCommonStyleValue(cells, 'shadow') as number | undefined;
   const opacity = getCommonStyleValue(cells, 'textOpacity') as number | undefined;
-  const writingDirection = (getCommonStyleValue(cells, 'writingDirection') as WritingDirection | undefined) ?? 'auto';
 
   const spacingTop = getCommonStyleValue(cells, 'spacingTop') as number | undefined;
   const spacingGlobal = getCommonStyleValue(cells, 'spacing') as number | undefined;
@@ -83,10 +80,6 @@ export default function TextTab({ graph, cells }: TabProps) {
     patch({ fontStyle: next });
   };
 
-  const currentLabelPosition = LABEL_POSITIONS.find(
-    (p) => p.align === align && p.verticalAlign === verticalAlign
-  )?.key;
-
   // While a color picker is open, it replaces the whole tab (full panel
   // width, closed with its own X) instead of floating over these fields —
   // see useSidebarColorPicker.
@@ -94,29 +87,13 @@ export default function TextTab({ graph, cells }: TabProps) {
 
   return (
     <View>
-      <Field label="Font">
-        <TouchableOpacity style={styles.dropdownTrigger} onPress={() => setFontMenuOpen((o) => !o)}>
-          <Text style={styles.dropdownValue}>{fontFamily ?? 'mixed'}</Text>
-          <Text style={styles.dropdownCaret}>▾</Text>
-        </TouchableOpacity>
-        {fontMenuOpen && (
-          <ScrollView style={styles.dropdownMenu} nestedScrollEnabled>
-            {FONT_FAMILIES.map((f) => (
-              <TouchableOpacity
-                key={f}
-                style={styles.dropdownItem}
-                onPress={() => {
-                  patch({ fontFamily: f });
-                  setFontMenuOpen(false);
-                }}
-              >
-                <Text style={[styles.dropdownItemText, { fontFamily: Platform.OS === 'web' ? f : undefined }]}>
-                  {f}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </ScrollView>
-        )}
+      <Field label="Font" style={styles.fontField}>
+        <Dropdown<string>
+          value={fontFamily ?? FONT_FAMILY_OPTIONS[0].key}
+          options={FONT_FAMILY_OPTIONS}
+          onChange={(f) => patch({ fontFamily: f })}
+          renderValue={(f) => <FontFamilyLabel family={f} />}
+        />
       </Field>
 
       {/* B / I / U / horizontal-text toggle + font size, all on one row */}
@@ -166,25 +143,6 @@ export default function TextTab({ graph, cells }: TabProps) {
           </ToggleButton>
         </View>
       </View>
-
-      <InlineField label="Position">
-        <Dropdown<LabelPosition>
-          value={currentLabelPosition}
-          options={LABEL_POSITIONS.map((p) => ({ key: p.key, label: p.label }))}
-          onChange={(key) => {
-            const preset = LABEL_POSITIONS.find((p) => p.key === key)!;
-            patch({ align: preset.align, verticalAlign: preset.verticalAlign });
-          }}
-        />
-      </InlineField>
-
-      <InlineField label="Writing Direction">
-        <Dropdown<WritingDirection>
-          value={writingDirection}
-          options={WRITING_DIRECTIONS}
-          onChange={(key) => patch({ writingDirection: key })}
-        />
-      </InlineField>
 
       <View style={styles.divider} />
 
@@ -259,6 +217,13 @@ export default function TextTab({ graph, cells }: TabProps) {
 }
 
 const styles = StyleSheet.create({
+  // Raised above every row that follows (B/I/U row, align row, Font/BG/Border
+  // Color checkboxes, ...) so the Font dropdown's open menu — nested inside
+  // Field — floats over them instead of painting underneath. Same fix as
+  // the Line Style dropdown in StyleTab.tsx.
+  fontField: {
+    zIndex: 2,
+  },
   fontRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -290,39 +255,7 @@ const styles = StyleSheet.create({
   pairItem: {
     flex: 1,
   },
-  dropdownTrigger: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    borderRadius: RADIUS.sm,
-    paddingHorizontal: SPACING.sm,
-    paddingVertical: 8,
-  },
-  dropdownValue: {
-    fontSize: 13,
-    color: COLORS.gray900,
-  },
-  dropdownCaret: {
-    fontSize: 11,
-    color: COLORS.gray400,
-  },
-  dropdownMenu: {
-    maxHeight: 160,
-    marginTop: 4,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    borderRadius: RADIUS.sm,
-    backgroundColor: COLORS.white,
-  },
-  dropdownItem: {
-    paddingHorizontal: SPACING.sm,
-    paddingVertical: 8,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.borderLight,
-  },
-  dropdownItemText: {
+  fontFamilyLabel: {
     fontSize: 13,
     color: COLORS.gray900,
   },

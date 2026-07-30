@@ -1,5 +1,5 @@
 import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
-import { Stack, usePathname } from 'expo-router';
+import { Stack, usePathname, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import 'react-native-reanimated';
 import { useColorScheme } from '@/hooks/use-color-scheme';
@@ -78,37 +78,21 @@ export default function RootLayout() {
     setLoadingProgress(1);
   };
 
-  // Check auth AND pre-load user data during splash
+  // Check auth AND pre-load user data during splash.
+  //
+  // No token-presence pre-check — web's session lives in an httpOnly cookie
+  // this code can never read, so verifyToken() is called unconditionally
+  // (it applies its own per-platform fast-path internally). verifyToken()
+  // already caches the user on success via setCachedUser(), so the separate
+  // raw fetch('/api/auth/me') this used to do here was a fully redundant
+  // second round trip to the exact same endpoint — removed rather than
+  // patched (it also had no credentials/CSRF handling, which would have
+  // broken it under the cookie model anyway).
   useEffect(() => {
     const checkAuth = async () => {
       try {
-        const token = await authService.getAccessToken();
-        if (token) {
-          const result = await authService.verifyToken();
-          if (result.success) {
-            // Pre-load user data during splash
-            const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'https://igraph-backend.onrender.com';
-            try {
-              const response = await fetch(`${API_BASE_URL}/api/auth/me`, {
-                headers: { Authorization: `Bearer ${token}` },
-              });
-              if (response.ok) {
-                const data = await response.json();
-                if (data.success && data.data.user) {
-                  authService.setCachedUser(data.data.user);
-                }
-              }
-            } catch (e) {
-              console.log('Background user load failed:', e);
-            }
-            
-            setTargetRoute('/(tabs)/home');
-          } else {
-            setTargetRoute('/(auth)/signin');
-          }
-        } else {
-          setTargetRoute('/(auth)/signin');
-        }
+        const result = await authService.verifyToken();
+        setTargetRoute(result.success ? '/(tabs)/home' : '/(auth)/signin');
       } catch (error) {
         setTargetRoute('/(auth)/signin');
       } finally {
@@ -290,12 +274,23 @@ export default function RootLayout() {
   // on launch. Only (tabs) routes are worth remembering: (auth) screens
   // (sign-in, splash, etc.) and the root index/modal aren't real
   // destinations to resume into.
+  //
+  // usePathname() resolves route GROUPS out of the path (e.g. the Create
+  // screen reads as "/create", never "/(tabs)/create") — group folders are
+  // organizational only, same reason components/Navbar.tsx has to strip them
+  // before comparing against its own route table. useSegments(), unlike
+  // usePathname(), does include the group name as its own first entry, so
+  // it's what actually tells us which group we're in; pathname still supplies
+  // the real (resolved, not templated) rest of the path. Without this, the
+  // old `pathname?.startsWith('/(tabs)')` check could never be true and
+  // silently never saved anything.
   const pathname = usePathname();
+  const segments = useSegments();
   useEffect(() => {
-    if (pathname?.startsWith('/(tabs)')) {
-      authService.saveLastRoute(pathname);
-    }
-  }, [pathname]);
+    if (segments[0] !== '(tabs)' || !pathname) return;
+    const routeWithGroup = pathname.startsWith('/(tabs)') ? pathname : `/(tabs)${pathname}`;
+    authService.saveLastRoute(routeWithGroup);
+  }, [pathname, segments]);
 
   // The app (Stack) stays mounted underneath at all times so the splash
   // fades directly into the already-rendered destination screen instead of

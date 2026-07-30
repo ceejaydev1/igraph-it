@@ -94,11 +94,47 @@ const api = axios.create({
   withCredentials: true,
 });
 
+// CSRF TOKEN (web only)
+//
+// Double-submit pattern: the backend sets a small, non-httpOnly `csrf_token`
+// cookie (it's a nonce, not a credential — meant to be read) and expects it
+// echoed back as X-CSRF-Token on every state-changing request. This is the
+// compensating control for the auth cookies needing SameSite=None (a genuine
+// cross-site deployment — frontend and backend live on different domains),
+// which otherwise weakens the CSRF protection SameSite would normally give.
+// Cached in memory only; a fresh tab/reload just fetches it again.
+let csrfToken = null;
+
+const ensureCsrfToken = async () => {
+  if (Platform.OS !== 'web') return null; // native has no ambient cookie, nothing to protect
+  if (csrfToken) return csrfToken;
+  try {
+    const response = await api.get('/auth/csrf-token');
+    csrfToken = response.data?.data?.csrfToken || null;
+  } catch (e) {
+    console.log('Failed to fetch CSRF token:', e.message);
+  }
+  return csrfToken;
+};
+
 api.interceptors.request.use(
   async (config) => {
     const token = await storage.getItem('accessToken');
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
+    }
+    // Web has no client-readable token (httpOnly cookie carries the real
+    // credential via withCredentials above) but does need the CSRF nonce
+    // attached on every state-changing request — the compensating control
+    // for the cookie needing SameSite=None across the cross-site frontend/
+    // backend deployment. Native never sends an Origin header, so the
+    // backend's CSRF check already exempts it; skip the extra round trip.
+    if (Platform.OS === 'web') {
+      const method = (config.method || 'get').toUpperCase();
+      if (['POST', 'PUT', 'DELETE', 'PATCH'].includes(method)) {
+        const csrf = await ensureCsrfToken();
+        if (csrf) config.headers['X-CSRF-Token'] = csrf;
+      }
     }
     return config;
   },
@@ -127,7 +163,20 @@ api.interceptors.response.use(
                         originalRequest.url?.includes('/auth/google') ||
                         originalRequest.url?.includes('/auth/verify-otp') ||
                         originalRequest.url?.includes('/auth/forgot-password') ||
-                        originalRequest.url?.includes('/auth/reset-password');
+                        originalRequest.url?.includes('/auth/reset-password') ||
+                        // /auth/refresh-token: excluded so a failed refresh doesn't
+                        // recursively call refreshToken() again from inside itself
+                        // (this same interceptor wraps that request too).
+                        originalRequest.url?.includes('/auth/refresh-token') ||
+                        // /auth/me: this is verifyToken()'s routine "am I logged
+                        // in?" probe, called on every page load including public
+                        // ones (see app/index.tsx). A 401 here just means "not
+                        // signed in" — verifyToken() already handles that itself —
+                        // not "an active session just died". Letting it fall
+                        // through to the hard redirect below caused an infinite
+                        // reload loop: load signin -> probe -> 401 -> redirect to
+                        // signin -> reload -> probe -> 401 -> ...
+                        originalRequest.url?.includes('/auth/me');
 
     if (error.response?.status === 401 && !originalRequest._retry && !isAuthRoute) {
       originalRequest._retry = true;
@@ -140,9 +189,37 @@ api.interceptors.response.use(
         }
       } catch (refreshError) {
         if (Platform.OS === 'web') {
-          window.location.href = '/(auth)/signin';
+          // Group segments like "(auth)" are only ever stripped from the URL
+          // for client-side (SPA) navigation, never from a hard `location.href`
+          // assignment — so this always landed on the literal, non-canonical
+          // "/(auth)/signin". Guarding on the current path (not just fixing the
+          // href) also stops this from ever firing a self-triggering reload
+          // loop again if some other public-page request ever 401s here.
+          const authPaths = ['/signin', '/signup', '/forgot-password', '/verify-otp', '/reset-password'];
+          if (!authPaths.includes(window.location.pathname)) {
+            window.location.href = '/signin';
+          }
         }
         return Promise.reject(refreshError);
+      }
+    }
+
+    // Mirrors the 401→refresh→retry dance above: a CSRF token can go stale
+    // (cleared on a previous sign-out, or just expired) without the session
+    // itself being invalid, so re-fetch and retry once rather than surfacing
+    // a confusing 403 to the user.
+    if (
+      error.response?.status === 403 &&
+      error.response?.data?.code === 'CSRF_INVALID' &&
+      !originalRequest._csrfRetry &&
+      Platform.OS === 'web'
+    ) {
+      originalRequest._csrfRetry = true;
+      csrfToken = null;
+      const freshCsrf = await ensureCsrfToken();
+      if (freshCsrf) {
+        originalRequest.headers['X-CSRF-Token'] = freshCsrf;
+        return api(originalRequest);
       }
     }
 
@@ -157,11 +234,19 @@ api.interceptors.response.use(
 // TOKEN MANAGEMENT
 
 export const storeTokens = async (accessToken, refreshToken) => {
+  if (Platform.OS === 'web') {
+    // Nothing to do — the backend already set the real credential as an
+    // httpOnly cookie in the same response these tokens came from. Never
+    // persist the raw JWTs client-side on web; that's the exact XSS-exposed
+    // surface this refactor removes.
+    return;
+  }
+
   if (!accessToken || !refreshToken) {
     console.error('❌ Cannot store tokens: missing token');
     return;
   }
-  
+
   console.log('💾 Storing tokens...');
   await storage.setItem('accessToken', accessToken);
   await storage.setItem('refreshToken', refreshToken);
@@ -182,11 +267,26 @@ export const clearTokens = async () => {
 };
 
 export const getAccessToken = async () => {
+  if (Platform.OS === 'web') return null; // httpOnly — JS was never meant to read this
   return await storage.getItem('accessToken');
 };
 
 export const getRefreshToken = async () => {
+  if (Platform.OS === 'web') return null;
   return await storage.getItem('refreshToken');
+};
+
+// Cheap, non-authoritative "probably signed in" check for UI gates before
+// attempting an action (e.g. showing a save button) — not a security
+// boundary, the action's own API call remains the real source of truth via
+// the 401→refresh→retry interceptor either way. Native keeps its exact
+// original zero-network-call behavior; web substitutes the user cache
+// (populated by the tab layout's own verifyToken() call on mount) since
+// there's no client-readable token to check anymore.
+export const hasActiveSession = async () => {
+  if (Platform.OS !== 'web') return !!(await getAccessToken());
+  const cached = await getCachedUser();
+  return !!cached;
 };
 
 // LAST VISITED ROUTE
@@ -286,6 +386,13 @@ const base64UrlDecode = (input) => {
 };
 
 export const getCurrentUserId = async () => {
+  if (Platform.OS === 'web') {
+    // No client-readable token to decode anymore (httpOnly cookie) — the
+    // uid comes from the same user cache every sign-in/verifyToken() call
+    // already populates.
+    const cached = await getCachedUser();
+    return cached?.uid || null;
+  }
   const token = await getAccessToken();
   if (!token) return null;
   try {
@@ -327,11 +434,11 @@ export const signIn = async (email, password, consentTimestamp = null, rememberM
   pendingRequest = controller;
   
   try {
-    const payload = consentTimestamp 
-      ? { email, password, consentTimestamp }
-      : { email, password };
-    
-    const response = await api.post('/auth/signin', 
+    const payload = consentTimestamp
+      ? { email, password, consentTimestamp, rememberMe }
+      : { email, password, rememberMe };
+
+    const response = await api.post('/auth/signin',
       payload,
       { 
         signal: controller.signal,
@@ -365,8 +472,8 @@ export const signIn = async (email, password, consentTimestamp = null, rememberM
 export const googleAuth = async (idToken, consentTimestamp = null, rememberMe = false) => {
   try {
     const payload = consentTimestamp
-      ? { idToken, consentTimestamp }
-      : { idToken };
+      ? { idToken, consentTimestamp, rememberMe }
+      : { idToken, rememberMe };
 
     const response = await api.post('/auth/google', payload, {
       timeout: 45000, // Handles free-tier cold start (same as verifyResetOTP)
@@ -396,7 +503,7 @@ export const googleAuth = async (idToken, consentTimestamp = null, rememberMe = 
 // password proves ownership before Google is allowed to sign into it.
 export const linkGoogleAccount = async (idToken, password, rememberMe = false) => {
   try {
-    const response = await api.post('/auth/link-google', { idToken, password });
+    const response = await api.post('/auth/link-google', { idToken, password, rememberMe });
     if (response.data.success && response.data.data?.tokens) {
       setAuthPersistence(rememberMe);
       await storeTokens(
@@ -487,13 +594,22 @@ export const resetPassword = async (email, otp, newPassword) => {
 };
 
 export const refreshToken = async () => {
-  const refresh = await getRefreshToken();
-  if (!refresh) throw new Error('No refresh token');
-  
+  let refresh = null;
+  if (Platform.OS !== 'web') {
+    refresh = await getRefreshToken();
+    if (!refresh) throw new Error('No refresh token');
+  }
+  // Web sends no body at all — the refresh_token cookie carries the
+  // credential automatically, and the backend reissues access_token as a
+  // fresh cookie in its response.
+
   try {
-    const response = await api.post('/auth/refresh-token', { refreshToken: refresh });
+    const body = Platform.OS === 'web' ? {} : { refreshToken: refresh };
+    const response = await api.post('/auth/refresh-token', body);
     if (response.data.success && response.data.data?.accessToken) {
-      await storage.setItem('accessToken', response.data.data.accessToken);
+      if (Platform.OS !== 'web') {
+        await storage.setItem('accessToken', response.data.data.accessToken);
+      }
       return response.data.data.accessToken;
     }
     return null;
@@ -511,15 +627,29 @@ export const refreshToken = async () => {
 // savedDiagrams.tsx call fetch() directly (for streaming-friendly responses),
 // which bypasses it entirely.
 export const authFetch = async (url, options = {}) => {
-  const attempt = async (accessToken) => fetch(url, {
-    ...options,
-    headers: {
-      ...(options.headers || {}),
-      Authorization: `Bearer ${accessToken}`,
-    },
-  });
+  const attempt = async (accessToken) => {
+    const headers = { ...(options.headers || {}) };
+    if (accessToken) headers.Authorization = `Bearer ${accessToken}`;
 
-  const token = await getAccessToken();
+    if (Platform.OS === 'web') {
+      const method = (options.method || 'GET').toUpperCase();
+      if (['POST', 'PUT', 'DELETE', 'PATCH'].includes(method)) {
+        const csrf = await ensureCsrfToken();
+        if (csrf) headers['X-CSRF-Token'] = csrf;
+      }
+    }
+
+    return fetch(url, {
+      ...options,
+      headers,
+      // Without this, the httpOnly session cookie never attaches to a raw
+      // fetch() call — this is what actually makes save/load/delete/rename
+      // work on web under the cookie model; native ignores it.
+      credentials: Platform.OS === 'web' ? 'include' : options.credentials,
+    });
+  };
+
+  const token = await getAccessToken(); // null on web (harmless), real value on native (unchanged)
   let response = await attempt(token);
 
   if (response.status === 401) {
@@ -539,11 +669,18 @@ export const authFetch = async (url, options = {}) => {
 
 export const verifyToken = async () => {
   try {
-    const token = await getAccessToken();
-    if (!token) {
-      return { success: false };
+    if (Platform.OS !== 'web') {
+      // Native still has a client-readable token, so this remains a cheap
+      // fast-path that skips the network call entirely when there's clearly
+      // no session. Web has nothing to check client-side anymore (httpOnly
+      // cookie) — the request itself, riding on withCredentials, is the only
+      // way to find out.
+      const token = await getAccessToken();
+      if (!token) {
+        return { success: false };
+      }
     }
-    
+
     const response = await api.get('/auth/me');
     
     if (response.data && response.data.success === true) {
@@ -566,13 +703,20 @@ export const verifyToken = async () => {
 };
 
 export const logout = async () => {
-  const refresh = await getRefreshToken();
-  if (refresh) {
-    try {
-      await api.post('/auth/logout', { refreshToken: refresh });
-    } catch (e) {
-      console.log('Logout error:', e);
+  try {
+    if (Platform.OS === 'web') {
+      // No body token to send (nothing client-readable) — the refresh_token
+      // cookie carries the credential automatically, and the backend clears
+      // both cookies in its response.
+      await api.post('/auth/logout');
+    } else {
+      const refresh = await getRefreshToken();
+      if (refresh) {
+        await api.post('/auth/logout', { refreshToken: refresh });
+      }
     }
+  } catch (e) {
+    console.log('Logout error:', e);
   }
   await clearTokens();
   cachedUserData = null;
@@ -580,9 +724,9 @@ export const logout = async () => {
 };
 
 export const checkAuthStatus = async () => {
-  const token = await getAccessToken();
-  if (!token) return false;
-  
+  // verifyToken() already applies the right fast-path per platform (native:
+  // skip the network call if there's no token; web: always ask the server,
+  // since there's nothing client-readable to pre-check).
   try {
     const result = await verifyToken();
     return result.success;
@@ -629,9 +773,9 @@ export const changePassword = async (currentPassword, newPassword) => {
 export const updateProfile = async (data) => {
   try {
     console.log('📤 Updating profile...');
-    
-    const token = await getAccessToken();
-    if (!token) {
+
+    const signedIn = await hasActiveSession();
+    if (!signedIn) {
       throw new Error('No access token found');
     }
 

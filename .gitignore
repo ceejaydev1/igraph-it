@@ -5,3 +5,5 @@ igraph-frontend/node_modules
 igraph-frontend/.expo
 # Local Netlify folder
 .netlify
+.vercel
+.env*

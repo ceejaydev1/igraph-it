@@ -625,7 +625,14 @@ const SavedDiagramCard = React.memo(({
             <Image
               source={{ uri: diagram.previewImage }}
               style={styles.cardPreviewImage}
-              resizeMode="contain"
+              // "contain" left visible gaps of the card's own background
+              // color down the sides whenever the thumbnail's aspect ratio
+              // (fixed by DIAGRAM_THUMBNAIL_MIN_SIZE in create.tsx) didn't
+              // match this card's box. The thumbnail is generated with a
+              // generous grid-background margin around the actual diagram
+              // specifically so "cover" cropping into that margin doesn't
+              // cut into real content — it fills the card edge-to-edge instead.
+              resizeMode="cover"
             />
           ) : (
             <PreviewGlyph color={colors.primary} />
@@ -738,10 +745,10 @@ export default function SavedDiagrams() {
   const loadSavedDiagrams = async () => {
     try {
       setError(null);
-      const token = await authService.getAccessToken();
+      const signedIn = await authService.hasActiveSession();
 
-      if (!token) {
-        console.log('🔴 No access token found, redirecting to signin');
+      if (!signedIn) {
+        console.log('🔴 No active session, redirecting to signin');
         router.replace('/(auth)/signin');
         return;
       }
@@ -809,8 +816,8 @@ export default function SavedDiagrams() {
     try {
       setDeletingId(diagram.id);
 
-      const token = await authService.getAccessToken();
-      if (!token) {
+      const signedIn = await authService.hasActiveSession();
+      if (!signedIn) {
         showToast('Please sign in again.', 'error');
         setDeletingId(null);
         setDeleteModalVisible(false);
@@ -894,8 +901,8 @@ export default function SavedDiagrams() {
 
     setIsRenaming(true);
     try {
-      const token = await authService.getAccessToken();
-      if (!token) {
+      const signedIn = await authService.hasActiveSession();
+      if (!signedIn) {
         showToast('Please sign in again.', 'error');
         setIsRenaming(false);
         return;

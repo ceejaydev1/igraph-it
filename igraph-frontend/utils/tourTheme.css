@@ -1,0 +1,28 @@
+/* Overrides driver.js's default gray footer buttons to match the app's
+   primary blue (#4c6fff, same blue used across Home/Reference/Navbar). */
+
+.driver-popover-footer-btn.driver-popover-next-btn,
+.driver-popover-footer-btn.driver-popover-done-btn {
+  background-color: #4c6fff !important;
+  border-color: #4c6fff !important;
+  color: #ffffff !important;
+}
+
+.driver-popover-footer-btn.driver-popover-next-btn:hover,
+.driver-popover-footer-btn.driver-popover-next-btn:focus,
+.driver-popover-footer-btn.driver-popover-done-btn:hover,
+.driver-popover-footer-btn.driver-popover-done-btn:focus {
+  background-color: #3b5de7 !important;
+  border-color: #3b5de7 !important;
+}
+
+.driver-popover-footer-btn.driver-popover-prev-btn {
+  background-color: #ffffff !important;
+  border-color: #4c6fff !important;
+  color: #4c6fff !important;
+}
+
+.driver-popover-footer-btn.driver-popover-prev-btn:hover,
+.driver-popover-footer-btn.driver-popover-prev-btn:focus {
+  background-color: #eef2ff !important;
+}

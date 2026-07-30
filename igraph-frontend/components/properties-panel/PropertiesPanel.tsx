@@ -62,6 +62,17 @@ interface PropertiesPanelProps {
    *  landing on whichever tab was last active. The tab bar itself still lets
    *  the user switch freely afterwards. */
   initialTab?: TabKey;
+  /** Controls the desktop collapsed/expanded state from outside — e.g. a
+   *  toggle button rendered above this panel, outside its own clipped
+   *  container. Omit to keep the panel's default self-managed behavior
+   *  (used by the mobile bottom sheet, which doesn't have this control at
+   *  all). */
+  collapsed?: boolean;
+  /** Fires whenever collapsed state changes, whether triggered externally
+   *  (via the `collapsed` prop) or internally (e.g. the edge rail, or
+   *  auto-expanding when a mobile selection is made) — lets an external
+   *  toggle button stay in sync without owning the state itself. */
+  onCollapsedChange?: (collapsed: boolean) => void;
 }
 
 // ─── Shared style helpers, exported for the tab components ────────────────
@@ -137,13 +148,30 @@ const TABS: { key: TabKey; label: string }[] = [
   { key: 'arrange', label: 'Arrange' },
 ];
 
-export default function PropertiesPanel({ graph, visible = true, forceOpen = false, onRequestClose, toolbarHeight = 0, initialTab }: PropertiesPanelProps) {
+export default function PropertiesPanel({
+  graph,
+  visible = true,
+  forceOpen = false,
+  onRequestClose,
+  toolbarHeight = 0,
+  initialTab,
+  collapsed: collapsedProp,
+  onCollapsedChange,
+}: PropertiesPanelProps) {
   const { width } = useWindowDimensions();
   const isMobile = width < 768;
 
   const [selectedCells, setSelectedCells] = useState<any[]>([]);
   const [activeTab, setActiveTab] = useState<TabKey>('style');
-  const [collapsed, setCollapsed] = useState(isMobile); // collapsed by default on small viewports
+  const [internalCollapsed, setInternalCollapsed] = useState(isMobile); // collapsed by default on small viewports
+  const collapsed = collapsedProp !== undefined ? collapsedProp : internalCollapsed;
+  const setCollapsed = useCallback(
+    (v: boolean) => {
+      onCollapsedChange?.(v);
+      if (collapsedProp === undefined) setInternalCollapsed(v);
+    },
+    [collapsedProp, onCollapsedChange]
+  );
   const [, forceTick] = useState(0); // used to re-render tabs after external (e.g. rotation handle) updates
 
   const listenerRef = useRef<any>(null);
@@ -196,14 +224,6 @@ export default function PropertiesPanel({ graph, visible = true, forceOpen = fal
     graph?.clearSelection?.();
     onRequestClose?.();
   }, [graph, onRequestClose]);
-
-  const handleChevronPress = useCallback(() => {
-    if (forceOpen) {
-      onRequestClose?.();
-      return;
-    }
-    setCollapsed(true);
-  }, [forceOpen, onRequestClose]);
 
   // ─── Mobile bottom sheet: animated open/close + swipe-down-to-close ───────
   // Mirrors ShapesBottomPanel's feel (slide up/down, draggable handle)
@@ -334,12 +354,9 @@ export default function PropertiesPanel({ graph, visible = true, forceOpen = fal
       {/* Header */}
       <View style={styles.header}>
         <Text style={styles.headerTitle}>
-          {selectedCells.length > 1 ? `${selectedCells.length} shapes selected` : 'Style'}
+          {selectedCells.length > 1 ? `${selectedCells.length} shapes selected` : 'Properties'}
         </Text>
         <View style={styles.headerActions}>
-          <TouchableOpacity onPress={handleChevronPress} style={styles.iconBtn}>
-            <ChevronIcon open={true} />
-          </TouchableOpacity>
           <TouchableOpacity onPress={handleClose} style={styles.iconBtn}>
             <CloseIcon />
           </TouchableOpacity>

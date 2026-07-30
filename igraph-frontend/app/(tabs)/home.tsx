@@ -16,6 +16,8 @@ import {
 import { useRouter } from 'expo-router';
 import { Svg, Path, Circle } from 'react-native-svg';
 import { DIAGRAM_ICON_MAP, GenericDiagramGlyph } from '../../constants/diagramTypeIcons';
+import { useOnboardingTour } from '../../hooks/useOnboardingTour';
+import { HOME_TOUR_ID, getHomeTourSteps } from '../../utils/tours';
 
 // Enable LayoutAnimation on Android (safe check)
 if (Platform.OS === 'android') {
@@ -46,13 +48,14 @@ const DIAGRAMS: Diagram[] = [
   { id: 9, title: 'Sequence Diagram', type: 'UML' },
   { id: 10, title: 'Class Diagram', type: 'UML' },
   { id: 11, title: 'Waterfall Model', type: 'SDLC' },
-  { id: 12, title: 'Big Bang Model', type: 'SDLC' },
-  { id: 13, title: 'Prototype Model', type: 'SDLC' },
-  { id: 14, title: 'Agile Model', type: 'SDLC' },
-  { id: 15, title: 'Iterative Model', type: 'SDLC' },
-  { id: 16, title: 'V Model', type: 'SDLC' },
-  { id: 17, title: 'Rapid Application Development', type: 'SDLC' },
-  { id: 18, title: 'Spiral Model', type: 'SDLC' },
+  { id: 12, title: 'Modified Waterfall Model', type: 'SDLC' },
+  { id: 13, title: 'Big Bang Model', type: 'SDLC' },
+  { id: 14, title: 'Prototype Model', type: 'SDLC' },
+  { id: 15, title: 'Agile Model', type: 'SDLC' },
+  { id: 16, title: 'Iterative Model', type: 'SDLC' },
+  { id: 17, title: 'V Model', type: 'SDLC' },
+  { id: 18, title: 'Rapid Application Development', type: 'SDLC' },
+  { id: 19, title: 'Spiral Model', type: 'SDLC' },
 ];
 
 const TYPE_COLORS = {
@@ -243,14 +246,16 @@ const TabButton = React.memo(({
   </Pressable>
 ));
 
-const DiagramCard = React.memo(({ 
-  title, 
-  type, 
+const DiagramCard = React.memo(({
+  title,
+  type,
   onPress,
-}: { 
-  title: string; 
+  nativeID,
+}: {
+  title: string;
   type: Diagram['type'];
   onPress?: () => void;
+  nativeID?: string;
 }) => {
   const { width } = useWindowDimensions();
   const isDesktop = width >= 1024;
@@ -287,7 +292,8 @@ const DiagramCard = React.memo(({
   });
 
   return (
-    <Pressable 
+    <Pressable
+      nativeID={nativeID}
       onPress={onPress}
       style={({ pressed }) => [
         styles.cardTouchable,
@@ -393,6 +399,9 @@ export default function Home() {
   const filteredDiagrams = useFilteredDiagrams(activeTab, searchQuery);
   const layout = useResponsiveLayout();
 
+  const homeTourSteps = useMemo(() => getHomeTourSteps({ router }), [router]);
+  useOnboardingTour(HOME_TOUR_ID, homeTourSteps, showContent);
+
   useEffect(() => {
     const timer = setTimeout(() => {
       setShowContent(true);
@@ -443,12 +452,16 @@ export default function Home() {
   }, [router]);
 
   // Memoized render item for FlatList
-  const renderItem = useCallback(({ item }: { item: Diagram }) => (
+  const renderItem = useCallback(({ item, index }: { item: Diagram; index: number }) => (
     <View style={[styles.gridItem, { width: layout.cardWidth }]}>
       <DiagramCard
         title={item.title}
         type={item.type}
         onPress={() => handleDiagramPress(item.id)}
+        // The Home tour's card-anatomy step anchors to the first rendered
+        // card — only ever the one at index 0 in the current filter/search
+        // state, so this can't collide with a second nativeID elsewhere.
+        nativeID={index === 0 ? 'tour-home-card-example' : undefined}
       />
     </View>
   ), [layout.cardWidth, handleDiagramPress]);
@@ -476,7 +489,7 @@ export default function Home() {
       <DotGrid />
       
       <View style={styles.headerSection}>
-        <View style={styles.searchBarContainer}>
+        <View nativeID="tour-home-search" style={styles.searchBarContainer}>
           <View style={styles.searchBar}>
             <TextInput
               ref={inputRef}
@@ -513,7 +526,7 @@ export default function Home() {
           </View>
         </View>
 
-        <View style={styles.tabsRow}>
+        <View nativeID="tour-home-tabs" style={styles.tabsRow}>
           {TABS.map((tab) => (
             <TabButton
               key={tab}
@@ -579,7 +592,6 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#f8fafc',
   },
-  
   dotGridContainer: {
     position: 'absolute',
     top: 0,
@@ -588,7 +600,6 @@ const styles = StyleSheet.create({
     bottom: 0,
     overflow: 'hidden',
   },
-
   skeletonContainer: {
     flex: 1,
     backgroundColor: '#f8fafc',

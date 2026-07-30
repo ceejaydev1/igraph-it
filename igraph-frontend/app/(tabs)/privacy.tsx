@@ -288,24 +288,29 @@ export default function PrivacyPage() {
         <View style={styles.headerSpacer} />
       </View>
 
-      {/* Tab Bar — flat, full-width (matches previous layout) */}
-      <View style={styles.tabBar}>
-        <TouchableOpacity
-          style={[styles.tab, activeTab === 'terms' && styles.activeTab]}
-          onPress={() => handleTabSwitch('terms')}
-        >
-          <Text style={[styles.tabText, activeTab === 'terms' && styles.activeTabText]}>
-            Terms & Conditions
-          </Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.tab, activeTab === 'privacy' && styles.activeTab]}
-          onPress={() => handleTabSwitch('privacy')}
-        >
-          <Text style={[styles.tabText, activeTab === 'privacy' && styles.activeTabText]}>
-            Privacy Policy
-          </Text>
-        </TouchableOpacity>
+      {/* Tab Bar — outer spans full width for the divider/background, inner
+          caps at the same width as the content below so the tabs line up
+          with the text they control instead of spreading to the page edges
+          on desktop. */}
+      <View style={styles.tabBarOuter}>
+        <View style={[styles.tabBarInner, isDesktop && { maxWidth: CONTENT_MAX_WIDTH }]}>
+          <TouchableOpacity
+            style={[styles.tab, activeTab === 'terms' && styles.activeTab]}
+            onPress={() => handleTabSwitch('terms')}
+          >
+            <Text style={[styles.tabText, activeTab === 'terms' && styles.activeTabText]}>
+              Terms & Conditions
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.tab, activeTab === 'privacy' && styles.activeTab]}
+            onPress={() => handleTabSwitch('privacy')}
+          >
+            <Text style={[styles.tabText, activeTab === 'privacy' && styles.activeTabText]}>
+              Privacy Policy
+            </Text>
+          </TouchableOpacity>
+        </View>
       </View>
 
       {/* Content — capped + centered so paragraph lines stay a comfortable
@@ -399,11 +404,16 @@ const styles = StyleSheet.create({
   },
 
   // Tab Bar
-  tabBar: {
+  tabBarOuter: {
     flexDirection: 'row',
+    justifyContent: 'center',
     borderBottomWidth: 1,
     borderBottomColor: COLORS.border,
     backgroundColor: COLORS.surface,
+  },
+  tabBarInner: {
+    flexDirection: 'row',
+    width: '100%',
     paddingHorizontal: SPACING.xl,
   },
   tab: {

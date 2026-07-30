@@ -21,6 +21,24 @@ import * as authService from '../../services/authService';
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 const OTP_LENGTH = 6;
 
+// Fixed, deterministic box size instead of the old flex:1 + maxWidth combo —
+// that combination left leftover space unpredictable, which is what made
+// `justifyContent: 'center'` on otpRow flaky on real devices (looked
+// off-center despite the style saying otherwise) and, on narrower phones,
+// rendered noticeably smaller than intended. otpContainer's negative margin
+// (below) fully cancels the card's own horizontal padding for this row only,
+// so OTP_ROW_WIDTH is the card's full outer width — same value used here to
+// size the boxes and there to size the row they sit in, so they always
+// agree.
+const OTP_GAP = 6;
+const OTP_PAGE_PADDING = 18; // must match scrollContent's paddingHorizontal
+const OTP_CARD_MAX_WIDTH = 430; // must match card's maxWidth
+const OTP_ROW_WIDTH = Math.min(SCREEN_WIDTH - OTP_PAGE_PADDING * 2, OTP_CARD_MAX_WIDTH);
+const OTP_BOX_SIZE = Math.max(
+  44,
+  Math.min(60, Math.floor((OTP_ROW_WIDTH - OTP_GAP * (OTP_LENGTH - 1)) / OTP_LENGTH))
+);
+
 // DiagramBackground with grid-bg.png
 const DiagramBackground = () => (
   <View style={StyleSheet.absoluteFillObject} pointerEvents="none">
@@ -622,25 +640,32 @@ const styles = StyleSheet.create({
   },
   subtitle: { fontSize: 14, color: '#7f8bb3', textAlign: 'center', lineHeight: 22, marginBottom: 32 },
   emailHighlight: { color: '#4c6fff', fontWeight: '700' },
-  otpContainer: { width: '100%', marginBottom: 8 },
-  otpRow: { flexDirection: 'row', justifyContent: 'space-between', gap: 10, marginBottom: 8 },
-  hiddenInput: { 
-    position: 'absolute', width: '100%', height: '100%', 
-    opacity: 0, zIndex: 10, backgroundColor: 'transparent' 
+  // Pulled out past the card's own 32px side padding entirely (negative
+  // margin cancels all of it), so OTP_ROW_WIDTH above — the same value used
+  // to size otpBox — is exactly this row's available width.
+  otpContainer: { width: '100%', marginBottom: 8, marginHorizontal: -32 },
+  otpRow: { flexDirection: 'row', justifyContent: 'center', gap: OTP_GAP, marginBottom: 8 },
+  hiddenInput: {
+    position: 'absolute', width: '100%', height: '100%',
+    opacity: 0, zIndex: 10, backgroundColor: 'transparent'
   },
-  otpBox: { 
-    flex: 1, aspectRatio: 1, maxWidth: 58, borderRadius: 14, 
-    borderWidth: 1.8, borderColor: '#dde3fa', backgroundColor: '#f8faff', 
-    alignItems: 'center', justifyContent: 'center' 
+  // Fixed size (OTP_BOX_SIZE, computed above) instead of flex:1 + maxWidth —
+  // a deterministic size is what actually makes justifyContent:'center' on
+  // otpRow reliable, and reads as noticeably bigger on typical phone widths
+  // than the old flex-distributed size did.
+  otpBox: {
+    width: OTP_BOX_SIZE, height: OTP_BOX_SIZE * 1.15, borderRadius: 16,
+    borderWidth: 1.8, borderColor: '#dde3fa', backgroundColor: '#f8faff',
+    alignItems: 'center', justifyContent: 'center'
   },
-  otpBoxFocused: { 
-    borderColor: '#4c6fff', backgroundColor: '#ffffff', 
-    shadowColor: '#4c6fff', shadowOffset: { width: 0, height: 0 }, 
-    shadowOpacity: 0.18, shadowRadius: 10, elevation: 5 
+  otpBoxFocused: {
+    borderColor: '#4c6fff', backgroundColor: '#ffffff',
+    shadowColor: '#4c6fff', shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.18, shadowRadius: 10, elevation: 5
   },
   otpBoxFilled: { borderColor: '#a5b4fc', backgroundColor: '#f0f4ff' },
   otpBoxError: { borderColor: '#ef4444', backgroundColor: '#fff5f5' },
-  otpDigit: { fontSize: 22, fontWeight: '700', color: '#1a1f36' },
+  otpDigit: { fontSize: Math.round(OTP_BOX_SIZE * 0.42), fontWeight: '700', color: '#1a1f36' },
   otpDigitError: { color: '#ef4444' },
   cursor: { 
     position: 'absolute', bottom: 12, width: 2, height: 20, 

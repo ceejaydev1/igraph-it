@@ -645,16 +645,20 @@ export default function SignIn() {
 
   // Background session check — no longer gates the initial render.
   // If a valid session exists, redirect; otherwise do nothing and let the
-  // form stay visible (it was already rendered on mount).
+  // form stay visible (it was already rendered on mount). Prefers the saved
+  // lastRoute over home — same validation guard as app/index.tsx, so a
+  // corrupt/stale value falls back to home instead of an invalid href.
   useEffect(() => {
     const checkExistingSession = async () => {
       try {
-        const token = await authService.getAccessToken();
-        if (token) {
-          const response = await authService.verifyToken();
-          if (response.success) {
-            router.replace('/(tabs)/home');
-          }
+        // No token-presence pre-check — web's session lives in an httpOnly
+        // cookie this code can never read, so verifyToken() is called
+        // unconditionally and applies its own per-platform fast-path.
+        const response = await authService.verifyToken();
+        if (response.success) {
+          const savedRoute = await authService.getLastRoute();
+          const isValidSavedRoute = typeof savedRoute === 'string' && savedRoute.startsWith('/(tabs)');
+          router.replace((isValidSavedRoute ? savedRoute : '/(tabs)/home') as any);
         }
       } catch (error) {
         console.log('No valid session found');

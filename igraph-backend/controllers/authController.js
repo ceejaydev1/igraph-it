@@ -6,6 +6,7 @@ const userModel = require('../models/userModel');
 const otpModel = require('../models/otpModel');
 const { generateOTP, getOTPExpiry } = require('../utils/generateOTP');
 const { generateAccessToken, generateRefreshToken, verifyRefreshToken } = require('../utils/generateJWT');
+const { getAccessCookieOptions, getRefreshCookieOptions, getClearCookieOptions } = require('../utils/cookieOptions');
 const { sendVerificationEmail, sendPasswordResetEmail } = require('../services/emailService');
 
 // HELPERS
@@ -351,7 +352,7 @@ const resendOTP = async (req, res) => {
 
 const signin = async (req, res) => {
   try {
-    const { email, password } = req.body;
+    const { email, password, rememberMe } = req.body;
 
     if (!email || !password) {
       return res.status(400).json({ success: false, message: 'Email and password are required.' });
@@ -401,6 +402,11 @@ const signin = async (req, res) => {
       expires_at: sessionExpiry.toISOString()
     });
 
+    // Web reads the session from these httpOnly cookies going forward; the
+    // JSON tokens below are kept unchanged for native, which has no cookie jar.
+    res.cookie('access_token', accessToken, getAccessCookieOptions(rememberMe));
+    res.cookie('refresh_token', refreshToken, getRefreshCookieOptions(rememberMe));
+
     res.status(200).json({
       success: true,
       message: 'Sign in successful!',
@@ -427,7 +433,7 @@ const signin = async (req, res) => {
 
 const googleAuth = async (req, res) => {
   try {
-    const { idToken } = req.body;
+    const { idToken, rememberMe } = req.body;
 
     if (!idToken) {
       return res.status(400).json({ success: false, message: 'No ID token provided.' });
@@ -478,6 +484,9 @@ const googleAuth = async (req, res) => {
         expires_at: sessionExpiry.toISOString()
       });
 
+      res.cookie('access_token', accessToken, getAccessCookieOptions(rememberMe));
+      res.cookie('refresh_token', refreshToken, getRefreshCookieOptions(rememberMe));
+
       return res.status(200).json({
         success: true,
         message: 'Google sign in successful!',
@@ -523,6 +532,9 @@ const googleAuth = async (req, res) => {
       expires_at: sessionExpiry.toISOString()
     });
 
+    res.cookie('access_token', accessToken, getAccessCookieOptions(rememberMe));
+    res.cookie('refresh_token', refreshToken, getRefreshCookieOptions(rememberMe));
+
     res.status(200).json({
       success: true,
       message: 'Google sign in successful!',
@@ -556,7 +568,7 @@ const googleAuth = async (req, res) => {
 
 const linkGoogleAccount = async (req, res) => {
   try {
-    const { idToken, password } = req.body;
+    const { idToken, password, rememberMe } = req.body;
 
     if (!idToken || !password) {
       return res.status(400).json({
@@ -622,6 +634,9 @@ const linkGoogleAccount = async (req, res) => {
       created_at: new Date().toISOString(),
       expires_at: sessionExpiry.toISOString()
     });
+
+    res.cookie('access_token', accessToken, getAccessCookieOptions(rememberMe));
+    res.cookie('refresh_token', refreshToken, getRefreshCookieOptions(rememberMe));
 
     res.status(200).json({
       success: true,
@@ -885,7 +900,9 @@ const resetPassword = async (req, res) => {
 
 const refreshToken = async (req, res) => {
   try {
-    const { refreshToken: token } = req.body;
+    const tokenFromBody = req.body ? req.body.refreshToken : undefined;
+    const tokenFromCookie = req.cookies ? req.cookies.refresh_token : undefined;
+    const token = tokenFromBody || tokenFromCookie;
 
     if (!token) {
       return res.status(400).json({
@@ -934,6 +951,15 @@ const refreshToken = async (req, res) => {
 
     const newAccessToken = generateAccessToken(user.user_id, user.email);
 
+    if (!tokenFromBody) {
+      // Web caller — it authenticated this request via the refresh_token
+      // cookie rather than a body field, so reissue access_token the same
+      // way. rememberMe isn't re-sent on refresh, so this always treats the
+      // session as persistent; worst case is a session-only login getting a
+      // few extra minutes of cookie lifetime, not a security issue.
+      res.cookie('access_token', newAccessToken, getAccessCookieOptions(true));
+    }
+
     res.status(200).json({
       success: true,
       message: 'Token refreshed successfully.',
@@ -953,7 +979,7 @@ const refreshToken = async (req, res) => {
 
 const logout = async (req, res) => {
   try {
-    const { refreshToken: token } = req.body;
+    const token = (req.body && req.body.refreshToken) || (req.cookies && req.cookies.refresh_token);
 
     if (token) {
       const sessionSnapshot = await db.collection('sessions')
@@ -966,6 +992,12 @@ const logout = async (req, res) => {
         await sessionSnapshot.docs[0].ref.delete();
       }
     }
+
+    // Clear unconditionally — even if no matching session doc was found
+    // (e.g. already-expired token), the browser should never keep holding
+    // onto stale cookies after an explicit sign-out.
+    res.clearCookie('access_token', getClearCookieOptions('/'));
+    res.clearCookie('refresh_token', getClearCookieOptions('/api/auth'));
 
     res.status(200).json({
       success: true,

@@ -1,4 +1,4 @@
-import React, { useState, useRef, useCallback, useEffect } from 'react';
+import React, { useState, useRef, useCallback, useEffect, useMemo } from 'react';
 import {
   View,
   Text,
@@ -13,13 +13,16 @@ import {
   ScrollView,
   Modal,
   Pressable,
+  Animated,
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Svg, Path, Rect, Circle } from 'react-native-svg';
-import { SvgCanvas2D, ImageExport } from '@maxgraph/core';
-import DiagramCanvas, { DiagramCanvasHandle, getShapeStyle, insertUmlClassCell } from '@/components/DiagramCanvas';
+import { SvgCanvas2D, ImageExport, Geometry, Point } from '@maxgraph/core';
+import DiagramCanvas, { DiagramCanvasHandle, getShapeStyle, insertUmlClassCell, insertDfdDataStoreCell, findSequenceMessageEndpoints, sequenceMessageConnectionStyle, SEQUENCE_MESSAGE_SHAPE_IDS } from '@/components/DiagramCanvas';
+import ShareModal from '@/components/ShareModal';
+import RequestAccessModal from '@/components/RequestAccessModal';
 import ShapesPanel from '@/components/shapes/ShapesPanel';
 import ShapesBottomPanel from '../../components/shapes/ShapesBottomPanel';
 import ConnectorsBottomPanel from '../../components/ConnectorsBottomPanel';
@@ -28,10 +31,15 @@ import QuickFormatBar from '@/components/properties-panel/QuickFormatBar';
 import { ICONS } from '../../constants/icons';
 import { COLORS, SPACING } from '@/constants/theme';
 import { IGRAPH_ID_STYLE_MAP } from '@/components/maxgraph-custom-shapes';
-import { getShapeDefinitionById } from '@/constants/shapes';
+import { getShapeDefinitionById, CONNECTOR_SHAPE_IDS } from '@/constants/shapes';
 import { tagShapeRole } from '@/utils/flowchartRules';
 import * as authService from '../../services/authService';
+import * as shareService from '../../services/diagramShareService';
+import { joinDiagram, leaveDiagram, sendDiagramChange } from '../../services/collabSocketClient';
 import { useSave } from '../../contexts/SaveContext';
+import { useOnboardingTour } from '@/hooks/useOnboardingTour';
+import { CREATE_TOUR_ID, getCreateTourSteps } from '@/utils/tours';
+import { resolveTourWait } from '@/utils/onboardingTour';
 
 const UndoIcon = ({ color = '#4a5568', size = 20 }: { color?: string; size?: number }) => (
   <Svg width={size} height={size} viewBox="0 0 24 24" fill={color}>
@@ -70,6 +78,17 @@ const SaveIcon = ({ color = '#4a5568' }: { color?: string }) => (
       strokeLinecap="round"
       strokeLinejoin="round"
     />
+  </Svg>
+);
+
+// SHARE ICON
+
+const ShareIcon = ({ color = '#4a5568' }: { color?: string }) => (
+  <Svg width={20} height={20} viewBox="0 0 24 24" fill="none">
+    <Circle cx="18" cy="5" r="3" stroke={color} strokeWidth={1.8} />
+    <Circle cx="6" cy="12" r="3" stroke={color} strokeWidth={1.8} />
+    <Circle cx="18" cy="19" r="3" stroke={color} strokeWidth={1.8} />
+    <Path d="M8.6 10.5L15.4 6.5M8.6 13.5L15.4 17.5" stroke={color} strokeWidth={1.8} strokeLinecap="round" />
   </Svg>
 );
 
@@ -139,6 +158,77 @@ const DownloadDropdown = ({
   );
 };
 
+// ─── AUTOSAVE INDICATOR ─────────────────────────────────────────────────────
+
+const CloudSyncIcon = ({ color, checked }: { color: string; checked: boolean }) => (
+  <Svg width={15} height={15} viewBox="0 0 24 24" fill="none">
+    <Path
+      d="M7 18a4.5 4.5 0 01-.4-8.98A5.5 5.5 0 0117 8.5a4 4 0 01-1 7.9H7z"
+      stroke={color}
+      strokeWidth={1.7}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      fill={checked ? color : 'none'}
+      fillOpacity={checked ? 0.14 : 0}
+    />
+    {checked && (
+      <Path d="M8.3 12.4L10.7 14.8L15.5 10" stroke={color} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" fill="none" />
+    )}
+  </Svg>
+);
+
+type SyncStatus = 'local' | 'syncing' | 'synced' | 'offline';
+
+const SYNC_STATUS_META: Record<SyncStatus, { label: string; color: string }> = {
+  local: { label: 'Saved on device', color: '#d97706' },
+  syncing: { label: 'Saving…', color: '#4c6fff' },
+  synced: { label: 'Saved', color: '#10b981' },
+  offline: { label: 'Saved on device', color: '#94a3b8' },
+};
+
+// Sits beside the diagram title so the user always knows whether their work
+// is safe — amber while it's only on this device, a brief animated pulse
+// while a background sync to the server is in flight, and a green check
+// (with a satisfying little pop) once the server has actually confirmed it.
+const AutosaveIndicator = ({ status }: { status: SyncStatus }) => {
+  const pulse = useRef(new Animated.Value(1)).current;
+  const pop = useRef(new Animated.Value(1)).current;
+
+  useEffect(() => {
+    if (status !== 'syncing') {
+      pulse.setValue(1);
+      return;
+    }
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulse, { toValue: 0.35, duration: 550, useNativeDriver: true }),
+        Animated.timing(pulse, { toValue: 1, duration: 550, useNativeDriver: true }),
+      ])
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [status, pulse]);
+
+  useEffect(() => {
+    if (status !== 'synced') return;
+    pop.setValue(0.55);
+    Animated.spring(pop, { toValue: 1, friction: 4, tension: 140, useNativeDriver: true }).start();
+  }, [status, pop]);
+
+  const meta = SYNC_STATUS_META[status];
+
+  return (
+    <View style={styles.autosaveIndicator}>
+      <Animated.View style={{ opacity: pulse, transform: [{ scale: pop }] }}>
+        <CloudSyncIcon color={meta.color} checked={status === 'synced'} />
+      </Animated.View>
+      <Text style={[styles.autosaveIndicatorLabel, { color: meta.color }]} numberOfLines={1}>
+        {meta.label}
+      </Text>
+    </View>
+  );
+};
+
 // ─── MAIN COMPONENT ──────────────────────────────────────────────────────────
 
 interface Page {
@@ -149,18 +239,135 @@ interface Page {
 
 const generatePageId = () => `page_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`;
 
+// Renders `html` into a hidden iframe on this same page and prints that
+// iframe, instead of the old window.open()-based popup. window.open() is
+// unreliable once the app is installed as a PWA — iOS in particular blocks
+// or silently kicks the user out to Safari when a standalone PWA tries to
+// open a new top-level window — and an in-page iframe means the user never
+// leaves the Create Diagram screen in the first place, so there's nothing
+// to "return to" after Print or Cancel.
+function printHtmlInHiddenIframe(html: string): boolean {
+  if (typeof document === 'undefined') return false;
+
+  const iframe = document.createElement('iframe');
+  // A 0×0 iframe is invisible on desktop, but Android Chrome's print
+  // pipeline won't scope printing to a frame with no real layout box — it
+  // silently falls back to printing the top-level page instead (the create
+  // screen's own toolbar/canvas, not this generated document). Giving it an
+  // actual size and pushing it off-screen keeps it invisible while still
+  // being a real, printable layout target on every platform.
+  iframe.style.position = 'fixed';
+  iframe.style.top = '0';
+  iframe.style.left = '-10000px';
+  iframe.style.width = '8.5in';
+  iframe.style.height = '11in';
+  iframe.style.border = '0';
+  document.body.appendChild(iframe);
+
+  const cleanup = () => {
+    if (iframe.parentNode) iframe.parentNode.removeChild(iframe);
+  };
+
+  const doc = iframe.contentDocument;
+  if (!doc) {
+    cleanup();
+    return false;
+  }
+  doc.open();
+  doc.write(html);
+  doc.close();
+
+  iframe.onload = () => {
+    setTimeout(() => {
+      const win = iframe.contentWindow;
+      if (!win) {
+        cleanup();
+        return;
+      }
+      // 'afterprint' is the normal signal the dialog closed (Print or
+      // Cancel), but iOS Safari doesn't always fire it for framed content,
+      // so a timeout backstops the cleanup either way.
+      win.onafterprint = cleanup;
+      win.focus();
+      win.print();
+      setTimeout(cleanup, 60000);
+    }, 300);
+  };
+
+  return true;
+}
+
+// Printing always hands off to window.print()'s native dialog — the OS's
+// own UI, not this page's, so it already lists every real printer installed
+// on the machine with zero code here. Page size is fixed at Letter/portrait
+// (see PAPER_SIZES.Letter below) since there's no in-page control for it
+// anymore; the native dialog itself still lets the user override both.
+
+// The owner never sees a badge — it's their own diagram, there's nothing to
+// clarify. Collaborators do, so they always know at a glance what they can
+// do here without having to go open Share to check.
+const ACCESS_BADGE_LABEL: Record<string, string> = {
+  edit_share: 'Edit and Share',
+  edit: 'Edit Only',
+  view: 'View Only',
+};
+
 export default function CreateScreen() {
   const router = useRouter();
-  const { diagramId } = useLocalSearchParams<{ diagramId?: string }>();
+  const { diagramId, share: shareToken } = useLocalSearchParams<{ diagramId?: string; share?: string }>();
   const { width } = useWindowDimensions();
   const isDesktop = width >= 768;
 
+  // Opening a /create?share=<token> link (see ShareModal's "Copy link")
+  // redeems the token — which is what actually grants standing access, not
+  // just a one-time peek — then swaps straight to the normal ?diagramId=
+  // flow so every existing load/hydrate/collab-join path handles the rest
+  // exactly like any other diagram open.
+  useEffect(() => {
+    if (!shareToken) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const result = await shareService.redeemShareLink(shareToken);
+        if (cancelled) return;
+        if (result.success && result.data?.diagramId) {
+          router.replace(`/create?diagramId=${result.data.diagramId}`);
+        } else {
+          Alert.alert('Link unavailable', result.message || 'This share link is invalid or has expired.');
+          router.replace('/create');
+        }
+      } catch (e: any) {
+        if (cancelled) return;
+        Alert.alert('Link unavailable', e?.response?.data?.message || 'This share link is invalid or has expired.');
+        router.replace('/create');
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [shareToken]);
+
   const [diagramName, setDiagramName] = useState('Blank diagram');
   const [isGraphReady, setIsGraphReady] = useState(false);
+
+  const createTourSteps = useMemo(() => getCreateTourSteps({ router, isDesktop }), [router, isDesktop]);
+  useOnboardingTour(CREATE_TOUR_ID, createTourSteps, isGraphReady);
   const [graphInstance, setGraphInstance] = useState<any>(null);
+  // Resolved once the graph is ready; a late-arriving id (auth settling just
+  // after sign-in) re-triggers the hydrate effect below for one more restore
+  // attempt instead of leaving hasHydratedRef latched shut on a false start.
+  const [authUserId, setAuthUserId] = useState<string | null>(null);
   const [diagramXml, setDiagramXml] = useState<string>('');
   const [showShapesPanel, setShowShapesPanel] = useState(false);
   const [isPanelVisible, setIsPanelVisible] = useState(true);
+  // Desktop-only: mirrors PropertiesPanel's internal collapsed state so the
+  // collapse toggle button can live up in the format bar (outside the
+  // panel's own clipped container) instead of inline in its header.
+  const [isPropertiesPanelCollapsed, setIsPropertiesPanelCollapsed] = useState(false);
+  // Set while a connector/line shape was tapped (not dragged) from the Shapes
+  // panel — instead of guessing where to attach it from viewport-center
+  // (unreliable on mobile, which has no drag-and-drop), the next two shapes
+  // the user taps become its source/target directly. See handleAddShape and
+  // handleCanvasSelectionChange.
+  const [pendingConnector, setPendingConnector] = useState<{ shapeId: string; sourceCell: any } | null>(null);
   // Mobile-only: Text/Draw/Comment double as direct entry points into the
   // Properties bottom sheet's Text/Style/Arrange tabs (those three buttons
   // had no real tool behind them before — just a visual active state — so
@@ -185,6 +392,22 @@ export default function CreateScreen() {
   // ─── Save state ──────────────────────────────────────────────────────────────
   const [isSaving, setIsSaving] = useState(false);
 
+  // ─── Autosave status indicator ───────────────────────────────────────────────
+  // 'local' — persisted to this device's storage, not yet confirmed by the
+  // server. 'syncing' — a background server sync is in flight right now.
+  // 'synced' — the server has confirmed this exact content. 'offline' — the
+  // last background sync attempt failed (no connection, signed out, etc.);
+  // the local copy is still safe, it just hasn't reached the server yet.
+  const [syncStatus, setSyncStatus] = useState<SyncStatus>('local');
+  // Set on every content change, cleared once that content is written to
+  // AsyncStorage — read by the 5s local-autosave tick below so it only
+  // actually writes when something changed since the last tick.
+  const isDirtyRef = useRef(false);
+  // Set on every content change, cleared once the SERVER confirms that exact
+  // content — read by attemptBackgroundSync so it skips redundant network
+  // round-trips when nothing has changed since the last successful sync.
+  const hasUnsyncedServerChangesRef = useRef(false);
+
   // ─── Download state ──────────────────────────────────────────────────────────
   const [showDownloadDropdown, setShowDownloadDropdown] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
@@ -200,16 +423,20 @@ export default function CreateScreen() {
     onConfirm?: () => void;
   } | null>(null);
 
+  // ─── Share state ─────────────────────────────────────────────────────────────
+  const [showShareModal, setShowShareModal] = useState(false);
+
   // ─── Print state ─────────────────────────────────────────────────────────────
   const [showPrintModal, setShowPrintModal] = useState(false);
   const [printPreviewUrl, setPrintPreviewUrl] = useState<string | null>(null);
-  const [printCopies, setPrintCopies] = useState('1');
-  const [printPageRange, setPrintPageRange] = useState('');
-  const [printOrientation, setPrintOrientation] = useState<'portrait' | 'landscape'>('portrait');
-  const [printPaperSize, setPrintPaperSize] = useState<string>('Letter');
-  const [showPaperSizeDropdown, setShowPaperSizeDropdown] = useState(false);
-  const [showOrientationDropdown, setShowOrientationDropdown] = useState(false);
   const [isPreparingPrint, setIsPreparingPrint] = useState(false);
+  // Optional name (top-left corner) and title (centered) overlaid on the
+  // printed page — set via the "Edit" row in the print settings panel.
+  const [printName, setPrintName] = useState('');
+  const [printTitle, setPrintTitle] = useState('');
+  // Is the Edit row's Name/Title panel open.
+  const [isPrintEditOpen, setIsPrintEditOpen] = useState(false);
+  const [printZoom, setPrintZoom] = useState(100);
 
   // ─── Zoom state ─────────────────────────────────────────────────────────────
   const [zoomLevel, setZoomLevel] = useState(100);
@@ -232,6 +459,33 @@ export default function CreateScreen() {
   const diagramCanvasRef = useRef<DiagramCanvasHandle>(null);
   // Diagram currently being edited; null = never-saved new diagram.
   const currentDiagramIdRef = useRef<string | null>(null);
+  // Same value as currentDiagramIdRef, mirrored into state — plain effects
+  // can't react to a ref changing, and the collaboration-room join/leave
+  // effect below needs to fire exactly when this diagram gets its first real
+  // id (right after the very first save) or changes to a different one.
+  const [activeDiagramId, setActiveDiagramId] = useState<string | null>(null);
+  // 'owner' for anything this account created; set from the backend's
+  // accessLevel once an existing diagram is fetched (see hydrate() below).
+  // Gates both the read-only canvas state and whether Save/rename are shown.
+  const [myAccessLevel, setMyAccessLevel] = useState<'owner' | 'edit_share' | 'edit' | 'view'>('owner');
+  const canEditDiagram = myAccessLevel === 'owner' || myAccessLevel === 'edit_share' || myAccessLevel === 'edit';
+  // Plain 'edit' collaborators have nothing to do in the Share dialog (no
+  // link, no collaborator management) and 'view' obviously can't share —
+  // hiding the button for both avoids a dead-end click.
+  const canShareDiagram = myAccessLevel === 'owner' || myAccessLevel === 'edit_share';
+  // Whether *this* user already has an outstanding "Request Edit Access" —
+  // set from the backend's getDiagram response, so it survives a reload
+  // instead of resetting the moment the tab closes.
+  const [hasPendingAccessRequest, setHasPendingAccessRequest] = useState(false);
+  const [showRequestAccessModal, setShowRequestAccessModal] = useState(false);
+  const setCurrentDiagramId = useCallback((id: string | null) => {
+    currentDiagramIdRef.current = id;
+    setActiveDiagramId(id);
+  }, []);
+  // Who else currently has this diagram open — driven by the collab-socket
+  // 'presence' event (see the join effect further down).
+  const [collabViewers, setCollabViewers] = useState<{ userId: string; userName: string; permission: string }[]>([]);
+  const collabSendTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Last diagramId this instance has actually hydrated from the backend, so a
   // re-render doesn't re-fetch, but switching to a *different* diagramId does.
   const loadedDiagramIdRef = useRef<string | null>(null);
@@ -251,11 +505,10 @@ export default function CreateScreen() {
   // inside loadXml()'s import — without this guard it would capture the new
   // XML under the *previous* render's activePageId.
   const isHydratingRef = useRef(false);
-  const autosaveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  // Always points at a flush of the *current* pending autosave (rebuilt by
-  // the debounce effect below on every relevant change). Called synchronously
-  // from the focus-loss handler further down, so it must be a ref rather
-  // than a value captured by that handler's own (deps-[]) closure.
+  // Always points at a flush of the current draft (local save + background
+  // server sync attempt). Called synchronously from the focus-loss handler
+  // further down, so it must be a ref rather than a value captured by that
+  // handler's own (deps-[]) closure.
   const pendingAutosaveFlushRef = useRef<() => void>(() => {});
   // Synchronous re-entrancy guard for Save: `isSaving` state doesn't flip
   // true until after an `await` (auth token lookup) runs, leaving a window
@@ -265,7 +518,7 @@ export default function CreateScreen() {
   const isSavingRef = useRef(false);
 
   // ─── SaveContext integration ──────────────────────────────────────────────
-  const { setSaveHandler, setIsSaving: setContextIsSaving } = useSave();
+  const { setSaveHandler, setIsSaving: setContextIsSaving, setFlushHandler } = useSave();
 
   // ─── Debug: Log when component mounts ──────────────────────────────────────
   useEffect(() => {
@@ -280,6 +533,74 @@ export default function CreateScreen() {
   useEffect(() => {
     diagramNameRef.current = diagramName;
   }, [diagramName]);
+
+  // Read inside the collab-socket effect's onRemoteChange handler below,
+  // which only re-subscribes when activeDiagramId/isGraphReady change — a
+  // plain closure over activePageId would go stale the moment the user
+  // switched pages without also rejoining the room.
+  const activePageIdRef = useRef(activePageId);
+  useEffect(() => {
+    activePageIdRef.current = activePageId;
+  }, [activePageId]);
+
+  // ─── Real-time collaboration ────────────────────────────────────────────
+  // Joins this diagram's room the moment it actually has a real id (a
+  // never-saved new diagram has nothing to join yet — see setCurrentDiagramId)
+  // and the graph exists to apply remote changes into. Only one diagram is
+  // ever joined at a time; switching to a different one (or this diagram
+  // getting its first id right after the very first save) tears down the old
+  // room and joins the new one via this same effect re-running.
+  //
+  // Scope note: sync is per active page, not the whole multi-page document —
+  // two people on different pages of the same diagram won't see each other's
+  // edits until they're both on the same page. Covering every page at once
+  // would mean broadcasting (and merging) all of them simultaneously, which
+  // is a meaningfully bigger feature than what a share dialog needs.
+  useEffect(() => {
+    if (!activeDiagramId || !isGraphReady) return;
+    let cancelled = false;
+
+    joinDiagram(activeDiagramId, {
+      onRemoteChange: (xml: string) => {
+        if (cancelled || !xml) return;
+        isHydratingRef.current = true;
+        diagramCanvasRef.current?.loadXml(xml);
+        diagramCanvasRef.current?.refresh();
+        isHydratingRef.current = false;
+        setDiagramXml(xml);
+        const pageId = activePageIdRef.current;
+        if (pageId) pageXmlCache.current.set(pageId, xml);
+      },
+      onPresence: (viewers: { userId: string; userName: string; permission: string }[]) => {
+        if (!cancelled) setCollabViewers(viewers);
+      },
+      // Pushed the instant the owner changes this account's access level (or
+      // approves its access request) — without this, a tab already open on
+      // the diagram keeps its stale myAccessLevel (still gating the canvas
+      // read-only, still hiding Share) until the user happens to reload.
+      onPermissionChange: (permission: 'owner' | 'edit_share' | 'edit' | 'view') => {
+        if (!cancelled) setMyAccessLevel(permission);
+      },
+    }).then((result) => {
+      if (!cancelled && !result.ok) {
+        console.warn('Could not join collaboration room:', result.message);
+      }
+    });
+
+    return () => {
+      cancelled = true;
+      leaveDiagram();
+      setCollabViewers([]);
+    };
+  }, [activeDiagramId, isGraphReady]);
+
+  // Viewers get a read-only canvas — the real enforcement is always the
+  // backend (save + socket permission checks), this is purely so they don't
+  // try to drag a shape only to have any resulting save rejected.
+  useEffect(() => {
+    if (!isGraphReady) return;
+    diagramCanvasRef.current?.setReadOnly(myAccessLevel === 'view');
+  }, [myAccessLevel, isGraphReady]);
 
   // react-native-web's Modal portals to document.body rather than rendering
   // inside this screen's own container, so it ignores which screen React
@@ -301,13 +622,13 @@ export default function CreateScreen() {
         setDialogState(null);
         setShowPrintModal(false);
         setShowPageModal(false);
-        // The autosave effect only writes the current draft to AsyncStorage
-        // 800ms after the last edit. Switching tabs faster than that (very
-        // easy to do) previously lost whatever was just drawn, because this
-        // screen can end up rebuilt from scratch on return (e.g. the mobile/
-        // desktop layout branch flipping) with nothing but that draft to
-        // restore from. Firing the pending save right as focus is lost —
-        // instead of waiting on the timer — closes that window.
+        // The local autosave tick only runs every 5s. Switching tabs faster
+        // than that (very easy to do) previously lost whatever was just
+        // drawn, because this screen can end up rebuilt from scratch on
+        // return (e.g. the mobile/desktop layout branch flipping) with
+        // nothing but that draft to restore from. Firing the pending save
+        // right as focus is lost — instead of waiting on the timer — closes
+        // that window.
         pendingAutosaveFlushRef.current();
       };
     }, [])
@@ -334,6 +655,49 @@ export default function CreateScreen() {
     console.log('🟢 Graph ready, setting graphInstance');
     setGraphInstance(graph);
     setIsGraphReady(true);
+
+    // Remount restore: reload the saved local draft now that the graph
+    // provably exists, instead of depending on the hydratedGraphRef/
+    // isMidSessionRemount gating above, which can lose the race across two
+    // effect passes referring to the same graph instance. Skipped when a
+    // specific diagramId is requested — that case is already handled by the
+    // backend fetch in the hydrate effect, and this pointer-based restore
+    // would otherwise clobber it with the wrong diagram's content.
+    if (!diagramId) {
+      (async () => {
+        try {
+          const uid = await authService.getCurrentUserId();
+          if (!uid) return;
+          const pointerRaw = await AsyncStorage.getItem(activePointerKey(uid));
+          const pointer = pointerRaw ? JSON.parse(pointerRaw) : { diagramId: null };
+          const contentRaw = await AsyncStorage.getItem(draftKey(uid, pointer.diagramId));
+          if (!contentRaw) return;
+
+          const content = JSON.parse(contentRaw);
+          const activeXml = content.pages?.[0]?.xml || content.xml || '';
+          if (!activeXml || activeXml.length === 0) return;
+
+          console.log('🔁 onReady restore — xmlLen:', activeXml.length);
+          isHydratingRef.current = true;
+          diagramCanvasRef.current?.loadXml(activeXml);
+          diagramCanvasRef.current?.refresh();
+          isHydratingRef.current = false;
+
+          if (content.pages) {
+            content.pages.forEach((p: any) => pageXmlCache.current.set(p.id, p.xml || ''));
+            setPages(content.pages);
+            setActivePageId(content.activePageId || content.pages[0].id);
+          }
+          setDiagramXml(activeXml);
+          diagramXmlRef.current = activeXml;
+          setCurrentDiagramId(pointer.diagramId || null);
+          hasHydratedRef.current = true;
+        } catch (e) {
+          console.warn('onReady restore failed:', e);
+        }
+      })();
+    }
+
     if (graph) {
       try {
         const scale = graph.getView().getScale();
@@ -346,10 +710,23 @@ export default function CreateScreen() {
 
   const handleGraphChange = (xml: string) => {
     if (isHydratingRef.current) return;
-    console.log('🔄 Graph changed, XML length:', xml?.length || 0);
+    console.log('🔄 handleGraphChange — xmlLen:', xml?.length || 0, 'activePageId:', activePageId, 'hydrated:', hasHydratedRef.current);
     setDiagramXml(xml);
     if (activePageId) {
       pageXmlCache.current.set(activePageId, xml);
+    }
+
+    // Broadcast to any other live collaborators on this same diagram+page.
+    // Debounced so a drag/resize (many CHANGE events in a row) sends one
+    // update shortly after things settle instead of one per intermediate
+    // frame — collaborators see it a couple hundred ms later, not live pixel-
+    // by-pixel, but that's the right trade for not flooding the socket.
+    if (canEditDiagram && currentDiagramIdRef.current) {
+      const diagramId = currentDiagramIdRef.current;
+      if (collabSendTimerRef.current) clearTimeout(collabSendTimerRef.current);
+      collabSendTimerRef.current = setTimeout(() => {
+        sendDiagramChange(diagramId, xml);
+      }, 200);
     }
   };
 
@@ -375,6 +752,9 @@ export default function CreateScreen() {
     isHydratingRef.current = true;
     diagramCanvasRef.current?.loadXml(activeXml);
     isHydratingRef.current = false;
+    // loadXml() imports the model but doesn't reliably repaint (same class of
+    // issue as the visibilitychange/focus-loss cases elsewhere in this file).
+    diagramCanvasRef.current?.refresh();
 
     // Returned so callers can persist this exact snapshot to AsyncStorage
     // immediately (see hydrate()'s backend-load branch below) — reading
@@ -408,13 +788,54 @@ export default function CreateScreen() {
     if (!isGraphReady || !graphInstance) return;
     let cancelled = false;
 
+    console.log('🔍 hydrate effect — diagramId:', diagramId,
+      'hasHydrated:', hasHydratedRef.current,
+      'hydratedGraphRef:', hydratedGraphRef.current === graphInstance ? 'same' : 'different');
+
     // A different graph instance than last time means DiagramCanvas was
-    // remounted (e.g. the mobile/desktop layout branch swapped) and is now
-    // blank — forget what we'd previously loaded so it gets reloaded here.
+    // torn down and rebuilt (e.g. the mobile/desktop layout branch flipping
+    // on a resize) and is now blank. Only a REAL first mount should fall
+    // through to the backend/local-draft hydrate() below — a mid-session
+    // remount (hydratedGraphRef.current already pointed at some earlier
+    // instance) instead restores straight from `pages`/`activePageId`,
+    // which are owned by this screen, not by DiagramCanvas, and so are
+    // still sitting in memory with the real, current content regardless of
+    // what just happened to the child component. Going through
+    // AsyncStorage/the backend here instead — the previous behavior — can
+    // race a save that's still in flight (the local autosave tick is only
+    // every 5s) and come back with an older snapshot missing whatever was
+    // just drawn: this is the actual bug behind "my shape disappeared after
+    // switching tabs and back."
+    // Only trust the cache-restore shortcut below if the *previous* instance
+    // had actually finished a real hydrate (backend fetch or local draft) —
+    // otherwise this remount is racing that still-in-flight first load (e.g.
+    // useWindowDimensions() settling on a different width right after the
+    // very first mount, flipping isDesktop before the ?diagramId= fetch has
+    // resolved). pageXmlCache/diagramXmlRef are still empty at that point, so
+    // "restoring" from them would silently load a blank canvas, mark
+    // hydration as done, and lock loadedDiagramIdRef — permanently cancelling
+    // the real fetch's continuation instead of ever retrying it.
+    const wasFullyHydrated = hasHydratedRef.current;
+    const isMidSessionRemount =
+      hydratedGraphRef.current !== null && hydratedGraphRef.current !== graphInstance && wasFullyHydrated;
     if (hydratedGraphRef.current !== graphInstance) {
       hydratedGraphRef.current = graphInstance;
       loadedDiagramIdRef.current = null;
       hasHydratedRef.current = false;
+    }
+
+    if (isMidSessionRemount) {
+      const xmlToRestore = pageXmlCache.current.get(activePageId) || diagramXmlRef.current || '';
+      console.log('🔍 remount restore — cacheHas:', pageXmlCache.current.has(activePageId),
+        'xmlLen:', xmlToRestore.length, 'graphReady:', !!(diagramCanvasRef.current));
+      isHydratingRef.current = true;
+      diagramCanvasRef.current?.loadXml(xmlToRestore);
+      isHydratingRef.current = false;
+      // loadXml() imports the model but doesn't reliably repaint on its own.
+      diagramCanvasRef.current?.refresh();
+      hasHydratedRef.current = true;
+      loadedDiagramIdRef.current = diagramId || currentDiagramIdRef.current || null;
+      return;
     }
 
     const hydrate = async () => {
@@ -427,7 +848,9 @@ export default function CreateScreen() {
           if (cancelled) return;
           if (result.success && result.data) {
             const loaded = applyLoadedContent(result.data);
-            currentDiagramIdRef.current = diagramId;
+            setMyAccessLevel(result.data.accessLevel || 'owner');
+            setHasPendingAccessRequest(!!result.data.hasPendingAccessRequest);
+            setCurrentDiagramId(diagramId);
             // Set this *before* the awaits below, not just in the `finally`.
             // applyLoadedContent's setState calls above get flushed by React
             // at our next `await`, which re-runs the autosave-debounce effect
@@ -442,8 +865,8 @@ export default function CreateScreen() {
             hasHydratedRef.current = true;
 
             // Persist this snapshot right away too, instead of relying only
-            // on the debounced autosave (800ms after a state change) or the
-            // focus-loss flush above catching up. Navbar strips the
+            // on the 5s local-autosave tick or the focus-loss flush above
+            // catching up. Navbar strips the
             // ?diagramId param on every subsequent visit to this tab (see
             // its create-only router.navigate), so if the user switches tabs
             // before either of those, the only way back to this diagram is
@@ -471,51 +894,129 @@ export default function CreateScreen() {
       }
 
       if (!diagramId && !hasHydratedRef.current) {
+        let uid: string | null = null;
         try {
-          const uid = await authService.getCurrentUserId();
+          uid = await authService.getCurrentUserId();
           if (uid) {
             const pointerRaw = await AsyncStorage.getItem(activePointerKey(uid));
             const pointer = pointerRaw ? JSON.parse(pointerRaw) : { diagramId: null };
             const contentRaw = await AsyncStorage.getItem(draftKey(uid, pointer.diagramId));
-            if (contentRaw && !cancelled) {
+            if (contentRaw) {
               applyLoadedContent(JSON.parse(contentRaw));
-              currentDiagramIdRef.current = pointer.diagramId || null;
+              setMyAccessLevel('owner');
+              setHasPendingAccessRequest(false);
+              setCurrentDiagramId(pointer.diagramId || null);
               loadedDiagramIdRef.current = pointer.diagramId || null;
             }
           }
         } catch (e) {
           console.warn('Could not restore local draft:', e);
         } finally {
-          if (!cancelled) hasHydratedRef.current = true;
+          // Only latch when we actually had a uid. If auth wasn't ready yet
+          // (uid null right after sign-in), leave the gate open so the retry
+          // below can run once the id resolves.
+          if (!cancelled && uid) hasHydratedRef.current = true;
         }
       }
     };
 
     hydrate();
     return () => { cancelled = true; };
-  }, [isGraphReady, graphInstance, diagramId]);
+  }, [isGraphReady, graphInstance, diagramId, authUserId]);
 
-  // Debounced per-account autosave so unsaved edits survive a tab switch or
-  // a logout/login even before the user explicitly hits Save.
+  // Resolves the signed-in uid once the graph is ready. Right after a fresh
+  // sign-in, authService.getCurrentUserId() inside the hydrate effect above
+  // can still return null on its first pass — this re-checks independently
+  // and, once it lands, feeds authUserId back into that effect's deps so a
+  // late-arriving id gets a second, real hydrate attempt.
+  useEffect(() => {
+    if (!isGraphReady) return;
+    let cancelled = false;
+    authService.getCurrentUserId().then((uid) => {
+      if (!cancelled) setAuthUserId(uid ?? null);
+    });
+    return () => { cancelled = true; };
+  }, [isGraphReady, graphInstance]);
+
+  // Marks pending changes dirty for both the local autosave tick below and
+  // the background server sync — a plain effect rather than the timer
+  // itself, so continuous editing without a pause still gets picked up by
+  // the next tick instead of endlessly deferring (a fixed-delay debounce
+  // that resets on every keystroke can go a long time without ever firing
+  // while the user keeps typing).
   useEffect(() => {
     if (!hasHydratedRef.current) return;
-    if (autosaveTimeoutRef.current) clearTimeout(autosaveTimeoutRef.current);
-
-    const flush = () => {
-      authService.getCurrentUserId().then((uid) => {
-        if (uid) persistDraft(uid, currentDiagramIdRef.current);
-      });
-    };
-    // Also reachable synchronously from the focus-loss handler below, so a
-    // tab switch that lands inside the 800ms debounce window still gets a
-    // save attempt instead of losing whatever was just drawn.
-    pendingAutosaveFlushRef.current = flush;
-
-    autosaveTimeoutRef.current = setTimeout(flush, 800);
-    return () => {
-      if (autosaveTimeoutRef.current) clearTimeout(autosaveTimeoutRef.current);
-    };
+    isDirtyRef.current = true;
+    hasUnsyncedServerChangesRef.current = true;
   }, [diagramXml, pages, diagramName, activePageId]);
+
+  // Writes the current draft to this device's storage — on a steady 5s
+  // clock while there are unsaved changes, not just once after a pause, so
+  // unsaved edits reliably survive a tab switch or a logout/login even
+  // before the user explicitly hits Save.
+  const flushLocalAutosave = useCallback(async () => {
+    if (!isDirtyRef.current) return;
+    isDirtyRef.current = false;
+    const uid = await authService.getCurrentUserId();
+    if (uid) await persistDraft(uid, currentDiagramIdRef.current);
+    // The green "synced" state means the server has confirmed this *exact*
+    // content — a fresh local-only save always means something has changed
+    // since then, so it can only ever downgrade the indicator back to
+    // "local", never leave a stale green checkmark showing while a sync
+    // attempt is genuinely still in flight.
+    setSyncStatus((prev) => (prev === 'syncing' ? prev : 'local'));
+  }, []);
+
+  // Sign-out flush: never early-returns on the dirty flag (the 5s tick may
+  // have already cleared it), so the freshest refs always reach disk before
+  // the screen is torn down.
+  const forceFlushDraft = useCallback(async () => {
+    isDirtyRef.current = false;
+    const uid = await authService.getCurrentUserId();
+    if (uid) await persistDraft(uid, currentDiagramIdRef.current);
+  }, []);
+
+  useEffect(() => {
+    // Also reachable synchronously from the focus-loss handler below, so a
+    // fast tab switch still gets a local save attempt (and kicks off a
+    // background server sync) instead of only waiting for the next 5s tick.
+    pendingAutosaveFlushRef.current = () => {
+      flushLocalAutosave();
+      attemptBackgroundSyncRef.current();
+    };
+    const interval = setInterval(flushLocalAutosave, 5000);
+    return () => clearInterval(interval);
+  }, [flushLocalAutosave]);
+
+  // Registered with SaveContext so a screen this instance can't outlive
+  // (e.g. userAccount.tsx, right before signing out) can await a real save
+  // to local storage first — see onFlushDraft's own comment in
+  // SaveContext.tsx for why that screen's own focus-loss autosave isn't
+  // enough on its own for that specific navigation.
+  useEffect(() => {
+    setFlushHandler(forceFlushDraft);
+    return () => setFlushHandler(null);
+  }, [forceFlushDraft, setFlushHandler]);
+
+  // Server sync trigger — the tab/window going to the background. Web-only
+  // (document.visibilitychange); the other named trigger, leaving the
+  // editor, is covered by the useFocusEffect cleanup further down, which
+  // already calls pendingAutosaveFlushRef on every platform.
+  useEffect(() => {
+    if (Platform.OS !== 'web' || typeof document === 'undefined') return;
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'hidden') {
+        flushLocalAutosave();
+        attemptBackgroundSyncRef.current();
+      } else if (document.visibilityState === 'visible') {
+        // Returning from another system/browser tab — RN focus never changed,
+        // so useFocusEffect didn't fire. Force the same repaint it would have.
+        diagramCanvasRef.current?.refresh();
+      }
+    };
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', onVisibilityChange);
+  }, [flushLocalAutosave]);
 
   // ─── Focus helper ─────────────────────────────────────────────────────────
 
@@ -550,11 +1051,30 @@ export default function CreateScreen() {
     const pageXml = pageXmlCache.current.get(pageId) || '';
     setDiagramXml(pageXml);
 
-    if (graphInstance && pageXml) {
+    // This used to just console.log and stop — it updated diagramXml/
+    // pageXmlCache bookkeeping but never actually told the live maxGraph
+    // instance to load the target page's content, so the canvas kept
+    // showing whatever the *previous* page had. Guarded by isHydratingRef
+    // (same as applyLoadedContent) so the CHANGE listener this import fires
+    // synchronously doesn't get captured by handleGraphChange under the
+    // *old* activePageId closure and stomp the wrong page's cache entry.
+    if (graphInstance) {
+      isHydratingRef.current = true;
       try {
-        console.log(`📄 Switched to page: ${pageId}`);
+        if (pageXml) {
+          diagramCanvasRef.current?.loadXml(pageXml);
+        } else {
+          // A blank page (e.g. just added, never drawn on) — nothing to
+          // import, so clear the model directly instead, same as
+          // addNewPage does for the page it just created.
+          const model = graphInstance.getDataModel ? graphInstance.getDataModel() : graphInstance.model;
+          model?.clear();
+          graphInstance.clearSelection();
+        }
       } catch (e) {
         console.error('Error loading page:', e);
+      } finally {
+        isHydratingRef.current = false;
       }
     }
 
@@ -627,6 +1147,26 @@ export default function CreateScreen() {
               setActivePageId(newActiveId);
               const xml = pageXmlCache.current.get(newActiveId) || '';
               setDiagramXml(xml);
+
+              // Same bug as switchToPage had: without this, deleting the
+              // active page updates bookkeeping state but leaves the live
+              // canvas showing the just-deleted page's content.
+              if (graphInstance) {
+                isHydratingRef.current = true;
+                try {
+                  if (xml) {
+                    diagramCanvasRef.current?.loadXml(xml);
+                  } else {
+                    const model = graphInstance.getDataModel ? graphInstance.getDataModel() : graphInstance.model;
+                    model?.clear();
+                    graphInstance.clearSelection();
+                  }
+                } catch (e) {
+                  console.error('Error loading page after delete:', e);
+                } finally {
+                  isHydratingRef.current = false;
+                }
+              }
             }
 
             setTimeout(focusGraph, 100);
@@ -640,15 +1180,47 @@ export default function CreateScreen() {
     const page = pages.find(p => p.id === pageId);
     if (!page) return;
 
+    // Same missing-persist bug as the others below: flush whatever page is
+    // currently active before switching away from it.
+    if (activePageId && diagramXml) {
+      pageXmlCache.current.set(activePageId, diagramXml);
+    }
+
+    const sourceXml = pageXmlCache.current.get(pageId) || '';
     const newPage: Page = {
       id: generatePageId(),
       name: `${page.name} (Copy)`,
-      xml: pageXmlCache.current.get(pageId) || '',
+      xml: sourceXml,
     };
+    // Without this, switching away from the new copy and back would find
+    // nothing cached for its id and come back blank, even though `pages`
+    // still lists it as having xml (that field is only ever read at
+    // creation time here — pageXmlCache is the real source of truth
+    // everywhere else, same as switchToPage/addNewPage/deletePage).
+    pageXmlCache.current.set(newPage.id, sourceXml);
 
     setPages([...pages, newPage]);
     setActivePageId(newPage.id);
-    setDiagramXml(newPage.xml);
+    setDiagramXml(sourceXml);
+
+    // And the same missing-load bug: reflect the copy on the live canvas
+    // immediately instead of leaving it showing the previous page.
+    if (graphInstance) {
+      isHydratingRef.current = true;
+      try {
+        if (sourceXml) {
+          diagramCanvasRef.current?.loadXml(sourceXml);
+        } else {
+          const model = graphInstance.getDataModel ? graphInstance.getDataModel() : graphInstance.model;
+          model?.clear();
+          graphInstance.clearSelection();
+        }
+      } catch (e) {
+        console.error('Error loading duplicated page:', e);
+      } finally {
+        isHydratingRef.current = false;
+      }
+    }
 
     setTimeout(focusGraph, 100);
   };
@@ -687,8 +1259,71 @@ export default function CreateScreen() {
 
   // ─── Add shape ─────────────────────────────────────────────────────────────
 
+  // The tap-picking half of the tap-to-connect flow (see the early return in
+  // handleAddShape below): while pendingConnector is set, the graph's own
+  // selection-change events — which fire on every tap/click regardless of
+  // platform — are read as "the user just picked a shape" instead of normal
+  // selection. Tapping empty canvas (cell null) cancels rather than leaving
+  // the mode silently active with no visible way out besides the banner's
+  // own Cancel button.
+  const handleCanvasSelectionChange = (cell: any) => {
+    if (!pendingConnector) return;
+
+    if (!cell) {
+      setPendingConnector(null);
+      return;
+    }
+    if (cell.isEdge?.()) return; // ignore taps on edges/connectors themselves
+
+    if (!pendingConnector.sourceCell) {
+      setPendingConnector({ ...pendingConnector, sourceCell: cell });
+      return;
+    }
+    if (cell === pendingConnector.sourceCell) return; // same shape tapped twice — keep waiting for a different one
+
+    const graph = graphInstance;
+    if (!graph) { setPendingConnector(null); return; }
+
+    const styleKey = IGRAPH_ID_STYLE_MAP[pendingConnector.shapeId] ?? 'igraph.rectangle';
+    const styleObject = {
+      ...getShapeStyle(styleKey),
+      fontColor: '#1a1f36',
+      fontSize: 12,
+    };
+
+    const sourceGeo = pendingConnector.sourceCell.getGeometry();
+    const targetGeo = cell.getGeometry();
+    const startPoint = { x: sourceGeo.x + sourceGeo.width / 2, y: sourceGeo.y + sourceGeo.height / 2 };
+    const endPoint = { x: targetGeo.x + targetGeo.width / 2, y: targetGeo.y + targetGeo.height / 2 };
+
+    const edge = graph.insertEdge(null, null, '', pendingConnector.sourceCell, cell, styleObject);
+    const geometry = new Geometry(0, 0, 0, 0);
+    geometry.setTerminalPoint(new Point(startPoint.x, startPoint.y), true);
+    geometry.setTerminalPoint(new Point(endPoint.x, endPoint.y), false);
+    graph.getDataModel().setGeometry(edge, geometry);
+    tagShapeRole(edge, pendingConnector.shapeId);
+
+    setPendingConnector(null);
+    graph.setSelectionCell(edge);
+    setTimeout(focusGraph, 50);
+  };
+
   const handleAddShape = (shapeId: string) => {
     if (!graphInstance) return;
+
+    // Connector/line shapes (other than Sequence Diagram messages, which
+    // have their own lifeline-aware placement below) skip viewport-center
+    // guessing entirely — the next two shapes the user taps become its
+    // source/target directly. That guessing was unreliable whenever the two
+    // shapes weren't positioned almost exactly where the center-placed
+    // connector's default endpoints happened to reach, which is the only
+    // way to place a connector at all on mobile (no drag-and-drop there).
+    // See handleCanvasSelectionChange for the tap-picking half of this.
+    if (CONNECTOR_SHAPE_IDS.has(shapeId) && !SEQUENCE_MESSAGE_SHAPE_IDS.has(shapeId)) {
+      graphInstance.clearSelection();
+      setPendingConnector({ shapeId, sourceCell: null });
+      return;
+    }
 
     try {
       const graph = graphInstance;
@@ -721,21 +1356,56 @@ export default function CreateScreen() {
       let cell: any;
       if (shapeId === 'class-box') {
         cell = insertUmlClassCell(graph, x, y, w, h);
-      } else {
-        // getShapeStyle carries each shape's real default fill (e.g. solid
-        // black arrowheads/markers, FDD category colors) instead of forcing
-        // every shape to a white fill regardless of what it's supposed to be.
+      } else if (shapeId === 'dfd-data-store' || shapeId === 'dfd-data-store-gs') {
+        cell = insertDfdDataStoreCell(graph, x, y, w, h, shapeId === 'dfd-data-store-gs' ? 'gs' : 'yourdon');
+      } else if (CONNECTOR_SHAPE_IDS.has(shapeId)) {
+        // Only Sequence Diagram message arrows still reach here — every
+        // other connector/line shape is handled by the tap-to-connect flow
+        // (the early return for CONNECTOR_SHAPE_IDS at the top of this
+        // function). A message arrow's far end should reach whichever
+        // lifeline/activation is actually there, however far apart they
+        // really are — not the arrow's own arbitrary default width. See
+        // findSequenceMessageEndpoints in DiagramCanvas.tsx.
         const styleObject = {
           ...getShapeStyle(styleKey),
           fontColor: '#1a1f36',
           fontSize: 12,
+        };
+
+        const dropY = y + h / 2;
+        const found = findSequenceMessageEndpoints(graph, x, dropY);
+        const sourceCell = found.source;
+        const targetCell = found.target;
+        const sourceGeo = sourceCell?.getGeometry();
+        const targetGeo = targetCell?.getGeometry();
+        const startPoint = sourceGeo ? { x: sourceGeo.x + sourceGeo.width, y: dropY } : { x, y: dropY };
+        const endPoint = targetGeo ? { x: targetGeo.x, y: dropY } : { x: x + w, y: dropY };
+        Object.assign(styleObject, sequenceMessageConnectionStyle(sourceCell, targetCell, dropY));
+
+        cell = graph.insertEdge(null, null, '', sourceCell, targetCell, styleObject);
+        const geometry = new Geometry(0, 0, 0, 0);
+        geometry.setTerminalPoint(new Point(startPoint.x, startPoint.y), true);
+        geometry.setTerminalPoint(new Point(endPoint.x, endPoint.y), false);
+        graph.getDataModel().setGeometry(cell, geometry);
+      } else {
+        // getShapeStyle carries each shape's real default fill (e.g. solid
+        // black arrowheads/markers, FDD category colors) instead of forcing
+        // every shape to a white fill regardless of what it's supposed to be.
+        // Alignment defaults come first so a shape with its own label-
+        // position override (e.g. igraph.umlLifeline's verticalAlign:
+        // 'top', keeping the name inside its header box instead of centered
+        // on the whole tall shape) wins instead of being clobbered here.
+        const styleObject = {
           align: 'center' as const,
           verticalAlign: 'middle' as const,
           whiteSpace: 'wrap',
+          ...getShapeStyle(styleKey),
+          fontColor: '#1a1f36',
+          fontSize: 12,
         };
 
         cell = graph.insertVertex(
-          null, null, '',
+          null, null, shapeDef?.defaultLabel ?? '',
           x, y,
           w, h,
           styleObject,
@@ -745,6 +1415,7 @@ export default function CreateScreen() {
 
       graph.setSelectionCell(cell);
       console.log(`✅ Added "${shapeId}" as "${styleKey}" at (${x}, ${y})`);
+      resolveTourWait('create-shape-drop');
 
       setTimeout(focusGraph, 50);
     } catch (e) {
@@ -765,7 +1436,92 @@ export default function CreateScreen() {
   // ImageExport + SvgCanvas2D, sized from graph.getGraphBounds()) always
   // captures the full diagram content, regardless of current pan/zoom.
 
-  const buildDiagramSvgElement = (graph: any, options?: { forRaster?: boolean }): SVGSVGElement => {
+  // The print title (see PrintModal's "Edit" row) gets written straight into
+  // a hidden iframe's document.write() call in executePrint — escape it so a
+  // title containing '<', '&', etc. can't break out of the surrounding markup.
+  function escapeHtml(value: string): string {
+    return value
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  }
+
+  // Shared scratch canvas for measuring text width during raster export's
+  // manual word-wrap below — cheaper than creating one per label.
+  let wrapMeasureCanvas: HTMLCanvasElement | null = null;
+
+  // On-canvas word wrap is just CSS (`word-wrap: break-word`) on the live
+  // foreignObject <div> — see TextShape.updateSize in maxGraph. The raster
+  // export path below disables foreignObject entirely (Safari/iOS taints the
+  // canvas otherwise — see the forRaster comment further down), which means
+  // labels fall back to plain SVG <text>. Plain SVG text has no wrapping of
+  // its own, so a label that used to wrap onto 3 lines on-screen would
+  // render as one long unbroken line spilling out of its shape in the PNG/
+  // JPG/PDF export. This greedily breaks `text` into '\n'-joined lines that
+  // fit `maxWidth` at the given font — SvgCanvas2D.plainText already knows
+  // how to lay out '\n'-separated lines (it's how multi-line labels render
+  // at all in the non-HTML path), it just never received any.
+  function wrapPlainTextToWidth(text: string, maxWidth: number, fontSize: number, fontFamily: string): string {
+    if (maxWidth <= 0) return text;
+    if (!wrapMeasureCanvas) wrapMeasureCanvas = document.createElement('canvas');
+    const ctx = wrapMeasureCanvas.getContext('2d');
+    if (!ctx) return text;
+    ctx.font = `${fontSize}px ${fontFamily || 'Helvetica'}`;
+
+    return text
+      .split('\n')
+      .map((paragraph) => {
+        const words = paragraph.split(' ');
+        const lines: string[] = [];
+        let current = '';
+        for (const word of words) {
+          const trial = current ? `${current} ${word}` : word;
+          if (current && ctx.measureText(trial).width > maxWidth) {
+            lines.push(current);
+            current = word;
+          } else {
+            current = trial;
+          }
+        }
+        if (current) lines.push(current);
+        return lines.join('\n');
+      })
+      .join('\n');
+  }
+
+  // Only used for raster export (forRaster) — see wrapPlainTextToWidth above
+  // for why plain SVG text otherwise overflows instead of wrapping.
+  class WrappingSvgCanvas2D extends SvgCanvas2D {
+    plainText(
+      x: number, y: number, w: number, h: number, str: string,
+      align: any, valign: any, wrap: boolean, overflow: any, clip: boolean,
+      rotation?: number, dir?: string,
+    ) {
+      if (wrap && w > 0 && typeof str === 'string' && !str.includes('\n')) {
+        str = wrapPlainTextToWidth(str, w, (this as any).state.fontSize, (this as any).state.fontFamily);
+      }
+      // @ts-ignore — base signature matches at runtime, just not exactly typed
+      super.plainText(x, y, w, h, str, align, valign, wrap, overflow, clip, rotation, dir);
+    }
+  }
+
+  // Saved-diagram card thumbnails pass this as buildDiagramSvgElement's
+  // minSize so a diagram with only one or two small shapes doesn't get
+  // snug-cropped right up to them (which made it fill/overflow the card,
+  // looking "zoomed in" compared to the same diagram's spacious look on the
+  // real canvas). Export/print/SVG-download deliberately don't use this —
+  // those want the tight crop.
+  const DIAGRAM_THUMBNAIL_MIN_SIZE = { width: 900, height: 600 };
+
+  const buildDiagramSvgElement = (
+    graph: any,
+    options?: {
+      forRaster?: boolean;
+      minSize?: { width: number; height: number };
+      gridBackground?: boolean;
+    }
+  ): SVGSVGElement => {
     // graph.getGraphBounds() is in "view" pixels — it already includes
     // whatever zoom level the editor happens to be at (e.g. 200% because the
     // user zoomed in to place a shape precisely). Exporting those raw pixels
@@ -779,10 +1535,48 @@ export default function CreateScreen() {
     // viewBox stays in raw view-pixel units (matching what ImageExport will
     // actually draw), with padding added in that same raw space.
     const rawPadding = padding * viewScale;
-    const viewBoxX = bounds.x - rawPadding;
-    const viewBoxY = bounds.y - rawPadding;
-    const viewBoxWidth = bounds.width + rawPadding * 2;
-    const viewBoxHeight = bounds.height + rawPadding * 2;
+    let viewBoxX = bounds.x - rawPadding;
+    let viewBoxY = bounds.y - rawPadding;
+    let viewBoxWidth = bounds.width + rawPadding * 2;
+    let viewBoxHeight = bounds.height + rawPadding * 2;
+
+    // Thumbnail previews (see minSize callers) shouldn't snug-crop right up
+    // to the shapes — a single small rectangle would then fill the entire
+    // card, looking "zoomed in" compared to how spacious it actually looks
+    // on the real canvas. Padding the viewBox out to at least minSize (in
+    // the same raw/unscaled units, centered on the real content) keeps small
+    // diagrams looking appropriately small, while a diagram already bigger
+    // than minSize is left as the tight crop above.
+    if (options?.minSize) {
+      const rawMinWidth = options.minSize.width * viewScale;
+      const rawMinHeight = options.minSize.height * viewScale;
+      const targetAspect = rawMinWidth / rawMinHeight;
+
+      let finalWidth = Math.max(viewBoxWidth, rawMinWidth);
+      let finalHeight = Math.max(viewBoxHeight, rawMinHeight);
+
+      // A diagram that's mostly one long thin stroke (e.g. a tall freehand
+      // line) has a bounding box far more extreme than minSize's aspect —
+      // only clamping each side to a minimum independently still left the
+      // box arbitrarily tall/narrow in that case. That's what let such a
+      // thumbnail render far taller than the fixed-height card and spill out
+      // underneath it despite resizeMode="contain" — contain can't be
+      // "wrong", but it also can't shrink an extreme aspect ratio down to
+      // something that reads as a normal thumbnail. Growing the shorter side
+      // to match minSize's own aspect keeps every thumbnail's proportions
+      // sane regardless of the diagram's actual shape.
+      const finalAspect = finalWidth / finalHeight;
+      if (finalAspect > targetAspect) {
+        finalHeight = finalWidth / targetAspect;
+      } else if (finalAspect < targetAspect) {
+        finalWidth = finalHeight * targetAspect;
+      }
+
+      viewBoxX -= (finalWidth - viewBoxWidth) / 2;
+      viewBoxY -= (finalHeight - viewBoxHeight) / 2;
+      viewBoxWidth = finalWidth;
+      viewBoxHeight = finalHeight;
+    }
 
     // width/height (the actual output size) are normalized back to 1:1 scale.
     // Mapping the raw viewBox into this smaller/larger box is what undoes the
@@ -804,10 +1598,65 @@ export default function CreateScreen() {
     background.setAttribute('y', String(viewBoxY));
     background.setAttribute('width', String(viewBoxWidth));
     background.setAttribute('height', String(viewBoxHeight));
-    background.setAttribute('fill', '#ffffff');
-    root.appendChild(background);
 
-    const svgCanvas = new SvgCanvas2D(root, true);
+    if (options?.gridBackground) {
+      // Thumbnails only: match the live editor's own canvas background (see
+      // paintGridOnCanvas/CANVAS_BG/MINOR_COLOR/MAJOR_COLOR in
+      // DiagramCanvas.tsx) instead of plain white, so a saved-diagram card
+      // reads as a snapshot of the canvas rather than a shape on blank paper.
+      // Real exports/prints intentionally keep the plain white background.
+      background.setAttribute('fill', '#f8faff');
+      const defs = svgDoc.createElementNS('http://www.w3.org/2000/svg', 'defs');
+      const pattern = svgDoc.createElementNS('http://www.w3.org/2000/svg', 'pattern');
+      const patternId = 'thumbnail-grid';
+      const minorSize = 10 * viewScale; // 10 mirrors GRID_SIZE in DiagramCanvas.tsx
+      const majorSize = minorSize * 5; // mirrors MAJOR_EVERY in DiagramCanvas.tsx
+      pattern.setAttribute('id', patternId);
+      pattern.setAttribute('width', String(majorSize));
+      pattern.setAttribute('height', String(majorSize));
+      pattern.setAttribute('patternUnits', 'userSpaceOnUse');
+      pattern.setAttribute('x', String(viewBoxX));
+      pattern.setAttribute('y', String(viewBoxY));
+      for (let i = 0; i < 5; i++) {
+        const offset = i * minorSize;
+        const isMajor = i === 0;
+        const stroke = isMajor ? '#bec8d9' : '#dde3ed';
+        const strokeWidth = isMajor ? '1' : '0.5';
+
+        const vLine = svgDoc.createElementNS('http://www.w3.org/2000/svg', 'line');
+        vLine.setAttribute('x1', String(offset));
+        vLine.setAttribute('y1', '0');
+        vLine.setAttribute('x2', String(offset));
+        vLine.setAttribute('y2', String(majorSize));
+        vLine.setAttribute('stroke', stroke);
+        vLine.setAttribute('stroke-width', strokeWidth);
+        pattern.appendChild(vLine);
+
+        const hLine = svgDoc.createElementNS('http://www.w3.org/2000/svg', 'line');
+        hLine.setAttribute('x1', '0');
+        hLine.setAttribute('y1', String(offset));
+        hLine.setAttribute('x2', String(majorSize));
+        hLine.setAttribute('y2', String(offset));
+        hLine.setAttribute('stroke', stroke);
+        hLine.setAttribute('stroke-width', strokeWidth);
+        pattern.appendChild(hLine);
+      }
+      defs.appendChild(pattern);
+      root.appendChild(defs);
+
+      const gridOverlay = svgDoc.createElementNS('http://www.w3.org/2000/svg', 'rect');
+      gridOverlay.setAttribute('x', String(viewBoxX));
+      gridOverlay.setAttribute('y', String(viewBoxY));
+      gridOverlay.setAttribute('width', String(viewBoxWidth));
+      gridOverlay.setAttribute('height', String(viewBoxHeight));
+      gridOverlay.setAttribute('fill', `url(#${patternId})`);
+      root.appendChild(background);
+      root.appendChild(gridOverlay);
+    } else {
+      background.setAttribute('fill', '#ffffff');
+      root.appendChild(background);
+    }
+
     // Safari/WebKit (every browser on iOS, not just Safari itself) treats an
     // <img> loaded from an SVG containing <foreignObject> — which is how
     // maxGraph renders word-wrapped text labels by default — as tainting any
@@ -817,7 +1666,10 @@ export default function CreateScreen() {
     // involved) kept working. Falling back to plain SVG <text> for the
     // raster path avoids foreignObject entirely, which is canvas-safe
     // everywhere — the SVG file download keeps foreignObject for nicer,
-    // properly word-wrapped text since it never touches a canvas.
+    // properly word-wrapped text since it never touches a canvas. That
+    // fallback loses wrapping outright (see wrapPlainTextToWidth above), so
+    // raster export uses the subclass that puts it back manually.
+    const svgCanvas = options?.forRaster ? new WrappingSvgCanvas2D(root, true) : new SvgCanvas2D(root, true);
     if (options?.forRaster) {
       svgCanvas.foEnabled = false;
     }
@@ -834,10 +1686,18 @@ export default function CreateScreen() {
     return `<?xml version="1.0" encoding="UTF-8"?>\n<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">\n${svgData}`;
   };
 
-  const renderDiagramToCanvas = (graph: any, scale: number = 2): Promise<HTMLCanvasElement> => {
+  const renderDiagramToCanvas = (
+    graph: any,
+    scale: number = 2,
+    options?: { minSize?: { width: number; height: number }; gridBackground?: boolean }
+  ): Promise<HTMLCanvasElement> => {
     return new Promise((resolve, reject) => {
       try {
-        const svg = buildDiagramSvgElement(graph, { forRaster: true });
+        const svg = buildDiagramSvgElement(graph, {
+          forRaster: true,
+          minSize: options?.minSize,
+          gridBackground: options?.gridBackground,
+        });
         const width = Number(svg.getAttribute('width')) || 800;
         const height = Number(svg.getAttribute('height')) || 600;
 
@@ -931,6 +1791,10 @@ export default function CreateScreen() {
       console.log('⏳ Save already in progress, ignoring duplicate click');
       return;
     }
+    if (isHydratingRef.current || !diagramXmlRef.current) {
+      console.log('⏭️ skipping save — hydrating or empty');
+      return;
+    }
     // Set synchronously, before any `await`, so a rapid second click (which
     // JS will only ever process after this call either returns or hits its
     // first await) is guaranteed to see this and bail out above.
@@ -944,11 +1808,11 @@ export default function CreateScreen() {
 
     // Check if user is authenticated
     console.log('🔑 Checking authentication...');
-    const token = await authService.getAccessToken();
-    console.log('🔑 Token:', token ? `Present (${token.substring(0, 20)}...)` : 'MISSING');
+    const signedIn = await authService.hasActiveSession();
+    console.log('🔑 Session:', signedIn ? 'Active' : 'None');
 
-    if (!token) {
-      console.log('❌ No token found');
+    if (!signedIn) {
+      console.log('❌ Not signed in');
       isSavingRef.current = false;
       confirmDialog('Sign In Required', 'Please sign in to save your diagram.', 'Sign In', () => {
         router.push('/(auth)/signin');
@@ -983,7 +1847,10 @@ export default function CreateScreen() {
       console.log('🖼️ Generating preview image...');
       let imageDataUrl = '';
       try {
-        const canvas = await renderDiagramToCanvas(graphInstance, 0.5);
+        const canvas = await renderDiagramToCanvas(graphInstance, 0.5, {
+          minSize: DIAGRAM_THUMBNAIL_MIN_SIZE,
+          gridBackground: true,
+        });
         imageDataUrl = canvas.toDataURL('image/png');
         console.log('🖼️ Preview generated, size:', (imageDataUrl.length / 1024).toFixed(1), 'KB');
       } catch (renderError) {
@@ -1039,7 +1906,9 @@ export default function CreateScreen() {
       // surfacing a confusing "Diagram not found" error.
       if (response.status === 404 && payload.id) {
         console.warn('⚠️ Referenced diagram id not found on server, retrying as a new diagram');
-        currentDiagramIdRef.current = null;
+        setMyAccessLevel('owner');
+        setHasPendingAccessRequest(false);
+        setCurrentDiagramId(null);
         loadedDiagramIdRef.current = null;
         const { id: _staleId, ...retryPayload } = payload;
         response = await authService.authFetch(url, {
@@ -1066,7 +1935,7 @@ export default function CreateScreen() {
         console.log('✅ Diagram saved successfully!');
         const savedId: string | undefined = result.data?.diagram?.id;
         if (savedId) {
-          currentDiagramIdRef.current = savedId;
+          setCurrentDiagramId(savedId);
           loadedDiagramIdRef.current = savedId;
           authService.getCurrentUserId().then((uid) => {
             if (uid) persistDraft(uid, savedId);
@@ -1095,6 +1964,99 @@ export default function CreateScreen() {
     }
   }, [graphInstance, activeUmlType, pages, activePageId, router, setContextIsSaving]);
 
+  // ─── Quiet background sync (autosave indicator) ──────────────────────────
+  // Same save endpoint as handleSaveDiagram above, but this one runs on its
+  // own — backgrounding the tab, leaving the editor — not from a user
+  // click, so it must never interrupt them with a dialog or a sign-in
+  // redirect. flushLocalAutosave already keeps their work safe on this
+  // device regardless of whether this succeeds; this only decides whether
+  // the indicator can turn green (server-confirmed) or stays at "saved on
+  // this device" (offline, signed out, or nothing new to send).
+  // Sends id: undefined when nothing's been saved yet, same as handleSaveDiagram
+  // above — the backend creates a new record and the returned id is captured
+  // below, so a diagram never worked on with the explicit Save button still
+  // makes it to the server and survives sign-out/sign-in on another device.
+  const attemptBackgroundSync = useCallback(async () => {
+    if (!graphInstance) return;
+    if (isSavingRef.current) return; // a manual save is already in flight
+    if (!hasUnsyncedServerChangesRef.current) return; // nothing new since the last confirmed sync
+
+    const signedIn = await authService.hasActiveSession();
+    if (!signedIn) return; // not signed in — the local copy is all there is to offer
+
+    const xml = diagramXmlRef.current;
+    const isEmptyXml = !xml ||
+      xml.trim().length === 0 ||
+      xml === '<mxGraphModel/>' ||
+      xml === '<root/>' ||
+      xml === '<mxGraphModel><root><mxCell id="0"/><mxCell id="1" parent="0"/></mxGraphModel>';
+    if (isEmptyXml) return;
+
+    setSyncStatus('syncing');
+    try {
+      let imageDataUrl = '';
+      try {
+        const canvas = await renderDiagramToCanvas(graphInstance, 0.5, {
+          minSize: DIAGRAM_THUMBNAIL_MIN_SIZE,
+          gridBackground: true,
+        });
+        imageDataUrl = canvas.toDataURL('image/png');
+      } catch {
+        // Preview is optional — a failed render shouldn't block the sync.
+      }
+
+      const payload = {
+        id: currentDiagramIdRef.current || undefined,
+        name: diagramNameRef.current || 'Untitled Diagram',
+        xml,
+        previewImage: imageDataUrl,
+        type: activeUmlType || 'General',
+        pages: pages.map(p => ({
+          id: p.id,
+          name: p.name,
+          xml: pageXmlCache.current.get(p.id) || ''
+        })),
+        activePageId,
+      };
+
+      const API_URL = process.env.EXPO_PUBLIC_API_URL || 'https://igraph-backend.onrender.com';
+      const response = await authService.authFetch(`${API_URL}/api/diagrams/save`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      if (!response.ok) throw new Error(`Server error: ${response.status}`);
+
+      const result = await response.json();
+      if (result.success) {
+        const savedId: string | undefined = result.data?.diagram?.id;
+        if (savedId) {
+          setCurrentDiagramId(savedId);
+          loadedDiagramIdRef.current = savedId;
+          authService.getCurrentUserId().then((uid) => {
+            if (uid) persistDraft(uid, savedId);
+          });
+        }
+        hasUnsyncedServerChangesRef.current = false;
+        setSyncStatus('synced');
+      } else {
+        setSyncStatus('offline');
+      }
+    } catch (e) {
+      console.warn('Background sync to server failed (local copy is still safe):', e);
+      setSyncStatus('offline');
+    }
+  }, [graphInstance, activeUmlType, pages, activePageId]);
+
+  // Read by pendingAutosaveFlushRef and the visibility-change handler, both
+  // of which are set up once (empty/near-empty deps) — this keeps them
+  // calling whichever version of attemptBackgroundSync actually closes over
+  // the current graphInstance/pages/etc., instead of a stale first render.
+  const attemptBackgroundSyncRef = useRef(attemptBackgroundSync);
+  useEffect(() => {
+    attemptBackgroundSyncRef.current = attemptBackgroundSync;
+  }, [attemptBackgroundSync]);
+
   // ─── Start a new, blank diagram ──────────────────────────────────────────
   // This screen deliberately never unmounts across tab switches (see
   // Navbar's create-only router.navigate) so in-progress work survives
@@ -1103,7 +2065,9 @@ export default function CreateScreen() {
   // diagram was last loaded/saved in this instance, with no way to detach
   // from it. This gives the user an explicit way to do that.
   const startNewDiagram = useCallback(() => {
-    currentDiagramIdRef.current = null;
+    setMyAccessLevel('owner');
+    setHasPendingAccessRequest(false);
+    setCurrentDiagramId(null);
     loadedDiagramIdRef.current = null;
     pageXmlCache.current.clear();
 
@@ -1180,23 +2144,6 @@ export default function CreateScreen() {
       return;
     }
 
-    // Mobile browsers only allow window.open() when it's still in the same
-    // synchronous tick as the user's tap — once an `await` runs first, they
-    // silently block it as a popup (desktop is more lenient, which is why PDF
-    // export previously only worked there). Opening the window right here,
-    // before any await, keeps it inside that trusted click context; we fill
-    // in the real content once rendering finishes below.
-    let printWindow: Window | null = null;
-    if (format === 'pdf') {
-      printWindow = window.open('', '_blank');
-      if (printWindow) {
-        printWindow.document.write(
-          '<html><body style="margin:0;display:flex;align-items:center;justify-content:center;min-height:100vh;font-family:system-ui,sans-serif;color:#64748b;">Preparing your diagram…</body></html>'
-        );
-        printWindow.document.close();
-      }
-    }
-
     setIsDownloading(true);
 
     try {
@@ -1222,8 +2169,9 @@ export default function CreateScreen() {
         const pdfHtml = `
           <html>
             <head>
-              <title>${name}</title>
+              <title>${escapeHtml(name)}</title>
               <style>
+                @page { margin: 0; }
                 body { margin: 0; padding: 20px; display: flex; justify-content: center; align-items: center; min-height: 100vh; background: white; font-family: system-ui, sans-serif; }
                 .container { text-align: center; }
                 h1 { font-size: 18px; color: #333; margin-bottom: 20px; }
@@ -1237,27 +2185,15 @@ export default function CreateScreen() {
             </head>
             <body>
               <div class="container">
-                <h1>${name}</h1>
+                <h1>${escapeHtml(name)}</h1>
                 <img src="${dataUrl}" alt="Diagram" />
-                <script>
-                  window.onload = function() {
-                    setTimeout(function() {
-                      window.print();
-                    }, 800);
-                  };
-                <\/script>
               </div>
             </body>
           </html>
         `;
 
-        if (printWindow) {
-          printWindow.document.open();
-          printWindow.document.write(pdfHtml);
-          printWindow.document.close();
-        } else {
-          // Popup was blocked (or unsupported) even for the synchronous open
-          // attempt above — fall back to a direct file download instead.
+        if (!printHtmlInHiddenIframe(pdfHtml)) {
+          // No iframe document access (extremely rare) — fall back to a direct file download.
           downloadFile(pdfHtml, `${name}.pdf.html`, 'text/html');
           notify(
             'PDF Export',
@@ -1283,9 +2219,6 @@ export default function CreateScreen() {
       }, mimeType, format === 'jpg' ? 0.92 : undefined);
     } catch (error) {
       console.error('Download error:', error);
-      if (printWindow) {
-        try { printWindow.close(); } catch {}
-      }
       notify('Error', `Failed to download as ${format.toUpperCase()}: ${error instanceof Error ? error.message : 'please try again.'}`);
       setIsDownloading(false);
     }
@@ -1293,7 +2226,15 @@ export default function CreateScreen() {
 
   // ─── Toolbar actions ────────────────────────────────────────────────────────
 
-  const handlePrint = () => {
+  const handleShare = useCallback(() => {
+    if (!currentDiagramIdRef.current) {
+      notify('Save first', 'Save this diagram before sharing it.');
+      return;
+    }
+    setShowShareModal(true);
+  }, []);
+
+  const handlePrint = useCallback(() => {
     if (!graphInstance) {
       Alert.alert('No Diagram', 'Please create a diagram first.');
       return;
@@ -1313,53 +2254,94 @@ export default function CreateScreen() {
         Alert.alert('Error', 'Failed to prepare diagram for printing.');
         setIsPreparingPrint(false);
       });
-  };
+  }, [graphInstance]);
 
+  // Ctrl+P / Cmd+P opens this diagram's own print screen instead of the
+  // browser's native "print this webpage" dialog, which would otherwise just
+  // screenshot whatever chrome/toolbars happen to be on screen.
+  useEffect(() => {
+    if (Platform.OS !== 'web') return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'p') {
+        e.preventDefault();
+        handlePrint();
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [handlePrint]);
+
+  // Paper size is stored as e.g. "8.5in" / "297mm" (see PAPER_SIZES) —
+  // normalized to inches since that's the one unit both the @page CSS below
+  // and jsPDF's page-size math can share.
+  // Hands off to the browser's native print dialog — the OS's own UI, not
+  // anything this page renders — so its printer list is already accurate
+  // and up to date with whatever's actually installed on the machine.
   const executePrint = () => {
     if (!printPreviewUrl) return;
 
-    const size = PAPER_SIZES[printPaperSize] || PAPER_SIZES.Letter;
-    const pageSizeCss = printOrientation === 'landscape'
-      ? `${size.height} ${size.width}`
-      : `${size.width} ${size.height}`;
+    const nameHtml = printName.trim() ? `<div class="print-name">${escapeHtml(printName.trim())}</div>` : '';
+    const titleHtml = printTitle.trim() ? `<h1 class="print-title">${escapeHtml(printTitle.trim())}</h1>` : '';
 
-    const printWindow = window.open('', '_blank');
-    if (printWindow) {
-      printWindow.document.write(`
-        <html>
-          <head>
-            <title>${diagramName || 'Diagram'}</title>
-            <style>
-              @page { size: ${pageSizeCss}; margin: 0.4in; }
-              body { margin: 0; display: flex; justify-content: center; align-items: center; min-height: 100vh; background: white; }
-              img { max-width: 100%; max-height: 100vh; object-fit: contain; }
-              @media print {
-                body { margin: 0; }
-                img { max-width: 100%; max-height: 100vh; }
-              }
-            </style>
-          </head>
-          <body>
-            <img src="${printPreviewUrl}" alt="Diagram" />
-            <script>
-              window.onload = function() {
-                setTimeout(function() {
-                  window.print();
-                }, 500);
-              };
-            <\/script>
-          </body>
-        </html>
-      `);
-      printWindow.document.close();
-    } else {
-      Alert.alert('Error', 'Could not open the print window. Please check your pop-up blocker.');
+    const html = `
+      <html>
+        <head>
+          <title>${escapeHtml(printTitle.trim() || printName.trim() || diagramName || 'Diagram')}</title>
+          <style>
+            /* margin: 0 on @page leaves no space for Chrome's own header/footer
+               (date, title, url, page number) to draw into, so it prints blank
+               instead of a checkbox we can't reach from here; padding on body
+               recreates the page inset that used to live in the @page margin.
+               No size property here on purpose - Chrome only trusts a stylesheet's
+               @page margin when its size matches the paper size picked in
+               the dialog. Declaring one tied to Letter meant switching to
+               Legal/A4/etc. no longer matched, so Chrome fell back to its
+               own default margins and the header/footer came back. Leaving
+               size unset makes margin: 0 apply no matter what paper is picked. */
+            @page { margin: 0; }
+            body { margin: 0; padding: 0.4in; box-sizing: border-box; background: white; position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100vh; width: 100%; }
+            .print-name { position: absolute; top: 0.2in; left: 0.2in; font: 600 13px Helvetica, Arial, sans-serif; color: #1a1f36; }
+            .print-title { position: absolute; top: 0.2in; left: 0; right: 0; margin: 0; font: 600 20px Helvetica, Arial, sans-serif; color: #1a1f36; text-align: center; }
+            img { max-width: 100%; max-height: 90vh; object-fit: contain; }
+          </style>
+        </head>
+        <body>
+          ${nameHtml}
+          ${titleHtml}
+          <img src="${printPreviewUrl}" alt="Diagram" />
+        </body>
+      </html>
+    `;
+
+    if (!printHtmlInHiddenIframe(html)) {
+      Alert.alert('Error', 'Could not prepare the print preview.');
     }
 
-    setShowPrintModal(false);
-    setShowPaperSizeDropdown(false);
-    setShowOrientationDropdown(false);
+    closePrintModal();
   };
+
+  const closePrintModal = () => {
+    setShowPrintModal(false);
+    setIsPrintEditOpen(false);
+  };
+
+  const PRINT_ZOOM_STEPS = [50, 75, 100, 125, 150, 200];
+
+  const handlePrintZoomIn = useCallback(() => {
+    setPrintZoom((z) => {
+      const idx = PRINT_ZOOM_STEPS.findIndex((s) => s >= z);
+      const nextIdx = idx === -1 ? PRINT_ZOOM_STEPS.length - 1 : Math.min(idx + 1, PRINT_ZOOM_STEPS.length - 1);
+      return PRINT_ZOOM_STEPS[nextIdx];
+    });
+  }, []);
+
+  const handlePrintZoomOut = useCallback(() => {
+    setPrintZoom((z) => {
+      const idx = PRINT_ZOOM_STEPS.findIndex((s) => s >= z);
+      const prevIdx = idx === -1 ? 0 : Math.max(idx - 1, 0);
+      return PRINT_ZOOM_STEPS[prevIdx];
+    });
+  }, []);
 
   const handleUndo = () => {
     if (!graphInstance) return;
@@ -1431,26 +2413,6 @@ export default function CreateScreen() {
     }
   }, [showShapesPanel, isGraphReady, focusGraph]);
 
-  interface PaperSizeDef {
-    label: string;
-    width: string;
-    height: string;
-  }
-
-  const PAPER_SIZES: Record<string, PaperSizeDef> = {
-    Letter: { label: 'Letter', width: '8.5in', height: '11in' },
-    Legal: { label: 'Legal', width: '8.5in', height: '14in' },
-    Tabloid: { label: 'Tabloid', width: '11in', height: '17in' },
-    Executive: { label: 'Executive', width: '7.25in', height: '10.5in' },
-    Statement: { label: 'Statement', width: '5.5in', height: '8.5in' },
-    A3: { label: 'A3', width: '297mm', height: '420mm' },
-    A4: { label: 'A4', width: '210mm', height: '297mm' },
-    A5: { label: 'A5', width: '148mm', height: '210mm' },
-    A6: { label: 'A6', width: '105mm', height: '148mm' },
-    B4: { label: 'B4 (JIS)', width: '257mm', height: '364mm' },
-    B5: { label: 'B5 (JIS)', width: '182mm', height: '257mm' },
-  };
-
   const AppDialog = () => {
     if (!dialogState) return null;
     const { title, message, confirmText, onConfirm } = dialogState;
@@ -1484,176 +2446,6 @@ export default function CreateScreen() {
               >
                 <Text style={styles.modalCreateText}>{confirmText || 'OK'}</Text>
               </TouchableOpacity>
-            </View>
-          </Pressable>
-        </Pressable>
-      </Modal>
-    );
-  };
-
-  const PrintModal = () => {
-    if (!showPrintModal) return null;
-
-    const paperKeys = Object.keys(PAPER_SIZES);
-
-    return (
-      <Modal
-        visible={showPrintModal}
-        transparent={true}
-        animationType="fade"
-        onRequestClose={() => setShowPrintModal(false)}
-      >
-        <Pressable
-          style={styles.printModalOverlay}
-          onPress={() => {
-            setShowPrintModal(false);
-            setShowPaperSizeDropdown(false);
-            setShowOrientationDropdown(false);
-          }}
-        >
-          <Pressable style={styles.printModalContainer} onPress={(e) => e.stopPropagation()}>
-            <View style={styles.printSettingsPanel}>
-              <Text style={styles.printModalTitle}>Print</Text>
-
-              <TouchableOpacity
-                style={styles.printMainButton}
-                onPress={executePrint}
-                activeOpacity={0.85}
-              >
-                <PrintIcon color="#ffffff" />
-                <Text style={styles.printMainButtonText}>Print</Text>
-              </TouchableOpacity>
-
-              <View style={styles.printCopiesRow}>
-                <Text style={styles.printFieldLabel}>Copies:</Text>
-                <TextInput
-                  style={styles.printCopiesInput}
-                  value={printCopies}
-                  onChangeText={(t) => setPrintCopies(t.replace(/[^0-9]/g, ''))}
-                  keyboardType="numeric"
-                />
-              </View>
-
-              <Text style={styles.printSectionLabel}>Printer</Text>
-              <View style={styles.printSelectBox}>
-                <Text style={styles.printSelectText}>Save as PDF</Text>
-              </View>
-
-              <Text style={styles.printSectionLabel}>Settings</Text>
-
-              <View style={styles.printPagesRow}>
-                <Text style={styles.printFieldLabel}>Pages:</Text>
-                <TextInput
-                  style={styles.printPagesInput}
-                  placeholder="All"
-                  placeholderTextColor="#94a3b8"
-                  value={printPageRange}
-                  onChangeText={setPrintPageRange}
-                />
-              </View>
-
-              <View style={{ position: 'relative' }}>
-                <TouchableOpacity
-                  style={styles.printSelectBox}
-                  onPress={() => {
-                    setShowOrientationDropdown(prev => !prev);
-                    setShowPaperSizeDropdown(false);
-                  }}
-                  activeOpacity={0.7}
-                >
-                  <Text style={styles.printSelectText}>
-                    {printOrientation === 'portrait' ? 'Portrait Orientation' : 'Landscape Orientation'}
-                  </Text>
-                  <Text style={styles.printSelectCaret}>▾</Text>
-                </TouchableOpacity>
-                {showOrientationDropdown && (
-                  <View style={styles.printOptionsList}>
-                    {(['portrait', 'landscape'] as const).map((opt) => (
-                      <TouchableOpacity
-                        key={opt}
-                        style={styles.printOptionItem}
-                        onPress={() => {
-                          setPrintOrientation(opt);
-                          setShowOrientationDropdown(false);
-                        }}
-                      >
-                        <Text style={styles.printOptionText}>
-                          {opt === 'portrait' ? 'Portrait Orientation' : 'Landscape Orientation'}
-                        </Text>
-                      </TouchableOpacity>
-                    ))}
-                  </View>
-                )}
-              </View>
-
-              <View style={{ position: 'relative' }}>
-                <TouchableOpacity
-                  style={styles.printSelectBox}
-                  onPress={() => {
-                    setShowPaperSizeDropdown(prev => !prev);
-                    setShowOrientationDropdown(false);
-                  }}
-                  activeOpacity={0.7}
-                >
-                  <Text style={styles.printSelectText}>{PAPER_SIZES[printPaperSize].label}</Text>
-                  <Text style={styles.printSelectCaret}>▾</Text>
-                </TouchableOpacity>
-                {showPaperSizeDropdown && (
-                  <View style={[styles.printOptionsList, styles.printOptionsListScrollable]}>
-                    <ScrollView style={{ maxHeight: 220 }}>
-                      {paperKeys.map((key) => (
-                        <TouchableOpacity
-                          key={key}
-                          style={styles.printOptionItem}
-                          onPress={() => {
-                            setPrintPaperSize(key);
-                            setShowPaperSizeDropdown(false);
-                          }}
-                        >
-                          <Text style={styles.printOptionText}>{PAPER_SIZES[key].label}</Text>
-                          <Text style={styles.printOptionSubText}>
-                            {PAPER_SIZES[key].width} × {PAPER_SIZES[key].height}
-                          </Text>
-                        </TouchableOpacity>
-                      ))}
-                    </ScrollView>
-                  </View>
-                )}
-              </View>
-
-              <TouchableOpacity
-                style={styles.printCancelButton}
-                onPress={() => {
-                  setShowPrintModal(false);
-                  setShowPaperSizeDropdown(false);
-                  setShowOrientationDropdown(false);
-                }}
-                activeOpacity={0.7}
-              >
-                <Text style={styles.printCancelButtonText}>Cancel</Text>
-              </TouchableOpacity>
-            </View>
-
-            <View style={styles.printPreviewPanel}>
-              <ScrollView contentContainerStyle={styles.printPreviewScrollContent}>
-                <View
-                  style={[
-                    styles.printPreviewPage,
-                    printOrientation === 'landscape' && styles.printPreviewPageLandscape,
-                  ]}
-                >
-                  {printPreviewUrl && Platform.OS === 'web' ? (
-                    <img
-                      src={printPreviewUrl}
-                      style={{
-                        maxWidth: '100%',
-                        maxHeight: '100%',
-                        objectFit: 'contain',
-                      }}
-                    />
-                  ) : null}
-                </View>
-              </ScrollView>
             </View>
           </Pressable>
         </Pressable>
@@ -1745,12 +2537,14 @@ export default function CreateScreen() {
           <View style={styles.mobileTopBarLeft}>
             <TouchableOpacity
               style={styles.mobileTopBarBtn}
-              onPress={() => router.back()}
+              onPress={() => router.navigate('/(tabs)/home')}
               activeOpacity={0.7}
             >
               <ICONS.Close color="#4a5568" />
             </TouchableOpacity>
             <TouchableOpacity
+              // @ts-ignore - nativeID renders as a DOM id on web (react-native-web); missing from TouchableOpacityProps' types
+              nativeID="tour-create-new"
               style={styles.mobileTopBarBtn}
               onPress={handleNewDiagram}
               activeOpacity={0.7}
@@ -1760,6 +2554,7 @@ export default function CreateScreen() {
           </View>
 
           <TextInput
+            nativeID="tour-create-title"
             style={styles.mobileTitle}
             value={diagramName}
             onChangeText={setDiagramName}
@@ -1768,10 +2563,32 @@ export default function CreateScreen() {
             numberOfLines={1}
             maxLength={50}
           />
+          {myAccessLevel !== 'owner' && (
+            <View style={styles.accessBadge}>
+              <Text style={styles.accessBadgeText} numberOfLines={1}>{ACCESS_BADGE_LABEL[myAccessLevel]}</Text>
+            </View>
+          )}
 
           <View style={styles.mobileTopBarRight}>
-            {/* ─── SAVE BUTTON ─────────────────────────────────────────────── */}
+            {/* ─── SHARE BUTTON ────────────────────────────────────────────── */}
+            {canShareDiagram && (
             <TouchableOpacity
+              // @ts-ignore - nativeID renders as a DOM id on web (react-native-web); missing from TouchableOpacityProps' types
+              nativeID="tour-create-share"
+              style={[styles.mobileTopBarBtn, !isGraphReady && styles.mobileTopBarBtnDisabled]}
+              onPress={handleShare}
+              disabled={!isGraphReady}
+              activeOpacity={0.7}
+            >
+              <ShareIcon color={isGraphReady ? '#4a5568' : '#cbd5e1'} />
+            </TouchableOpacity>
+            )}
+
+            {/* ─── SAVE BUTTON ─────────────────────────────────────────────── */}
+            {canEditDiagram && (
+            <TouchableOpacity
+              // @ts-ignore - nativeID renders as a DOM id on web (react-native-web); missing from TouchableOpacityProps' types
+              nativeID="tour-create-save"
               style={[styles.mobileTopBarBtn, !isGraphReady && styles.mobileTopBarBtnDisabled]}
               onPress={handleSaveDiagram}
               disabled={!isGraphReady || isSaving}
@@ -1783,8 +2600,11 @@ export default function CreateScreen() {
                 <SaveIcon color={isGraphReady ? '#10b981' : '#cbd5e1'} />
               )}
             </TouchableOpacity>
-            
+            )}
+
             <TouchableOpacity
+              // @ts-ignore - nativeID renders as a DOM id on web (react-native-web); missing from TouchableOpacityProps' types
+              nativeID="tour-create-print"
               style={[styles.mobileTopBarBtn, !isGraphReady && styles.mobileTopBarBtnDisabled]}
               onPress={handlePrint}
               disabled={!isGraphReady || isPreparingPrint}
@@ -1793,6 +2613,8 @@ export default function CreateScreen() {
               <PrintIcon color={isGraphReady ? '#4a5568' : '#cbd5e1'} />
             </TouchableOpacity>
             <TouchableOpacity
+              // @ts-ignore - nativeID renders as a DOM id on web (react-native-web); missing from TouchableOpacityProps' types
+              nativeID="tour-create-download"
               style={[styles.mobileTopBarBtn, !isGraphReady && styles.mobileTopBarBtnDisabled]}
               onPress={() => setShowDownloadDropdown(prev => !prev)}
               disabled={!isGraphReady || isDownloading}
@@ -1808,19 +2630,37 @@ export default function CreateScreen() {
         </View>
 
         {/* ─── CANVAS WITH FLOATING UNDO/REDO ────────────────────────────── */}
-        <View style={styles.mobileCanvasContainer}>
+        <View nativeID="tour-create-canvas" style={styles.mobileCanvasContainer}>
           <DiagramCanvas
             key="diagram-canvas"
             ref={diagramCanvasRef}
             onReady={handleGraphReady}
             onChange={handleGraphChange}
             onZoomChange={setZoomLevel}
+            onSelectionChange={handleCanvasSelectionChange}
             umlType={activeUmlType}
             isMobile
           />
 
+          {pendingConnector && (
+            <View style={styles.connectHintBanner} pointerEvents="box-none">
+              <View style={styles.connectHintPill}>
+                <Text style={styles.connectHintText}>
+                  {pendingConnector.sourceCell ? 'Tap the second shape' : 'Tap the first shape'}
+                </Text>
+                <TouchableOpacity
+                  onPress={() => setPendingConnector(null)}
+                  style={styles.connectHintCancelBtn}
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                >
+                  <CloseTabIcon color="#ffffff" />
+                </TouchableOpacity>
+              </View>
+            </View>
+          )}
+
           {/* Floating Undo/Redo buttons */}
-          <View style={styles.floatingUndoRedoContainer}>
+          <View nativeID="tour-create-undo-redo" style={styles.floatingUndoRedoContainer}>
             <TouchableOpacity
               style={[styles.floatingUndoRedoBtn, !isGraphReady && styles.floatingUndoRedoBtnDisabled]}
               onPress={handleUndo}
@@ -1845,51 +2685,77 @@ export default function CreateScreen() {
         {/* ─── BOTTOM TOOLBAR ───────────────────────────────────────────── */}
         <View style={[styles.mobileBottomToolbar, { height: toolbarHeight }]}>
           <View style={styles.mobileBottomToolbarRow}>
-            <View style={styles.mobileToolGroup}>
-              <TouchableOpacity
-                style={[styles.mobileBottomToolBtn, showShapesPanel && styles.mobileBottomToolBtnActive]}
-                onPress={toggleShapesPanel}
-              >
-                <ICONS.Shapes color={showShapesPanel ? '#4c6fff' : '#64748b'} />
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[
-                  styles.mobileBottomToolBtn,
-                  showMobileProperties && activeTool === 'text' && styles.mobileBottomToolBtnActive,
-                ]}
-                onPress={() => openMobileProperties('text', 'text')}
-              >
-                <ICONS.Text color={showMobileProperties && activeTool === 'text' ? '#4c6fff' : '#64748b'} />
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[
-                  styles.mobileBottomToolBtn,
-                  showMobileProperties && activeTool === 'draw' && styles.mobileBottomToolBtnActive,
-                ]}
-                onPress={() => openMobileProperties('draw', 'style')}
-              >
-                <ICONS.Draw color={showMobileProperties && activeTool === 'draw' ? '#4c6fff' : '#64748b'} />
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[
-                  styles.mobileBottomToolBtn,
-                  showMobileProperties && activeTool === 'comment' && styles.mobileBottomToolBtnActive,
-                ]}
-                onPress={() => openMobileProperties('comment', 'arrange')}
-              >
-                <ICONS.Comment color={showMobileProperties && activeTool === 'comment' ? '#4c6fff' : '#64748b'} />
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.mobileBottomToolBtn, showConnectorsPanel && styles.mobileBottomToolBtnActive]}
-                onPress={toggleConnectorsPanel}
-              >
-                <ICONS.Connector color={showConnectorsPanel ? '#4c6fff' : '#64748b'} />
-              </TouchableOpacity>
-            </View>
+            {canEditDiagram ? (
+              <View style={styles.mobileToolGroup}>
+                <TouchableOpacity
+                  // @ts-ignore - nativeID renders as a DOM id on web (react-native-web); missing from TouchableOpacityProps' types
+                  nativeID="tour-create-shapes"
+                  style={[styles.mobileBottomToolBtn, showShapesPanel && styles.mobileBottomToolBtnActive]}
+                  onPress={toggleShapesPanel}
+                >
+                  <ICONS.Shapes color={showShapesPanel ? '#4c6fff' : '#64748b'} />
+                </TouchableOpacity>
+                <TouchableOpacity
+                  // @ts-ignore - nativeID renders as a DOM id on web (react-native-web); missing from TouchableOpacityProps' types
+                  nativeID="tour-create-text"
+                  style={[
+                    styles.mobileBottomToolBtn,
+                    showMobileProperties && activeTool === 'text' && styles.mobileBottomToolBtnActive,
+                  ]}
+                  onPress={() => openMobileProperties('text', 'text')}
+                >
+                  <ICONS.Text color={showMobileProperties && activeTool === 'text' ? '#4c6fff' : '#64748b'} />
+                </TouchableOpacity>
+                <TouchableOpacity
+                  // @ts-ignore - nativeID renders as a DOM id on web (react-native-web); missing from TouchableOpacityProps' types
+                  nativeID="tour-create-style"
+                  style={[
+                    styles.mobileBottomToolBtn,
+                    showMobileProperties && activeTool === 'draw' && styles.mobileBottomToolBtnActive,
+                  ]}
+                  onPress={() => openMobileProperties('draw', 'style')}
+                >
+                  <ICONS.Draw color={showMobileProperties && activeTool === 'draw' ? '#4c6fff' : '#64748b'} />
+                </TouchableOpacity>
+                <TouchableOpacity
+                  // @ts-ignore - nativeID renders as a DOM id on web (react-native-web); missing from TouchableOpacityProps' types
+                  nativeID="tour-create-comment"
+                  style={[
+                    styles.mobileBottomToolBtn,
+                    showMobileProperties && activeTool === 'comment' && styles.mobileBottomToolBtnActive,
+                  ]}
+                  onPress={() => openMobileProperties('comment', 'arrange')}
+                >
+                  <ICONS.Comment color={showMobileProperties && activeTool === 'comment' ? '#4c6fff' : '#64748b'} />
+                </TouchableOpacity>
+                <TouchableOpacity
+                  // @ts-ignore - nativeID renders as a DOM id on web (react-native-web); missing from TouchableOpacityProps' types
+                  nativeID="tour-create-connectors"
+                  style={[styles.mobileBottomToolBtn, showConnectorsPanel && styles.mobileBottomToolBtnActive]}
+                  onPress={toggleConnectorsPanel}
+                >
+                  <ICONS.Connector color={showConnectorsPanel ? '#4c6fff' : '#64748b'} />
+                </TouchableOpacity>
+              </View>
+            ) : (
+              <View style={styles.viewOnlyBanner}>
+                <Text style={styles.viewOnlyBannerText} numberOfLines={1}>
+                  {hasPendingAccessRequest ? 'Request sent' : "You don't have permission to edit"}
+                </Text>
+                {!hasPendingAccessRequest && (
+                  <TouchableOpacity
+                    style={styles.requestPermissionButton}
+                    onPress={() => setShowRequestAccessModal(true)}
+                  >
+                    <Text style={styles.requestPermissionButtonText}>Request permission</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+            )}
 
             <View style={styles.mobileToolDivider} />
 
-            <View style={styles.mobileToolGroup}>
+            <View nativeID="tour-create-zoom" style={styles.mobileToolGroup}>
               <TouchableOpacity
                 style={[styles.mobileBottomToolBtn, !isGraphReady && styles.mobileTopBarBtnDisabled]}
                 onPress={handleZoomOut}
@@ -1957,7 +2823,35 @@ export default function CreateScreen() {
           </>
         )}
 
-        <PrintModal />
+        <PrintModal
+          visible={showPrintModal}
+          onClose={closePrintModal}
+          onPrint={executePrint}
+          previewUrl={printPreviewUrl}
+          name={printName}
+          onNameChange={setPrintName}
+          title={printTitle}
+          onTitleChange={setPrintTitle}
+          isEditOpen={isPrintEditOpen}
+          onEditOpenChange={setIsPrintEditOpen}
+          zoom={printZoom}
+          onZoomIn={handlePrintZoomIn}
+          onZoomOut={handlePrintZoomOut}
+        />
+        <ShareModal
+          visible={showShareModal}
+          onClose={() => setShowShareModal(false)}
+          diagramId={activeDiagramId}
+          diagramName={diagramName}
+        />
+        {activeDiagramId && (
+          <RequestAccessModal
+            visible={showRequestAccessModal}
+            onClose={() => setShowRequestAccessModal(false)}
+            diagramId={activeDiagramId}
+            onSent={() => setHasPendingAccessRequest(true)}
+          />
+        )}
         <AppDialog />
       </SafeAreaView>
     );
@@ -1972,13 +2866,20 @@ export default function CreateScreen() {
       <View style={styles.container}>
         <View style={styles.navbar}>
           <View style={styles.navbarLeft}>
-            <TouchableOpacity style={styles.navIconBtn} onPress={() => router.back()} activeOpacity={0.7}>
+            <TouchableOpacity style={styles.navIconBtn} onPress={() => router.navigate('/(tabs)/home')} activeOpacity={0.7}>
               <ICONS.Close color="#4a5568" />
             </TouchableOpacity>
-            <TouchableOpacity style={styles.navIconBtn} onPress={handleNewDiagram} activeOpacity={0.7}>
+            <TouchableOpacity
+              // @ts-ignore - nativeID renders as a DOM id on web (react-native-web); missing from TouchableOpacityProps' types
+              nativeID="tour-create-new"
+              style={styles.navIconBtn}
+              onPress={handleNewDiagram}
+              activeOpacity={0.7}
+            >
               <ICONS.NewDiagram color="#4a5568" />
             </TouchableOpacity>
             <TextInput
+              nativeID="tour-create-title"
               style={[styles.titleInput, styles.titleInputDesktop]}
               value={diagramName}
               onChangeText={setDiagramName}
@@ -1986,10 +2887,33 @@ export default function CreateScreen() {
               placeholderTextColor="#94a3b8"
               maxLength={50}
             />
+            {myAccessLevel !== 'owner' && (
+              <View style={styles.accessBadge}>
+                <Text style={styles.accessBadgeText}>{ACCESS_BADGE_LABEL[myAccessLevel]}</Text>
+              </View>
+            )}
+            <AutosaveIndicator status={syncStatus} />
           </View>
           <View style={styles.navbarRight}>
-            {/* ─── SAVE BUTTON ─────────────────────────────────────────────── */}
+            {/* ─── SHARE BUTTON ────────────────────────────────────────────── */}
+            {canShareDiagram && (
             <TouchableOpacity
+              // @ts-ignore - nativeID renders as a DOM id on web (react-native-web); missing from TouchableOpacityProps' types
+              nativeID="tour-create-share"
+              style={[styles.navIconBtn, styles.navBtnPrimary, !isGraphReady && styles.navBtnDisabled]}
+              onPress={handleShare}
+              activeOpacity={0.7}
+              disabled={!isGraphReady}
+            >
+              <ShareIcon color={isGraphReady ? '#ffffff' : '#94a3b8'} />
+            </TouchableOpacity>
+            )}
+
+            {/* ─── SAVE BUTTON ─────────────────────────────────────────────── */}
+            {canEditDiagram && (
+            <TouchableOpacity
+              // @ts-ignore - nativeID renders as a DOM id on web (react-native-web); missing from TouchableOpacityProps' types
+              nativeID="tour-create-save"
               style={[styles.navIconBtn, styles.navBtnSuccess, !isGraphReady && styles.navBtnDisabled]}
               onPress={handleSaveDiagram}
               activeOpacity={0.7}
@@ -2001,8 +2925,11 @@ export default function CreateScreen() {
                 <SaveIcon color={isGraphReady ? '#ffffff' : '#94a3b8'} />
               )}
             </TouchableOpacity>
+            )}
 
             <TouchableOpacity
+              // @ts-ignore - nativeID renders as a DOM id on web (react-native-web); missing from TouchableOpacityProps' types
+              nativeID="tour-create-print"
               style={[styles.navIconBtn, styles.navBtnPrimary, !isGraphReady && styles.navBtnDisabled]}
               onPress={handlePrint}
               activeOpacity={0.7}
@@ -2012,6 +2939,8 @@ export default function CreateScreen() {
             </TouchableOpacity>
 
             <TouchableOpacity
+              // @ts-ignore - nativeID renders as a DOM id on web (react-native-web); missing from TouchableOpacityProps' types
+              nativeID="tour-create-download"
               style={[styles.navIconBtn, styles.navBtnPrimary, !isGraphReady && styles.navBtnDisabled]}
               onPress={() => setShowDownloadDropdown(prev => !prev)}
               activeOpacity={0.7}
@@ -2027,56 +2956,94 @@ export default function CreateScreen() {
         </View>
 
         {/* ─── FORMAT BAR - UNDO/REDO + QUICK STYLE CONTROLS ─────────────── */}
-        <View style={styles.formatBar}>
-          <TouchableOpacity
-            style={[styles.formatBtn, !isGraphReady && styles.formatBtnDisabled]}
-            onPress={handleUndo}
-            disabled={!isGraphReady}
-            activeOpacity={0.7}
-          >
-            <UndoIcon color={isGraphReady ? '#4a5568' : '#cbd5e1'} size={18} />
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.formatBtn, !isGraphReady && styles.formatBtnDisabled]}
-            onPress={handleRedo}
-            disabled={!isGraphReady}
-            activeOpacity={0.7}
-          >
-            <RedoIcon color={isGraphReady ? '#4a5568' : '#cbd5e1'} size={18} />
-          </TouchableOpacity>
+        {canEditDiagram ? (
+          <View nativeID="tour-create-undo-redo" style={styles.formatBar}>
+            <TouchableOpacity
+              style={[styles.formatBtn, !isGraphReady && styles.formatBtnDisabled]}
+              onPress={handleUndo}
+              disabled={!isGraphReady}
+              activeOpacity={0.7}
+            >
+              <UndoIcon color={isGraphReady ? '#4a5568' : '#cbd5e1'} size={18} />
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.formatBtn, !isGraphReady && styles.formatBtnDisabled]}
+              onPress={handleRedo}
+              disabled={!isGraphReady}
+              activeOpacity={0.7}
+            >
+              <RedoIcon color={isGraphReady ? '#4a5568' : '#cbd5e1'} size={18} />
+            </TouchableOpacity>
 
-          <View style={styles.formatBarDivider} />
+            <View style={styles.formatBarDivider} />
 
-          <QuickFormatBar graph={graphInstance} />
-        </View>
+            <QuickFormatBar graph={graphInstance} />
+          </View>
+        ) : (
+          <View style={[styles.formatBar, styles.viewOnlyBannerDesktop]}>
+            <Text style={styles.viewOnlyBannerText}>
+              {hasPendingAccessRequest ? 'Request sent — waiting for the owner to respond.' : "You don't have permission to edit"}
+            </Text>
+            {!hasPendingAccessRequest && (
+              <TouchableOpacity
+                style={styles.requestPermissionButton}
+                onPress={() => setShowRequestAccessModal(true)}
+              >
+                <Text style={styles.requestPermissionButtonText}>Request permission</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        )}
 
         <View style={styles.body}>
-          <View style={styles.canvasContainer}>
+          <View nativeID="tour-create-canvas" style={styles.canvasContainer}>
             <DiagramCanvas
               key="diagram-canvas"
               ref={diagramCanvasRef}
               onReady={handleGraphReady}
               onChange={handleGraphChange}
               onZoomChange={setZoomLevel}
+              onSelectionChange={handleCanvasSelectionChange}
               umlType={activeUmlType}
             />
+
+            {pendingConnector && (
+              <View style={styles.connectHintBanner} pointerEvents="box-none">
+                <View style={styles.connectHintPill}>
+                  <Text style={styles.connectHintText}>
+                    {pendingConnector.sourceCell ? 'Click the second shape' : 'Click the first shape'}
+                  </Text>
+                  <TouchableOpacity
+                    onPress={() => setPendingConnector(null)}
+                    style={styles.connectHintCancelBtn}
+                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                  >
+                    <CloseTabIcon color="#ffffff" />
+                  </TouchableOpacity>
+                </View>
+              </View>
+            )}
           </View>
 
-          <View style={styles.iconRail}>
-            <TouchableOpacity
-              style={[styles.railBtn, isPanelVisible && styles.railBtnActive]}
-              onPress={() => {
-                setIsPanelVisible(prev => !prev);
-                setTimeout(focusGraph, 100);
-              }}
-              activeOpacity={0.7}
-            >
-              <ICONS.Shapes color={isPanelVisible ? '#ffffff' : '#4a5568'} />
-            </TouchableOpacity>
-          </View>
+          {canEditDiagram && (
+            <View style={styles.iconRail}>
+              <TouchableOpacity
+                // @ts-ignore - nativeID renders as a DOM id on web (react-native-web); missing from TouchableOpacityProps' types
+                nativeID="tour-create-shapes"
+                style={[styles.railBtn, isPanelVisible && styles.railBtnActive]}
+                onPress={() => {
+                  setIsPanelVisible(prev => !prev);
+                  setTimeout(focusGraph, 100);
+                }}
+                activeOpacity={0.7}
+              >
+                <ICONS.Shapes color={isPanelVisible ? '#ffffff' : '#4a5568'} />
+              </TouchableOpacity>
+            </View>
+          )}
 
-          {isPanelVisible && (
-            <View style={styles.shapesPanelWrapper}>
+          {canEditDiagram && isPanelVisible && (
+            <View nativeID="tour-create-shapes-panel" style={styles.shapesPanelWrapper}>
               <ShapesPanel
                 onSelectShape={handleAddShape}
                 isGraphReady={isGraphReady}
@@ -2087,15 +3054,33 @@ export default function CreateScreen() {
           )}
 
           {/* ─── PROPERTIES PANEL ─────────────────────────────────────────── */}
-          {graphInstance && (
-            <View style={styles.propertiesPanelWrapper}>
-              <PropertiesPanel graph={graphInstance} />
+          {canEditDiagram && graphInstance && (
+            <View nativeID="tour-create-properties" style={styles.propertiesPanelWrapper}>
+              <PropertiesPanel
+                graph={graphInstance}
+                collapsed={isPropertiesPanelCollapsed}
+                onCollapsedChange={setIsPropertiesPanelCollapsed}
+              />
             </View>
           )}
         </View>
 
+        {/* Properties panel collapse toggle — rendered here (a sibling of
+            `body`, not nested inside it) so it isn't clipped by `body`'s
+            overflow: 'hidden'. Anchored to line up with the panel's
+            top-right corner just below, poking up into the format bar. */}
+        {canEditDiagram && graphInstance && (
+          <TouchableOpacity
+            style={styles.propertiesToggleTab}
+            onPress={() => setIsPropertiesPanelCollapsed((v) => !v)}
+            activeOpacity={0.7}
+          >
+            <PropertiesToggleIcon collapsed={isPropertiesPanelCollapsed} />
+          </TouchableOpacity>
+        )}
+
         <View style={styles.bottomBar}>
-          <View style={styles.pageTabsRow}>
+          <View nativeID="tour-create-pages" style={styles.pageTabsRow}>
             {Platform.OS === 'web' ? (
               <div
                 style={{
@@ -2133,7 +3118,7 @@ export default function CreateScreen() {
             </TouchableOpacity>
           </View>
 
-          <View style={styles.zoomRow}>
+          <View nativeID="tour-create-zoom" style={styles.zoomRow}>
             <TouchableOpacity
               style={styles.zoomBtn}
               onPress={handleZoomOut}
@@ -2217,7 +3202,35 @@ export default function CreateScreen() {
           </>
         )}
 
-        <PrintModal />
+        <PrintModal
+          visible={showPrintModal}
+          onClose={closePrintModal}
+          onPrint={executePrint}
+          previewUrl={printPreviewUrl}
+          name={printName}
+          onNameChange={setPrintName}
+          title={printTitle}
+          onTitleChange={setPrintTitle}
+          isEditOpen={isPrintEditOpen}
+          onEditOpenChange={setIsPrintEditOpen}
+          zoom={printZoom}
+          onZoomIn={handlePrintZoomIn}
+          onZoomOut={handlePrintZoomOut}
+        />
+        <ShareModal
+          visible={showShareModal}
+          onClose={() => setShowShareModal(false)}
+          diagramId={activeDiagramId}
+          diagramName={diagramName}
+        />
+        {activeDiagramId && (
+          <RequestAccessModal
+            visible={showRequestAccessModal}
+            onClose={() => setShowRequestAccessModal(false)}
+            diagramId={activeDiagramId}
+            onSent={() => setHasPendingAccessRequest(true)}
+          />
+        )}
         <AppDialog />
       </View>
     </SafeAreaView>
@@ -2232,6 +3245,20 @@ const PrintIcon = ({ color = '#4a5568' }: { color?: string }) => (
     <Path d="M6 21H18V15H6V21Z" stroke={color} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" />
     <Path d="M6 15H4C3.46957 15 3.96086 14.7893 3.58579 14.4142C3.21071 14.0391 3 13.5304 3 13V11C3 10.4696 3.21071 9.96086 3.58579 9.58579C3.96086 9.21071 4.46957 9 4 9H20C20.5304 9 21.0391 9.21071 21.4142 9.58579C21.7893 9.96086 22 10.4696 22 11V13C22 13.5304 21.7893 14.0391 21.4142 14.4142C21.0391 14.7893 20.5304 15 20 15H18" stroke={color} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" />
     <Path d="M17 13H7" stroke={color} strokeWidth={1.8} strokeLinecap="round" />
+  </Svg>
+);
+
+const BackArrowIcon = ({ color = '#ffffff' }: { color?: string }) => (
+  <Svg width={20} height={20} viewBox="0 0 24 24" fill="none">
+    <Path d="M19 12H5" stroke={color} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" />
+    <Path d="M12 19L5 12L12 5" stroke={color} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" />
+  </Svg>
+);
+
+const EditPencilIcon = ({ color = '#6b7280' }: { color?: string }) => (
+  <Svg width={14} height={14} viewBox="0 0 24 24" fill="none">
+    <Path d="M12 20H21" stroke={color} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" />
+    <Path d="M16.5 3.5C16.8978 3.10218 17.4374 2.87868 18 2.87868C18.2786 2.87868 18.5544 2.93355 18.8118 3.04015C19.0692 3.14676 19.303 3.30301 19.5 3.5C19.697 3.69699 19.8532 3.93083 19.9598 4.18822C20.0665 4.44562 20.1213 4.72142 20.1213 5C20.1213 5.27857 20.0665 5.55438 19.9598 5.81177C19.8532 6.06916 19.697 6.30301 19.5 6.5L7 19L3 20L4 16L16.5 3.5Z" stroke={color} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" />
   </Svg>
 );
 
@@ -2255,6 +3282,278 @@ const CloseTabIcon = ({ color = '#94a3b8' }: { color?: string }) => (
     <Path d="M18 6L6 18M6 6L18 18" stroke={color} strokeWidth={2} strokeLinecap="round" />
   </Svg>
 );
+
+/** Double-chevron for the Properties panel's collapse toggle — points right
+ *  (collapse) when the panel is open, left (expand) once it's collapsed. */
+const PropertiesToggleIcon = ({ collapsed, color = '#4a5568' }: { collapsed: boolean; color?: string }) => (
+  <Svg width={14} height={14} viewBox="0 0 24 24" fill="none">
+    {collapsed ? (
+      <>
+        <Path d="M17 6l-6 6 6 6" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+        <Path d="M11 6l-6 6 6 6" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+      </>
+    ) : (
+      <>
+        <Path d="M7 6l6 6-6 6" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+        <Path d="M13 6l6 6-6 6" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+      </>
+    )}
+  </Svg>
+);
+
+// ─── PRINT MODAL ────────────────────────────────────────────────────────────
+//
+// A real top-level component, not one defined inline inside CreateScreen's
+// render body — a component defined inside another component's render body
+// gets a new identity every render, so React tears down and rebuilds the
+// whole print screen on every keystroke/click inside it instead of just
+// updating it. Everything it needs comes in as props instead of closures.
+
+interface PaperSizeDef {
+  label: string;
+  width: string;
+  height: string;
+}
+
+const PAPER_SIZES: Record<string, PaperSizeDef> = {
+  Letter: { label: 'Letter', width: '8.5in', height: '11in' },
+  Legal: { label: 'Legal', width: '8.5in', height: '14in' },
+  Tabloid: { label: 'Tabloid', width: '11in', height: '17in' },
+  Executive: { label: 'Executive', width: '7.25in', height: '10.5in' },
+  Statement: { label: 'Statement', width: '5.5in', height: '8.5in' },
+  A3: { label: 'A3', width: '297mm', height: '420mm' },
+  A4: { label: 'A4', width: '210mm', height: '297mm' },
+  A5: { label: 'A5', width: '148mm', height: '210mm' },
+  A6: { label: 'A6', width: '105mm', height: '148mm' },
+  B4: { label: 'B4 (JIS)', width: '257mm', height: '364mm' },
+  B5: { label: 'B5 (JIS)', width: '182mm', height: '257mm' },
+};
+
+// Max bounding box the preview page is scaled to fit inside at 100% zoom —
+// the actual on-screen shape comes from the selected paper's real aspect
+// ratio (see paperSizeToPreviewSize), so picking Legal vs A4 vs Statement
+// visibly changes the preview instead of every size looking identical.
+const PRINT_PREVIEW_MAX = { width: 460, height: 595 };
+
+function paperSizeToPreviewSize(
+  size: PaperSizeDef,
+  orientation: 'portrait' | 'landscape',
+  maxBox: { width: number; height: number } = PRINT_PREVIEW_MAX,
+) {
+  const toInches = (v: string) => v.endsWith('mm') ? Number.parseFloat(v) / 25.4 : Number.parseFloat(v);
+  let w = toInches(size.width);
+  let h = toInches(size.height);
+  if (orientation === 'landscape') [w, h] = [h, w];
+  const scale = Math.min(maxBox.width / w, maxBox.height / h);
+  return { width: w * scale, height: h * scale };
+}
+
+interface PrintModalProps {
+  visible: boolean;
+  onClose: () => void;
+  onPrint: () => void;
+  previewUrl: string | null;
+
+  name: string;
+  onNameChange: (v: string) => void;
+  title: string;
+  onTitleChange: (v: string) => void;
+  isEditOpen: boolean;
+  onEditOpenChange: (open: boolean) => void;
+
+  zoom: number;
+  onZoomIn: () => void;
+  onZoomOut: () => void;
+}
+
+// Narrower than this and the desktop 3-column backstage (rail + 300px
+// settings + preview) simply doesn't fit — see the mobile branch below.
+const PRINT_MOBILE_BREAKPOINT = 700;
+
+function PrintModal({
+  visible, onClose, onPrint, previewUrl,
+  name, onNameChange, title, onTitleChange,
+  isEditOpen, onEditOpenChange,
+  zoom, onZoomIn, onZoomOut,
+}: PrintModalProps) {
+  const { width: winWidth, height: winHeight } = useWindowDimensions();
+  if (!visible) return null;
+
+  const isMobile = winWidth < PRINT_MOBILE_BREAKPOINT;
+  const previewMaxBox = isMobile
+    ? { width: winWidth - 48, height: winHeight * 0.42 }
+    : PRINT_PREVIEW_MAX;
+  const base = paperSizeToPreviewSize(PAPER_SIZES.Letter, 'portrait', previewMaxBox);
+  const pageSize = { width: base.width * (zoom / 100), height: base.height * (zoom / 100) };
+  const hasEditText = !!(name.trim() || title.trim());
+
+  const preview = (
+    <View style={isMobile ? styles.printMobilePreviewArea : styles.printPreviewPanel}>
+      <ScrollView contentContainerStyle={styles.printPreviewScrollContent}>
+        <View style={[styles.printPreviewPage, pageSize]}>
+          {name.trim() ? (
+            <Text style={styles.printPreviewName} numberOfLines={1}>{name.trim()}</Text>
+          ) : null}
+          {title.trim() ? (
+            <Text style={styles.printPreviewTitle} numberOfLines={1}>{title.trim()}</Text>
+          ) : null}
+          {previewUrl && Platform.OS === 'web' ? (
+            <img
+              src={previewUrl}
+              style={{
+                maxWidth: '100%',
+                maxHeight: title.trim() ? 'calc(100% - 28px)' : '100%',
+                objectFit: 'contain',
+              }}
+            />
+          ) : null}
+        </View>
+      </ScrollView>
+
+      <View style={styles.printZoomRow}>
+        <TouchableOpacity style={styles.zoomBtn} onPress={onZoomOut} activeOpacity={0.7}>
+          <Text style={styles.zoomBtnText}>−</Text>
+        </TouchableOpacity>
+        <Text style={styles.zoomLabel}>{zoom}%</Text>
+        <TouchableOpacity style={styles.zoomBtn} onPress={onZoomIn} activeOpacity={0.7}>
+          <Text style={styles.zoomBtnText}>+</Text>
+        </TouchableOpacity>
+      </View>
+    </View>
+  );
+
+  // Shared between the desktop 3-column layout and the mobile stacked one
+  // below — only this one row now (Copies/Printer/Orientation/Paper size
+  // were removed; printing always goes straight to the system dialog, which
+  // already offers all of those itself).
+  const editRow = (
+    <>
+      <TouchableOpacity
+        style={styles.printSelectBox}
+        onPress={() => onEditOpenChange(!isEditOpen)}
+        activeOpacity={0.7}
+      >
+        <Text
+          style={[styles.printSelectText, !hasEditText && styles.printSelectPlaceholder]}
+          numberOfLines={1}
+        >
+          {[name.trim(), title.trim()].filter(Boolean).join(' · ') || 'Edit — add name or title'}
+        </Text>
+        <EditPencilIcon color="#6b7280" />
+      </TouchableOpacity>
+      {isEditOpen && (
+        <View style={styles.printEditPanel}>
+          <View style={styles.printEditField}>
+            <Text style={styles.printEditFieldLabel}>Name (top-left corner)</Text>
+            <TextInput
+              autoFocus
+              style={styles.printEditInput}
+              placeholder="e.g. your name"
+              placeholderTextColor="#94a3b8"
+              value={name}
+              onChangeText={onNameChange}
+              returnKeyType="next"
+            />
+          </View>
+          <View style={styles.printEditField}>
+            <Text style={styles.printEditFieldLabel}>Title</Text>
+            <TextInput
+              style={styles.printEditInput}
+              placeholder="e.g. diagram title"
+              placeholderTextColor="#94a3b8"
+              value={title}
+              onChangeText={onTitleChange}
+              onSubmitEditing={() => onEditOpenChange(false)}
+              returnKeyType="done"
+            />
+          </View>
+          <TouchableOpacity
+            style={styles.printEditDoneButton}
+            onPress={() => onEditOpenChange(false)}
+            activeOpacity={0.7}
+          >
+            <Text style={styles.printEditDoneText}>Done</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+    </>
+  );
+
+  if (isMobile) {
+    // Word Mobile's print screen shape: a slim title bar (back + title only —
+    // no crowded toolbar), the page preview given the most room since that's
+    // what you're actually checking, a scrollable options list below it, and
+    // one full-width Print button pinned to the bottom within thumb reach —
+    // not a 300px settings rail, which has no room to exist on a phone.
+    return (
+      <Modal visible={visible} transparent={false} animationType="slide" onRequestClose={onClose}>
+        <View style={styles.printMobileContainer}>
+          <View style={styles.printMobileTopBar}>
+            <TouchableOpacity onPress={onClose} activeOpacity={0.7} style={styles.printMobileBackButton}>
+              <BackArrowIcon color="#1a1f36" />
+            </TouchableOpacity>
+            <Text style={styles.printMobileTopBarTitle}>Print</Text>
+            <View style={styles.printMobileBackButton} />
+          </View>
+
+          {preview}
+
+          <View style={styles.printMobileSettingsContent}>
+            {editRow}
+          </View>
+
+          <View style={styles.printMobileBottomBar}>
+            <TouchableOpacity style={styles.printMainButton} onPress={onPrint} activeOpacity={0.85}>
+              <PrintIcon color="#ffffff" />
+              <Text style={styles.printMainButtonText}>Print</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+    );
+  }
+
+  return (
+    <Modal
+      visible={visible}
+      transparent={false}
+      animationType="fade"
+      onRequestClose={onClose}
+    >
+      <View style={styles.printBackstage}>
+        {/* Thin rail — the only way out of this screen, same role as Word's
+            backstage back arrow: no "click outside to dismiss" once this is
+            full-screen, since there is no outside. */}
+        <View style={styles.printBackRail}>
+          <TouchableOpacity
+            style={styles.printBackButton}
+            onPress={onClose}
+            activeOpacity={0.7}
+          >
+            <BackArrowIcon color="#ffffff" />
+          </TouchableOpacity>
+        </View>
+
+        <View style={styles.printSettingsPanel}>
+          <Text style={styles.printModalTitle}>Print</Text>
+
+          {editRow}
+
+          <TouchableOpacity
+            style={styles.printMainButton}
+            onPress={onPrint}
+            activeOpacity={0.85}
+          >
+            <PrintIcon color="#ffffff" />
+            <Text style={styles.printMainButtonText}>Print</Text>
+          </TouchableOpacity>
+        </View>
+
+        {preview}
+      </View>
+    </Modal>
+  );
+}
 
 // ─── STYLES ───────────────────────────────────────────────────────────────────
 
@@ -2313,6 +3612,20 @@ const styles = StyleSheet.create({
     fontSize: 16,
     minWidth: 180,
   },
+  autosaveIndicator: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    marginLeft: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 999,
+    backgroundColor: '#f8fafc',
+  },
+  autosaveIndicatorLabel: {
+    fontSize: 11,
+    fontWeight: '600',
+  },
   formatBar: {
     height: 40,
     flexDirection: 'row',
@@ -2323,6 +3636,47 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: '#e2e8f0',
     zIndex: 19,
+  },
+  accessBadge: {
+    backgroundColor: '#eef2ff',
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    marginLeft: 8,
+  },
+  accessBadgeText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#4c6fff',
+    textTransform: 'uppercase',
+    letterSpacing: 0.3,
+  },
+  viewOnlyBannerDesktop: {
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+  },
+  viewOnlyBanner: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 12,
+  },
+  viewOnlyBannerText: {
+    fontSize: 13,
+    color: '#64748b',
+    fontWeight: '500',
+  },
+  requestPermissionButton: {
+    backgroundColor: '#1a1f36',
+    borderRadius: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+  },
+  requestPermissionButtonText: {
+    color: '#ffffff',
+    fontWeight: '600',
+    fontSize: 12,
   },
   formatBarDivider: {
     width: 1,
@@ -2356,6 +3710,33 @@ const styles = StyleSheet.create({
     bottom: 0,
     backgroundColor: '#f0f2f5',
     zIndex: 1,
+  },
+  // Tap-to-connect prompt, shown while pendingConnector is active.
+  connectHintBanner: {
+    position: 'absolute',
+    top: 16,
+    left: 0,
+    right: 0,
+    alignItems: 'center',
+    zIndex: 30,
+  },
+  connectHintPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: '#1a1f36',
+    borderRadius: 999,
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    ...(Platform.OS === 'web' ? { boxShadow: '0 4px 12px rgba(15,23,42,0.25)' } : {}),
+  },
+  connectHintText: {
+    color: '#ffffff',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  connectHintCancelBtn: {
+    padding: 2,
   },
   iconRail: {
     position: 'absolute',
@@ -2394,6 +3775,27 @@ const styles = StyleSheet.create({
     right: 0,
     bottom: 0,
     zIndex: 6,
+  },
+  // Positioned as a sibling of `body` (see the comment at its call site) so
+  // it isn't clipped by body's overflow: 'hidden'. `right: 12` matches the
+  // Properties panel's own edge padding so it lines up with the panel just
+  // below; `top`/`height` land its bottom edge flush with where the panel
+  // starts (navbar 48+1 + format bar 40+1 = 90px down).
+  propertiesToggleTab: {
+    position: 'absolute',
+    top: 70,
+    right: 12,
+    width: 28,
+    height: 20,
+    backgroundColor: '#ffffff',
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    borderBottomWidth: 0,
+    borderTopLeftRadius: 6,
+    borderTopRightRadius: 6,
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 25,
   },
   bottomBar: {
     height: 36,
@@ -2638,44 +4040,39 @@ const styles = StyleSheet.create({
     borderColor: '#ffffff',
     borderTopColor: 'transparent',
   },
-  printModalOverlay: {
+  // ─── PRINT — full-screen "backstage" view ───────────────────────────────────
+  printBackstage: {
     flex: 1,
-    backgroundColor: 'rgba(15, 23, 42, 0.45)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 20,
-  },
-  printModalContainer: {
     flexDirection: 'row',
     backgroundColor: '#f5f5f5',
-    borderRadius: 12,
-    overflow: 'hidden',
-    width: 860,
-    maxWidth: '95%',
-    height: 620,
-    maxHeight: '90%',
-    ...(Platform.OS === 'web'
-      ? { boxShadow: '0 20px 60px rgba(15, 23, 42, 0.35)' }
-      : {
-          shadowColor: '#0f172a',
-          shadowOffset: { width: 0, height: 10 },
-          shadowOpacity: 0.3,
-          shadowRadius: 24,
-          elevation: 12,
-        }),
+  },
+  printBackRail: {
+    width: 56,
+    backgroundColor: '#16213e',
+    alignItems: 'center',
+    paddingTop: 18,
+  },
+  printBackButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   printSettingsPanel: {
-    width: 260,
+    width: 300,
     backgroundColor: '#f5f5f5',
-    paddingHorizontal: 20,
-    paddingTop: 20,
-    paddingBottom: 16,
+    paddingHorizontal: 24,
+    paddingTop: 28,
+    paddingBottom: 20,
+    borderRightWidth: 1,
+    borderRightColor: '#e2e8f0',
   },
   printModalTitle: {
-    fontSize: 20,
+    fontSize: 22,
     fontWeight: '600',
     color: '#1a1a1a',
-    marginBottom: 16,
+    marginBottom: 20,
   },
   printMainButton: {
     flexDirection: 'row',
@@ -2684,71 +4081,58 @@ const styles = StyleSheet.create({
     gap: 8,
     backgroundColor: '#4c6fff',
     borderRadius: 8,
-    height: 90,
-    marginBottom: 16,
+    height: 64,
+    marginBottom: 24,
   },
   printMainButtonText: {
     color: '#ffffff',
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: '600',
-  },
-  printCopiesRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 16,
-  },
-  printFieldLabel: {
-    fontSize: 13,
-    color: '#1a1a1a',
-    fontWeight: '400',
-  },
-  printCopiesInput: {
-    width: 56,
-    height: 28,
-    borderWidth: 1,
-    borderColor: '#d1d5db',
-    borderRadius: 4,
-    paddingHorizontal: 8,
-    fontSize: 13,
-    color: '#1a1a1a',
-    backgroundColor: '#ffffff',
-    textAlign: 'left',
-  },
-  printSectionLabel: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#374151',
-    marginBottom: 8,
   },
   printSelectBox: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    height: 34,
+    height: 38,
     borderWidth: 1,
     borderColor: '#d1d5db',
     borderRadius: 6,
-    paddingHorizontal: 10,
+    paddingHorizontal: 12,
     backgroundColor: '#ffffff',
     marginBottom: 10,
   },
   printSelectText: {
     fontSize: 13,
     color: '#1a1a1a',
+    flexShrink: 1,
+  },
+  printSelectPlaceholder: {
+    color: '#94a3b8',
   },
   printSelectCaret: {
     fontSize: 11,
     color: '#6b7280',
   },
-  printPagesRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
+  printEditPanel: {
+    flexDirection: 'column',
+    gap: 10,
+    backgroundColor: '#ffffff',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    padding: 12,
+    marginTop: -4,
     marginBottom: 10,
   },
-  printPagesInput: {
-    flex: 1,
+  printEditField: {
+    gap: 5,
+  },
+  printEditFieldLabel: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#64748b',
+  },
+  printEditInput: {
     height: 34,
     borderWidth: 1,
     borderColor: '#d1d5db',
@@ -2758,70 +4142,37 @@ const styles = StyleSheet.create({
     color: '#1a1a1a',
     backgroundColor: '#ffffff',
   },
-  printOptionsList: {
-    position: 'absolute',
-    top: 36,
-    left: 0,
-    right: 0,
-    backgroundColor: '#ffffff',
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#e2e8f0',
-    zIndex: 50,
-    ...(Platform.OS === 'web'
-      ? { boxShadow: '0 8px 20px rgba(15, 23, 42, 0.15)' }
-      : {
-          shadowColor: '#0f172a',
-          shadowOffset: { width: 0, height: 6 },
-          shadowOpacity: 0.15,
-          shadowRadius: 14,
-          elevation: 10,
-        }),
+  printEditDoneButton: {
+    height: 32,
+    paddingHorizontal: 14,
+    borderRadius: 6,
+    backgroundColor: '#4c6fff',
+    alignItems: 'center',
+    justifyContent: 'center',
+    alignSelf: 'flex-end',
   },
-  printOptionsListScrollable: {
-    maxHeight: 220,
-  },
-  printOptionItem: {
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#f1f5f9',
-  },
-  printOptionText: {
-    fontSize: 13,
-    color: '#1a1a1a',
-  },
-  printOptionSubText: {
-    fontSize: 11,
-    color: '#94a3b8',
-    marginTop: 1,
-  },
-  printCancelButton: {
-    marginTop: 'auto',
-    alignSelf: 'flex-start',
-  },
-  printCancelButtonText: {
-    fontSize: 13,
-    color: '#4c6fff',
+  printEditDoneText: {
+    color: '#ffffff',
+    fontSize: 12,
     fontWeight: '600',
   },
   printPreviewPanel: {
     flex: 1,
+    position: 'relative',
     backgroundColor: '#e8e8e8',
   },
   printPreviewScrollContent: {
     flexGrow: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    padding: 24,
+    padding: 32,
   },
   printPreviewPage: {
-    width: 380,
-    height: 492,
+    position: 'relative',
     backgroundColor: '#ffffff',
     alignItems: 'center',
     justifyContent: 'center',
-    padding: 16,
+    padding: 20,
     ...(Platform.OS === 'web'
       ? { boxShadow: '0 4px 16px rgba(15, 23, 42, 0.15)' }
       : {
@@ -2832,9 +4183,86 @@ const styles = StyleSheet.create({
           elevation: 4,
         }),
   },
-  printPreviewPageLandscape: {
-    width: 492,
-    height: 380,
+  printPreviewName: {
+    position: 'absolute',
+    top: 12,
+    left: 12,
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#1a1f36',
+  },
+  printPreviewTitle: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#1a1f36',
+    marginBottom: 10,
+    textAlign: 'center',
+  },
+  printZoomRow: {
+    position: 'absolute',
+    bottom: 16,
+    right: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: '#ffffff',
+    borderRadius: 20,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    ...(Platform.OS === 'web'
+      ? { boxShadow: '0 4px 12px rgba(15, 23, 42, 0.18)' }
+      : {
+          shadowColor: '#0f172a',
+          shadowOffset: { width: 0, height: 2 },
+          shadowOpacity: 0.18,
+          shadowRadius: 8,
+          elevation: 6,
+        }),
+  },
+
+  // ─── PRINT — mobile stacked layout (see PRINT_MOBILE_BREAKPOINT) ────────────
+  printMobileContainer: {
+    flex: 1,
+    backgroundColor: '#ffffff',
+  },
+  printMobileTopBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    height: 52,
+    paddingHorizontal: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e2e8f0',
+  },
+  printMobileBackButton: {
+    width: 36,
+    height: 36,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  printMobileTopBarTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#1a1f36',
+  },
+  printMobilePreviewArea: {
+    position: 'relative',
+    backgroundColor: '#e8e8e8',
+    borderBottomWidth: 1,
+    borderBottomColor: '#e2e8f0',
+  },
+  printMobileSettingsContent: {
+    padding: 20,
+    paddingBottom: 32,
+  },
+  printMobileBottomBar: {
+    padding: 16,
+    paddingBottom: Platform.OS === 'ios' ? 28 : 16,
+    borderTopWidth: 1,
+    borderTopColor: '#e2e8f0',
+    backgroundColor: '#ffffff',
   },
 
   // ─── MOBILE STYLES ─────────────────────────────────────────────────────────

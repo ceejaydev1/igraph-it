@@ -14,6 +14,18 @@ import { useRouter, usePathname, Href } from 'expo-router';
 import { Svg, Path, Rect, Circle } from 'react-native-svg';
 import * as Haptics from 'expo-haptics'; // npx expo install expo-haptics
 import { useSave } from '../contexts/SaveContext';
+import { startTour, resetTour } from '../utils/onboardingTour';
+import { TAB_TOURS } from '../utils/tours';
+
+// One nativeID per tab link, so each tab's onboarding tour (utils/tours.ts)
+// can point a step at "the nav item for this tab" regardless of which
+// layout (desktop side links vs. mobile bottom dock) is currently rendered.
+const NAV_TOUR_IDS: Record<string, string> = {
+  '/(tabs)/home': 'tour-nav-home',
+  '/(tabs)/create': 'tour-nav-create',
+  '/(tabs)/reference': 'tour-nav-reference',
+  '/(tabs)/userAccount': 'tour-nav-profile',
+};
 
 // ============ BREAKPOINT ============
 const DESKTOP_BREAKPOINT = 1024;
@@ -49,6 +61,14 @@ const UserAccountIcon = ({ active, size = 18, color }: { active: boolean; size?:
   <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
     <Circle cx="12" cy="8" r="4" stroke={color ?? (active ? '#ffffff' : '#64748b')} strokeWidth={1.8} fill="none" />
     <Path d="M20 21V19C20 16.8 18.2 15 16 15H8C5.8 15 4 16.8 4 19V21" stroke={color ?? (active ? '#ffffff' : '#64748b')} strokeWidth={1.8} strokeLinecap="round" fill="none" />
+  </Svg>
+);
+
+const HelpIcon = ({ color = '#64748b', size = 18 }: { color?: string; size?: number }) => (
+  <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+    <Circle cx="12" cy="12" r="9" stroke={color} strokeWidth={1.8} />
+    <Path d="M9.5 9a2.5 2.5 0 1 1 3.4 2.33c-.65.26-1.15.87-1.15 1.67v.5" stroke={color} strokeWidth={1.8} strokeLinecap="round" />
+    <Circle cx="12" cy="16.75" r="0.9" fill={color} />
   </Svg>
 );
 
@@ -240,6 +260,20 @@ export default function Navbar({
     ]).start();
   }, [activeSideIndex, itemWidth]);
 
+  // Replays the current tab's onboarding tour on demand — resetTour() clears
+  // the "already seen" flag first so startTour()'s own seen-check (see
+  // utils/onboardingTour.ts) doesn't just no-op the very replay we asked for.
+  const handleReplayTour = () => {
+    const currentItem = navItems.find((item) => isRouteActive(pathname, item.route));
+    const tour = currentItem ? TAB_TOURS[currentItem.route] : undefined;
+    if (!tour) return;
+    resetTour(tour.id);
+    // Navbar's own breakpoint is a reasonable stand-in for Create's exact
+    // isDesktop check here — this only feeds the "Add a shape" step's
+    // desktop-vs-mobile branch (see getCreateTourSteps).
+    startTour(tour.id, tour.getSteps({ router, isDesktop: !isBurger }), { force: true });
+  };
+
   // ─── ✅ FIXED: Handle Save - Guard against accidental auto-saves ──────────
   const handleSavePress = async () => {
     if (isSaving) {
@@ -286,13 +320,14 @@ export default function Navbar({
 
             {/* Navigation Items - conditionally hidden */}
             {!hideNavLinks && (
-              <View style={styles.navLinks}>
+              <View nativeID="tour-navbar-overview" style={styles.navLinks}>
                 {navItems.map((item) => {
                   const isActive = isRouteActive(pathname, item.route);
                   const Icon = item.icon;
                   return (
                     <Pressable
                       key={item.label}
+                      nativeID={NAV_TOUR_IDS[item.route]}
                       onPress={() => handleNavigation(item.route)}
                       style={({ pressed }) => [
                         styles.navItem,
@@ -340,6 +375,14 @@ export default function Navbar({
                 </Pressable>
               )}
               {actions}
+              <Pressable
+                onPress={handleReplayTour}
+                style={({ pressed }) => [styles.helpButton, pressed && styles.helpButtonPressed]}
+                accessibilityRole="button"
+                accessibilityLabel="Replay tour for this page"
+              >
+                <HelpIcon />
+              </Pressable>
               <Avatar fullName={fullName} email={userEmail} size={avatarSize} />
               {showGreeting && (
                 <Text style={[styles.greetingText, { fontSize: 14 }]} numberOfLines={1}>
@@ -407,6 +450,15 @@ export default function Navbar({
               {actions}
 
               <Pressable
+                onPress={handleReplayTour}
+                style={({ pressed }) => [styles.helpButton, pressed && styles.helpButtonPressed]}
+                accessibilityRole="button"
+                accessibilityLabel="Replay tour for this page"
+              >
+                <HelpIcon />
+              </Pressable>
+
+              <Pressable
                 onPress={() => handleNavigation('/(tabs)/userAccount')}
                 style={({ pressed }) => [
                   styles.accountBtn,
@@ -426,6 +478,7 @@ export default function Navbar({
       {!isCreateScreen && (
       <View style={styles.bottomNavWrapper}>
         <View
+          nativeID="tour-navbar-mobile-dock"
           style={styles.bottomNavCard}
           onLayout={(e) => setBarWidth(e.nativeEvent.layout.width)}
         >
@@ -455,6 +508,7 @@ export default function Navbar({
               return (
                 <Pressable
                   key={item.label}
+                  nativeID={NAV_TOUR_IDS[item.route]}
                   onPress={() => {
                     triggerTabHaptic();
                     handleNavigation(item.route);
@@ -476,6 +530,7 @@ export default function Navbar({
             return (
               <Pressable
                 key={item.label}
+                nativeID={NAV_TOUR_IDS[item.route]}
                 onPress={() => {
                   triggerTabHaptic();
                   handleNavigation(item.route);
@@ -687,6 +742,17 @@ const styles = StyleSheet.create({
   },
   accountBtnPressed: {
     opacity: 0.7,
+  },
+  helpButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  helpButtonPressed: {
+    opacity: 0.6,
+    backgroundColor: '#f1f5f9',
   },
 
   // ── DOCKED BOTTOM NAVBAR (premium) ───────────
