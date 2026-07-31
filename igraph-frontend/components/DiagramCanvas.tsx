@@ -2369,6 +2369,28 @@ const WebCanvas = forwardRef<DiagramCanvasHandle, DiagramCanvasProps>(({ onReady
               if (headGeo) endPoint = { x: headGeo.x, y: headGeo.y + headGeo.height / 2 };
             }
           }
+
+          // The Fish Head's flat edge — where the spine should always meet
+          // it — sits exactly at the horizontal center of its own bounding
+          // box (see FishboneHeadShapeCanvas's paintBackground and its
+          // 'igraph.fishboneHead' entry in IGRAPH_PERIMETERS), not spread
+          // across the full left side the way a plain rectangle's edge is.
+          // The normal *dynamic* floating-perimeter calculation only lands
+          // exactly there when the spine's other end happens to be level
+          // with the head's vertical center — anything even slightly off
+          // instead resolves onto one of the triangle's slanted edges,
+          // which is what actually produced a crooked, not-quite-
+          // horizontal connection. A fixed entry point at that exact spot
+          // (entryPerimeter:false skips the dynamic calculation entirely)
+          // makes the attachment deterministic no matter where the
+          // spine's other end is. Scoped to 'fishbone-head' specifically —
+          // Effect Box is a plain rectangle, where (0.5, 0.5) would be its
+          // *interior* center, not a boundary point.
+          if (shapeId === 'fishbone-spine' && targetCell && getShapeRole(targetCell) === 'fishbone-head') {
+            styleObject.entryX = 0.5;
+            styleObject.entryY = 0.5;
+            styleObject.entryPerimeter = false;
+          }
         }
 
         cell = graph.insertEdge(null, null, '', sourceCell, targetCell, styleObject);
@@ -2496,6 +2518,23 @@ const WebCanvas = forwardRef<DiagramCanvasHandle, DiagramCanvasProps>(({ onReady
         const danglingSpine = findDanglingEdgeByRole(graph, new Set(['fishbone-spine']));
         if (danglingSpine) {
           graph.getDataModel().setTerminal(danglingSpine.edge, cell, danglingSpine.isSource);
+          // Same fixed-point reasoning as the spine's own drop-time
+          // special case above (see the entryX/entryY comment there) —
+          // pins the connection to the flat edge's exact midpoint instead
+          // of leaving it to the dynamic floating-perimeter calculation,
+          // which is only guaranteed to land there when the spine's other
+          // end happens to be level with this cell's vertical center.
+          // Scoped to 'fishbone-head' only — Effect Box is a plain
+          // rectangle, where (0.5, 0.5) would be its interior center, not
+          // a boundary point.
+          if (shapeId === 'fishbone-head') {
+            const edgeStyle = danglingSpine.edge.getStyle();
+            const base = typeof edgeStyle === 'object' && edgeStyle !== null ? edgeStyle : {};
+            const fixedPoint = danglingSpine.isSource
+              ? { exitX: 0.5, exitY: 0.5, exitPerimeter: false }
+              : { entryX: 0.5, entryY: 0.5, entryPerimeter: false };
+            graph.getDataModel().setStyle(danglingSpine.edge, { ...base, ...fixedPoint } as CellStateStyle);
+          }
         }
       }
 
