@@ -2323,8 +2323,32 @@ const WebCanvas = forwardRef<DiagramCanvasHandle, DiagramCanvasProps>(({ onReady
           graph.batchUpdate(() => {
             cell = graph.insertVertex(null, null, label, centeredX, centeredY, dropW, dropH, fullStyle);
             graph.removeCells([edgeCell]);
-            if (source) tagShapeRole(graph.insertEdge(null, null, '', source, cell, leftEdgeStyle), edgeRole);
-            if (target) tagShapeRole(graph.insertEdge(null, null, '', cell, target, rightEdgeStyle), edgeRole);
+
+            // Always recreate both halves, even where the original edge
+            // wasn't actually attached to anything on that side (source/
+            // target null — e.g. a cardinality dropped on empty canvas
+            // with no entity nearby to snap onto yet). Skipping the
+            // insertEdge call there — the previous behavior — deleted the
+            // edge and never replaced it, so the whole cardinality marker
+            // just vanished the instant a relationship landed on it
+            // instead of ending up split. A floating end keeps exactly the
+            // dangling look the original had; startPoint/endPoint (above)
+            // are its remembered position either way.
+            const leftEdge = graph.insertEdge(null, null, '', source, cell, leftEdgeStyle);
+            if (!source && startPoint) {
+              const leftGeo = new Geometry(0, 0, 0, 0);
+              leftGeo.setTerminalPoint(new Point(startPoint.x, startPoint.y), true);
+              graph.getDataModel().setGeometry(leftEdge, leftGeo);
+            }
+            tagShapeRole(leftEdge, edgeRole);
+
+            const rightEdge = graph.insertEdge(null, null, '', cell, target, rightEdgeStyle);
+            if (!target && endPoint) {
+              const rightGeo = new Geometry(0, 0, 0, 0);
+              rightGeo.setTerminalPoint(new Point(endPoint.x, endPoint.y), false);
+              graph.getDataModel().setGeometry(rightEdge, rightGeo);
+            }
+            tagShapeRole(rightEdge, edgeRole);
           });
         } else {
           cell = graph.insertVertex(null, null, label, cx, cy, dropW, dropH, fullStyle);
