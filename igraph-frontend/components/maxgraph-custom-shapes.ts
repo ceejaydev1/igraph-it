@@ -577,6 +577,31 @@ function cardinalityLabels(
   return full;
 }
 
+// Fishbone's Sub-Cause variants draw a short second tick branching off their
+// main cause line — a "here's a bystander cause feeding into this one"
+// notch. As a fixed-box vertex this was just a flat horizontal segment at a
+// hardcoded height; as a real edge (see CONNECTOR_SHAPE_IDS) the main line
+// can end up at any angle once its ends are dragged onto shapes, so the
+// stub is instead perpendicular to whatever that actual angle is, branching
+// off partway between the two endpoints rather than at a fixed x/y.
+function paintFishboneSubStub(c: AbstractCanvas2D, start: Point, end: Point) {
+  const dx = end.x - start.x;
+  const dy = end.y - start.y;
+  const len = Math.hypot(dx, dy) || 1;
+  const ux = dx / len;
+  const uy = dy / len;
+  const px = -uy;
+  const py = ux;
+  const branchAt = 0.55;
+  const stubLength = Math.min(18, len * 0.3);
+  const bx = start.x + dx * branchAt;
+  const by = start.y + dy * branchAt;
+  c.begin();
+  c.moveTo(bx, by);
+  c.lineTo(bx + px * stubLength, by + py * stubLength);
+  c.stroke();
+}
+
 // ════════════════════════════════════════════════════════════════════════════
 // FDD SHAPES - Canvas implementations
 // ════════════════════════════════════════════════════════════════════════════
@@ -1247,6 +1272,19 @@ class FishboneCauseTopShapeCanvas extends Shape {
     c.lineTo(x + w - 2, y + 2);
     c.stroke();
   }
+
+  // Real edge now (see CONNECTOR_SHAPE_IDS) — dragged onto/between the
+  // spine and its cause label like any other connector, instead of
+  // sitting as a fixed-size, fixed-angle floating box. paintBackground
+  // above only still runs for older saved diagrams that have this as a
+  // plain vertex.
+  paintEdgeShape(c: AbstractCanvas2D, pts: Point[]) {
+    if (pts.length < 2) return;
+    c.setStrokeColor(this.stroke);
+    c.setStrokeWidth(this.strokeWidth);
+    if (this.strokeWidth <= 0) c.setStrokeColor('none');
+    edgeLine(c, pts[0], pts, pts[pts.length - 1]);
+  }
 }
 
 class FishboneCauseBottomShapeCanvas extends Shape {
@@ -1263,6 +1301,16 @@ class FishboneCauseBottomShapeCanvas extends Shape {
     c.moveTo(x + 2, y + 2);
     c.lineTo(x + w - 2, y + h - 2);
     c.stroke();
+  }
+
+  // Real edge now (see CONNECTOR_SHAPE_IDS) — same reasoning as
+  // FishboneCauseTopShapeCanvas above.
+  paintEdgeShape(c: AbstractCanvas2D, pts: Point[]) {
+    if (pts.length < 2) return;
+    c.setStrokeColor(this.stroke);
+    c.setStrokeWidth(this.strokeWidth);
+    if (this.strokeWidth <= 0) c.setStrokeColor('none');
+    edgeLine(c, pts[0], pts, pts[pts.length - 1]);
   }
 }
 
@@ -1285,6 +1333,20 @@ class FishboneSubCauseTopShapeCanvas extends Shape {
     c.lineTo(x + w - 2, y + h * 0.4);
     c.stroke();
   }
+
+  // Real edge now (see CONNECTOR_SHAPE_IDS) — see FishboneCauseTopShapeCanvas
+  // above. paintFishboneSubStub redoes the extra branch tick relative to the
+  // edge's own actual angle instead of a fixed x/y within a box.
+  paintEdgeShape(c: AbstractCanvas2D, pts: Point[]) {
+    if (pts.length < 2) return;
+    c.setStrokeColor(this.stroke);
+    c.setStrokeWidth(this.strokeWidth);
+    if (this.strokeWidth <= 0) c.setStrokeColor('none');
+    const start = pts[0];
+    const end = pts[pts.length - 1];
+    edgeLine(c, start, pts, end);
+    paintFishboneSubStub(c, start, end);
+  }
 }
 
 class FishboneSubCauseBottomShapeCanvas extends Shape {
@@ -1306,6 +1368,19 @@ class FishboneSubCauseBottomShapeCanvas extends Shape {
     c.lineTo(x + w - 2, y + h * 0.6);
     c.stroke();
   }
+
+  // Real edge now (see CONNECTOR_SHAPE_IDS) — same reasoning as
+  // FishboneSubCauseTopShapeCanvas above.
+  paintEdgeShape(c: AbstractCanvas2D, pts: Point[]) {
+    if (pts.length < 2) return;
+    c.setStrokeColor(this.stroke);
+    c.setStrokeWidth(this.strokeWidth);
+    if (this.strokeWidth <= 0) c.setStrokeColor('none');
+    const start = pts[0];
+    const end = pts[pts.length - 1];
+    edgeLine(c, start, pts, end);
+    paintFishboneSubStub(c, start, end);
+  }
 }
 
 class FishboneTertiaryShapeCanvas extends Shape {
@@ -1322,6 +1397,16 @@ class FishboneTertiaryShapeCanvas extends Shape {
     c.moveTo(x + 2, y + h - 2);
     c.lineTo(x + w - 2, y + 2);
     c.stroke();
+  }
+
+  // Real edge now (see CONNECTOR_SHAPE_IDS) — same reasoning as
+  // FishboneCauseTopShapeCanvas above.
+  paintEdgeShape(c: AbstractCanvas2D, pts: Point[]) {
+    if (pts.length < 2) return;
+    c.setStrokeColor(this.stroke);
+    c.setStrokeWidth(this.strokeWidth);
+    if (this.strokeWidth <= 0) c.setStrokeColor('none');
+    edgeLine(c, pts[0], pts, pts[pts.length - 1]);
   }
 }
 

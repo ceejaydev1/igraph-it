@@ -1201,12 +1201,29 @@ export function validateFishbone(graph: Graph): DiagramIssue[] {
   const subCauseRoles = new Set(['fishbone-sub-top', 'fishbone-sub-bottom']);
   const causeRoles = new Set([...mainCauseRoles, ...subCauseRoles, 'fishbone-tertiary']);
 
-  const { issues, validVertices } = runStructuralChecks(graph, {
+  // Cause shapes are real edges now (see CONNECTOR_SHAPE_IDS in
+  // constants/shapes.ts) — dragged directly onto the spine/their parent
+  // cause like any other connector instead of sitting as a fixed-angle
+  // floating box a separate connector had to be drawn onto to count as
+  // "attached". runStructuralChecks' validVertices only ever holds real
+  // vertices (it skips isConnectorCell cells entirely), so every check
+  // below that used to read a cause *vertex*'s own edges now reads the
+  // cause *edge*'s own source/target roles directly instead — same
+  // structural question ("is this attached to the right kind of parent"),
+  // just answered the way an edge answers it rather than a vertex.
+  const { issues, validVertices, edges } = runStructuralChecks(graph, {
     freeFloatingRoles: new Set(['fishbone-note', 'fishbone-spine']),
     annotationRoles: new Set(['fishbone-note']),
-    labeledRoles: new Set(['fishbone-head', 'fishbone-problem', ...causeRoles, 'fishbone-category']),
+    labeledRoles: new Set(['fishbone-head', 'fishbone-problem', 'fishbone-category']),
     disconnectedMessage: "This shape isn't connected to the fishbone yet.",
   });
+
+  const causeEdges = edges.filter((e) => causeRoles.has(getShapeRole(e) ?? ''));
+
+  // G4-equivalent for causes — checkEmptyLabels works on any Cell[], edges
+  // included, but runStructuralChecks above only ever runs it over
+  // validVertices, which causes no longer appear in.
+  issues.push(...checkEmptyLabels(causeEdges, causeRoles));
 
   const spines = validVertices.filter((c) => getShapeRole(c) === 'fishbone-spine');
   // 5.1/5.2 — exactly one spine expected.
@@ -1234,38 +1251,35 @@ export function validateFishbone(graph: Graph): DiagramIssue[] {
     }
   });
 
-  // 5.5 — a Main Cause must attach to the spine.
-  for (const cell of validVertices) {
-    const role = getShapeRole(cell);
+  // 5.5 — a Main Cause must attach to the spine. Dangling ends (neither
+  // terminal a real cell) are already reported separately by G2's
+  // checkDanglingEdges inside runStructuralChecks above, so this only
+  // needs to ask "is the spine one of this cause's two real endpoints".
+  for (const edge of causeEdges) {
+    const role = getShapeRole(edge);
     if (!role || !mainCauseRoles.has(role)) continue;
-    const attachedToSpine = (cell.getEdges(true, true, false) ?? []).some((e) => {
-      const other = e.source === cell ? e.target : e.source;
-      return other && getShapeRole(other) === 'fishbone-spine';
-    });
+    const { sourceRole, targetRole } = edgeRoles(edge);
+    const attachedToSpine = sourceRole === 'fishbone-spine' || targetRole === 'fishbone-spine';
     if (!attachedToSpine) {
-      issues.push({ cell, severity: 'error', message: 'This Main Cause should branch from the spine.' });
+      issues.push({ cell: edge, severity: 'error', message: 'This Main Cause should branch from the spine.' });
     }
   }
 
   // 5.6/5.7/5.8 — sub-causes branch from a Main Cause, tertiary causes
   // branch from a Sub-Cause; a cause attached straight to the spine (or to
   // nothing at all) is wrong at any level.
-  for (const cell of validVertices) {
-    const role = getShapeRole(cell);
+  for (const edge of causeEdges) {
+    const role = getShapeRole(edge);
     if (!role || (!subCauseRoles.has(role) && role !== 'fishbone-tertiary')) continue;
     const parentRoles = role === 'fishbone-tertiary' ? subCauseRoles : mainCauseRoles;
-    const links = cell.getEdges(true, true, false) ?? [];
-    const connectedToExpectedParent = links.some((e) => {
-      const other = e.source === cell ? e.target : e.source;
-      const otherRole = other ? getShapeRole(other) : undefined;
-      return otherRole && parentRoles.has(otherRole);
-    });
+    const { sourceCell, targetCell, sourceRole, targetRole } = edgeRoles(edge);
+    const connectedToExpectedParent = (!!sourceRole && parentRoles.has(sourceRole)) || (!!targetRole && parentRoles.has(targetRole));
     if (!connectedToExpectedParent) {
       const expected = role === 'fishbone-tertiary' ? 'a Sub-Cause' : 'a Main Cause';
-      if (links.length === 0) {
-        issues.push({ cell, severity: 'error', message: `This cause isn't connected to anything — every cause should branch from ${expected}.` });
+      if (!sourceCell && !targetCell) {
+        issues.push({ cell: edge, severity: 'error', message: `This cause isn't connected to anything — every cause should branch from ${expected}.` });
       } else {
-        issues.push({ cell, severity: 'warning', message: `This should branch from ${expected}, not connect straight to the spine.` });
+        issues.push({ cell: edge, severity: 'warning', message: `This should branch from ${expected}, not connect straight to the spine.` });
       }
     }
   }
@@ -1276,8 +1290,8 @@ export function validateFishbone(graph: Graph): DiagramIssue[] {
   // into the shape choice itself.
   const topRoles = new Set(['fishbone-cause-top', 'fishbone-sub-top']);
   const bottomRoles = new Set(['fishbone-cause-bottom', 'fishbone-sub-bottom']);
-  const hasTop = validVertices.some((c) => topRoles.has(getShapeRole(c) ?? ''));
-  const hasBottom = validVertices.some((c) => bottomRoles.has(getShapeRole(c) ?? ''));
+  const hasTop = causeEdges.some((e) => topRoles.has(getShapeRole(e) ?? ''));
+  const hasBottom = causeEdges.some((e) => bottomRoles.has(getShapeRole(e) ?? ''));
   if (hasTop !== hasBottom && (hasTop || hasBottom)) {
     issues.push({ severity: 'info', message: 'Only one side of the spine has causes on it — consider balancing categories across both sides.' });
   }

@@ -831,6 +831,7 @@ export const CONNECTOR_SHAPE_IDS = new Set([
   'erd-connector', 'erd-cardinality-11', 'erd-cardinality-1n', 'erd-cardinality-n1', 'erd-cardinality-mn',
   // Fishbone Diagram
   'fishbone-arrow', 'fishbone-dashed-arrow',
+  'fishbone-cause-top', 'fishbone-cause-bottom', 'fishbone-sub-top', 'fishbone-sub-bottom', 'fishbone-tertiary',
   // Use Case Diagram
   'uc-association', 'uc-include', 'uc-extend', 'uc-generalization', 'uc-note-connector',
   // Activity Diagram
