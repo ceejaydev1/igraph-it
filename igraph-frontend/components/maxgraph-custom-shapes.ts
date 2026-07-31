@@ -1269,6 +1269,12 @@ class FishboneProblemShapeCanvas extends Shape {
   }
 }
 
+// "Top"/"Bottom" name which side of the spine the cause sits on, not the
+// diagonal's own slant — Top draws "\" (top-left to bottom-right) so it
+// angles *down* toward the spine below it, Bottom draws "/" (bottom-left
+// to top-right) so it angles *up* toward the spine above it. Matching
+// FISHBONE_DIAGONAL_UP/DOWN in DiagramCanvas.tsx controls the same slant
+// for a freshly-dropped connector version of these.
 class FishboneCauseTopShapeCanvas extends Shape {
   paintBackground(c: AbstractCanvas2D, x: number, y: number, w: number, h: number) {
     c.setStrokeColor(this.stroke);
@@ -1280,8 +1286,8 @@ class FishboneCauseTopShapeCanvas extends Shape {
     // invisible.
     if (this.strokeWidth <= 0) c.setStrokeColor('none');
     c.begin();
-    c.moveTo(x + 2, y + h - 2);
-    c.lineTo(x + w - 2, y + 2);
+    c.moveTo(x + 2, y + 2);
+    c.lineTo(x + w - 2, y + h - 2);
     c.stroke();
   }
 
@@ -1310,8 +1316,8 @@ class FishboneCauseBottomShapeCanvas extends Shape {
     // invisible.
     if (this.strokeWidth <= 0) c.setStrokeColor('none');
     c.begin();
-    c.moveTo(x + 2, y + 2);
-    c.lineTo(x + w - 2, y + h - 2);
+    c.moveTo(x + 2, y + h - 2);
+    c.lineTo(x + w - 2, y + 2);
     c.stroke();
   }
 

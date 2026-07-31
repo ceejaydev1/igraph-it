@@ -494,9 +494,13 @@ export const SEQUENCE_MESSAGE_SHAPE_IDS = new Set(['seq-sync-msg', 'seq-async-ms
 // their diagonal angle (see their shapes-panel preview icons) — used below
 // in handleDrop to keep that angle for a drop with nothing nearby to
 // attach to, instead of findConnectorDropEndpoints' generic horizontal
-// fallback flattening it out.
-const FISHBONE_DIAGONAL_UP = new Set(['fishbone-cause-top', 'fishbone-sub-top', 'fishbone-tertiary']);
-const FISHBONE_DIAGONAL_DOWN = new Set(['fishbone-cause-bottom', 'fishbone-sub-bottom']);
+// fallback flattening it out. UP = "/" (bottom-left to top-right), DOWN =
+// "\" (top-left to bottom-right) — Main Cause (Top) sits above the spine
+// so it angles *down* toward it ("\", DOWN), Main Cause (Bottom) sits
+// below so it angles *up* toward it ("/", UP) — see the matching comment
+// on FishboneCauseTopShapeCanvas in maxgraph-custom-shapes.ts.
+const FISHBONE_DIAGONAL_UP = new Set(['fishbone-cause-bottom', 'fishbone-sub-top', 'fishbone-tertiary']);
+const FISHBONE_DIAGONAL_DOWN = new Set(['fishbone-cause-top', 'fishbone-sub-bottom']);
 // A Main Cause branches off the spine specifically (validateFishbone's
 // 5.5) — never straight onto the Fish Head or any other nearby shape, even
 // if one happens to be closer to the drop point. The generic connector
