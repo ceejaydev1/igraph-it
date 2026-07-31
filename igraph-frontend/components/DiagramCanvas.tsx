@@ -419,10 +419,14 @@ function distanceToSegment(px: number, py: number, ax: number, ay: number, bx: n
 // two endpoints (real cell or floating terminal point either way — see
 // edgeEndpoint), same generous-tolerance approach validateERD's nearestEdge
 // already uses for matching a cardinality marker to its edge.
-export function findEdgeNearPoint(graph: Graph, x: number, y: number, threshold: number): any {
+// `roles`, when given, restricts the search to edges of just those shape
+// roles (see the Fishbone Main Cause branch in handleDrop, which must only
+// ever find the spine — never any other nearby connector).
+export function findEdgeNearPoint(graph: Graph, x: number, y: number, threshold: number, roles?: Set<string>): any {
   let best: any = null;
   let bestDistance = Infinity;
   for (const edge of graph.getChildEdges(graph.getDefaultParent())) {
+    if (roles && !roles.has(getShapeRole(edge) ?? '')) continue;
     const a = edgeEndpoint(edge, true);
     const b = edgeEndpoint(edge, false);
     if (!a || !b) continue;
@@ -493,6 +497,13 @@ export const SEQUENCE_MESSAGE_SHAPE_IDS = new Set(['seq-sync-msg', 'seq-async-ms
 // fallback flattening it out.
 const FISHBONE_DIAGONAL_UP = new Set(['fishbone-cause-top', 'fishbone-sub-top', 'fishbone-tertiary']);
 const FISHBONE_DIAGONAL_DOWN = new Set(['fishbone-cause-bottom', 'fishbone-sub-bottom']);
+// A Main Cause branches off the spine specifically (validateFishbone's
+// 5.5) — never straight onto the Fish Head or any other nearby shape, even
+// if one happens to be closer to the drop point. The generic connector
+// search (bracketing, then nearby-vertex/edge fallback) doesn't know that
+// distinction, so these two get their own spine-only search in handleDrop
+// instead of the shared one every other connector uses.
+const FISHBONE_MAIN_CAUSE_IDS = new Set(['fishbone-cause-top', 'fishbone-cause-bottom']);
 
 function getCellStyleShapeName(cell: any): string | undefined {
   const style = cell?.getStyle?.();
@@ -2305,7 +2316,31 @@ const WebCanvas = forwardRef<DiagramCanvasHandle, DiagramCanvasProps>(({ onReady
         let startPoint: { x: number; y: number };
         let endPoint: { x: number; y: number };
 
-        if (SEQUENCE_MESSAGE_SHAPE_IDS.has(shapeId)) {
+        if (FISHBONE_MAIN_CAUSE_IDS.has(shapeId)) {
+          // A Main Cause must branch off the spine specifically
+          // (validateFishbone's 5.5) — the generic connector search below
+          // would happily bracket/snap it onto whatever's nearest (the
+          // Fish Head in particular, if dropped anywhere close to it),
+          // which counts as "attached" structurally but is the wrong
+          // parent. Searches only for the spine, never anything else, so a
+          // Main Cause can only ever end up attached to it or fully
+          // floating — never straight onto another shape.
+          const centerX = cx + dropW / 2;
+          const centerY = cy + dropH / 2;
+          const dy = FISHBONE_DIAGONAL_UP.has(shapeId) ? -dropH : dropH;
+          const spine = findEdgeNearPoint(graph, centerX, centerY, CONNECTOR_SNAP_DISTANCE, new Set(['fishbone-spine']));
+          if (spine) {
+            sourceCell = spine;
+            targetCell = null;
+            startPoint = { x: centerX, y: centerY };
+            endPoint = { x: centerX + dropW, y: centerY + dy };
+          } else {
+            sourceCell = null;
+            targetCell = null;
+            startPoint = { x: centerX - dropW / 2, y: centerY - dy / 2 };
+            endPoint = { x: centerX + dropW / 2, y: centerY + dy / 2 };
+          }
+        } else if (SEQUENCE_MESSAGE_SHAPE_IDS.has(shapeId)) {
           const dropY = cy + dropH / 2;
           const found = findSequenceMessageEndpoints(graph, x, dropY);
           sourceCell = found.source;
@@ -2380,16 +2415,27 @@ const WebCanvas = forwardRef<DiagramCanvasHandle, DiagramCanvasProps>(({ onReady
           // with the head's vertical center — anything even slightly off
           // instead resolves onto one of the triangle's slanted edges,
           // which is what actually produced a crooked, not-quite-
-          // horizontal connection. A fixed entry point at that exact spot
-          // (entryPerimeter:false skips the dynamic calculation entirely)
-          // makes the attachment deterministic no matter where the
-          // spine's other end is. Scoped to 'fishbone-head' specifically —
-          // Effect Box is a plain rectangle, where (0.5, 0.5) would be its
-          // *interior* center, not a boundary point.
+          // horizontal connection (and, when dropped close enough that
+          // *both* the generic search's left and right probe points land
+          // on the head at once — hSource claims it and the duplicate
+          // hTarget candidate gets dropped, so it ends up as sourceCell,
+          // not targetCell — a genuinely degenerate near-zero-length
+          // "next" direction, which is what produced the thin sliver
+          // artifact instead of a merely-crooked line). A fixed entry/exit
+          // point at that exact spot (entryPerimeter/exitPerimeter:false
+          // skips the dynamic calculation entirely) makes the attachment
+          // deterministic no matter where the spine's other end is, or
+          // which end the head ended up on. Scoped to 'fishbone-head'
+          // specifically — Effect Box is a plain rectangle, where
+          // (0.5, 0.5) would be its *interior* center, not a boundary point.
           if (shapeId === 'fishbone-spine' && targetCell && getShapeRole(targetCell) === 'fishbone-head') {
             styleObject.entryX = 0.5;
             styleObject.entryY = 0.5;
             styleObject.entryPerimeter = false;
+          } else if (shapeId === 'fishbone-spine' && sourceCell && getShapeRole(sourceCell) === 'fishbone-head') {
+            styleObject.exitX = 0.5;
+            styleObject.exitY = 0.5;
+            styleObject.exitPerimeter = false;
           }
         }
 
