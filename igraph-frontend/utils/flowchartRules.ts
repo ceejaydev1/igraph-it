@@ -1247,9 +1247,21 @@ export function validateFishbone(graph: Graph): DiagramIssue[] {
       issues.push({ cell, severity: 'warning', message: 'A fishbone diagram should only have one Fish Head or Effect Box.' });
     });
   }
-  // 5.9 — the effect exists but nothing feeds into it yet.
+  // 5.9 — the effect exists but nothing feeds into it yet. Checking
+  // head.getEdges() alone stopped meaning that the moment the spine became
+  // a real edge in its own right: the spine's own connection to the head
+  // always satisfies "head has an edge", regardless of whether any Main
+  // Cause is actually attached to that spine — so this used to always pass
+  // once a spine existed, even on a diagram with zero causes anywhere.
+  // Checks the actual causal chain instead: is any cause edge attached to
+  // any spine at all.
+  const anyCauseOnSpine = causeEdges.some((e) => {
+    const { sourceRole, targetRole } = edgeRoles(e);
+    return sourceRole === 'fishbone-spine' || targetRole === 'fishbone-spine';
+  });
   heads.forEach((head) => {
-    if ((head.getEdges(true, true, false)?.length ?? 0) === 0) {
+    const headEdges = head.getEdges(true, true, false) ?? [];
+    if (headEdges.length === 0 || !anyCauseOnSpine) {
       issues.push({ cell: head, severity: 'warning', message: 'No causes lead into this effect yet — no analysis has been added.' });
     }
   });
