@@ -435,6 +435,36 @@ export function findEdgeNearPoint(graph: Graph, x: number, y: number, threshold:
   return best;
 }
 
+// Fishbone's spine is meant to attach to the one Fish Head/Effect Box in
+// the diagram no matter how far away it was dropped — there's only ever
+// one, so unlike an ordinary connector snap (small fixed radius, meant to
+// disambiguate between several nearby candidates) there's nothing to
+// disambiguate here. Used by handleDrop below both when the spine itself
+// is dropped (finds the head) and when the head is dropped after the
+// spine already exists (finds the spine) — see findDanglingEdgeByRole.
+function findVertexByRole(graph: Graph, roles: Set<string>): any {
+  for (const cell of graph.getChildVertices(graph.getDefaultParent())) {
+    const role = getShapeRole(cell);
+    if (role && roles.has(role)) return cell;
+  }
+  return null;
+}
+
+// The other half of findVertexByRole above — finds an edge of one of the
+// given roles that still has at least one unattached end, and which end.
+function findDanglingEdgeByRole(
+  graph: Graph,
+  roles: Set<string>,
+): { edge: any; isSource: boolean } | null {
+  for (const edge of graph.getChildEdges(graph.getDefaultParent())) {
+    const role = getShapeRole(edge);
+    if (!role || !roles.has(role)) continue;
+    if (!edge.source) return { edge, isSource: true };
+    if (!edge.target) return { edge, isSource: false };
+  }
+  return null;
+}
+
 // Sequence Diagram message arrows (Sync/Async/Return) are meant to span
 // however far apart the two participants actually are — not the connector
 // shape's own arbitrary default width. The generic connector-drop snap
@@ -2323,6 +2353,22 @@ const WebCanvas = forwardRef<DiagramCanvasHandle, DiagramCanvasProps>(({ onReady
               startPoint = { x: endPoint.x - dropW, y: endPoint.y - dy };
             }
           }
+
+          // The spine's whole job is to reach the one Fish Head/Effect Box
+          // in the diagram — unlike an ordinary connector's small fixed
+          // snap radius (meant to pick the right one among several nearby
+          // shapes), there's only ever one of these, so it should attach
+          // no matter how far away it actually is. Only steps in when the
+          // normal search above didn't already find something on the
+          // right end — a real nearby/bracketed attachment always wins.
+          if (shapeId === 'fishbone-spine' && !targetCell) {
+            const head = findVertexByRole(graph, new Set(['fishbone-head', 'fishbone-problem']));
+            if (head) {
+              targetCell = head;
+              const headGeo = head.getGeometry();
+              if (headGeo) endPoint = { x: headGeo.x, y: headGeo.y + headGeo.height / 2 };
+            }
+          }
         }
 
         cell = graph.insertEdge(null, null, '', sourceCell, targetCell, styleObject);
@@ -2441,6 +2487,17 @@ const WebCanvas = forwardRef<DiagramCanvasHandle, DiagramCanvasProps>(({ onReady
         }
       }
       tagShapeRole(cell, shapeId);
+
+      // The reverse order from the spine's own special-case above — a Fish
+      // Head/Effect Box dropped after the spine already exists (dangling,
+      // waiting for it) attaches no matter how far away it lands, same
+      // reasoning: there's only ever one spine to find.
+      if ((shapeId === 'fishbone-head' || shapeId === 'fishbone-problem') && cell) {
+        const danglingSpine = findDanglingEdgeByRole(graph, new Set(['fishbone-spine']));
+        if (danglingSpine) {
+          graph.getDataModel().setTerminal(danglingSpine.edge, cell, danglingSpine.isSource);
+        }
+      }
 
       // A shape dropped near an existing connector's loose end should
       // attach to it automatically — the mirror of the magnet-snap a
