@@ -3538,6 +3538,21 @@ const WebCanvas = forwardRef<DiagramCanvasHandle, DiagramCanvasProps>(({ onReady
 
       const onPinchTouchStart = (e: TouchEvent) => {
         if (e.touches.length === 2) {
+          // The first finger landing (just before the second joins to make
+          // this a pinch) already started PanningHandler's own single-
+          // finger pan — useLeftButtonForPanning is on for mobile (above),
+          // so that's normal single-finger scrolling. It doesn't stop on
+          // its own just because a second finger arrived: mobile browsers
+          // keep synthesizing mouse-move from that first touch point
+          // independently of the touchmove listener below (preventDefault
+          // there doesn't reach an already-active mousedown→mousemove
+          // chain), so the view kept panning *while* also being zoomed —
+          // the jumpy/jittery feel this is fixing. reset() forcibly ends
+          // that pan the instant the pinch actually starts, leaving this
+          // handler as the two-finger gesture's only driver, same as the
+          // isForcePanningEvent/pinchEnabled guards above already make it
+          // for maxGraph's own built-in pinch handling.
+          panningHandler?.reset();
           pinchBaseDistance = touchDistance(e.touches);
           pinchStepIndex = nearestZoomStepIndex(Math.round(graph.getView().getScale() * 100));
         }
