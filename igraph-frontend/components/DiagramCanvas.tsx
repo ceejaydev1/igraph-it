@@ -2396,12 +2396,31 @@ const WebCanvas = forwardRef<DiagramCanvasHandle, DiagramCanvasProps>(({ onReady
           // no matter how far away it actually is. Only steps in when the
           // normal search above didn't already find something on the
           // right end — a real nearby/bracketed attachment always wins.
+          // head !== sourceCell matters: dropped close enough to the head
+          // that the generic search's left AND right probe points both
+          // land on it, sourceCell already *is* the head (see the
+          // exitX/exitY case below) — without this check this fallback
+          // would then also assign the *same* head to targetCell, wiring
+          // both ends of the edge to one identical cell. That degenerate
+          // edge (not just a crooked line — an edge with no real "next"
+          // direction between its two ends at all, since both are the
+          // same shape) is what actually produced the artifact at the tip.
           if (shapeId === 'fishbone-spine' && !targetCell) {
             const head = findVertexByRole(graph, new Set(['fishbone-head', 'fishbone-problem']));
-            if (head) {
+            if (head && head !== sourceCell) {
               targetCell = head;
               const headGeo = head.getGeometry();
               if (headGeo) endPoint = { x: headGeo.x, y: headGeo.y + headGeo.height / 2 };
+            } else if (head && head === sourceCell) {
+              // Give the still-dangling far end a clean, well-clear-of-the-
+              // head point instead of leaving it at the original hEnd
+              // probe point (which, dropped this close, could land inside
+              // or barely past the head's own bounds) — reads the same as
+              // a normal "dropped far away" spine once dragged/left alone.
+              const headGeo = head.getGeometry();
+              if (headGeo) {
+                endPoint = { x: headGeo.x - Math.max(dropW, 120), y: headGeo.y + headGeo.height / 2 };
+              }
             }
           }
 
