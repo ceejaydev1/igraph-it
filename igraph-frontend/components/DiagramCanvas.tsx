@@ -448,6 +448,14 @@ const SEQUENCE_TIMELINE_STYLES = new Set([
 
 export const SEQUENCE_MESSAGE_SHAPE_IDS = new Set(['seq-sync-msg', 'seq-async-msg', 'seq-return-msg']);
 
+// Fishbone's cause connectors read as a "bone" specifically because of
+// their diagonal angle (see their shapes-panel preview icons) — used below
+// in handleDrop to keep that angle for a drop with nothing nearby to
+// attach to, instead of findConnectorDropEndpoints' generic horizontal
+// fallback flattening it out.
+const FISHBONE_DIAGONAL_UP = new Set(['fishbone-cause-top', 'fishbone-sub-top', 'fishbone-tertiary']);
+const FISHBONE_DIAGONAL_DOWN = new Set(['fishbone-cause-bottom', 'fishbone-sub-bottom']);
+
 function getCellStyleShapeName(cell: any): string | undefined {
   const style = cell?.getStyle?.();
   return typeof style === 'object' ? style?.shape : undefined;
@@ -2251,11 +2259,27 @@ const WebCanvas = forwardRef<DiagramCanvasHandle, DiagramCanvasProps>(({ onReady
           endPoint = targetGeo ? { x: targetGeo.x, y: dropY } : { x: cx + dropW, y: dropY };
           Object.assign(styleObject, sequenceMessageConnectionStyle(sourceCell, targetCell, dropY));
         } else {
-          const found = findConnectorDropEndpoints(graph, cx + dropW / 2, cy + dropH / 2, dropW);
+          const centerX = cx + dropW / 2;
+          const centerY = cy + dropH / 2;
+          const found = findConnectorDropEndpoints(graph, centerX, centerY, dropW);
           startPoint = found.startPoint;
           endPoint = found.endPoint;
           sourceCell = found.sourceCell;
           targetCell = found.targetCell;
+
+          // Only overridden when nothing was found to attach to on either
+          // end — a real bracketed pair or magnet-snapped shape always
+          // wins over matching the panel icon's angle, since actually
+          // being attached matters more than the exact angle.
+          if (!sourceCell && !targetCell) {
+            if (FISHBONE_DIAGONAL_UP.has(shapeId)) {
+              startPoint = { x: centerX - dropW / 2, y: centerY + dropH / 2 };
+              endPoint = { x: centerX + dropW / 2, y: centerY - dropH / 2 };
+            } else if (FISHBONE_DIAGONAL_DOWN.has(shapeId)) {
+              startPoint = { x: centerX - dropW / 2, y: centerY - dropH / 2 };
+              endPoint = { x: centerX + dropW / 2, y: centerY + dropH / 2 };
+            }
+          }
         }
 
         cell = graph.insertEdge(null, null, '', sourceCell, targetCell, styleObject);
