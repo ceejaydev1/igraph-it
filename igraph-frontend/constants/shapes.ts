@@ -108,10 +108,10 @@ export const DIAGRAM_SHAPES: Record<string, ShapeDefinition[]> = {
     { id: 'erd-attribute', svgComponent: 'ERDAttributeShape', label: 'Attribute', description: 'Entity property', width: 100, height: 50, category: 'UML' },
     { id: 'erd-multivalued-attr', svgComponent: 'ERDMultivaluedAttrShape', label: 'Multivalued Attr', description: 'Multiple values (double oval)', width: 100, height: 50, category: 'UML' },
     { id: 'erd-derived-attr', svgComponent: 'ERDDerivedAttrShape', label: 'Derived Attr', description: 'Calculated attribute (dashed oval)', width: 100, height: 50, category: 'UML' },
-    { id: 'erd-cardinality-11', svgComponent: 'ERDCardinality11Shape', label: 'Cardinality 1:1', description: 'One to one', width: 80, height: 40, category: 'UML' },
-    { id: 'erd-cardinality-1n', svgComponent: 'ERDCardinality1NShape', label: 'Cardinality 1:N', description: 'One to many', width: 80, height: 40, category: 'UML' },
-    { id: 'erd-cardinality-n1', svgComponent: 'ERDCardinalityN1Shape', label: 'Cardinality N:1', description: 'Many to one', width: 80, height: 40, category: 'UML' },
-    { id: 'erd-cardinality-mn', svgComponent: 'ERDCardinalityMNShape', label: 'Cardinality M:N', description: 'Many to many', width: 80, height: 40, category: 'UML' },
+    { id: 'erd-cardinality-11', svgComponent: 'ERDCardinality11Shape', label: 'Cardinality 1:1', description: 'One to one', width: 240, height: 40, category: 'UML' },
+    { id: 'erd-cardinality-1n', svgComponent: 'ERDCardinality1NShape', label: 'Cardinality 1:N', description: 'One to many', width: 240, height: 40, category: 'UML' },
+    { id: 'erd-cardinality-n1', svgComponent: 'ERDCardinalityN1Shape', label: 'Cardinality N:1', description: 'Many to one', width: 240, height: 40, category: 'UML' },
+    { id: 'erd-cardinality-mn', svgComponent: 'ERDCardinalityMNShape', label: 'Cardinality M:N', description: 'Many to many', width: 240, height: 40, category: 'UML' },
     { id: 'erd-connector', svgComponent: 'ERDConnectorShape', label: 'Connector', description: 'Relationship line', width: 60, height: 20, category: 'UML' },
   ],
 
@@ -120,7 +120,7 @@ export const DIAGRAM_SHAPES: Record<string, ShapeDefinition[]> = {
   // ═══════════════════════════════════════════════════════════════════════════
   'Fishbone Diagram': [
     { id: 'fishbone-spine', svgComponent: 'FishboneSpineShape', label: 'Spine', description: 'Central backbone', width: 120, height: 20, category: 'UML' },
-    { id: 'fishbone-head', svgComponent: 'FishboneHeadShape', label: 'Fish Head', description: 'Problem/Effect', width: 120, height: 90, category: 'UML' },
+    { id: 'fishbone-head', svgComponent: 'FishboneHeadShape', label: 'Fish Head', description: 'Problem/Effect', width: 160, height: 130, category: 'UML' },
     { id: 'fishbone-problem', svgComponent: 'FishboneProblemShape', label: 'Effect Box', description: 'Problem being analyzed', width: 140, height: 60, category: 'UML' },
     { id: 'fishbone-cause-top', svgComponent: 'FishboneCauseTopShape', label: 'Main Cause (Top)', description: 'Cause category above spine', width: 100, height: 80, category: 'UML' },
     { id: 'fishbone-cause-bottom', svgComponent: 'FishboneCauseBottomShape', label: 'Main Cause (Bottom)', description: 'Cause category below spine', width: 100, height: 80, category: 'UML' },
@@ -828,7 +828,7 @@ export const CONNECTOR_SHAPE_IDS = new Set([
   // Data Flow Diagram
   'dfd-data-flow', 'dfd-bidirectional',
   // Entity Relationship Diagram
-  'erd-connector',
+  'erd-connector', 'erd-cardinality-11', 'erd-cardinality-1n', 'erd-cardinality-n1', 'erd-cardinality-mn',
   // Fishbone Diagram
   'fishbone-arrow', 'fishbone-dashed-arrow',
   // Use Case Diagram

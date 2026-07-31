@@ -1133,10 +1133,21 @@ export function validateERD(graph: Graph): DiagramIssue[] {
   }
 
   // 4.7 / 4.8 — cardinality markers belong on entity<->relationship legs,
-  // not on attribute links, and every leg should carry one.
-  const cardinalityCells = validVertices.filter((c) => isCardinality(getShapeRole(c)));
+  // not on attribute links, and every leg should carry one. Cardinality
+  // markers are real edges now (see CONNECTOR_SHAPE_IDS in
+  // constants/shapes.ts) — dropped straight onto/between an entity and a
+  // relationship, the marker itself *is* that leg's connector, so it
+  // satisfies 4.8 the instant it links the two. Diagrams saved before that
+  // change still have cardinality as a small free-floating vertex placed
+  // near a separate connecting edge — nearestEdge's proximity heuristic
+  // keeps recognizing those exactly as it always did.
   const claimedEdges = new Set<Cell>();
-  for (const marker of cardinalityCells) {
+  for (const edge of entityRelationshipEdges) {
+    if (isCardinality(getShapeRole(edge))) claimedEdges.add(edge);
+  }
+
+  const cardinalityVertices = validVertices.filter((c) => isCardinality(getShapeRole(c)));
+  for (const marker of cardinalityVertices) {
     const edge = nearestEdge(marker, edges);
     if (!edge) continue;
     const { sourceRole, targetRole } = edgeRoles(edge);

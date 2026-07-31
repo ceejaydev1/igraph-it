@@ -501,6 +501,82 @@ function paintConnectorLine(
   if (dashedLine) c.setDashed(false);
 }
 
+// ERD cardinality markers (1:1, 1:N, N:1, M:N) — like every other shape in
+// this section, these are real edges now (see CONNECTOR_SHAPE_IDS in
+// constants/shapes.ts), so `pts` is the actual resolved source→target line,
+// not a synthesized box. Draws that line the same way edgeLine does, plus
+// the two notation labels inset a bit from each end and nudged to the
+// line's "upper" side (perpendicular to its direction) so they read next to
+// the line instead of sitting on top of the stroke. Either label can be
+// blank — see cardinalityLabels below, for when this connector is one half
+// of a relationship split (Entity -1- Relationship -N- Entity), where only
+// the entity-facing end of each half should carry a symbol at all.
+function paintCardinalityEdge(
+  c: AbstractCanvas2D,
+  pts: Point[],
+  startLabel: string,
+  endLabel: string,
+) {
+  if (pts.length < 2) return;
+  const start = pts[0];
+  const end = pts[pts.length - 1];
+
+  c.begin();
+  c.moveTo(start.x, start.y);
+  for (let i = 1; i < pts.length - 1; i++) c.lineTo(pts[i].x, pts[i].y);
+  c.lineTo(end.x, end.y);
+  c.stroke();
+
+  if (!startLabel && !endLabel) return;
+
+  const dx = end.x - start.x;
+  const dy = end.y - start.y;
+  const len = Math.hypot(dx, dy) || 1;
+  const ux = dx / len;
+  const uy = dy / len;
+  // Perpendicular to the line's direction, rotated so a horizontal line
+  // (the common case — two entities side by side) puts labels above it.
+  const px = uy;
+  const py = -ux;
+  const inset = Math.min(20, len / 4);
+  const labelGap = 10;
+
+  c.setFontColor('#1a1f36');
+  c.setFontSize(12);
+  if (startLabel) {
+    c.text(
+      start.x + ux * inset + px * labelGap, start.y + uy * inset + py * labelGap,
+      0, 0, startLabel, 'center', 'middle', false, '', 'hidden', false, 0, ''
+    );
+  }
+  if (endLabel) {
+    c.text(
+      end.x - ux * inset + px * labelGap, end.y - uy * inset + py * labelGap,
+      0, 0, endLabel, 'center', 'middle', false, '', 'hidden', false, 0, ''
+    );
+  }
+}
+
+// Splitting a cardinality connector for a relationship dropped in its
+// middle (see DiagramCanvas.tsx's handleDrop) turns one edge showing both
+// symbols (e.g. "1" at the entity end, "N" at the other) into two — and
+// each half should show only the symbol for whichever entity it's actually
+// touching, not both of the original's symbols again on every half. The
+// half-edge's own style carries which end that is: 'start' for the half
+// whose source is the original entity (Entity -1-> Relationship), 'end'
+// for the half whose target is (Relationship -N-> Entity). A connector
+// that was never split (style has neither) keeps showing both, same as
+// always — this only changes behavior for the two new halves.
+function cardinalityLabels(
+  style: CellStateStyle | null | undefined,
+  full: [string, string],
+): [string, string] {
+  const side = (style as Record<string, unknown> | null | undefined)?.cardinalitySide;
+  if (side === 'start') return [full[0], ''];
+  if (side === 'end') return ['', full[1]];
+  return full;
+}
+
 // ════════════════════════════════════════════════════════════════════════════
 // FDD SHAPES - Canvas implementations
 // ════════════════════════════════════════════════════════════════════════════
@@ -4007,6 +4083,17 @@ class ERDCardinality11ShapeCanvas extends Shape {
     c.lineTo(x + w - 2, cy);
     c.stroke();
   }
+
+  // Real edge now (see CONNECTOR_SHAPE_IDS) — dragged onto/between entity
+  // shapes like any other connector instead of sitting as a fixed-size
+  // floating box. paintBackground above only still runs for older saved
+  // diagrams that have this as a plain vertex.
+  paintEdgeShape(c: AbstractCanvas2D, pts: Point[]) {
+    c.setStrokeColor(this.stroke);
+    c.setStrokeWidth(this.strokeWidth);
+    if (this.strokeWidth <= 0) c.setStrokeColor('none');
+    paintCardinalityEdge(c, pts, ...cardinalityLabels(this.style, ['1', '1']));
+  }
 }
 
 class ERDCardinality1NShapeCanvas extends Shape {
@@ -4028,6 +4115,17 @@ class ERDCardinality1NShapeCanvas extends Shape {
     c.moveTo(x + 2, cy);
     c.lineTo(x + w - 2, cy);
     c.stroke();
+  }
+
+  // Real edge now (see CONNECTOR_SHAPE_IDS) — dragged onto/between entity
+  // shapes like any other connector instead of sitting as a fixed-size
+  // floating box. paintBackground above only still runs for older saved
+  // diagrams that have this as a plain vertex.
+  paintEdgeShape(c: AbstractCanvas2D, pts: Point[]) {
+    c.setStrokeColor(this.stroke);
+    c.setStrokeWidth(this.strokeWidth);
+    if (this.strokeWidth <= 0) c.setStrokeColor('none');
+    paintCardinalityEdge(c, pts, ...cardinalityLabels(this.style, ['1', 'N']));
   }
 }
 
@@ -4051,6 +4149,17 @@ class ERDCardinalityN1ShapeCanvas extends Shape {
     c.lineTo(x + w - 2, cy);
     c.stroke();
   }
+
+  // Real edge now (see CONNECTOR_SHAPE_IDS) — dragged onto/between entity
+  // shapes like any other connector instead of sitting as a fixed-size
+  // floating box. paintBackground above only still runs for older saved
+  // diagrams that have this as a plain vertex.
+  paintEdgeShape(c: AbstractCanvas2D, pts: Point[]) {
+    c.setStrokeColor(this.stroke);
+    c.setStrokeWidth(this.strokeWidth);
+    if (this.strokeWidth <= 0) c.setStrokeColor('none');
+    paintCardinalityEdge(c, pts, ...cardinalityLabels(this.style, ['N', '1']));
+  }
 }
 
 class ERDCardinalityMNShapeCanvas extends Shape {
@@ -4072,6 +4181,17 @@ class ERDCardinalityMNShapeCanvas extends Shape {
     c.moveTo(x + 2, cy);
     c.lineTo(x + w - 2, cy);
     c.stroke();
+  }
+
+  // Real edge now (see CONNECTOR_SHAPE_IDS) — dragged onto/between entity
+  // shapes like any other connector instead of sitting as a fixed-size
+  // floating box. paintBackground above only still runs for older saved
+  // diagrams that have this as a plain vertex.
+  paintEdgeShape(c: AbstractCanvas2D, pts: Point[]) {
+    c.setStrokeColor(this.stroke);
+    c.setStrokeWidth(this.strokeWidth);
+    if (this.strokeWidth <= 0) c.setStrokeColor('none');
+    paintCardinalityEdge(c, pts, ...cardinalityLabels(this.style, ['M', 'N']));
   }
 }
 

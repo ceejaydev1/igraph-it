@@ -229,8 +229,10 @@ function clientToGraphCoords(
 // create.tsx's handleAddShape (tap-to-add, used by the mobile Shapes sheet)
 // applies the exact same snap radius as this file's own handleDrop
 // (desktop drag-and-drop) — one connector-attach behavior, not two that can
-// quietly drift apart.
-export const CONNECTOR_SNAP_DISTANCE = 24;
+// quietly drift apart. Widened from 24: that was tight enough that a
+// perfectly reasonable drop next to another shape (not exactly centered on
+// it) still missed the snap and landed dangling.
+export const CONNECTOR_SNAP_DISTANCE = 40;
 
 // Finds the vertex nearest a point, for magnet-attaching a freshly-dropped
 // connector's endpoint (see handleDrop below and create.tsx's
@@ -2202,18 +2204,115 @@ const WebCanvas = forwardRef<DiagramCanvasHandle, DiagramCanvasProps>(({ onReady
           fontSize: 12,
         };
 
-        cell = graph.insertVertex(
-          null,
-          null,
-          getShapeDefinitionById(shapeId)?.defaultLabel ?? '',
-          cx,
-          cy,
-          dropW,
-          dropH,
-          fullStyle,
-        );
+        const label = getShapeDefinitionById(shapeId)?.defaultLabel ?? '';
+
+        // ERD's Relationship / Identifying Relationship diamonds are meant
+        // to sit *in* the line between two entities, not just visually on
+        // top of it — dropped straight onto an existing connector, this
+        // used to insert a free-floating vertex that only overlapped the
+        // edge, obscuring it and making the entities look disconnected even
+        // though the original edge underneath was untouched. Splitting the
+        // edge for real (entity -> relationship -> entity, replacing the
+        // single edge with two) is what actually wires the diamond into
+        // the connection.
+        const edgeCell = (shapeId === 'erd-relationship' || shapeId === 'erd-identifying-rel')
+          ? graph.getCellAt(x, y, null, false, true)
+          : null;
+
+        if (edgeCell && typeof edgeCell.isEdge === 'function' && edgeCell.isEdge()) {
+          const source = edgeCell.getTerminal(true);
+          const target = edgeCell.getTerminal(false);
+          const edgeStyle = edgeCell.getStyle();
+          // Cardinality connectors (see CONNECTOR_SHAPE_IDS) are tagged
+          // with their own shapeId (e.g. 'erd-cardinality-mn') — reused on
+          // both halves below so each still reads as "a cardinality
+          // marker" for validateERD's 4.8 check instead of falling back to
+          // an untagged, unrecognized edge until the next reload.
+          const edgeRole = getShapeRole(edgeCell);
+          // A cardinality connector splitting here used to show both of
+          // its symbols (e.g. "1" and "N") again on *each* half — cloning
+          // its whole style did that literally. cardinalitySide (read by
+          // paintCardinalityEdge via cardinalityLabels in
+          // maxgraph-custom-shapes.ts) tells each half which one symbol is
+          // actually its: 'start' for the half whose source is the real
+          // entity (Entity -1-> Relationship), 'end' for the half whose
+          // target is (Relationship -N-> Entity) — same pattern as bendDx/
+          // bendDy in maxgraph-universal-handler.ts for a style key that
+          // isn't part of CellStateStyle's real type. A no-op on every
+          // other connector shape, which never reads this key.
+          const styleIsObject = typeof edgeStyle === 'object' && edgeStyle !== null;
+          const leftEdgeStyle = (styleIsObject ? { ...edgeStyle, cardinalitySide: 'start' } : edgeStyle) as CellStateStyle;
+          const rightEdgeStyle = (styleIsObject ? { ...edgeStyle, cardinalitySide: 'end' } : edgeStyle) as CellStateStyle;
+
+          // Center the diamond on the straight line between the edge's two
+          // actual endpoints — "entity -<>- entity" — instead of wherever
+          // the cursor happened to land, so both resulting legs stay
+          // equal-length and collinear instead of kinking to one side.
+          // Falls back to the edge's own (floating) terminal point on
+          // whichever end isn't a real attached cell yet, rather than only
+          // centering when *both* ends are — a cardinality connector with
+          // one end still dangling (not yet dragged onto a second entity)
+          // is exactly the case that used to fall through to the raw
+          // cursor position and land off-line.
+          const endpointCenter = (terminal: any, isSource: boolean): { x: number; y: number } | null => {
+            const geo = terminal?.getGeometry();
+            if (geo) return { x: geo.x + geo.width / 2, y: geo.y + geo.height / 2 };
+            const pt = edgeCell.getGeometry()?.getTerminalPoint(isSource);
+            return pt ? { x: pt.x, y: pt.y } : null;
+          };
+          const startPoint = endpointCenter(source, true);
+          const endPoint = endpointCenter(target, false);
+          const midX = startPoint && endPoint ? (startPoint.x + endPoint.x) / 2 : cx + dropW / 2;
+          const midY = startPoint && endPoint ? (startPoint.y + endPoint.y) / 2 : cy + dropH / 2;
+          const centeredX = Math.round((midX - dropW / 2) / GRID_SIZE) * GRID_SIZE;
+          const centeredY = Math.round((midY - dropH / 2) / GRID_SIZE) * GRID_SIZE;
+
+          graph.batchUpdate(() => {
+            cell = graph.insertVertex(null, null, label, centeredX, centeredY, dropW, dropH, fullStyle);
+            graph.removeCells([edgeCell]);
+            if (source) tagShapeRole(graph.insertEdge(null, null, '', source, cell, leftEdgeStyle), edgeRole);
+            if (target) tagShapeRole(graph.insertEdge(null, null, '', cell, target, rightEdgeStyle), edgeRole);
+          });
+        } else {
+          cell = graph.insertVertex(null, null, label, cx, cy, dropW, dropH, fullStyle);
+        }
       }
       tagShapeRole(cell, shapeId);
+
+      // A shape dropped near an existing connector's loose end should
+      // attach to it automatically — the mirror of the magnet-snap a
+      // freshly-dropped connector's own ends already get (see
+      // findConnectorDropEndpoints above): there the connector is new and
+      // the shape's already on the canvas, here it's the other way
+      // around. Deliberately not gated on the shape landing with zero
+      // connections of its own — an ERD Relationship in particular can
+      // come out of the split branch above already holding one leg and
+      // still have a second, independently-dropped cardinality sitting
+      // dangling right next to it (e.g. placed before its far entity
+      // existed), which should attach here too. Checks every dangling
+      // edge within range, not just the first, so more than one loose end
+      // near the drop gets picked up in the same drop.
+      if (cell && typeof cell.isVertex === 'function' && cell.isVertex()) {
+        const anchorX = cx + dropW / 2;
+        const anchorY = cy + dropH / 2;
+        for (const edge of graph.getChildEdges(graph.getDefaultParent())) {
+          if (edge.source && edge.target) continue;
+          const geo = edge.getGeometry();
+          if (!edge.source) {
+            const p = geo?.getTerminalPoint(true);
+            if (p && Math.hypot(p.x - anchorX, p.y - anchorY) <= CONNECTOR_SNAP_DISTANCE) {
+              graph.getDataModel().setTerminal(edge, cell, true);
+              continue;
+            }
+          }
+          if (!edge.target) {
+            const p = geo?.getTerminalPoint(false);
+            if (p && Math.hypot(p.x - anchorX, p.y - anchorY) <= CONNECTOR_SNAP_DISTANCE) {
+              graph.getDataModel().setTerminal(edge, cell, false);
+            }
+          }
+        }
+      }
 
       graph.clearSelection();
       setTimeout(() => {
