@@ -2329,20 +2329,35 @@ const WebCanvas = forwardRef<DiagramCanvasHandle, DiagramCanvasProps>(({ onReady
           // parent. Searches only for the spine, never anything else, so a
           // Main Cause can only ever end up attached to it or fully
           // floating — never straight onto another shape.
+          // Which side of the spine this shape sits on (top/bottom) and
+          // which way its line slants ("\" vs "/") are two different
+          // things — Top is always above the spine no matter which way it
+          // slants, matching the reference layout where every top-row
+          // category box sits above with its line angling down-and-right
+          // to reach the spine, and every bottom-row box sits below
+          // angling up-and-right. The outer/label end is always on the
+          // *left* (matching that same reference — a box's line runs
+          // down-or-up *and rightward* to reach the spine, not leftward),
+          // with vertical side alone deciding whether that makes it "\"
+          // (Top: outer above-left, spine below-right) or "/" (Bottom:
+          // outer below-left, spine above-right) — see the matching
+          // comment on FishboneCauseTopShapeCanvas in
+          // maxgraph-custom-shapes.ts.
           const centerX = cx + dropW / 2;
           const centerY = cy + dropH / 2;
-          const dy = FISHBONE_DIAGONAL_UP.has(shapeId) ? -dropH : dropH;
+          const outerIsAbove = shapeId === 'fishbone-cause-top';
+          const outerDy = outerIsAbove ? -dropH : dropH;
           const spine = findEdgeNearPoint(graph, centerX, centerY, CONNECTOR_SNAP_DISTANCE, new Set(['fishbone-spine']));
           if (spine) {
             sourceCell = spine;
             targetCell = null;
             startPoint = { x: centerX, y: centerY };
-            endPoint = { x: centerX + dropW, y: centerY + dy };
+            endPoint = { x: centerX - dropW, y: centerY + outerDy };
           } else {
             sourceCell = null;
             targetCell = null;
-            startPoint = { x: centerX - dropW / 2, y: centerY - dy / 2 };
-            endPoint = { x: centerX + dropW / 2, y: centerY + dy / 2 };
+            startPoint = { x: centerX + dropW / 2, y: centerY - outerDy / 2 };
+            endPoint = { x: centerX - dropW / 2, y: centerY + outerDy / 2 };
           }
         } else if (SEQUENCE_MESSAGE_SHAPE_IDS.has(shapeId)) {
           const dropY = cy + dropH / 2;
