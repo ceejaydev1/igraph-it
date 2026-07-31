@@ -3194,7 +3194,19 @@ const WebCanvas = forwardRef<DiagramCanvasHandle, DiagramCanvasProps>(({ onReady
       graph.setGridEnabled(true);
       graph.setGridSize(GRID_SIZE);
       graph.setConnectable(true);
-      graph.setAllowDanglingEdges(false);
+      // A dangling (one- or both-ends-unattached) edge is already a core,
+      // intentional state throughout this app — a connector dropped with
+      // no shape nearby to snap onto, or half of a relationship split
+      // whose far side isn't wired up yet, both create one on purpose (see
+      // handleDrop below). `false` here didn't stop any of that — it only
+      // blocked the *interactive* version of the same thing: EdgeHandler
+      // silently discards the whole drag (no model update, no error
+      // shown — see its mouseUp) if you drag an end onto empty canvas
+      // instead of another shape, which is exactly how you'd manually
+      // stretch a still-dangling cardinality leg longer. That's the
+      // "drags but snaps back" behavior — nothing was actually broken,
+      // this flag was just disallowing something the app depends on.
+      graph.setAllowDanglingEdges(true);
       graph.setDisconnectOnMove(false);
       graph.setMultigraph(false);
       graph.setTooltips(true);
