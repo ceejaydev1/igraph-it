@@ -18,6 +18,9 @@ import {
   Geometry,
   Point,
   Clipboard,
+  registerDefaultPerimeters,
+  registerDefaultEdgeStyles,
+  registerDefaultEdgeMarkers,
 } from '@maxgraph/core';
 
 import type {
@@ -139,6 +142,22 @@ EdgeHandlerConfig.selectionStrokeWidth = 1.5;
 console.log('🎨 All configs set to BLUE (#4c6fff)');
 
 if (Platform.OS === 'web') {
+  // maxGraph's own built-in perimeters/edge-styles/edge-markers are opt-in —
+  // importing @maxgraph/core does NOT register them, despite IGRAPH_PERIMETERS
+  // (maxgraph-custom-shapes.ts) and every edgeStyle: 'orthogonalEdgeStyle'
+  // etc. throughout this app referencing them by name. Without this, every
+  // one of those string names fails to resolve (GraphView.getPerimeterFunction
+  // falls through to null), which for a perimeter means the affected shape's
+  // edges connect at its dead-center instead of clipping to its actual
+  // outline — invisible for a rectangle (bounding box = its own shape) but
+  // very visibly wrong for anything else (ellipse, diamond/rhombus, hexagon,
+  // triangle), where a manually-dragged connection can look like it's
+  // landing at a fixed, wrong point instead of tracking the target's
+  // direction. Must run before registerAllCustomShapes() assigns any style
+  // that references these names.
+  registerDefaultPerimeters();
+  registerDefaultEdgeStyles();
+  registerDefaultEdgeMarkers();
   registerAllCustomShapes();
   console.log('✅ All custom shapes registered with maxGraph');
 }
