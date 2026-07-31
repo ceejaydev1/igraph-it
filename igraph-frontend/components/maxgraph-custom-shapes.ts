@@ -1215,6 +1215,18 @@ class FishboneSpineShapeCanvas extends Shape {
     c.lineTo(x + w - 2, cy);
     c.stroke();
   }
+
+  // Real edge now (see CONNECTOR_SHAPE_IDS) — dragged onto/between the Fish
+  // Head and Effect Box like any other connector instead of sitting as a
+  // fixed-size floating box. paintBackground above only still runs for
+  // older saved diagrams that have this as a plain vertex.
+  paintEdgeShape(c: AbstractCanvas2D, pts: Point[]) {
+    if (pts.length < 2) return;
+    c.setStrokeColor(this.stroke);
+    c.setStrokeWidth(this.strokeWidth);
+    if (this.strokeWidth <= 0) c.setStrokeColor('none');
+    edgeLine(c, pts[0], pts, pts[pts.length - 1]);
+  }
 }
 
 class FishboneHeadShapeCanvas extends Shape {

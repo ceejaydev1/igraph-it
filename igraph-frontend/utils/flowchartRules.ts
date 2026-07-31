@@ -1225,9 +1225,12 @@ export function validateFishbone(graph: Graph): DiagramIssue[] {
   // validVertices, which causes no longer appear in.
   issues.push(...checkEmptyLabels(causeEdges, causeRoles));
 
-  const spines = validVertices.filter((c) => getShapeRole(c) === 'fishbone-spine');
+  // The spine is a real edge now too (see CONNECTOR_SHAPE_IDS) — checked
+  // across both validVertices and edges so an older saved diagram that
+  // still has it as a plain vertex keeps validating exactly as before.
+  const spines = [...validVertices, ...edges].filter((c) => getShapeRole(c) === 'fishbone-spine');
   // 5.1/5.2 — exactly one spine expected.
-  if (validVertices.length > 0 && spines.length === 0) {
+  if ((validVertices.length > 0 || edges.length > 0) && spines.length === 0) {
     issues.push({ severity: 'error', message: 'This fishbone diagram has no spine yet — add one to anchor the cause branches.' });
   } else if (spines.length > 1) {
     spines.slice(1).forEach((cell) => {

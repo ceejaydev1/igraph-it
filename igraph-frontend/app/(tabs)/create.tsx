@@ -1333,7 +1333,14 @@ export default function CreateScreen() {
       setPendingConnector(null);
       return;
     }
-    if (cell.isEdge?.()) return; // ignore taps on edges/connectors themselves
+    // Edges are valid taps too, not just shapes — Fishbone's spine in
+    // particular is a real connector now (see CONNECTOR_SHAPE_IDS in
+    // constants/shapes.ts), and a Main Cause branching off it is exactly
+    // the tap-to-connect flow this is for. graph.insertEdge below accepts
+    // an edge as a terminal fine; the geometry math further down only
+    // seeds an initial (immediately superseded) terminal point once a real
+    // cell is set on both ends, so an edge's own less-meaningful x/y/width/
+    // height there is harmless.
 
     if (!pendingConnector.sourceCell) {
       setPendingConnector({ ...pendingConnector, sourceCell: cell });

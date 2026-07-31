@@ -373,8 +373,16 @@ export function findConnectorDropEndpoints(
   const half = reach / 2;
   const hStart = { x: centerX - half, y: centerY };
   const hEnd = { x: centerX + half, y: centerY };
-  const hSource = findNearbyVertex(graph, hStart.x, hStart.y, CONNECTOR_SNAP_DISTANCE);
-  const hTargetCandidate = findNearbyVertex(graph, hEnd.x, hEnd.y, CONNECTOR_SNAP_DISTANCE);
+  // Falls back to the nearest EDGE (findEdgeNearPoint, below) when no
+  // vertex is close enough — needed now that some "attach to" targets are
+  // themselves connectors rather than boxes (Fishbone's spine in
+  // particular: a Main Cause is meant to branch off it, same as before it
+  // was converted to a real edge, but findNearbyVertex alone can never
+  // find it since it only ever looks at graph.getChildVertices).
+  const hSource = findNearbyVertex(graph, hStart.x, hStart.y, CONNECTOR_SNAP_DISTANCE)
+    ?? findEdgeNearPoint(graph, hStart.x, hStart.y, CONNECTOR_SNAP_DISTANCE);
+  const hTargetCandidate = findNearbyVertex(graph, hEnd.x, hEnd.y, CONNECTOR_SNAP_DISTANCE)
+    ?? findEdgeNearPoint(graph, hEnd.x, hEnd.y, CONNECTOR_SNAP_DISTANCE);
   const hTarget = hTargetCandidate && hTargetCandidate !== hSource ? hTargetCandidate : null;
   return { startPoint: hStart, endPoint: hEnd, sourceCell: hSource, targetCell: hTarget };
 }
@@ -666,11 +674,24 @@ export function getShapeStyle(styleKey: string): CellStateStyle {
       strokeColor: BLACK,
       strokeWidth: 2,
     },
+    // FishboneHeadShapeCanvas draws a right-pointing triangle whose flat
+    // edge sits at the horizontal center of its own bounding box (the left
+    // half of the box is empty) — centering the label on the box the
+    // normal way puts its anchor right at that flat edge, spilling most of
+    // the text out into the empty left half instead of inside the visible
+    // triangle. spacingLeft/spacingRight instead center it within roughly
+    // where the triangle is actually wide enough to hold text (past the
+    // flat edge, short of the point), tuned for this shape's own default
+    // 160-wide box (see 'fishbone-head' in constants/shapes.ts).
     'igraph.fishboneHead': {
       shape: 'igraph.fishboneHead',
       fillColor: '#ffffff',
       strokeColor: BLACK,
       strokeWidth: 2,
+      align: 'center' as AlignValue,
+      verticalAlign: 'middle' as VAlignValue,
+      spacingLeft: 70,
+      spacingRight: 20,
     },
     'igraph.fishboneProblem': {
       shape: 'igraph.fishboneProblem',
@@ -1724,12 +1745,18 @@ const WebCanvas = forwardRef<DiagramCanvasHandle, DiagramCanvasProps>(({ onReady
         strokeColor: BLACK,
         strokeWidth: 2,
       },
+      // See the matching entry in getShapeStyle's specialStyles above for
+      // why this needs spacingLeft/spacingRight — the triangle's flat edge
+      // sits at the box's horizontal center, so a plain centered label
+      // spills into the empty left half instead of landing inside it.
       'igraph.fishboneHead': {
         ...base,
         shape: 'igraph.fishboneHead',
         fillColor: '#ffffff',
         strokeColor: BLACK,
         strokeWidth: 2,
+        spacingLeft: 70,
+        spacingRight: 20,
       },
       'igraph.fishboneProblem': {
         ...base,
