@@ -2294,17 +2294,33 @@ const WebCanvas = forwardRef<DiagramCanvasHandle, DiagramCanvasProps>(({ onReady
           sourceCell = found.sourceCell;
           targetCell = found.targetCell;
 
-          // Only overridden when nothing was found to attach to on either
-          // end — a real bracketed pair or magnet-snapped shape always
-          // wins over matching the panel icon's angle, since actually
-          // being attached matters more than the exact angle.
-          if (!sourceCell && !targetCell) {
-            if (FISHBONE_DIAGONAL_UP.has(shapeId)) {
-              startPoint = { x: centerX - dropW / 2, y: centerY + dropH / 2 };
-              endPoint = { x: centerX + dropW / 2, y: centerY - dropH / 2 };
-            } else if (FISHBONE_DIAGONAL_DOWN.has(shapeId)) {
-              startPoint = { x: centerX - dropW / 2, y: centerY - dropH / 2 };
-              endPoint = { x: centerX + dropW / 2, y: centerY + dropH / 2 };
+          // A Main/Sub/Tertiary Cause dropped roughly on the spine finds
+          // it as one real endpoint (almost always sourceCell — the spine
+          // spans the whole horizontal probe below, so the left probe
+          // point claims it first) with the other end left at the generic
+          // horizontal fallback point — a flat line with one tip pinned to
+          // the spine, not the diagonal "bone" every reference fishbone
+          // diagram actually has. start is the spine-proximal end and end
+          // is the outer/label end in both the fully-unattached case below
+          // and the shape's own original (pre-connector) diagonal — see
+          // FishboneCauseTopShapeCanvas's paintBackground in
+          // maxgraph-custom-shapes.ts — so a partial attachment just needs
+          // its still-dangling end pushed out to match that same diagonal,
+          // anchored on whichever end is real instead of on the drop
+          // center. Two real endpoints (bracketed between two actual
+          // shapes) is left alone — trust that real geometry over forcing
+          // an angle.
+          const isDiagonalUp = FISHBONE_DIAGONAL_UP.has(shapeId);
+          const isDiagonalDown = FISHBONE_DIAGONAL_DOWN.has(shapeId);
+          if (isDiagonalUp || isDiagonalDown) {
+            const dy = isDiagonalUp ? -dropH : dropH;
+            if (!sourceCell && !targetCell) {
+              startPoint = { x: centerX - dropW / 2, y: centerY - dy / 2 };
+              endPoint = { x: centerX + dropW / 2, y: centerY + dy / 2 };
+            } else if (sourceCell && !targetCell) {
+              endPoint = { x: startPoint.x + dropW, y: startPoint.y + dy };
+            } else if (!sourceCell && targetCell) {
+              startPoint = { x: endPoint.x - dropW, y: endPoint.y - dy };
             }
           }
         }
