@@ -360,6 +360,54 @@ export function findConnectorDropEndpoints(
   return { startPoint: hStart, endPoint: hEnd, sourceCell: hSource, targetCell: hTarget };
 }
 
+// An edge's two real endpoints in model space — its terminal cell's center
+// if it has one attached, otherwise the edge's own floating terminal point
+// (for a dangling end). Shared by findEdgeNearPoint below and handleDrop's
+// relationship-split centering, so both agree on what "this edge's line"
+// actually is.
+function edgeEndpoint(edge: any, isSource: boolean): { x: number; y: number } | null {
+  const terminal = edge.getTerminal(isSource);
+  const geo = terminal?.getGeometry();
+  if (geo) return { x: geo.x + geo.width / 2, y: geo.y + geo.height / 2 };
+  const pt = edge.getGeometry()?.getTerminalPoint(isSource);
+  return pt ? { x: pt.x, y: pt.y } : null;
+}
+
+function distanceToSegment(px: number, py: number, ax: number, ay: number, bx: number, by: number): number {
+  const dx = bx - ax;
+  const dy = by - ay;
+  const lenSq = dx * dx + dy * dy;
+  const t = lenSq === 0 ? 0 : Math.max(0, Math.min(1, ((px - ax) * dx + (py - ay) * dy) / lenSq));
+  return Math.hypot(px - (ax + t * dx), py - (ay + t * dy));
+}
+
+// Finds the edge whose line passes nearest a point, for "was a shape
+// dropped onto this connector" checks (see the relationship-split branch
+// in handleDrop). graph.getCellAt's own edge hit-test only counts a drop
+// that lands within a couple of pixels of the actual stroke — reasonable
+// for a mouse click, but a much tighter target than a drag-and-drop of a
+// whole shape ever reliably lands on, so relying on it alone made the
+// split silently never trigger on an ordinary, only-roughly-on-the-line
+// drop. This instead measures straight-line distance to the edge's own
+// two endpoints (real cell or floating terminal point either way — see
+// edgeEndpoint), same generous-tolerance approach validateERD's nearestEdge
+// already uses for matching a cardinality marker to its edge.
+export function findEdgeNearPoint(graph: Graph, x: number, y: number, threshold: number): any {
+  let best: any = null;
+  let bestDistance = Infinity;
+  for (const edge of graph.getChildEdges(graph.getDefaultParent())) {
+    const a = edgeEndpoint(edge, true);
+    const b = edgeEndpoint(edge, false);
+    if (!a || !b) continue;
+    const distance = distanceToSegment(x, y, a.x, a.y, b.x, b.y);
+    if (distance <= threshold && distance < bestDistance) {
+      best = edge;
+      bestDistance = distance;
+    }
+  }
+  return best;
+}
+
 // Sequence Diagram message arrows (Sync/Async/Return) are meant to span
 // however far apart the two participants actually are — not the connector
 // shape's own arbitrary default width. The generic connector-drop snap
@@ -2137,6 +2185,15 @@ const WebCanvas = forwardRef<DiagramCanvasHandle, DiagramCanvasProps>(({ onReady
     const cy = Math.round((y - dropH / 2) / GRID_SIZE) * GRID_SIZE;
 
     try {
+      // Where the dropped cell actually ends up — cx/cy (the raw cursor
+      // position) for everything except a relationship-split, which
+      // recenters onto the edge it just split (see centeredX/centeredY
+      // below). Anything below that needs "where the shape actually is"
+      // — currently just the magnet-attach check — must read this, not
+      // cx/cy directly, or it searches around the wrong point.
+      let finalX = cx;
+      let finalY = cy;
+
       // Class Diagram's "Class" shape needs a container + 3 independently
       // editable compartments, not a single vertex — see insertUmlClassCell.
       let cell: any;
@@ -2216,7 +2273,7 @@ const WebCanvas = forwardRef<DiagramCanvasHandle, DiagramCanvasProps>(({ onReady
         // single edge with two) is what actually wires the diamond into
         // the connection.
         const edgeCell = (shapeId === 'erd-relationship' || shapeId === 'erd-identifying-rel')
-          ? graph.getCellAt(x, y, null, false, true)
+          ? findEdgeNearPoint(graph, x, y, CONNECTOR_SNAP_DISTANCE)
           : null;
 
         if (edgeCell && typeof edgeCell.isEdge === 'function' && edgeCell.isEdge()) {
@@ -2248,24 +2305,20 @@ const WebCanvas = forwardRef<DiagramCanvasHandle, DiagramCanvasProps>(({ onReady
           // actual endpoints — "entity -<>- entity" — instead of wherever
           // the cursor happened to land, so both resulting legs stay
           // equal-length and collinear instead of kinking to one side.
-          // Falls back to the edge's own (floating) terminal point on
-          // whichever end isn't a real attached cell yet, rather than only
-          // centering when *both* ends are — a cardinality connector with
-          // one end still dangling (not yet dragged onto a second entity)
-          // is exactly the case that used to fall through to the raw
-          // cursor position and land off-line.
-          const endpointCenter = (terminal: any, isSource: boolean): { x: number; y: number } | null => {
-            const geo = terminal?.getGeometry();
-            if (geo) return { x: geo.x + geo.width / 2, y: geo.y + geo.height / 2 };
-            const pt = edgeCell.getGeometry()?.getTerminalPoint(isSource);
-            return pt ? { x: pt.x, y: pt.y } : null;
-          };
-          const startPoint = endpointCenter(source, true);
-          const endPoint = endpointCenter(target, false);
+          // edgeEndpoint (above) falls back to the edge's own floating
+          // terminal point on whichever end isn't a real attached cell yet,
+          // rather than only centering when *both* ends are — a cardinality
+          // connector with one end still dangling (not yet dragged onto a
+          // second entity) is exactly the case that used to fall through to
+          // the raw cursor position and land off-line.
+          const startPoint = edgeEndpoint(edgeCell, true);
+          const endPoint = edgeEndpoint(edgeCell, false);
           const midX = startPoint && endPoint ? (startPoint.x + endPoint.x) / 2 : cx + dropW / 2;
           const midY = startPoint && endPoint ? (startPoint.y + endPoint.y) / 2 : cy + dropH / 2;
           const centeredX = Math.round((midX - dropW / 2) / GRID_SIZE) * GRID_SIZE;
           const centeredY = Math.round((midY - dropH / 2) / GRID_SIZE) * GRID_SIZE;
+          finalX = centeredX;
+          finalY = centeredY;
 
           graph.batchUpdate(() => {
             cell = graph.insertVertex(null, null, label, centeredX, centeredY, dropW, dropH, fullStyle);
@@ -2293,8 +2346,8 @@ const WebCanvas = forwardRef<DiagramCanvasHandle, DiagramCanvasProps>(({ onReady
       // edge within range, not just the first, so more than one loose end
       // near the drop gets picked up in the same drop.
       if (cell && typeof cell.isVertex === 'function' && cell.isVertex()) {
-        const anchorX = cx + dropW / 2;
-        const anchorY = cy + dropH / 2;
+        const anchorX = finalX + dropW / 2;
+        const anchorY = finalY + dropH / 2;
         for (const edge of graph.getChildEdges(graph.getDefaultParent())) {
           if (edge.source && edge.target) continue;
           const geo = edge.getGeometry();
