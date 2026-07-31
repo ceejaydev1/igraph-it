@@ -491,6 +491,7 @@ const googleAuth = async (req, res) => {
         success: true,
         message: 'Google sign in successful!',
         data: {
+          isNewUser: false,
           user: {
             uid: existingUserByEmail.user_id,
             fullName: existingUserByEmail.full_name,
@@ -539,6 +540,7 @@ const googleAuth = async (req, res) => {
       success: true,
       message: 'Google sign in successful!',
       data: {
+        isNewUser: true,
         user: {
           uid: user.user_id,
           fullName: user.full_name,
