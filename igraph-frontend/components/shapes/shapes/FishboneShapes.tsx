@@ -75,6 +75,8 @@ export const FishboneProblemShape: React.FC<ShapeProps> = ({
 
 // ─── 4. Main Cause (Top) ──────────────────────────────────────────────────
 
+// "\" — angles down toward the spine below it. Matches
+// FishboneCauseTopShapeCanvas in maxgraph-custom-shapes.ts.
 export const FishboneCauseTopShape: React.FC<ShapeProps> = ({
   width,
   height,
@@ -82,12 +84,14 @@ export const FishboneCauseTopShape: React.FC<ShapeProps> = ({
   strokeWidth = 2,
 }) => (
   <Svg width={width} height={height} viewBox={`0 0 ${width} ${height}`}>
-    <Line x1={2} y1={height - 2} x2={width - 2} y2={2} stroke={color} strokeWidth={strokeWidth} />
+    <Line x1={2} y1={2} x2={width - 2} y2={height - 2} stroke={color} strokeWidth={strokeWidth} />
   </Svg>
 );
 
 // ─── 5. Main Cause (Bottom) ───────────────────────────────────────────────
 
+// "/" — angles up toward the spine above it. Matches
+// FishboneCauseBottomShapeCanvas in maxgraph-custom-shapes.ts.
 export const FishboneCauseBottomShape: React.FC<ShapeProps> = ({
   width,
   height,
@@ -95,7 +99,7 @@ export const FishboneCauseBottomShape: React.FC<ShapeProps> = ({
   strokeWidth = 2,
 }) => (
   <Svg width={width} height={height} viewBox={`0 0 ${width} ${height}`}>
-    <Line x1={2} y1={2} x2={width - 2} y2={height - 2} stroke={color} strokeWidth={strokeWidth} />
+    <Line x1={2} y1={height - 2} x2={width - 2} y2={2} stroke={color} strokeWidth={strokeWidth} />
   </Svg>
 );
 
