@@ -2349,10 +2349,35 @@ const WebCanvas = forwardRef<DiagramCanvasHandle, DiagramCanvasProps>(({ onReady
           const outerDy = outerIsAbove ? -dropH : dropH;
           const spine = findEdgeNearPoint(graph, centerX, centerY, CONNECTOR_SNAP_DISTANCE, new Set(['fishbone-spine']));
           if (spine) {
+            // The spine is a *line*, not a point-like vertex — once
+            // sourceCell is a real cell, maxGraph's floating-perimeter
+            // calculation recomputes the actual attachment point on every
+            // render from the ray toward the *other* end (the outer/label
+            // point below), completely ignoring whatever startPoint says
+            // here. Anchoring the outer point dropW/dropH away from an
+            // *assumed* attachment point that the render then moves
+            // elsewhere is what produced two causes each ending up nearly
+            // vertical, barely offset sideways at all, instead of the
+            // intended diagonal — the render kept dragging the spine-side
+            // point back under wherever the outer point actually was.
+            // Fixed here instead: exitX pins the spine attachment to a
+            // specific point along its own current rendered length (using
+            // the drop position), bypassing that recalculation entirely,
+            // so the outer point's offset from it is the one actually
+            // rendered.
             sourceCell = spine;
             targetCell = null;
-            startPoint = { x: centerX, y: centerY };
-            endPoint = { x: centerX - dropW, y: centerY + outerDy };
+            const spineState = graph.getView().getState(spine);
+            const spineX = spineState
+              ? Math.max(spineState.x, Math.min(spineState.x + spineState.width, centerX))
+              : centerX;
+            const spineY = spineState ? spineState.y + spineState.height / 2 : centerY;
+            const exitX = spineState && spineState.width > 0 ? (spineX - spineState.x) / spineState.width : 0.5;
+            styleObject.exitX = exitX;
+            styleObject.exitY = 0.5;
+            styleObject.exitPerimeter = false;
+            startPoint = { x: spineX, y: spineY };
+            endPoint = { x: spineX - dropW, y: spineY + outerDy };
           } else {
             sourceCell = null;
             targetCell = null;
