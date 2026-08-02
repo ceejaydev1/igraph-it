@@ -101,7 +101,7 @@ const otpLimiters = buildLimiters({
   prefix:     'otp',
   windowMs:   15 * 60 * 1000,
   ipMax:      20,
-  accountMax: 3,
+  accountMax: 5,
   message:    'Too many OTP requests. Please wait 15 minutes before trying again.',
 });
 

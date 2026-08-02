@@ -1,6 +1,6 @@
 const { db } = require('../config/firebase');
 const { v4: uuidv4 } = require('uuid');
-const { getAccessLevel, canView, canEdit } = require('../utils/diagramAccess');
+const { getAccessLevel, canView, canEdit, canRename } = require('../utils/diagramAccess');
 
 const COLLECTION = 'diagrams';
 
@@ -53,10 +53,10 @@ const saveDiagram = async (req, res) => {
       // below) — a plain 'edit' collaborator can save content changes here
       // but shouldn't be able to rename the diagram out from under everyone
       // else just because the title field rides along in the same save call.
-      const canRename = accessLevel === 'owner' || accessLevel === 'edit_share';
+      const allowRename = canRename(accessLevel);
 
       await db.collection(COLLECTION).doc(id).update({
-        ...(canRename ? { name: name.trim() } : {}),
+        ...(allowRename ? { name: name.trim() } : {}),
         xml: xml,
         preview_image: previewImage || null,
         type: type || 'General',
@@ -282,9 +282,16 @@ const renameDiagram = async (req, res) => {
 
     const data = doc.data();
 
-    // Check ownership
-    if (data.user_id !== userId) {
-      console.log(`❌ User ${userId} does not own diagram ${diagramId}`);
+    // Owner or edit_share collaborator — matches saveDiagram's own rename
+    // gate above (canRename), which is where this bug actually surfaced:
+    // this endpoint used to check plain ownership only, so an edit_share
+    // collaborator could rename a diagram from inside the editor (title
+    // rides along with a content save) but got a 403 doing the exact same
+    // thing from the Saved Diagrams screen's Rename button, which always
+    // calls this endpoint directly.
+    const accessLevel = getAccessLevel(data, userId);
+    if (!canRename(accessLevel)) {
+      console.log(`❌ User ${userId} does not have rename access to diagram ${diagramId} (level: ${accessLevel})`);
       return res.status(403).json({
         success: false,
         message: 'You do not have permission to rename this diagram.',

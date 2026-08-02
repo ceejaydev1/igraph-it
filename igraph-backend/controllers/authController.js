@@ -20,11 +20,15 @@ const { sendVerificationEmail, sendPasswordResetEmail } = require('../services/e
  *
  * @param {string} email
  * @param {string} purpose  'signup' | 'reset'
- * @param {number} maxRequests  Max OTPs allowed within the window (default 3)
+ * @param {number} maxRequests  Max OTPs allowed within the window (default 5,
+ *   matching the account-level cap on the /resend-otp and /forgot-password
+ *   express-rate-limit layer in routes/authRoutes.js — these two checks read
+ *   the same 'otps' collection, so they need to agree or one silently
+ *   overrides the other before it's ever reached.)
  * @param {number} windowMinutes  Rolling window in minutes (default 15)
  * @returns {Promise<boolean>}  true = rate limited, false = OK to proceed
  */
-const isEmailOTPRateLimited = async (email, purpose, maxRequests = 3, windowMinutes = 15) => {
+const isEmailOTPRateLimited = async (email, purpose, maxRequests = 5, windowMinutes = 15) => {
   try {
     const windowStart = new Date(Date.now() - windowMinutes * 60 * 1000).toISOString();
 

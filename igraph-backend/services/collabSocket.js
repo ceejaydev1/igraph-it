@@ -24,6 +24,26 @@ const { db } = require('../config/firebase');
 
 const roomName = (diagramId) => `diagram:${diagramId}`;
 
+// Per-socket flood guard for the two high-frequency real-time events
+// (diagram-change, cell-select). The frontend already debounces
+// diagram-change to one send per 200ms (max 5/sec — see the setTimeout in
+// app/(tabs)/create.tsx around collabSendTimerRef), so 30/sec per socket is
+// generous headroom above any legitimate client while still catching a
+// runaway or malicious one flooding every other collaborator in the room.
+// Excess messages are silently dropped, not disconnected — a brief burst
+// shouldn't kick a real user out mid-edit.
+const COLLAB_MSG_LIMIT = 30;
+const COLLAB_MSG_WINDOW_MS = 1000;
+const withinMessageBudget = (socket) => {
+  const now = Date.now();
+  if (now - socket.data.msgWindowStart >= COLLAB_MSG_WINDOW_MS) {
+    socket.data.msgWindowStart = now;
+    socket.data.msgCount = 0;
+  }
+  socket.data.msgCount += 1;
+  return socket.data.msgCount <= COLLAB_MSG_LIMIT;
+};
+
 // Set once attachCollabSocket runs, so notifyPermissionChange (called from
 // shareController, a separate module with no other handle on this socket
 // server) has something to reach live connections through.
@@ -95,6 +115,9 @@ function attachCollabSocket(httpServer, corsOriginFn) {
   };
 
   io.on('connection', (socket) => {
+    socket.data.msgCount = 0;
+    socket.data.msgWindowStart = Date.now();
+
     socket.on('join-diagram', async (diagramId, ack) => {
       try {
         if (typeof diagramId !== 'string' || !diagramId) {
@@ -135,6 +158,11 @@ function attachCollabSocket(httpServer, corsOriginFn) {
     socket.on('leave-diagram', () => {
       if (!socket.data.diagramId) return;
       const diagramId = socket.data.diagramId;
+      // Otherwise this user's highlight is left dangling on every other
+      // client's canvas — they're gone, but the last shape they had
+      // selected would keep showing their color until someone else
+      // happens to select it too.
+      socket.to(roomName(diagramId)).emit('cell-select', { cellId: null, fromUserId: socket.data.userId });
       socket.leave(roomName(diagramId));
       socket.data.diagramId = null;
       socket.data.permission = null;
@@ -145,6 +173,7 @@ function attachCollabSocket(httpServer, corsOriginFn) {
     // update. permission is re-checked per-message (not just at join time)
     // since a collaborator's access can be downgraded mid-session.
     socket.on('diagram-change', (payload) => {
+      if (!withinMessageBudget(socket)) return;
       const { diagramId, permission } = socket.data;
       if (!diagramId || !canEdit(permission)) return;
       if (!payload || typeof payload.xml !== 'string') return;
@@ -155,8 +184,27 @@ function attachCollabSocket(httpServer, corsOriginFn) {
       });
     });
 
+    // Relays which shape (if any) this user currently has selected, so
+    // every other client can highlight it in this user's color — a pure
+    // presence signal, not an edit, so unlike diagram-change this isn't
+    // gated on canEdit: a view-only collaborator pointing at a shape is
+    // just as meaningful to show as an editor doing the same. cellId null
+    // means "deselected".
+    socket.on('cell-select', (payload) => {
+      if (!withinMessageBudget(socket)) return;
+      const { diagramId } = socket.data;
+      if (!diagramId) return;
+      const cellId = payload && typeof payload.cellId === 'string' ? payload.cellId : null;
+
+      socket.to(roomName(diagramId)).emit('cell-select', {
+        cellId,
+        fromUserId: socket.data.userId,
+      });
+    });
+
     socket.on('disconnect', () => {
       if (socket.data.diagramId) {
+        socket.to(roomName(socket.data.diagramId)).emit('cell-select', { cellId: null, fromUserId: socket.data.userId });
         broadcastPresence(socket.data.diagramId);
       }
     });

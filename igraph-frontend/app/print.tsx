@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, Platform, TouchableOpacity } from 'react-native';
 
 // Handed a diagram off by app/(tabs)/create.tsx's print button, via
@@ -22,18 +22,28 @@ export interface DiagramPrintPayload {
 // Chrome's own built-in PDF viewer (a separate native-ish surface), where a
 // script-triggered .print() call from the opener frequently does nothing —
 // the user just sees the PDF sitting there with no system print sheet.
-// A plain HTML page calling window.print() on *itself*, from its own load
-// event, is the one thing every mobile browser reliably turns into the real
-// OS print dialog (see the screenshot in the PR discussion — Chrome's native
-// "Save as PDF / Copies / Paper size" sheet). This page has no app chrome of
-// its own to worry about leaking into the printout (the earlier
-// hide-siblings/@media print/iframe attempts on the live editor page all
-// failed because Android's print pipeline snapshots the DOM as it looked
-// *before* those late changes applied) — this is a fresh navigation that
-// loads already in its final, print-ready state.
+// A plain HTML page calling window.print() on itself is the one thing every
+// mobile browser reliably turns into the real OS print dialog (see the
+// screenshot in the PR discussion — Chrome's native "Save as PDF / Copies /
+// Paper size" sheet). This page has no app chrome of its own to worry about
+// leaking into the printout (the earlier hide-siblings/@media print/iframe
+// attempts on the live editor page all failed because Android's print
+// pipeline snapshots the DOM as it looked *before* those late changes
+// applied) — this is a fresh navigation that loads already in its final,
+// print-ready state.
+//
+// print() is only ever called from the on-screen Print button — NOT
+// automatically once the image loads. Two reasons: (1) auto-firing it meant
+// the system dialog took over instantly, before the user ever actually saw
+// this page, which read as the app "randomly" launching a system screen out
+// of nowhere; (2) an <img> firing 'load' only means the browser has decoded
+// the image, not that it's actually been painted to screen yet — calling
+// print() from that event could race ahead of the paint, which is why the
+// diagram sometimes showed up blank in the print preview. Waiting for a real
+// tap sidesteps both: by the time the user can see this page well enough to
+// press Print, the image has definitely painted.
 export default function PrintScreen() {
   const [payload, setPayload] = useState<DiagramPrintPayload | null | undefined>(undefined);
-  const printedRef = useRef(false);
 
   useEffect(() => {
     if (Platform.OS !== 'web') return;
@@ -64,8 +74,6 @@ export default function PrintScreen() {
   }, []);
 
   const triggerPrint = () => {
-    if (printedRef.current) return;
-    printedRef.current = true;
     window.focus();
     window.print();
   };
@@ -112,7 +120,6 @@ export default function PrintScreen() {
             it prints like anything else. */}
         <img
           src={payload.image}
-          onLoad={triggerPrint}
           style={{ width: '100%', height: 'auto', display: 'block' }}
         />
       </View>

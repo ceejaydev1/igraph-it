@@ -6,11 +6,11 @@
 //   view       — open/read only, can't edit or share
 //   edit       — can edit the diagram canvas; the share link/collaborators
 //                are not even shown to them
-//   edit_share — edit, plus can see and toggle on/off + copy the shareable
-//                link. Does NOT include managing collaborators or changing
-//                the link's own permission level — that's owner-only.
+//   edit_share — edit, rename, plus can see and toggle on/off + copy the
+//                shareable link. Does NOT include managing collaborators or
+//                changing the link's own permission level — that's owner-only.
 //   owner      — everything: manage collaborators, change the link's
-//                permission level, rename/delete, approve/deny access requests
+//                permission level, delete, approve/deny access requests
 
 const getAccessLevel = (diagramData, userId) => {
   if (!diagramData || !userId) return null;
@@ -27,6 +27,12 @@ const canEdit = (level) => level === 'owner' || level === 'edit' || level === 'e
 // has access (that's canManageCollaborators, owner-only).
 const canManageShareLink = (level) => level === 'owner' || level === 'edit_share';
 
+// A plain 'edit' collaborator can change diagram content but shouldn't be
+// able to retitle it out from under everyone else — same owner/edit_share
+// cutoff as canManageShareLink, kept as its own named check since the two
+// happen to share a boundary rather than a meaning.
+const canRename = (level) => level === 'owner' || level === 'edit_share';
+
 const canManageCollaborators = (level) => level === 'owner';
 
 const isValidCollaboratorPermission = (permission) =>
@@ -40,6 +46,7 @@ module.exports = {
   canView,
   canEdit,
   canManageShareLink,
+  canRename,
   canManageCollaborators,
   isValidCollaboratorPermission,
   isValidShareLinkPermission,

@@ -481,45 +481,55 @@ const EditProfileModal = ({
           style={[styles.modalWrapper, { padding: isMobile ? SPACING.md : SPACING.xl }]}
         >
           <Pressable style={[styles.editProfileModalContainer, { width: modalWidth, maxHeight: maxModalHeight }]}>
-            <TouchableOpacity
-              onPress={handleClose}
-              style={[styles.editProfileClose, loading && styles.disabledTouchable]}
-              disabled={loading}
-              accessibilityRole="button"
-              accessibilityLabel="Close edit profile"
-              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-            >
-              <CloseIcon color={COLORS.gray500} />
-            </TouchableOpacity>
+            <View style={styles.modalHeaderRow}>
+              <View style={styles.modalHeaderIconTitle}>
+                <View style={styles.modalIconCircleSmall}>
+                  <ProfileIcon color={COLORS.primary} />
+                </View>
+                <View style={styles.modalHeaderTextCol}>
+                  <Text style={[styles.modalTitle, { fontSize: isDesktop ? 20 : 19 }]}>Edit Profile</Text>
+                  <Text style={styles.modalSubtitle}>Update your name below</Text>
+                </View>
+              </View>
+              <TouchableOpacity
+                onPress={handleClose}
+                style={[styles.modalClose, loading && styles.disabledTouchable]}
+                disabled={loading}
+                accessibilityRole="button"
+                accessibilityLabel="Close edit profile"
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              >
+                <CloseIcon />
+              </TouchableOpacity>
+            </View>
 
             <ScrollView showsVerticalScrollIndicator={false} bounces={false}>
-              <View style={styles.editProfileHeroSection}>
-                <Text style={[styles.editProfileTitle, { fontSize: isDesktop ? 20 : 19 }]}>Edit Profile</Text>
-                <Text style={styles.editProfileSubtitle}>Update your name below</Text>
-              </View>
-
-              <View style={styles.editProfileField}>
+              <View style={[styles.editProfileField, { marginTop: SPACING.lg }]}>
                 <Text style={styles.editProfileLabel}>Full Name</Text>
-                <TextInput
+                <View
                   style={[
-                    styles.editProfileInput,
-                    { fontSize: isMobile ? 15 : 16 },
+                    styles.editProfileNameRow,
                     nameFocused && styles.editProfileInputFocused,
                     hasError && styles.inputError,
                     loading && styles.disabledInput,
                   ]}
-                  value={fullName}
-                  onChangeText={(text) => {
-                    setFullName(text);
-                    setError('');
-                  }}
-                  onFocus={() => setNameFocused(true)}
-                  onBlur={() => setNameFocused(false)}
-                  placeholder="Enter your full name"
-                  placeholderTextColor={COLORS.gray400}
-                  editable={!loading}
-                  accessibilityLabel="Full name"
-                />
+                >
+                  <ProfileIcon color={COLORS.gray400} />
+                  <TextInput
+                    style={[styles.editProfileNameInput, { fontSize: isMobile ? 15 : 16 }]}
+                    value={fullName}
+                    onChangeText={(text) => {
+                      setFullName(text);
+                      setError('');
+                    }}
+                    onFocus={() => setNameFocused(true)}
+                    onBlur={() => setNameFocused(false)}
+                    placeholder="Enter your full name"
+                    placeholderTextColor={COLORS.gray400}
+                    editable={!loading}
+                    accessibilityLabel="Full name"
+                  />
+                </View>
                 {hasError ? <Text style={styles.editProfileFieldError}>{error}</Text> : null}
               </View>
 
@@ -1746,40 +1756,26 @@ const styles = StyleSheet.create({
   profileOptionText: { ...TYPOGRAPHY.body, color: COLORS.gray800 },
 
   editProfileModalContainer: { backgroundColor: COLORS.white, borderRadius: RADIUS.xxl, overflow: 'hidden', ...SHADOWS.lg },
-  editProfileClose: {
-    position: 'absolute',
-    top: SPACING.lg,
-    right: SPACING.lg,
-    zIndex: 1,
-    padding: SPACING.xs,
-    borderRadius: RADIUS.full,
-    backgroundColor: COLORS.gray50,
-  },
-  editProfileHeroSection: {
-    alignItems: 'center',
-    paddingTop: SPACING.xxl,
-    paddingBottom: SPACING.lg,
-    paddingHorizontal: SPACING.xl,
-  },
-  editProfileTitle: { ...TYPOGRAPHY.h3, color: COLORS.gray900 },
-  editProfileSubtitle: {
-    ...TYPOGRAPHY.caption,
-    color: COLORS.gray500,
-    textAlign: 'center',
-    marginTop: SPACING.xs,
-    maxWidth: 260,
-  },
   editProfileField: { paddingHorizontal: SPACING.xl, marginBottom: SPACING.lg },
   editProfileLabel: { ...TYPOGRAPHY.captionBold, color: COLORS.gray700, marginBottom: SPACING.sm },
-  editProfileInput: {
-    ...TYPOGRAPHY.body,
-    color: COLORS.gray900,
+  // Icon + input row, matching passwordInputContainer's pattern in the
+  // Change Password modal — every field across both modals now leads with
+  // an icon instead of Full Name being the one bare exception.
+  editProfileNameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
     borderWidth: 1.5,
     borderColor: COLORS.gray200,
     borderRadius: RADIUS.md,
     paddingHorizontal: SPACING.md,
-    paddingVertical: SPACING.md,
     backgroundColor: COLORS.gray50,
+  },
+  editProfileNameInput: {
+    flex: 1,
+    paddingVertical: SPACING.md,
+    marginLeft: SPACING.sm,
+    ...TYPOGRAPHY.body,
+    color: COLORS.gray900,
   },
   editProfileInputFocused: {
     borderColor: COLORS.primary,
