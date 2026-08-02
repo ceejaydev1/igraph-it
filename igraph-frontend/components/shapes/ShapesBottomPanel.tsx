@@ -60,7 +60,6 @@ interface ShapesBottomPanelProps {
   visible: boolean;
   onClose: () => void;
   onSelectShape: (shapeId: string, shapeData?: ShapeDefinition) => void;
-  onUmlTypeChange?: (type: string) => void;
   isGraphReady: boolean;
   toolbarHeight: number;
 }
@@ -94,7 +93,6 @@ export default function ShapesBottomPanel({
   visible,
   onClose,
   onSelectShape,
-  onUmlTypeChange,
   isGraphReady,
   toolbarHeight,
 }: ShapesBottomPanelProps) {
@@ -182,15 +180,18 @@ export default function ShapesBottomPanel({
     }, 150);
   };
 
+  // Purely local UI state — which tab is active here has no bearing on the
+  // diagram's own declared type. That's now detected automatically from the
+  // shapes actually on the canvas (see detectDiagramTypeFromContent in
+  // create.tsx), not from which tab the shapes panel happens to be showing —
+  // switching here to peek at another tab's shapes, or drag in just one or
+  // two of them, no longer has any side effect on validation.
   const handleTabChange = (tab: string) => {
     setActiveTab(tab);
     setSearchQuery('');
     setActivePage(0);
     if (scrollViewRef.current) {
       scrollViewRef.current.scrollTo({ x: 0, animated: false });
-    }
-    if (onUmlTypeChange) {
-      onUmlTypeChange(tab);
     }
   };
 

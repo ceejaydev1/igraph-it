@@ -67,6 +67,13 @@ export const ICONS = {
     </Svg>
   ),
 
+  Tag: ({ color = '#4a5568' }: { color?: string }) => (
+    <Svg width={22} height={22} viewBox="0 0 24 24" fill="none">
+      <Path d="M12.59 2.59a2 2 0 0 0-1.42-.59H4a2 2 0 0 0-2 2v7.17a2 2 0 0 0 .59 1.42l9 9a2 2 0 0 0 2.82 0l7.17-7.17a2 2 0 0 0 0-2.82z" stroke={color} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" />
+      <Circle cx="7.5" cy="7.5" r="1.5" stroke={color} strokeWidth={1.8} />
+    </Svg>
+  ),
+
   NewDiagram: ({ color = '#4a5568' }: { color?: string }) => (
     <Svg width={22} height={22} viewBox="0 0 24 24" fill="none">
       <Path d="M13 3H7C5.89543 3 5 3.89543 5 5V19C5 20.1046 5.89543 21 7 21H17C18.1046 21 19 20.1046 19 19V9L13 3Z" stroke={color} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" />

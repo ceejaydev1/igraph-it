@@ -357,6 +357,17 @@ export const getCachedUser = async () => {
   return null;
 };
 
+// Synchronous, in-memory-only read of the same cache getCachedUser() above
+// serves — no storage read, no cache-expiry check, just whatever's currently
+// held. For callers that can't await (utils/onboardingTour.ts's "seen"
+// tracking needs the current user's id per-key, but its own functions are
+// called synchronously from a useFocusEffect callback). By the time any
+// screen's own onboarding hook runs, the (tabs) layout's own loadUserData()
+// has already called setCachedUser() on mount/focus, so this is reliably
+// populated in practice — worst case (never signed in this session yet) is
+// just falling back to no user-scoping for that one check, not a crash.
+export const getCachedUserSync = () => cachedUserData;
+
 export const setCachedUser = (data) => {
   cachedUserData = data;
   cacheTimestamp = Date.now();
@@ -375,6 +386,40 @@ export const getCachedDiagrams = () => cachedDiagrams;
 
 export const setCachedDiagrams = (diagrams) => {
   cachedDiagrams = diagrams;
+};
+
+// Prefetch cache for a single diagram's full content (xml/pages/type — not
+// just the list-view summary above). savedDiagrams.tsx kicks this off the
+// moment a diagram card is tapped, in parallel with the "Continue?"
+// confirmation modal it shows before actually navigating — by the time the
+// user confirms and create.tsx mounts, the real fetch has often already
+// finished, so create.tsx can skip its own network round trip entirely and
+// render the actual diagram immediately instead of a placeholder. In-memory
+// only, and consumed once (see takePrefetchedDiagram) so a stale copy is
+// never served to a later, different open of the same diagram.
+const prefetchedDiagrams = new Map();
+
+export const prefetchDiagram = (id) => {
+  if (!id || prefetchedDiagrams.has(id)) return;
+  const promise = api.get(`/diagrams/${id}`)
+    .then((res) => res.data)
+    .catch((err) => {
+      // A failed prefetch just means create.tsx's own fetch does the work
+      // instead, exactly as if this never ran — remove it so that real
+      // fetch isn't skipped in favor of a cached failure.
+      prefetchedDiagrams.delete(id);
+      throw err;
+    });
+  prefetchedDiagrams.set(id, promise);
+};
+
+// One-shot read: returns the in-flight/completed prefetch for this id (if
+// any) and removes it, so a later open of the same diagram always gets a
+// fresh fetch rather than silently reusing old content.
+export const takePrefetchedDiagram = (id) => {
+  const promise = prefetchedDiagrams.get(id);
+  if (promise) prefetchedDiagrams.delete(id);
+  return promise || null;
 };
 
 // Decodes the uid claim out of the stored access token without a network
@@ -581,7 +626,23 @@ export const forgotPassword = async (email) => {
 
 // 🏓 PING: Wake up free-tier backend before OTP verify
 
+// Callers fire this defensively from several places (sign-in, sign-up, every
+// Saved Diagrams focus...) since none of them know whether the backend is
+// already awake. Without a cooldown, bouncing between screens a few times
+// sends a fresh ping every single time — wasted requests that count against
+// the same global per-IP rate limit as everything else. If a ping landed
+// recently, the backend is already known to be awake (asleep or not, a
+// completed request either way proves the process is up right now), so
+// there's nothing more a repeat ping right after would accomplish.
+const PING_COOLDOWN_MS = 2 * 60 * 1000;
+let lastPingAt = 0;
+
 export const pingBackend = async () => {
+  if (Date.now() - lastPingAt < PING_COOLDOWN_MS) {
+    console.log('🏓 Backend ping skipped (pinged recently)');
+    return;
+  }
+  lastPingAt = Date.now();
   try {
     await api.get('/health', { timeout: 30000 });
     console.log('🏓 Backend ping successful');
@@ -723,7 +784,7 @@ export const verifyToken = async () => {
     }
 
     const response = await api.get('/auth/me');
-    
+
     if (response.data && response.data.success === true) {
       if (response.data.data?.user) {
         setCachedUser(response.data.data.user);
@@ -733,13 +794,52 @@ export const verifyToken = async () => {
         data: response.data.data || null
       };
     }
-    
+
     return { success: false };
   } catch (error) {
-    if (error.response?.status === 401) {
-      await clearTokens();
+    if (error.response?.status !== 401) {
+      return { success: false };
     }
-    return { success: false };
+
+    // /auth/me is deliberately excluded from the generic response
+    // interceptor's own 401->refresh->retry dance above (see that
+    // interceptor's comment on isAuthRoute) to avoid an infinite reload
+    // loop for a genuinely signed-out visitor hitting a public page. But
+    // that means a 401 here is ambiguous — it could mean "never signed in",
+    // or it could just mean the short-lived (15m) access token expired while
+    // the app was closed, with a perfectly valid 7-day refresh token still
+    // sitting in the cookie jar. Blindly clearing tokens on every 401 here
+    // is exactly what forced a still-valid session back to sign-in on every
+    // reopen past 15 minutes (closing a tab, a PWA getting evicted from
+    // background apps). Try one silent refresh + retry first, same as every
+    // other route already gets, and only give up if that's genuinely dead.
+    try {
+      await refreshToken();
+    } catch (_refreshError) {
+      // refreshToken() already clears tokens itself on a genuine 401/403
+      // rejection (an actually-dead session) and leaves them alone on a
+      // network/cold-start hiccup — nothing extra to do here either way.
+      return { success: false };
+    }
+
+    try {
+      const retryResponse = await api.get('/auth/me');
+      if (retryResponse.data && retryResponse.data.success === true) {
+        if (retryResponse.data.data?.user) {
+          setCachedUser(retryResponse.data.data.user);
+        }
+        return {
+          success: true,
+          data: retryResponse.data.data || null,
+        };
+      }
+      return { success: false };
+    } catch (retryError) {
+      if (retryError.response?.status === 401) {
+        await clearTokens();
+      }
+      return { success: false };
+    }
   }
 };
 

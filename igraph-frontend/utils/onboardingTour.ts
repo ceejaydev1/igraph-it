@@ -2,6 +2,7 @@ import { Platform } from 'react-native';
 import { driver, type Config, type DriveStep, type Driver } from 'driver.js';
 import 'driver.js/dist/driver.css';
 import './tourTheme.css';
+import { getCachedUserSync } from '../services/authService';
 
 // driver.js is DOM-only — this whole module is a no-op on native (iOS/Android),
 // where there's no document/window to attach a highlight overlay to. The app
@@ -10,10 +11,24 @@ const isWeb = () => Platform.OS === 'web' && typeof window !== 'undefined';
 
 const SEEN_KEY_PREFIX = 'igraphit_tour_seen_';
 
+// Scoped by account, not just tour — a shared computer (a school lab PC is
+// exactly this) otherwise breaks onboarding entirely: student A finishes the
+// tour, which marks it "seen" for that *browser*; student B then signs up
+// for their own, genuinely new account on the same machine, and their tour
+// silently never plays, because the seen-flag has no idea these are two
+// different people. Falls back to a shared 'anon' bucket only if no user is
+// cached yet (shouldn't normally happen — see getCachedUserSync's own
+// comment), which just means that one edge case behaves like the old
+// browser-only scoping instead of failing outright.
+const seenKey = (tourId: string): string => {
+  const uid = getCachedUserSync()?.uid || 'anon';
+  return `${SEEN_KEY_PREFIX}${tourId}_${uid}`;
+};
+
 const readSeen = (tourId: string): boolean => {
   if (!isWeb()) return true;
   try {
-    return window.localStorage.getItem(SEEN_KEY_PREFIX + tourId) === 'true';
+    return window.localStorage.getItem(seenKey(tourId)) === 'true';
   } catch {
     // Storage can throw in locked-down/private-browsing contexts — treat as
     // "already seen" so a broken localStorage can't spam the tour every visit.
@@ -24,7 +39,7 @@ const readSeen = (tourId: string): boolean => {
 const writeSeen = (tourId: string) => {
   if (!isWeb()) return;
   try {
-    window.localStorage.setItem(SEEN_KEY_PREFIX + tourId, 'true');
+    window.localStorage.setItem(seenKey(tourId), 'true');
   } catch {
     // Ignore — worst case the tour replays next visit.
   }
@@ -37,7 +52,7 @@ export const hasSeenTour = (tourId: string): boolean => readSeen(tourId);
 export const resetTour = (tourId: string) => {
   if (!isWeb()) return;
   try {
-    window.localStorage.removeItem(SEEN_KEY_PREFIX + tourId);
+    window.localStorage.removeItem(seenKey(tourId));
   } catch {
     // Ignore.
   }

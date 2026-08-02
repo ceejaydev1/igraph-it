@@ -901,6 +901,22 @@ export const getAllShapeIds = (): string[] => {
   return Array.from(ids);
 };
 
+// Reverse of DIAGRAM_SHAPES: which category (DIAGRAM_TABS entry) a given
+// shape id belongs to — used to auto-detect/correct a diagram's own declared
+// type from what's actually been drawn on it (see detectDiagramTypeFromContent
+// in create.tsx), instead of relying on a manually-set or stale stored field.
+const SHAPE_ID_TO_CATEGORY: Record<string, string> = {};
+for (const [category, shapes] of Object.entries(DIAGRAM_SHAPES)) {
+  for (const shape of shapes) {
+    if (!(shape.id in SHAPE_ID_TO_CATEGORY)) {
+      SHAPE_ID_TO_CATEGORY[shape.id] = category;
+    }
+  }
+}
+
+export const getCategoryForShapeId = (shapeId: string): string | undefined =>
+  SHAPE_ID_TO_CATEGORY[shapeId];
+
 // Looks up a shape's own default width/height (and full definition) by id,
 // regardless of which category it lives under. Used when inserting a shape
 // onto the canvas so its drop size matches its actual proportions (an oval

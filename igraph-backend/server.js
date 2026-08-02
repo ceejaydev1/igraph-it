@@ -123,8 +123,16 @@ app.use((req, res, next) => {
 });
 
 app.use(cookieParser());
-app.use(express.json({ limit: '50mb' }));
-app.use(express.urlencoded({ extended: true, limit: '50mb' }));
+// 50mb used to be needed because diagram saves could carry an oversized
+// preview thumbnail (see maxDimension in app/(tabs)/create.tsx's
+// renderDiagramToCanvas — thumbnails used to scale with the diagram's own
+// size instead of being capped) plus every page's full XML on every save.
+// With that image now capped to a couple hundred KB at most, 15mb is still
+// a generous ceiling for even a large multi-page diagram's XML, without
+// leaving a 512MB-RAM instance exposed to parsing near a 50mb body on every
+// request.
+app.use(express.json({ limit: '15mb' }));
+app.use(express.urlencoded({ extended: true, limit: '15mb' }));
 app.use(compression());
 
 const isProduction = process.env.NODE_ENV === 'production';
@@ -142,7 +150,7 @@ app.use((err, req, res, next) => {
   if (err.type === 'entity.too.large') {
     return res.status(413).json({
       success: false,
-      message: 'Request too large. Maximum size is 50MB.',
+      message: 'Request too large. Maximum size is 15MB.',
       code: 'PAYLOAD_TOO_LARGE'
     });
   }
@@ -226,7 +234,7 @@ app.use((err, req, res, next) => {
 const httpServer = app.listen(PORT, '0.0.0.0', () => {
   console.log(`✅ iGraph IT Backend running on port ${PORT}`);
   console.log(`🌍 Environment: ${process.env.NODE_ENV || 'development'}`);
-  console.log(`📦 JSON limit: 50mb`);
+  console.log(`📦 JSON limit: 15mb`);
   console.log(`🔒 CORS enabled for ${allowedOrigins.length} origins`);
   console.log(`📡 Local: http://localhost:${PORT}`);
 });

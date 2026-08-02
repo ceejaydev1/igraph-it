@@ -191,6 +191,26 @@ export default function Navbar({
     return () => sub.remove();
   }, []);
 
+  // Same class of stale-repaint bug as create.tsx's own visibilitychange
+  // handler (see its comment) — an installed PWA resuming from the
+  // background can leave these floating, elevation/shadow-composited mobile
+  // bars painted incorrectly: reported as the bottom dock showing only the
+  // raised Create FAB, with the pill background and the other three tabs
+  // missing until something forces a real repaint. Bumping this key remounts
+  // both mobile bars fresh on resume instead of trying to coax the stale
+  // compositor layer into repainting itself.
+  const [mobileBarRepaintKey, setMobileBarRepaintKey] = useState(0);
+  useEffect(() => {
+    if (Platform.OS !== 'web' || typeof document === 'undefined') return;
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        setMobileBarRepaintKey((k) => k + 1);
+      }
+    };
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', onVisibilityChange);
+  }, []);
+
   const handleNavigation = (route: string) => {
     // Create lives on a plain Stack (not real tabs), so router.push would
     // always mount a brand-new, blank create screen and leave the old one
@@ -379,7 +399,7 @@ export default function Navbar({
 
       {/* Top Bar — fully removed on the create screen (mobile) */}
       {shouldShowTopBar && (
-        <View style={[styles.mobileContainer, { height: navbarHeight }]}>
+        <View key={mobileBarRepaintKey} style={[styles.mobileContainer, { height: navbarHeight }]}>
           <View style={[styles.mobileNav, { height: navbarHeight }]}>
             <Pressable
               onPress={() => handleNavigation('/(tabs)/home')}
@@ -435,7 +455,7 @@ export default function Navbar({
           (mobile): it has its own bottom toolbar + shapes panel, and this
           floating bar (zIndex 200) was sitting on top of and hiding them. */}
       {!isCreateScreen && (
-      <View style={styles.bottomNavWrapper}>
+      <View key={mobileBarRepaintKey} style={styles.bottomNavWrapper}>
         <View
           nativeID="tour-navbar-mobile-dock"
           style={styles.bottomNavCard}

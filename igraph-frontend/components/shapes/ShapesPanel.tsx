@@ -298,14 +298,12 @@ interface ShapesPanelProps {
   onSelectShape: (shapeId: string, shapeData?: ShapeDefinition) => void;
   isGraphReady: boolean;
   activeDiagramType?: string;
-  onDiagramTypeChange?: (type: string) => void;
 }
 
 export default function ShapesPanel({
   onSelectShape,
   isGraphReady,
   activeDiagramType = 'Standard',
-  onDiagramTypeChange,
 }: ShapesPanelProps) {
   const { width: windowWidth } = useWindowDimensions();
   const isDesktop = windowWidth >= 768;
@@ -370,14 +368,17 @@ export default function ShapesPanel({
   }, [onSelectShape]);
 
   // ─── Category toggle ──────────────────────────────────────────────────────
+  // Purely local UI state — which category is expanded here has no bearing
+  // on the diagram's own declared type. That's now detected automatically
+  // from the shapes actually on the canvas (see detectDiagramTypeFromContent
+  // in create.tsx), not from which category the shapes panel happens to be
+  // showing — browsing here to peek at another category's shapes, or drag in
+  // just one or two of them, no longer has any side effect on validation.
 
   const toggleCategory = useCallback((category: string) => {
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
     setExpandedCategory(expandedCategory === category ? '' : category);
-    if (onDiagramTypeChange && expandedCategory !== category) {
-      onDiagramTypeChange(category);
-    }
-  }, [expandedCategory, onDiagramTypeChange]);
+  }, [expandedCategory]);
 
   // ─── Clear search ─────────────────────────────────────────────────────────
 

@@ -31,9 +31,9 @@ import ConnectorsBottomPanel from '../../components/ConnectorsBottomPanel';
 import PropertiesPanel from '@/components/properties-panel/PropertiesPanel';
 import QuickFormatBar from '@/components/properties-panel/QuickFormatBar';
 import { ICONS } from '../../constants/icons';
-import { COLORS, SPACING } from '@/constants/theme';
+import { COLORS, SPACING, RADIUS } from '@/constants/theme';
 import { IGRAPH_ID_STYLE_MAP } from '@/components/maxgraph-custom-shapes';
-import { getShapeDefinitionById, CONNECTOR_SHAPE_IDS } from '@/constants/shapes';
+import { getShapeDefinitionById, CONNECTOR_SHAPE_IDS, getCategoryForShapeId, DIAGRAM_TABS } from '@/constants/shapes';
 import { tagShapeRole, getShapeRole, computeFddEntryPoint } from '@/utils/flowchartRules';
 import * as authService from '../../services/authService';
 import * as shareService from '../../services/diagramShareService';
@@ -498,6 +498,17 @@ export default function CreateScreen() {
     onConfirm?: () => void;
   } | null>(null);
 
+  // ─── Diagram type state ──────────────────────────────────────────────────────
+  // Explicit, always-available override for the diagram's declared type —
+  // drives which validation ruleset applies (see umlType on DiagramCanvas).
+  // detectDiagramTypeFromContent below already sets this automatically as
+  // shapes are added/loaded, but picking a type here is a deliberate user
+  // action, so it always wins over the automatic guess — covers the cases
+  // detection can't (an all-Standard-shapes diagram, or the rare diagram
+  // detection gets wrong) and old diagrams saved before either mechanism
+  // existed.
+  const [showTypeModal, setShowTypeModal] = useState(false);
+
   // ─── Share state ─────────────────────────────────────────────────────────────
   const [showShareModal, setShowShareModal] = useState(false);
 
@@ -897,8 +908,22 @@ export default function CreateScreen() {
 
   // ─── Persistence: continue a saved diagram / resume the local draft ────────
 
-  const applyLoadedContent = (content: { name: string; xml: string; pages?: Page[]; activePageId?: string | null }) => {
+  const applyLoadedContent = (content: { name: string; xml: string; pages?: Page[]; activePageId?: string | null; type?: string }) => {
     pageXmlCache.current.clear();
+    // Baseline restore of the diagram's own declared type on load — without
+    // this, activeUmlType (which drives validation rules, see umlType passed
+    // to DiagramCanvas) stayed at whatever it was left at from a previous
+    // diagram/session instead of matching what's actually being opened.
+    // Older local drafts saved before this field existed won't have it —
+    // leaving activeUmlType untouched in that case is the safer fallback,
+    // rather than resetting it to some arbitrary default. This gets
+    // overridden below, once the content is actually loaded into the graph,
+    // by whatever detectDiagramTypeFromContent finds — content stored before
+    // that detector existed can have a stale/wrong type field, and this is
+    // what self-corrects it the moment the diagram is opened.
+    if (content.type) {
+      setActiveUmlType(content.type);
+    }
     const loadedPages: Page[] = content.pages && content.pages.length > 0
       ? content.pages
       : [{ id: generatePageId(), name: 'Page 1', xml: content.xml || '' }];
@@ -921,11 +946,23 @@ export default function CreateScreen() {
     // issue as the visibilitychange/focus-loss cases elsewhere in this file).
     diagramCanvasRef.current?.refresh();
 
+    // Cross-checks the just-loaded content against what's actually drawn —
+    // see detectDiagramTypeFromContent's own comment. Only overrides when a
+    // confident, type-specific majority is found; a diagram built entirely
+    // from Standard shapes (or one with no shapes yet) keeps whatever
+    // content.type/setActiveUmlType above already set.
+    if (graphInstance) {
+      const detected = detectDiagramTypeFromContent(graphInstance);
+      if (detected) {
+        setActiveUmlType(detected);
+      }
+    }
+
     // Returned so callers can persist this exact snapshot to AsyncStorage
     // immediately (see hydrate()'s backend-load branch below) — reading
     // `pages`/`activePageId` state here instead wouldn't work, since the
     // setPages/setActivePageId calls above haven't committed yet.
-    return { name, pages: loadedPages, activePageId: targetActiveId };
+    return { name, pages: loadedPages, activePageId: targetActiveId, type: content.type };
   };
 
   const draftKey = (uid: string, id: string | null) => `diagram_draft_${uid}_${id || 'new'}`;
@@ -937,6 +974,7 @@ export default function CreateScreen() {
         name: diagramNameRef.current,
         pages: pages.map(p => ({ id: p.id, name: p.name, xml: pageXmlCache.current.get(p.id) || '' })),
         activePageId,
+        type: activeUmlType,
       };
       await AsyncStorage.setItem(draftKey(uid, id), JSON.stringify(content));
       await AsyncStorage.setItem(activePointerKey(uid), JSON.stringify({ diagramId: id }));
@@ -1007,9 +1045,21 @@ export default function CreateScreen() {
       if (diagramId && diagramId !== loadedDiagramIdRef.current) {
         loadedDiagramIdRef.current = diagramId;
         try {
-          const API_URL = process.env.EXPO_PUBLIC_API_URL || 'https://igraph-backend.onrender.com';
-          const response = await authService.authFetch(`${API_URL}/api/diagrams/${diagramId}`);
-          const result = await response.json();
+          // savedDiagrams.tsx kicks this fetch off the moment its diagram
+          // card is tapped, well before navigation lands here — reusing it
+          // (instead of starting an identical fetch from scratch) is most of
+          // where "immediately" comes from: the network round trip has
+          // already been running during the "Continue?" confirmation modal
+          // and the navigation itself, so it's often already finished.
+          const prefetched = authService.takePrefetchedDiagram(diagramId);
+          let result;
+          if (prefetched) {
+            result = await prefetched;
+          } else {
+            const API_URL = process.env.EXPO_PUBLIC_API_URL || 'https://igraph-backend.onrender.com';
+            const response = await authService.authFetch(`${API_URL}/api/diagrams/${diagramId}`);
+            result = await response.json();
+          }
           if (cancelled) return;
           if (result.success && result.data) {
             const loaded = applyLoadedContent(result.data);
@@ -1537,6 +1587,42 @@ export default function CreateScreen() {
     setTimeout(focusGraph, 50);
   };
 
+  // Detects a diagram's real type from what's actually drawn on it, instead
+  // of trusting a manually-set or possibly-stale stored field. Tallies each
+  // vertex/edge's shape role (getShapeRole — the same session-tag-or-
+  // persisted-style lookup the validators themselves already use, so this
+  // stays consistent with how a shape's identity is resolved everywhere
+  // else) against the category it belongs to (getCategoryForShapeId), and
+  // returns whichever category has the most matches. 'Standard' shapes
+  // (plain rectangles, ellipses, etc. — used across every diagram type) are
+  // deliberately excluded from the tally so a Schematic diagram that
+  // happens to include a couple of generic label boxes doesn't get diluted
+  // toward "no clear type"; only diagram-specific shapes count. Returns null
+  // when nothing type-specific is on the canvas yet (a brand-new diagram, or
+  // one built entirely from Standard shapes) — callers should leave the
+  // current type alone in that case rather than clearing it.
+  const detectDiagramTypeFromContent = useCallback((graph: any): string | null => {
+    const parent = graph.getDefaultParent();
+    const cells = [...graph.getChildVertices(parent), ...graph.getChildEdges(parent)];
+    const counts: Record<string, number> = {};
+    for (const cell of cells) {
+      const shapeId = getShapeRole(cell);
+      if (!shapeId) continue;
+      const category = getCategoryForShapeId(shapeId);
+      if (!category || category === 'Standard') continue;
+      counts[category] = (counts[category] || 0) + 1;
+    }
+    let bestCategory: string | null = null;
+    let bestCount = 0;
+    for (const [category, count] of Object.entries(counts)) {
+      if (count > bestCount) {
+        bestCount = count;
+        bestCategory = category;
+      }
+    }
+    return bestCategory;
+  }, []);
+
   const handleAddShape = (shapeId: string) => {
     if (!graphInstance) return;
 
@@ -1648,6 +1734,19 @@ export default function CreateScreen() {
         );
       }
       tagShapeRole(cell, shapeId);
+
+      // Re-detects the diagram's type from actual content on every shape
+      // add — see detectDiagramTypeFromContent's own comment. This is what
+      // gives a brand-new diagram a type at all (there's no other picker for
+      // that), and keeps an existing diagram's type in step as it's built,
+      // without the old bug where merely *browsing* the shapes panel (not
+      // actually placing anything) could reclassify an already-built
+      // diagram — dropping a shape is a real, deliberate content change,
+      // which majority-vote detection can safely react to.
+      const detectedType = detectDiagramTypeFromContent(graph);
+      if (detectedType) {
+        setActiveUmlType(detectedType);
+      }
 
       // A Fork/Join bar needs its standard set of real, draggable stub
       // arrows wired up here too — this tap-to-add flow is a completely
@@ -1924,7 +2023,7 @@ export default function CreateScreen() {
   const renderDiagramToCanvas = (
     graph: any,
     scale: number = 2,
-    options?: { minSize?: { width: number; height: number }; gridBackground?: boolean }
+    options?: { minSize?: { width: number; height: number }; gridBackground?: boolean; maxDimension?: number }
   ): Promise<HTMLCanvasElement> => {
     return new Promise((resolve, reject) => {
       try {
@@ -1941,8 +2040,19 @@ export default function CreateScreen() {
         // silently return null/blank instead of throwing, which is why large
         // diagrams could fail to export as PNG/JPG/PDF only on phones.
         const MAX_CANVAS_DIMENSION = 4096;
+        // maxDimension (thumbnail callers only) targets a fixed output size
+        // regardless of the diagram's own size — without it, `scale` alone
+        // means a diagram twice as big produces a thumbnail twice as big,
+        // even though it's still rendered into the exact same ~150px-tall
+        // card. A large diagram scaled by 0.5 could still be a multi-
+        // megapixel PNG stored in Firestore and shipped on every list fetch
+        // for something the user only ever sees at thumbnail size.
+        const maxDimensionScale = options?.maxDimension
+          ? Math.min(options.maxDimension / width, options.maxDimension / height)
+          : Infinity;
         const effectiveScale = Math.min(
           scale,
+          maxDimensionScale,
           MAX_CANVAS_DIMENSION / width,
           MAX_CANVAS_DIMENSION / height
         );
@@ -2085,6 +2195,13 @@ export default function CreateScreen() {
         const canvas = await renderDiagramToCanvas(graphInstance, 0.5, {
           minSize: DIAGRAM_THUMBNAIL_MIN_SIZE,
           gridBackground: true,
+          // Caps the actual output resolution regardless of how big the
+          // diagram itself is — this image is only ever shown at ~150px
+          // tall in a list card (see cardPreview in savedDiagrams.tsx) and
+          // is what gets stored in Firestore and re-sent on every diagram
+          // list fetch, so a large diagram no longer means a proportionally
+          // large (and proportionally expensive) thumbnail.
+          maxDimension: 480,
         });
         imageDataUrl = canvas.toDataURL('image/png');
         console.log('🖼️ Preview generated, size:', (imageDataUrl.length / 1024).toFixed(1), 'KB');
@@ -2234,6 +2351,13 @@ export default function CreateScreen() {
         const canvas = await renderDiagramToCanvas(graphInstance, 0.5, {
           minSize: DIAGRAM_THUMBNAIL_MIN_SIZE,
           gridBackground: true,
+          // Caps the actual output resolution regardless of how big the
+          // diagram itself is — this image is only ever shown at ~150px
+          // tall in a list card (see cardPreview in savedDiagrams.tsx) and
+          // is what gets stored in Firestore and re-sent on every diagram
+          // list fetch, so a large diagram no longer means a proportionally
+          // large (and proportionally expensive) thumbnail.
+          maxDimension: 480,
         });
         imageDataUrl = canvas.toDataURL('image/png');
       } catch {
@@ -2768,6 +2892,14 @@ export default function CreateScreen() {
             >
               <ICONS.NewDiagram color="#4a5568" />
             </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.mobileTopBarBtn}
+              onPress={() => setShowTypeModal(true)}
+              activeOpacity={0.7}
+              accessibilityLabel={`Diagram type: ${activeUmlType}. Tap to change.`}
+            >
+              <ICONS.Tag color="#4a5568" />
+            </TouchableOpacity>
           </View>
 
           <TextInput
@@ -2861,6 +2993,7 @@ export default function CreateScreen() {
             umlType={activeUmlType}
             isMobile
           />
+
 
           {pendingConnector && (
             <View style={styles.connectHintBanner} pointerEvents="box-none">
@@ -2999,7 +3132,6 @@ export default function CreateScreen() {
           visible={showShapesPanel}
           onClose={toggleShapesPanel}
           onSelectShape={handleAddShape}
-          onUmlTypeChange={setActiveUmlType}
           isGraphReady={isGraphReady}
           toolbarHeight={toolbarHeight}
         />
@@ -3058,6 +3190,12 @@ export default function CreateScreen() {
           onZoomIn={handlePrintZoomIn}
           onZoomOut={handlePrintZoomOut}
         />
+        <DiagramTypeModal
+          visible={showTypeModal}
+          currentType={activeUmlType}
+          onSelect={setActiveUmlType}
+          onClose={() => setShowTypeModal(false)}
+        />
         <ShareModal
           visible={showShareModal}
           onClose={() => setShowShareModal(false)}
@@ -3109,6 +3247,14 @@ export default function CreateScreen() {
               placeholderTextColor="#94a3b8"
               maxLength={50}
             />
+            <TouchableOpacity
+              style={styles.typeChipBtn}
+              onPress={() => setShowTypeModal(true)}
+              activeOpacity={0.7}
+            >
+              <ICONS.Tag color="#4a5568" />
+              <Text style={styles.typeChipBtnText} numberOfLines={1}>{activeUmlType}</Text>
+            </TouchableOpacity>
             {myAccessLevel !== 'owner' && (
               <View style={styles.accessBadge}>
                 <Text style={styles.accessBadgeText}>{ACCESS_BADGE_LABEL[myAccessLevel]}</Text>
@@ -3232,6 +3378,7 @@ export default function CreateScreen() {
               umlType={activeUmlType}
             />
 
+
             {pendingConnector && (
               <View style={styles.connectHintBanner} pointerEvents="box-none">
                 <View style={styles.connectHintPill}>
@@ -3273,7 +3420,6 @@ export default function CreateScreen() {
                 onSelectShape={handleAddShape}
                 isGraphReady={isGraphReady}
                 activeDiagramType={activeUmlType}
-                onDiagramTypeChange={setActiveUmlType}
               />
             </View>
           )}
@@ -3442,6 +3588,12 @@ export default function CreateScreen() {
           onZoomIn={handlePrintZoomIn}
           onZoomOut={handlePrintZoomOut}
         />
+        <DiagramTypeModal
+          visible={showTypeModal}
+          currentType={activeUmlType}
+          onSelect={setActiveUmlType}
+          onClose={() => setShowTypeModal(false)}
+        />
         <ShareModal
           visible={showShareModal}
           onClose={() => setShowShareModal(false)}
@@ -3525,6 +3677,120 @@ const PropertiesToggleIcon = ({ collapsed, color = '#4a5568' }: { collapsed: boo
     )}
   </Svg>
 );
+
+// ─── DIAGRAM TYPE MODAL ─────────────────────────────────────────────────────
+// Explicit picker for the diagram's declared type — see showTypeModal's own
+// comment in CreateScreen for how this relates to detectDiagramTypeFromContent's
+// automatic guess (this always wins when the user picks something here).
+
+interface DiagramTypeModalProps {
+  visible: boolean;
+  currentType: string;
+  onSelect: (type: string) => void;
+  onClose: () => void;
+}
+
+function DiagramTypeModal({ visible, currentType, onSelect, onClose }: DiagramTypeModalProps) {
+  if (!visible) return null;
+  return (
+    <Modal animationType="fade" transparent visible={visible} onRequestClose={onClose}>
+      <Pressable style={typeModalStyles.overlay} onPress={onClose}>
+        <Pressable style={typeModalStyles.container}>
+          <View style={typeModalStyles.header}>
+            <Text style={typeModalStyles.title}>Diagram Type</Text>
+            <TouchableOpacity onPress={onClose} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+              <ICONS.Close color={COLORS.gray500} />
+            </TouchableOpacity>
+          </View>
+          <Text style={typeModalStyles.subtitle}>
+            Controls which validation rules apply to this diagram.
+          </Text>
+          <ScrollView style={typeModalStyles.list} showsVerticalScrollIndicator={false}>
+            {DIAGRAM_TABS.map((type) => {
+              const isActive = type === currentType;
+              return (
+                <TouchableOpacity
+                  key={type}
+                  style={[typeModalStyles.row, isActive && typeModalStyles.rowActive]}
+                  onPress={() => {
+                    onSelect(type);
+                    onClose();
+                  }}
+                >
+                  <Text style={[typeModalStyles.rowText, isActive && typeModalStyles.rowTextActive]}>
+                    {type}
+                  </Text>
+                  {isActive && <Text style={typeModalStyles.check}>✓</Text>}
+                </TouchableOpacity>
+              );
+            })}
+          </ScrollView>
+        </Pressable>
+      </Pressable>
+    </Modal>
+  );
+}
+
+const typeModalStyles = StyleSheet.create({
+  overlay: {
+    flex: 1,
+    backgroundColor: COLORS.overlay,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: SPACING.xl,
+  },
+  container: {
+    width: '100%',
+    maxWidth: 380,
+    maxHeight: '80%',
+    backgroundColor: COLORS.white,
+    borderRadius: RADIUS.xxl,
+    padding: SPACING.xl,
+  },
+  header: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  title: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: COLORS.gray900,
+  },
+  subtitle: {
+    fontSize: 13,
+    color: COLORS.gray500,
+    marginTop: SPACING.xs,
+    marginBottom: SPACING.md,
+  },
+  list: {
+    marginTop: SPACING.sm,
+  },
+  row: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: SPACING.md,
+    paddingHorizontal: SPACING.md,
+    borderRadius: RADIUS.md,
+  },
+  rowActive: {
+    backgroundColor: COLORS.primaryLight,
+  },
+  rowText: {
+    fontSize: 14,
+    color: COLORS.gray700,
+  },
+  rowTextActive: {
+    color: COLORS.primary,
+    fontWeight: '700',
+  },
+  check: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: COLORS.primary,
+  },
+});
 
 // ─── PRINT MODAL ────────────────────────────────────────────────────────────
 //
@@ -3836,6 +4102,24 @@ const styles = StyleSheet.create({
   titleInputDesktop: {
     fontSize: 16,
     minWidth: 180,
+  },
+  typeChipBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    marginLeft: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 999,
+    backgroundColor: '#f8fafc',
+    borderWidth: 1,
+    borderColor: '#eef2f6',
+  },
+  typeChipBtnText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#4a5568',
+    maxWidth: 160,
   },
   autosaveIndicator: {
     flexDirection: 'row',

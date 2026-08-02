@@ -729,6 +729,17 @@ export default function SavedDiagrams() {
   useFocusEffect(
     useCallback(() => {
       loadSavedDiagrams();
+      // Fire-and-forget warm-up for a Render free-tier cold backend — same
+      // call signin.tsx/signup.tsx already use while the user's attention is
+      // elsewhere. loadSavedDiagrams() above would eventually wake it too,
+      // but only once that request itself resolves; opening a diagram from
+      // this list is a *separate* request (create.tsx's own diagramId
+      // fetch), so without this, a user who lands here and taps a diagram
+      // quickly still eats the full cold-start delay on THAT request instead.
+      // Firing this in parallel, right on arrival, gives the backend the
+      // entire "browsing the list, picking one" window to finish waking up
+      // before that click ever happens.
+      authService.pingBackend?.();
     }, [])
   );
 
@@ -763,6 +774,25 @@ export default function SavedDiagrams() {
       });
 
       console.log(`📥 Response status: ${response.status}`);
+
+      // hasActiveSession() above is only a cheap local-cache check (see its
+      // own comment in authService.js) — by design, this request is the real
+      // source of truth, via authFetch's own 401->refresh->retry. If it's
+      // STILL 401 after that, the session is actually dead (or never really
+      // existed — a stale cache said otherwise), not just "a diagram list
+      // failed to load". Falling through to the generic error branch below
+      // used to dump the raw backend string ("Access denied. No token
+      // provided.") into an inline "Error Loading Diagrams" card — a
+      // confusing, technical message for what's really just "please sign in
+      // again". Treating it the same as the upfront !signedIn check above
+      // (clear the stale cache, redirect) is what every other real auth wall
+      // in this app already does instead of surfacing a raw error.
+      if (response.status === 401) {
+        console.log('🔴 Session actually expired (401 after retry), redirecting to signin');
+        await authService.clearTokens();
+        router.replace('/(auth)/signin');
+        return;
+      }
 
       const result = await response.json();
       console.log(`📥 Response data:`, result);
@@ -950,6 +980,12 @@ export default function SavedDiagrams() {
   const handleDiagramPress = (diagram: any) => {
     setContinuingDiagram(diagram);
     setContinueModalVisible(true);
+    // Starts fetching this diagram's real content right now, in parallel
+    // with the "Continue?" modal above — by the time the user reads it and
+    // taps Continue, create.tsx often has this already waiting for it (see
+    // takePrefetchedDiagram there) instead of only starting the fetch after
+    // navigation.
+    authService.prefetchDiagram(diagram.id);
   };
 
   const closeContinueModal = () => {
