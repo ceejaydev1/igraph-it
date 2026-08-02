@@ -13,6 +13,7 @@ let joinedDiagramId = null;
 let remoteChangeHandler = null;
 let presenceHandler = null;
 let permissionChangeHandler = null;
+let cellSelectHandler = null;
 
 const getSocket = () => {
   if (socket) return socket;
@@ -40,6 +41,13 @@ const getSocket = () => {
     if (presenceHandler) presenceHandler(viewers);
   });
 
+  // Which shape (if any — null means deselected/left) another collaborator
+  // currently has selected, so their live cursor can be shown as a colored
+  // highlight around it. See collabSocket.js's cell-select relay.
+  socket.on('cell-select', ({ cellId, fromUserId }) => {
+    if (cellSelectHandler) cellSelectHandler(cellId, fromUserId);
+  });
+
   // Pushed by the server the moment the owner changes this user's access
   // level (or approves their access request) — see collabSocket.js's
   // notifyPermissionChange. Only ever targets *this* socket, but still guard
@@ -60,13 +68,15 @@ const getSocket = () => {
   return socket;
 };
 
-// handlers.onRemoteChange(xml, fromUserId), handlers.onPresence(viewers), and
-// handlers.onPermissionChange(permission) stay registered until joinDiagram
-// is called again or leaveDiagram() runs.
+// handlers.onRemoteChange(xml, fromUserId), handlers.onPresence(viewers),
+// handlers.onPermissionChange(permission), and handlers.onCellSelect(cellId,
+// fromUserId) stay registered until joinDiagram is called again or
+// leaveDiagram() runs.
 export const joinDiagram = (diagramId, handlers = {}) => {
   remoteChangeHandler = handlers.onRemoteChange || null;
   presenceHandler = handlers.onPresence || null;
   permissionChangeHandler = handlers.onPermissionChange || null;
+  cellSelectHandler = handlers.onCellSelect || null;
   joinedDiagramId = diagramId;
 
   const s = getSocket();
@@ -85,6 +95,7 @@ export const leaveDiagram = () => {
   remoteChangeHandler = null;
   presenceHandler = null;
   permissionChangeHandler = null;
+  cellSelectHandler = null;
 };
 
 // No-op if we're not currently the joined diagram's editor — callers don't
@@ -93,6 +104,16 @@ export const leaveDiagram = () => {
 export const sendDiagramChange = (diagramId, xml) => {
   if (!socket || joinedDiagramId !== diagramId) return;
   socket.emit('diagram-change', { xml });
+};
+
+// No-op if we're not currently the joined diagram's room, same as
+// sendDiagramChange — but deliberately no permission check here (unlike
+// that one's edit-only gate): selection is a presence signal, not an edit,
+// so a view-only collaborator's pointer is just as worth showing. cellId
+// null announces "deselected".
+export const sendCellSelect = (diagramId, cellId) => {
+  if (!socket || joinedDiagramId !== diagramId) return;
+  socket.emit('cell-select', { cellId });
 };
 
 export const disconnectCollabSocket = () => {

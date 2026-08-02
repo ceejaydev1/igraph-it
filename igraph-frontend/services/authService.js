@@ -188,7 +188,19 @@ api.interceptors.response.use(
           return api(originalRequest);
         }
       } catch (refreshError) {
-        if (Platform.OS === 'web') {
+        // A network error/timeout hitting the refresh endpoint (backend
+        // waking up from a Render free-tier cold start, a brief connectivity
+        // drop) isn't the server telling us the session is invalid — it's
+        // just no answer at all. refreshToken() itself only clears tokens on
+        // an actual auth rejection (401/403) now, but this still needs its
+        // own matching guard: without it, *any* refresh failure — including
+        // "the backend hasn't woken up yet" — hard-redirected to signin,
+        // which is what "randomly booted back to sign-in while just using
+        // the diagram canvas" actually was. A real session is still there;
+        // the request just needs to be allowed to fail and retried, not the
+        // whole session torn down out from under an in-progress edit.
+        const isAuthRejection = refreshError.response && [401, 403].includes(refreshError.response.status);
+        if (isAuthRejection && Platform.OS === 'web') {
           // Group segments like "(auth)" are only ever stripped from the URL
           // for client-side (SPA) navigation, never from a hard `location.href`
           // assignment — so this always landed on the literal, non-canonical
@@ -415,6 +427,20 @@ export const signUp = async (userData, consentTimestamp = null) => {
 
 export const verifyOTP = async (email, otp) => {
   const response = await api.post('/auth/verify-otp', { email, otp });
+  // The backend now signs the new account straight in as part of
+  // verification (see verifyOTP in authController.js) — same response
+  // shape as signIn's, so store it the same way, so the caller lands
+  // already-authenticated instead of needing a separate sign-in.
+  if (response.data.success && response.data.data?.tokens) {
+    const { accessToken, refreshToken } = response.data.data.tokens;
+    await storeTokens(accessToken, refreshToken);
+    if (Platform.OS === 'web' && response.data.data.user) {
+      localStorage.setItem('user', JSON.stringify(response.data.data.user));
+    }
+    if (response.data.data.user) {
+      setCachedUser(response.data.data.user);
+    }
+  }
   return response.data;
 };
 
@@ -605,7 +631,11 @@ export const refreshToken = async () => {
 
   try {
     const body = Platform.OS === 'web' ? {} : { refreshToken: refresh };
-    const response = await api.post('/auth/refresh-token', body);
+    // Same generous cold-start allowance as googleAuth/verifyResetOTP above
+    // — this fires mid-session, on whatever request happened to catch the
+    // access token just after it expired, so it's exactly as likely to land
+    // on a sleeping free-tier backend as those are.
+    const response = await api.post('/auth/refresh-token', body, { timeout: 45000 });
     if (response.data.success && response.data.data?.accessToken) {
       if (Platform.OS !== 'web') {
         await storage.setItem('accessToken', response.data.data.accessToken);
@@ -615,7 +645,18 @@ export const refreshToken = async () => {
     return null;
   } catch (error) {
     console.error('Refresh token error:', error);
-    await clearTokens();
+    // Only a genuine rejection from the server (401/403 — invalid/expired
+    // refresh token, session not found) means this session is actually
+    // dead. A network error or timeout (e.g. the backend still waking up
+    // from a Render free-tier cold start) means the request just never got
+    // a real answer — the refresh token itself was never told "no". Wiping
+    // valid tokens in that case is what silently signed people out of an
+    // active session over nothing more than a slow response; see the
+    // matching guard on the response interceptor above.
+    const isAuthRejection = error.response && [401, 403].includes(error.response.status);
+    if (isAuthRejection) {
+      await clearTokens();
+    }
     throw error;
   }
 };
@@ -749,9 +790,16 @@ export const recordConsent = async (consentTimestamp) => {
 
 export const changePassword = async (currentPassword, newPassword) => {
   try {
+    // The backend now keeps *this* session signed in after a password
+    // change (invalidating every other one) — but only if it can tell which
+    // session that is. Web already sends the refresh_token cookie
+    // automatically; native has no ambient cookie, so its refresh token
+    // needs to ride along explicitly here.
+    const refresh = Platform.OS !== 'web' ? await getRefreshToken() : undefined;
     const response = await api.post('/auth/change-password', {
       currentPassword,
-      newPassword
+      newPassword,
+      ...(refresh ? { refreshToken: refresh } : {}),
     });
     return response.data;
   } catch (error) {

@@ -624,6 +624,37 @@ export const PentagonShape: React.FC<ShapeProps> = ({
   );
 };
 
+// ─── Merge / Junction (circled X) ───────────────────────────────────────────
+// The panel tile this renders into is 48x32 (non-square, same as every
+// other Flowchart icon here) — the X's own reach has to be computed from a
+// square centered inside that box, same as the circle's radius already is,
+// or the X ends up sized off the full rectangle while the circle stays
+// sized off the shorter side: the X pokes out past the circle on the long
+// axis and the whole glyph reads as a bowtie instead of a circled X.
+export const MergeJunctionShape: React.FC<ShapeProps> = ({
+  width,
+  height,
+  color = '#1a1f36',
+  fillColor = '#ffffff',
+  strokeWidth = 2,
+}) => {
+  const size = Math.min(width, height);
+  const ox = (width - size) / 2;
+  const oy = (height - size) / 2;
+  const cx = width / 2;
+  const cy = height / 2;
+  const r = size / 2 - 4;
+  const inset = ox + size * 0.28;
+  const insetY = oy + size * 0.28;
+  return (
+    <Svg width={width} height={height} viewBox={`0 0 ${width} ${height}`}>
+      <Circle cx={cx} cy={cy} r={r} fill={fillColor} stroke={color} strokeWidth={strokeWidth} />
+      <Line x1={inset} y1={insetY} x2={width - inset} y2={height - insetY} stroke={color} strokeWidth={strokeWidth} />
+      <Line x1={width - inset} y1={insetY} x2={inset} y2={height - insetY} stroke={color} strokeWidth={strokeWidth} />
+    </Svg>
+  );
+};
+
 // ─── Manual Input (Trapezoid) ──────────────────────────────────────────────
 export const TrapezoidShape: React.FC<ShapeProps> = ({
   width,

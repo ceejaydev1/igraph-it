@@ -34,6 +34,7 @@ import {
   FDD_ExternalEntityShape,
   // Flowchart Shapes
   PentagonShape,
+  MergeJunctionShape,
   TrapezoidShape,
   DShape,
   HexagonShape,
@@ -108,8 +109,8 @@ import {
   UMLInitialNodeShape,
   UMLActivityShape,
   UMLDecisionShape,
-  UMLMergeShape,
   UMLForkShape,
+  UMLJoinShape,
   UMLControlFlowShape,
   UMLObjectFlowShape,
   UMLSwimlaneShape,
@@ -194,6 +195,7 @@ const componentMap: Record<string, React.ComponentType<any>> = {
   
   // ─── Flowchart Shapes ──────────────────────────────────────────────────
   'PentagonShape': PentagonShape,
+  'MergeJunctionShape': MergeJunctionShape,
   'TrapezoidShape': TrapezoidShape,
   'DShape': DShape,
   'HexagonShape': HexagonShape,
@@ -274,8 +276,8 @@ const componentMap: Record<string, React.ComponentType<any>> = {
   'UMLInitialNodeShape': UMLInitialNodeShape,
   'UMLActivityShape': UMLActivityShape,
   'UMLDecisionShape': UMLDecisionShape,
-  'UMLMergeShape': UMLMergeShape,
   'UMLForkShape': UMLForkShape,
+  'UMLJoinShape': UMLJoinShape,
   'UMLControlFlowShape': UMLControlFlowShape,
   'UMLObjectFlowShape': UMLObjectFlowShape,
   'UMLSwimlaneShape': UMLSwimlaneShape,

@@ -111,6 +111,26 @@ let activeTourId: string | null = null;
 let waitSignal: string | null = null;
 let pendingTourId: string | null = null;
 
+// destroy() ends a tour for two very different reasons, both of which route
+// through the exact same onDestroyed callback below with no way to tell them
+// apart on their own: (1) WE end it ourselves — replacing a stale instance
+// right before starting a new one (below), or a chain hand-off step moving
+// on to the next module's tour (tours.ts's nextModuleStep) — the "new user"
+// onboarding moment is still very much in progress; or (2) the *user* ends
+// it — clicking X/Escape/the overlay, or reaching the chain's real final
+// Finish step — their onboarding moment is genuinely over. Only (2) should
+// ever clear the new-user flag; clearing it on (1) too (an earlier version
+// of this file did exactly that) wiped the flag the instant the *first*
+// tour in the chain handed off to the second one, long before the user
+// actually finished anything. destroyForHandoff marks case (1) so
+// onDestroyed can tell the two apart.
+let isHandoffDestroy = false;
+
+export const destroyForHandoff = (driverInstance: Driver) => {
+  isHandoffDestroy = true;
+  driverInstance.destroy();
+};
+
 export const startTour = (tourId: string, steps: DriveStep[], options: StartTourOptions = {}) => {
   if (!isWeb() || steps.length === 0) return;
   // `force` is only ever passed by the tour chain's own hand-off (already
@@ -126,7 +146,7 @@ export const startTour = (tourId: string, steps: DriveStep[], options: StartTour
   // Give the screen's own mount/focus effects a tick to finish rendering
   // before driver.js goes looking for the step elements in the DOM.
   requestAnimationFrame(() => {
-    activeDriver?.destroy();
+    if (activeDriver) destroyForHandoff(activeDriver);
 
     const tourInstance = driver({
       ...THEME,
@@ -136,6 +156,17 @@ export const startTour = (tourId: string, steps: DriveStep[], options: StartTour
         activeTourId = null;
         waitSignal = null;
         writeSeen(tourId);
+        if (isHandoffDestroy) {
+          // We ended this one ourselves to move on — the chain (or a fresh
+          // replacement instance) continues, so the new-user flag stays put.
+          isHandoffDestroy = false;
+        } else {
+          // A genuine end: the user closed it (X/Escape/overlay) or reached
+          // the chain's real Finish step (finishStep in tours.ts calls plain
+          // destroy(), not destroyForHandoff, specifically so it lands here).
+          // Either way, nothing should auto-start again after this.
+          clearNewUserOnboarding();
+        }
       },
     });
     activeDriver = tourInstance;

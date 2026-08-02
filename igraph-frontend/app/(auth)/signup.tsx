@@ -889,7 +889,7 @@ export default function SignUp() {
         const msg = result.message || '';
         const errorCode = result.code;
         if (errorCode === 'GOOGLE_ACCOUNT' || msg.toLowerCase().includes('google') || msg.toLowerCase().includes('oauth')) {
-          setEmailInlineError('This email is registered with Google.');
+          setEmailInlineError('This email is already registered.');
         } else if (msg.toLowerCase().includes('already registered') || msg.toLowerCase().includes('already exists')) {
           setEmailInlineError('An account with this email already exists.');
         } else {
@@ -902,7 +902,7 @@ export default function SignUp() {
         const msg = error.response.data.message;
         const errorCode = error.response.data.code;
         if (errorCode === 'GOOGLE_ACCOUNT' || msg.toLowerCase().includes('google') || msg.toLowerCase().includes('oauth')) {
-          setEmailInlineError('This email is registered with Google.');
+          setEmailInlineError('This email is already registered.');
         } else if (msg.toLowerCase().includes('already registered') || msg.toLowerCase().includes('already exists')) {
           setEmailInlineError('An account with this email already exists.');
         } else {

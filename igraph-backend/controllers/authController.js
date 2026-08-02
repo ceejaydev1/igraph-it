@@ -268,9 +268,46 @@ const verifyOTP = async (req, res) => {
 
     console.log(`✅ Account created for ${email} (uid: ${firebaseUser.uid})`);
 
+    // ── 9. Sign the new account straight in ───────────────────────────────────
+    // Verifying the OTP *is* proving ownership of the account that was just
+    // created — making the user re-type the password they entered seconds
+    // ago on a second screen is pure friction, not an extra security check.
+    // Mirrors signin's own session-creation below verbatim (same session
+    // shape, same cookies) so verifyToken()/refreshToken() treat this
+    // exactly like any other login afterward.
+    const accessToken = generateAccessToken(firebaseUser.uid, email);
+    const refreshToken = generateRefreshToken(firebaseUser.uid);
+
+    const sessionId = uuidv4();
+    const sessionExpiry = new Date();
+    sessionExpiry.setDate(sessionExpiry.getDate() + 7);
+
+    await db.collection('sessions').doc(sessionId).set({
+      session_id: sessionId,
+      user_id: firebaseUser.uid,
+      refresh_token: refreshToken,
+      device_info: req.headers['user-agent'] || 'unknown',
+      created_at: new Date().toISOString(),
+      expires_at: sessionExpiry.toISOString()
+    });
+
+    res.cookie('access_token', accessToken, getAccessCookieOptions(true));
+    res.cookie('refresh_token', refreshToken, getRefreshCookieOptions(true));
+
     res.status(200).json({
       success: true,
-      message: 'Email verified and account created successfully! You can now sign in.'
+      message: 'Email verified and account created successfully!',
+      data: {
+        user: {
+          uid: firebaseUser.uid,
+          fullName: pendingUser.fullName,
+          email,
+          profilePicture: null,
+          authProvider: 'email',
+          hasPassword: true
+        },
+        tokens: { accessToken, refreshToken }
+      }
     });
 
   } catch (error) {
@@ -323,13 +360,23 @@ const resendOTP = async (req, res) => {
       });
     }
 
-    const pendingUser = pendingSnapshot.docs[0].data();
+    const pendingDoc = pendingSnapshot.docs[0];
+    const pendingUser = pendingDoc.data();
 
     await otpModel.invalidateAllOTPsByEmail(email, 'signup');
 
     const otp = generateOTP();
     const otpExpiry = getOTPExpiry(5);
     await otpModel.createOTPWithEmail(email, otp, 'signup', otpExpiry, pendingUser.tempUserId);
+
+    // Extend the pending registration record's own expiry too — verifyOTP
+    // checks this *first*, separately from (and before) the OTP's own
+    // validity. Without this, resending only ever refreshed the OTP's 5-
+    // minute countdown, never the registration record's original 10-minute
+    // one from the initial signup — so a resent code could show 4+ minutes
+    // left on its own timer and still fail as "Registration session
+    // expired", because that older, invisible deadline had already passed.
+    await pendingDoc.ref.update({ expiresAt: getOTPExpiry(10).toISOString() });
 
     await sendVerificationEmail(email, pendingUser.fullName, otp);
 
@@ -1158,18 +1205,30 @@ const changePassword = async (req, res) => {
       console.error('Firebase Auth password update error:', firebaseError.message);
     }
 
-    // Invalidate all sessions
+    // Invalidate every *other* session (someone else holding a stolen
+    // password should get logged out everywhere) but keep this one — the
+    // device the user is actively changing the password from — signed in.
+    // Deleting all of them, including this request's own session, used to
+    // force a sign-out here too: the frontend followed up with an explicit
+    // logout+redirect to match (see handleChangePassword in
+    // userAccount.tsx), and even without that, the very next request would
+    // have 401'd once refreshToken() found no session left to refresh.
+    const currentRefreshToken = (req.body && req.body.refreshToken) || (req.cookies && req.cookies.refresh_token);
+
     const sessionsSnapshot = await db.collection('sessions')
       .where('user_id', '==', userId)
       .get();
 
     const batch = db.batch();
-    sessionsSnapshot.docs.forEach(doc => batch.delete(doc.ref));
+    sessionsSnapshot.docs.forEach(doc => {
+      if (currentRefreshToken && doc.data().refresh_token === currentRefreshToken) return;
+      batch.delete(doc.ref);
+    });
     await batch.commit();
 
     res.status(200).json({
       success: true,
-      message: 'Password changed successfully. Please sign in again.'
+      message: 'Password changed successfully.'
     });
 
   } catch (error) {

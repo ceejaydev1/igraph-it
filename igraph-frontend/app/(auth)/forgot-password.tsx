@@ -469,7 +469,14 @@ export default function ForgotPassword() {
       console.log('OTP sent successfully, navigating to verify-otp');
       const maskedEmail = email.replace(/(.{2})(.*)(@.*)/, '$1•••$3');
       showToast(`OTP code sent to ${maskedEmail}`, false);
-      
+      // Every other branch above resets loading before returning; this one
+      // didn't, since it navigates away instead of returning into this
+      // screen. But this screen isn't unmounted by that navigation — Expo
+      // Router keeps it alive in the background — so coming back to it
+      // later (e.g. tapping Back on verify-otp) resumed this exact stale
+      // `loading: true` state, leaving Send OTP permanently spinning/disabled.
+      setLoading(false);
+
       setTimeout(() => {
         router.push({
           pathname: '/(auth)/verify-otp',

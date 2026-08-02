@@ -317,7 +317,13 @@ export default function RootLayout() {
 
         <StatusBar style="auto" />
 
-        {showSplash && (
+        {/* app/print.tsx opens in its own tab purely to call window.print()
+            as soon as its diagram image loads — the branded splash overlay
+            (which stays up for a second or two while checkAuth() runs) was
+            still covering the page at that point, so the OS print dialog's
+            preview showed the splash instead of the diagram. That tab has
+            nothing to do with auth/onboarding, so it never needs the splash. */}
+        {showSplash && pathname !== '/print' && (
           <Animated.View
             style={[styles.splashOverlay, { opacity: fadeAnim }]}
             pointerEvents="auto"

@@ -14,17 +14,19 @@ import {
   EdgeHandlerConfig,
   CellState,
   CellOverlay,
+  CellHighlight,
   ImageBox,
   Geometry,
   Point,
   Clipboard,
+  PanningHandler,
+  getDefaultPlugins,
   registerDefaultPerimeters,
   registerDefaultEdgeStyles,
   registerDefaultEdgeMarkers,
 } from '@maxgraph/core';
 
 import type {
-  PanningHandler,
   ConnectionHandler,
   FitPlugin,
   CellStateStyle,
@@ -43,11 +45,13 @@ import {
   isDfdDataStoreContainerCell,
   isDfdDataStoreCompartmentCell,
   isUmlLifelineCell,
+  SCHEMATIC_PIN_DEFINITIONS,
+  SchematicPin,
 } from './maxgraph-custom-shapes';
-import { UniversalVertexHandler } from './maxgraph-universal-handler';
+import { UniversalVertexHandler, AxisLockedPanningHandler } from './maxgraph-universal-handler';
 import { getShapeDefinitionById, getShapesForDiagram, DIAGRAM_SHAPES, ShapeDefinition, isConnectorCell, CONNECTOR_SHAPE_IDS } from '@/constants/shapes';
 import { ShapePreview } from '@/components/shapes/ShapeIcon';
-import { tagShapeRole, getShapeRole, validateDiagram, FlowchartIssue, IssueSeverity } from '@/utils/flowchartRules';
+import { tagShapeRole, getShapeRole, validateDiagram, computeFddEntryPoint, FlowchartIssue, IssueSeverity } from '@/utils/flowchartRules';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -262,13 +266,14 @@ export const CONNECTOR_SNAP_DISTANCE = 40;
 // and doesn't depend on what's currently scrolled into view. Distance to a
 // cell is 0 when the point already lands inside its bounds, so a drop
 // directly on top of a shape always attaches, not just a near-miss.
-export function findNearbyVertex(graph: Graph, x: number, y: number, threshold: number): any {
+export function findNearbyVertex(graph: Graph, x: number, y: number, threshold: number, exclude?: any): any {
   const parent = graph.getDefaultParent();
   const vertices = graph.getChildVertices(parent);
   let best: any = null;
   let bestDistance = Infinity;
 
   for (const cell of vertices) {
+    if (exclude && cell === exclude) continue;
     const geo = cell.getGeometry();
     if (!geo) continue;
     const dx = Math.max(geo.x - x, 0, x - (geo.x + geo.width));
@@ -439,6 +444,271 @@ export function findEdgeNearPoint(graph: Graph, x: number, y: number, threshold:
   return best;
 }
 
+// ─── Schematic pin-accurate wiring ───────────────────────────────────────────
+// A Schematic component's real connection points are its drawn leads (see
+// SCHEMATIC_PIN_DEFINITIONS in maxgraph-custom-shapes.ts), not anywhere on
+// its bounding box — the same "fixed point, not floating perimeter" idea
+// Fishbone's spine attachment already uses below (attachMainCauseToSpine),
+// just table-driven instead of hand-derived per shape. Which pin is
+// "nearest" is judged by the wire's OTHER end (aim), not a raw drop pixel —
+// the CELL_CONNECTED event this feeds (see initGraph) doesn't carry the
+// original mouse position, and aiming by the far end matches how a real
+// schematic tool's snapping feels anyway: drag toward a resistor's left
+// side and you land on its left lead regardless of the exact pixel.
+//
+// `avoid` (already-used pin ids on this same part, from its other wires —
+// see usedSchematicPinIds) is checked first and, whenever it doesn't cover
+// every pin, filters them out of the running entirely, only falling back
+// to geometry among what's left. Without this, closing a loop back around
+// through a third part (e.g. Battery -> Resistor -> Ground -> Battery)
+// reliably starves one real lead on each of Battery and Resistor: once the
+// first wire claims each one's *facing* lead, the wire closing the loop is
+// aiming at Ground — a single point that, by straight-line distance alone,
+// reads as "still closer to that same already-used lead" on both ends
+// (Ground can't simultaneously read as being further left than Battery's
+// leftmost point and further right than Resistor's rightmost point — the
+// two remaining leads are each the outermost point of the whole layout).
+// Geometry alone can never resolve that; "don't reuse a lead that's still
+// free" does, and matches what a real user obviously wants anyway.
+function nearestSchematicPin(
+  role: string,
+  geo: { x: number; y: number; width: number; height: number },
+  aim: { x: number; y: number } | null,
+  avoid?: Set<string>,
+): SchematicPin | null {
+  const pins = SCHEMATIC_PIN_DEFINITIONS[role];
+  if (!pins || pins.length === 0) return null;
+  const candidates = avoid && pins.some((p) => !avoid.has(p.id)) ? pins.filter((p) => !avoid.has(p.id)) : pins;
+  if (!aim || candidates.length === 1) return candidates[0];
+  let best = candidates[0];
+  let bestDistance = Infinity;
+  for (const pin of candidates) {
+    const px = geo.x + pin.x * geo.width;
+    const py = geo.y + pin.y * geo.height;
+    const distance = Math.hypot(px - aim.x, py - aim.y);
+    if (distance < bestDistance) {
+      best = pin;
+      bestDistance = distance;
+    }
+  }
+  return best;
+}
+
+// Which of `terminal`'s own pins its other wires (every edge but this one)
+// already occupy — see nearestSchematicPin's `avoid` param.
+function usedSchematicPinIds(terminal: any, excludeEdge: any): Set<string> {
+  const used = new Set<string>();
+  const edges = terminal.getEdges?.(true, true, false) ?? [];
+  for (const other of edges) {
+    if (other === excludeEdge) continue;
+    const style = other.getStyle();
+    const styleObj = (typeof style === 'object' && style !== null ? style : {}) as Record<string, unknown>;
+    const pinId = other.getTerminal(true) === terminal ? styleObj.schematicSourcePin : styleObj.schematicTargetPin;
+    if (typeof pinId === 'string') used.add(pinId);
+  }
+  return used;
+}
+
+// Snaps one end of a schematic wire to its nearest real lead: pins the
+// connection to that lead's exact fraction (exitX/exitY or entryX/entryY +
+// perimeter:false — same mechanism as the Fish Head fixed-point attach
+// further down) and stamps which pin it is onto the edge's own persisted
+// style, schematicSourcePin/schematicTargetPin — the same "extra identity
+// riding on a real style key" trick as ERD's cardinalitySide (see the
+// relationship split in handleDrop). Unlike shape-role tagging (an
+// in-memory WeakMap — see getShapeRole in flowchartRules.ts), a persisted
+// style key survives a reload, which is what makes validateSchematic able
+// to name a specific unwired pin instead of just counting wires. No-ops
+// when `terminal` isn't a recognized schematic part (e.g. every other
+// diagram type), so this is safe to call unconditionally.
+function applySchematicPinSnap(graph: Graph, edge: any, terminal: any, isSource: boolean): void {
+  const role = terminal && typeof terminal.isVertex === 'function' && terminal.isVertex() ? getShapeRole(terminal) : undefined;
+  if (!role || !SCHEMATIC_PIN_DEFINITIONS[role]) return;
+  const geo = terminal.getGeometry();
+  if (!geo) return;
+  const aim = edgeEndpoint(edge, !isSource);
+  const avoid = usedSchematicPinIds(terminal, edge);
+  const pin = nearestSchematicPin(role, geo, aim, avoid);
+  if (!pin) return;
+  const currentStyle = edge.getStyle();
+  const base = (typeof currentStyle === 'object' && currentStyle !== null ? currentStyle : {}) as CellStateStyle;
+  const fixedPoint = isSource
+    ? { exitX: pin.x, exitY: pin.y, exitPerimeter: false }
+    : { entryX: pin.x, entryY: pin.y, entryPerimeter: false };
+  const pinKey = isSource ? 'schematicSourcePin' : 'schematicTargetPin';
+  graph.getDataModel().setStyle(edge, {
+    ...base,
+    ...fixedPoint,
+    edgeStyle: 'orthogonalEdgeStyle',
+    [pinKey]: pin.id,
+  } as CellStateStyle);
+}
+
+// The point on segment a->b closest to (px, py) — the same projection
+// distanceToSegment (above) already computes internally, exposed here as a
+// point instead of just a distance, for placing a junction vertex ON a
+// wire's line rather than merely measuring how close a drop landed to it.
+function closestPointOnSegment(
+  px: number, py: number, ax: number, ay: number, bx: number, by: number,
+): { x: number; y: number } {
+  const dx = bx - ax;
+  const dy = by - ay;
+  const lenSq = dx * dx + dy * dy;
+  const t = lenSq === 0 ? 0 : Math.max(0, Math.min(1, ((px - ax) * dx + (py - ay) * dy) / lenSq));
+  return { x: ax + t * dx, y: ay + t * dy };
+}
+
+// Finds a wire for a new wire's still-dangling end to branch into — the
+// auto-junction half of "a true T-junction auto-places a Wire Connection
+// dot." Deliberately excludes any candidate whose own endpoint is within
+// `threshold` of `point`: that's just two wires sharing a terminal (e.g.
+// both landing on the same component lead), not a real crossing — the same
+// distinction validateSchematic's own 6.9 crossing check draws (see
+// segmentIntersection's margin exclusion in flowchartRules.ts). Unlike
+// findEdgeNearPoint above, this always excludes `excludeEdge` itself —
+// without that, a still-dangling end is literally one of its own edge's two
+// endpoints, which would always "win" the search at distance 0.
+function findHostWireForJunction(
+  graph: Graph, excludeEdge: any, point: { x: number; y: number }, threshold: number,
+): any {
+  let best: any = null;
+  let bestDistance = Infinity;
+  for (const candidate of graph.getChildEdges(graph.getDefaultParent())) {
+    if (candidate === excludeEdge) continue;
+    const a = edgeEndpoint(candidate, true);
+    const b = edgeEndpoint(candidate, false);
+    if (!a || !b) continue;
+    if (Math.hypot(point.x - a.x, point.y - a.y) <= threshold) continue;
+    if (Math.hypot(point.x - b.x, point.y - b.y) <= threshold) continue;
+    const distance = distanceToSegment(point.x, point.y, a.x, a.y, b.x, b.y);
+    if (distance <= threshold && distance < bestDistance) {
+      best = candidate;
+      bestDistance = distance;
+    }
+  }
+  return best;
+}
+
+// Creates a real Wire Connection junction vertex at (x, y) — used only by
+// the automatic T-junction path (attemptSchematicAutoJunction below); a
+// manually-dropped Wire Connection goes through handleDrop's own insertion
+// instead. Mirrors handleDrop's own shape-insertion (styleKey + drop size
+// from the same IGRAPH_ID_STYLE_MAP/getDropSize this app already uses for
+// every palette drop) so an auto-placed dot looks and behaves exactly like
+// one the user placed by hand.
+function insertSchematicJunction(graph: Graph, x: number, y: number): any {
+  const styleKey = IGRAPH_ID_STYLE_MAP['schematic-connection'] ?? 'igraph.schematicConnection';
+  const { w, h } = getDropSize('schematic-connection');
+  const fullStyle: CellStateStyle = {
+    align: 'center' as AlignValue,
+    verticalAlign: 'middle' as VAlignValue,
+    whiteSpace: 'wrap' as WhiteSpaceValue,
+    ...getShapeStyle(styleKey),
+    fontColor: BLACK,
+    fontSize: 12,
+  };
+  const cx = Math.round((x - w / 2) / GRID_SIZE) * GRID_SIZE;
+  const cy = Math.round((y - h / 2) / GRID_SIZE) * GRID_SIZE;
+  const vertex = graph.insertVertex(null, null, '', cx, cy, w, h, fullStyle);
+  tagShapeRole(vertex, 'schematic-connection');
+  return vertex;
+}
+
+// Splits `hostEdge` into two real wires around `junction` — same
+// source -> X -> target transformation as the ERD relationship split in
+// handleDrop (Entity -> Relationship -> Entity), reused here for both the
+// automatic T-junction path and a manually-dropped Wire Connection landing
+// on an existing wire (see the broadened split condition in handleDrop).
+// Each half keeps whichever original pin data belongs to its own far end
+// (the source half's exitX/exitY, the target half's entryX/entryY) via the
+// `...base` spread, but the end that now faces the junction instead of the
+// wire's original far end is repinned to the junction's own single
+// 'joint' point — left as the original edge's stale entryX/entryY (meant
+// for whatever the far end used to be) would land the wire off the
+// junction's actual center.
+function splitSchematicWireAtJunction(graph: Graph, hostEdge: any, junction: any): void {
+  const source = hostEdge.getTerminal(true);
+  const target = hostEdge.getTerminal(false);
+  const startPoint = edgeEndpoint(hostEdge, true);
+  const endPoint = edgeEndpoint(hostEdge, false);
+  const hostStyle = hostEdge.getStyle();
+  const base = (typeof hostStyle === 'object' && hostStyle !== null ? hostStyle : {}) as CellStateStyle;
+  const junctionPin = SCHEMATIC_PIN_DEFINITIONS['schematic-connection'][0];
+
+  graph.batchUpdate(() => {
+    graph.removeCells([hostEdge]);
+
+    // Cast (rather than annotate the literal as CellStateStyle directly) so
+    // TS's excess-property check doesn't reject schematicTargetPin — same
+    // trick ERD's cardinalitySide already uses two-way through this file.
+    const leftStyle = {
+      ...base,
+      entryX: junctionPin.x,
+      entryY: junctionPin.y,
+      entryPerimeter: false,
+      edgeStyle: 'orthogonalEdgeStyle',
+      schematicTargetPin: junctionPin.id,
+    } as CellStateStyle;
+    const leftEdge = graph.insertEdge(null, null, '', source, junction, leftStyle);
+    if (!source && startPoint) {
+      const leftGeo = new Geometry(0, 0, 0, 0);
+      leftGeo.setTerminalPoint(new Point(startPoint.x, startPoint.y), true);
+      graph.getDataModel().setGeometry(leftEdge, leftGeo);
+    }
+
+    const rightStyle = {
+      ...base,
+      exitX: junctionPin.x,
+      exitY: junctionPin.y,
+      exitPerimeter: false,
+      edgeStyle: 'orthogonalEdgeStyle',
+      schematicSourcePin: junctionPin.id,
+    } as CellStateStyle;
+    const rightEdge = graph.insertEdge(null, null, '', junction, target, rightStyle);
+    if (!target && endPoint) {
+      const rightGeo = new Geometry(0, 0, 0, 0);
+      rightGeo.setTerminalPoint(new Point(endPoint.x, endPoint.y), false);
+      graph.getDataModel().setGeometry(rightEdge, rightGeo);
+    }
+  });
+}
+
+// The auto-junction entry point, called from the CELL_CONNECTED listener in
+// initGraph once `edge` has at least one end resolved to a real schematic
+// component. Checked direction-agnostically on every firing (rather than
+// once per gesture) so it doesn't depend on the exact order maxGraph
+// resolves a new edge's two ends in: covers both "drawn from a component,
+// dropped onto a wire" (a still-dangling end landing near another wire's
+// line) and "drawn from a wire, dropped onto a component" (maxGraph's own
+// connectableEdges already let that end's terminal literally BE the other
+// wire — see graph.setConnectableEdges(true) in initGraph — this just
+// converts that raw edge-to-edge attachment into a real, visible dot
+// instead of leaving it as an invisible floating tee).
+function attemptSchematicAutoJunction(graph: Graph, edge: any): void {
+  for (const isSource of [true, false]) {
+    const terminal = edge.getTerminal(isSource);
+    if (terminal && typeof terminal.isEdge === 'function' && terminal.isEdge()) {
+      const aim = edgeEndpoint(edge, !isSource);
+      const a = edgeEndpoint(terminal, true);
+      const b = edgeEndpoint(terminal, false);
+      if (!aim || !a || !b) continue;
+      const point = closestPointOnSegment(aim.x, aim.y, a.x, a.y, b.x, b.y);
+      const junction = insertSchematicJunction(graph, point.x, point.y);
+      splitSchematicWireAtJunction(graph, terminal, junction);
+      graph.getDataModel().setTerminal(edge, junction, isSource);
+      continue;
+    }
+    if (terminal) continue;
+    const point = edge.getGeometry()?.getTerminalPoint(isSource);
+    if (!point) continue;
+    const host = findHostWireForJunction(graph, edge, point, CONNECTOR_SNAP_DISTANCE);
+    if (!host) continue;
+    const junction = insertSchematicJunction(graph, point.x, point.y);
+    splitSchematicWireAtJunction(graph, host, junction);
+    graph.getDataModel().setTerminal(edge, junction, isSource);
+  }
+}
+
 // Fishbone's spine is meant to attach to the one Fish Head/Effect Box in
 // the diagram no matter how far away it was dropped — there's only ever
 // one, so unlike an ordinary connector snap (small fixed radius, meant to
@@ -509,6 +779,320 @@ const FISHBONE_DIAGONAL_DOWN = new Set(['fishbone-cause-top', 'fishbone-sub-bott
 // instead of the shared one every other connector uses.
 const FISHBONE_MAIN_CAUSE_IDS = new Set(['fishbone-cause-top', 'fishbone-cause-bottom']);
 
+// Same "must branch off its specific parent, never anything else" rule as
+// FISHBONE_MAIN_CAUSE_IDS above, extended to the legacy Sub-Cause/Tertiary
+// Cause roles (removed from the palette — see "Remove Sub-Cause and
+// Tertiary Cause from the Fishbone palette/reference" — but still
+// rendered/validated in any diagram saved before that). Used below to keep
+// the auto-attach-on-move logic from ever wiring one of these straight onto
+// an arbitrary nearby vertex on its parent-facing end.
+const RESTRICTED_SOURCE_CAUSE_ROLES = new Set([
+  ...FISHBONE_MAIN_CAUSE_IDS,
+  'fishbone-sub-top',
+  'fishbone-sub-bottom',
+  'fishbone-tertiary',
+]);
+
+// ─── Attach-on-move ──────────────────────────────────────────────────────
+// handleDrop's magnet-snap (a shape/connector landing near something it
+// should attach to gets attached immediately, see the blocks below it)
+// only ever ran at the moment a shape was first dropped from the palette —
+// once something was already on the canvas, dragging it near a dangling
+// connector end (a Category Box sliding over toward its Main Cause's still
+// -loose end, a Main Cause dragged along until it's close enough to the
+// spine, an ordinary connector's dangling end dragged onto a shape) did
+// nothing at all: the two stayed visually close but structurally
+// unattached. These mirror that same snap logic and are re-run after every
+// move via the MOVE_CELLS listener in the graph-setup effect below, so
+// attaching isn't a one-shot, drop-only affair.
+
+// The mirror of handleDrop's Main Cause branch (see FISHBONE_MAIN_CAUSE_IDS
+// above): re-finds the spine near this edge's still-dangling source point
+// and, if close enough, attaches to it with the same fixed exitX pinning
+// (see the matching comment in handleDrop on why a plain floating
+// attachment isn't enough for a line connecting to another line).
+function attachMainCauseToSpine(graph: Graph, edge: any, point: { x: number; y: number }) {
+  const spine = findEdgeNearPoint(graph, point.x, point.y, CONNECTOR_SNAP_DISTANCE, new Set(['fishbone-spine']));
+  if (!spine) return;
+  graph.getDataModel().setTerminal(edge, spine, true);
+  const spineState = graph.getView().getState(spine);
+  if (spineState) {
+    const spineX = Math.max(spineState.x, Math.min(spineState.x + spineState.width, point.x));
+    const exitX = spineState.width > 0 ? (spineX - spineState.x) / spineState.width : 0.5;
+    const style = edge.getStyle();
+    const base = typeof style === 'object' && style !== null ? style : {};
+    graph.getDataModel().setStyle(edge, { ...base, exitX, exitY: 0.5, exitPerimeter: false } as CellStateStyle);
+  }
+}
+
+// A moved edge's own dangling end(s) snapping onto whatever vertex is now
+// nearby — the reverse direction of attachVertexToDanglingEdges below, for
+// when it's the connector itself (rather than the shape) that just moved.
+// Excludes the edge's OWN other-side terminal from the search: without
+// that, a half-attached edge whose dangling end is nudged/dragged back
+// toward the very shape it's already attached to on the other side would
+// happily "attach" to that same shape a second time, producing a source
+// -> itself self-loop out of nowhere (flagged by validation as "A shape
+// can't connect to itself", but the real bug is this silently creating one
+// in response to an ordinary nudge). A Fork/Join stub is exactly this
+// shape — one end pinned to the bar, the other genuinely dangling only
+// CONNECTOR_SNAP_DISTANCE away to start with, so even a couple of nudge
+// keystrokes toward the bar could cross back into its own snap radius.
+function attachDanglingEdgeEnds(graph: Graph, edge: any) {
+  if (edge.source && edge.target) return;
+  const role = getShapeRole(edge);
+  const geo = edge.getGeometry();
+  if (!geo) return;
+
+  if (!edge.source) {
+    const p = geo.getTerminalPoint(true);
+    if (p) {
+      if (role && FISHBONE_MAIN_CAUSE_IDS.has(role)) {
+        attachMainCauseToSpine(graph, edge, p);
+      } else if (!role || !RESTRICTED_SOURCE_CAUSE_ROLES.has(role)) {
+        const v = findNearbyVertex(graph, p.x, p.y, CONNECTOR_SNAP_DISTANCE, edge.target);
+        if (v) graph.getDataModel().setTerminal(edge, v, true);
+      }
+    }
+  }
+  if (!edge.target) {
+    const p = geo.getTerminalPoint(false);
+    if (p) {
+      const v = findNearbyVertex(graph, p.x, p.y, CONNECTOR_SNAP_DISTANCE, edge.source);
+      if (v) graph.getDataModel().setTerminal(edge, v, false);
+    }
+  }
+}
+
+// A moved vertex snapping onto any dangling edge end that's now close
+// enough — same generic "shape dropped near a loose connector end" match
+// as handleDrop's own post-insert block, just re-run on every move instead
+// of once at drop time. Skips a dangling end that belongs to a restricted
+// cause role (see RESTRICTED_SOURCE_CAUSE_ROLES) on its parent-facing
+// side — that one may only ever attach via attachMainCauseToSpine, never
+// to an arbitrary nearby vertex.
+function attachVertexToDanglingEdges(graph: Graph, vertex: any) {
+  const geo = vertex.getGeometry();
+  if (!geo) return;
+  const anchorX = geo.x + geo.width / 2;
+  const anchorY = geo.y + geo.height / 2;
+  for (const edge of graph.getChildEdges(graph.getDefaultParent())) {
+    if (edge.source && edge.target) continue;
+    const role = getShapeRole(edge);
+    const edgeGeo = edge.getGeometry();
+    if (!edge.source && (!role || !RESTRICTED_SOURCE_CAUSE_ROLES.has(role))) {
+      const p = edgeGeo?.getTerminalPoint(true);
+      if (p && Math.hypot(p.x - anchorX, p.y - anchorY) <= CONNECTOR_SNAP_DISTANCE) {
+        graph.getDataModel().setTerminal(edge, vertex, true);
+        continue;
+      }
+    }
+    if (!edge.target) {
+      const p = edgeGeo?.getTerminalPoint(false);
+      if (p && Math.hypot(p.x - anchorX, p.y - anchorY) <= CONNECTOR_SNAP_DISTANCE) {
+        graph.getDataModel().setTerminal(edge, vertex, false);
+      }
+    }
+  }
+}
+
+// The mirror of handleDrop's own spine<->head special case: attaches
+// regardless of distance since there's only ever one of each, so any move
+// that leaves one of them still dangling with the other already present
+// (either one could have just been dragged away and back) reconnects them.
+//
+// The spine's tail end (whichever of source/target the head *didn't* claim
+// at drop time) is permanently, intentionally dangling — see the
+// "head !== sourceCell" guard and comment in handleDrop above, there since
+// the spine is meant to extend past the head with nothing at that far end
+// at all. findDanglingEdgeByRole has no way to tell that apart from a
+// genuinely-still-unattached end, so without re-checking here too, this
+// used to fire on *every single move of anything* once a spine+head both
+// existed — re-wiring that permanent tail straight onto the head, which was
+// already the spine's other end. That made the spine's source and target
+// the same cell: a zero-length degenerate edge, which renders as nothing —
+// the "moving a Category Box makes the spine disappear" symptom, even
+// though the Category Box move itself had nothing to do with the spine.
+function attachSpineToHead(graph: Graph) {
+  const dangling = findDanglingEdgeByRole(graph, new Set(['fishbone-spine']));
+  if (!dangling) return;
+  const otherEnd = dangling.edge.getTerminal(!dangling.isSource);
+  const head = findVertexByRole(graph, new Set(['fishbone-head', 'fishbone-problem']));
+  if (!head || head === otherEnd) return;
+  graph.getDataModel().setTerminal(dangling.edge, head, dangling.isSource);
+  if (getShapeRole(head) === 'fishbone-head') {
+    const style = dangling.edge.getStyle();
+    const base = typeof style === 'object' && style !== null ? style : {};
+    const fixedPoint = dangling.isSource
+      ? { exitX: 0.5, exitY: 0.5, exitPerimeter: false }
+      : { entryX: 0.5, entryY: 0.5, entryPerimeter: false };
+    graph.getDataModel().setStyle(dangling.edge, { ...base, ...fixedPoint } as CellStateStyle);
+  }
+}
+
+// A Main Cause already attached to the spine used to be frozen at whatever
+// point along it it first landed on — dragging the shape only ever moved its
+// still-floating outer/label end (translateCell moves an edge's own
+// terminalPoint, but a *real* terminal like the spine renders from
+// exitX/exitY + the spine's own geometry instead, which translate() never
+// touches), so there was no way to slide it left/right along the spine
+// afterward short of grabbing the exact pixel-sized connection handle. This
+// shifts exitX by the same dx every other moved shape gets, so the whole
+// diagonal — anchor included — actually slides as one piece, anywhere along
+// the spine's full length (clamped to its two ends). exitY is left at 0.5
+// (the spine's vertical center) always — that's what keeps a Top cause
+// above and a Bottom cause below, and moving along the spine is purely
+// horizontal.
+function slideMainCauseAlongSpine(graph: Graph, edge: any, dx: number) {
+  if (dx === 0) return;
+  const spine = edge.getTerminal(true);
+  if (!spine || getShapeRole(spine) !== 'fishbone-spine') return;
+  const spineState = graph.getView().getState(spine);
+  if (!spineState || spineState.width <= 0) return;
+  const style = edge.getStyle();
+  const base = typeof style === 'object' && style !== null ? style : {};
+  const currentExitX = typeof base.exitX === 'number' ? base.exitX : 0.5;
+  const scale = graph.getView().getScale();
+  const currentAbsX = spineState.x + currentExitX * spineState.width;
+  const newAbsX = Math.max(spineState.x, Math.min(spineState.x + spineState.width, currentAbsX + dx * scale));
+  const newExitX = (newAbsX - spineState.x) / spineState.width;
+  graph.getDataModel().setStyle(edge, { ...base, exitX: newExitX, exitY: 0.5, exitPerimeter: false } as CellStateStyle);
+}
+
+// The Sequence-diagram counterpart of slideMainCauseAlongSpine above, for
+// the exact same underlying reason: a Sync/Async/Return message with both
+// (or either) end pinned to a fixed exitY/entryY fraction (see
+// sequenceMessageConnectionStyle/applySequenceEndpointStyle) renders from
+// that fraction + its connected timeline's own geometry, which
+// translateCell never touches — so dragging an already-connected message
+// either didn't visually move at all, or (worse) moving it any other way
+// than grabbing both tiny connection handles in perfect sync desynced
+// exitY from entryY, leaving the message rendering as a diagonal kink
+// instead of the clean horizontal line every message should be. This
+// shifts exitY and entryY together by the same vertical distance the move
+// covered, on whichever ends are actually attached, so the whole message
+// slides up/down as one level line — the same "grab it anywhere and it
+// just slides" behavior every other shape already has.
+function slideSequenceMessageAlongTimelines(graph: Graph, edge: any, dy: number) {
+  if (dy === 0) return;
+  const role = getShapeRole(edge);
+  if (!role || !SEQUENCE_MESSAGE_SHAPE_IDS.has(role)) return;
+  const source = edge.getTerminal(true);
+  const target = edge.getTerminal(false);
+  if (!source && !target) return;
+  const style = edge.getStyle();
+  const base = (typeof style === 'object' && style !== null ? style : {}) as CellStateStyle & Record<string, unknown>;
+  const scale = graph.getView().getScale();
+  const patch: Record<string, unknown> = {};
+
+  const slide = (cell: any, key: 'exitY' | 'entryY') => {
+    const state = graph.getView().getState(cell);
+    if (!state || state.height <= 0) return;
+    const current = typeof base[key] === 'number' ? (base[key] as number) : 0.5;
+    const currentAbsY = state.y + current * state.height;
+    const newAbsY = Math.max(state.y, Math.min(state.y + state.height, currentAbsY + dy * scale));
+    patch[key] = (newAbsY - state.y) / state.height;
+  };
+
+  if (source) {
+    slide(source, 'exitY');
+    patch.exitX = 1;
+    patch.exitDx = 0;
+    patch.exitDy = 0;
+  }
+  if (target) {
+    slide(target, 'entryY');
+    patch.entryX = 0;
+    patch.entryDx = 0;
+    patch.entryDy = 0;
+  }
+  if (Object.keys(patch).length) {
+    graph.getDataModel().setStyle(edge, { ...base, ...patch } as CellStateStyle);
+  }
+}
+
+// The Fork/Join counterpart of slideMainCauseAlongSpine above, for the exact
+// same underlying reason: a stub's bar-side end renders from its own exitX/
+// entryX fraction + the bar's current geometry, which translateCell (nudge's
+// own mechanism) never touches — only the still-dangling far end has a real
+// stored point for a nudge/drag to actually shift. Left alone, moving the
+// dangling end pivots the line around the fixed bar attachment instead of
+// sliding the whole arrow sideways as one piece — the "pins to the bar but
+// won't move with it" bug. This shifts that fraction by the same horizontal
+// distance the move covered, so the bar-side end tracks along with it,
+// clamped to the bar's own two ends. Only applies while the far end is
+// still genuinely dangling — once it's attached to a real shape, this is an
+// ordinary two-shape connection and shouldn't keep sliding along the bar.
+function slideForkJoinStubAlongBar(graph: Graph, edge: any, dx: number) {
+  if (dx === 0) return;
+  const source = edge.getTerminal(true);
+  const target = edge.getTerminal(false);
+  const isBar = (c: any) => !!c && (getShapeRole(c) === 'act-fork' || getShapeRole(c) === 'act-join');
+
+  let bar: any;
+  let key: 'exitX' | 'entryX';
+  if (isBar(source) && !target) {
+    bar = source;
+    key = 'exitX';
+  } else if (isBar(target) && !source) {
+    bar = target;
+    key = 'entryX';
+  } else {
+    return;
+  }
+
+  const barState = graph.getView().getState(bar);
+  if (!barState || barState.width <= 0) return;
+  const style = edge.getStyle();
+  const base = (typeof style === 'object' && style !== null ? style : {}) as Record<string, unknown>;
+  const currentFrac = typeof base[key] === 'number' ? (base[key] as number) : 0.5;
+  const scale = graph.getView().getScale();
+  const currentAbsX = barState.x + currentFrac * barState.width;
+  const newAbsX = Math.max(barState.x, Math.min(barState.x + barState.width, currentAbsX + dx * scale));
+  const newFrac = (newAbsX - barState.x) / barState.width;
+  graph.getDataModel().setStyle(edge, { ...base, [key]: newFrac } as CellStateStyle);
+}
+
+// Entry point for the MOVE_CELLS listener below — re-runs the same
+// magnet-attach checks handleDrop does, scoped to just the cells that
+// actually moved (plus the always-cheap spine/head check, since either one
+// moving can reconnect the other), slides any already-attached Main Cause
+// along the spine by the same horizontal distance the move covered, and
+// slides any already-attached Sequence message along its timeline(s) by
+// the same vertical distance.
+export function runAutoAttachOnMove(graph: Graph, movedCells: any[], dx = 0, dy = 0) {
+  graph.batchUpdate(() => {
+    for (const cell of movedCells) {
+      if (!cell) continue;
+      if (typeof cell.isVertex === 'function' && cell.isVertex()) {
+        attachVertexToDanglingEdges(graph, cell);
+        attachDanglingSequenceMessages(graph, cell);
+        // Dragging a Fork/Join bar to a new spot leaves any still-dangling
+        // stub arrow behind at its old absolute position (see
+        // realignForkJoinStubs) — same fix as CELLS_RESIZED's, just for a
+        // move instead of a resize.
+        const barRole = getShapeRole(cell);
+        if (barRole === 'act-fork' || barRole === 'act-join') {
+          realignForkJoinStubs(graph, cell);
+        }
+      } else if (typeof cell.isEdge === 'function' && cell.isEdge()) {
+        const role = getShapeRole(cell);
+        if (cell.source && role && FISHBONE_MAIN_CAUSE_IDS.has(role)) {
+          slideMainCauseAlongSpine(graph, cell, dx);
+        }
+        if (role && SEQUENCE_MESSAGE_SHAPE_IDS.has(role)) {
+          slideSequenceMessageAlongTimelines(graph, cell, dy);
+        }
+        if (role === 'act-control-flow') {
+          slideForkJoinStubAlongBar(graph, cell, dx);
+        }
+        attachDanglingEdgeEnds(graph, cell);
+      }
+    }
+    attachSpineToHead(graph);
+  });
+}
+
 function getCellStyleShapeName(cell: any): string | undefined {
   const style = cell?.getStyle?.();
   return typeof style === 'object' ? style?.shape : undefined;
@@ -529,7 +1113,19 @@ export function sequenceMessageConnectionStyle(
   targetCell: any,
   dropY: number,
 ): Partial<CellStateStyle> {
-  const style: Partial<CellStateStyle> & Record<string, unknown> = {};
+  // Sequence Diagram convention: a message's label sits just above its
+  // (near-horizontal) line, not centered directly on top of it — the
+  // default maxGraph edge label position, which visually collided with the
+  // line/arrowhead. verticalLabelPosition moves the label bounds above the
+  // edge's own anchor point; verticalAlign then sits the text against the
+  // bottom of those bounds, so it lands snug just above the line rather
+  // than floating further up. Every call site for these three message
+  // types (Sync/Async/Return) always goes through this one function, drop
+  // or otherwise, so setting it unconditionally here covers all of them.
+  const style: Partial<CellStateStyle> & Record<string, unknown> = {
+    verticalLabelPosition: 'top',
+    verticalAlign: 'bottom',
+  };
   const sourceGeo = sourceCell?.getGeometry();
   if (sourceGeo && sourceGeo.height > 0) {
     style.exitX = 1;
@@ -553,13 +1149,23 @@ export function findSequenceMessageEndpoints(
   dropY: number,
 ): { source: any; target: any } {
   const parent = graph.getDefaultParent();
+  // A strict containment test (dropY has to fall exactly within this
+  // candidate's own y..y+height) silently dropped the far side into
+  // "not found" whenever the two participants' Activation bars/Lifelines
+  // weren't pixel-perfectly matched in height/start — completely normal
+  // when each was independently placed — even on a drop that visually
+  // reads as an obvious "between the two of them". Same
+  // CONNECTOR_SNAP_DISTANCE tolerance every other magnet-attach in this
+  // file already uses, applied here to the vertical containment check.
   const candidates = graph
     .getChildVertices(parent)
     .filter((cell: any) => {
       const shape = getCellStyleShapeName(cell);
       if (!shape || !SEQUENCE_TIMELINE_STYLES.has(shape)) return false;
       const geo = cell.getGeometry();
-      return !!geo && dropY >= geo.y && dropY <= geo.y + geo.height;
+      return !!geo
+        && dropY >= geo.y - CONNECTOR_SNAP_DISTANCE
+        && dropY <= geo.y + geo.height + CONNECTOR_SNAP_DISTANCE;
     })
     .sort((a: any, b: any) => (a.getGeometry()?.x ?? 0) - (b.getGeometry()?.x ?? 0));
 
@@ -577,6 +1183,67 @@ export function findSequenceMessageEndpoints(
     }
   }
   return { source, target };
+}
+
+// findSequenceMessageEndpoints above only ever runs once, at the moment a
+// Sync/Async/Return message is first dropped — a perfectly normal sequence-
+// diagram workflow is to lay out participants and Activation bars first,
+// wire messages between them, then stretch an Activation bar taller
+// afterward to actually match how long the interaction runs. That resize
+// (or a plain move) never revisited any message that was dropped just past
+// the bar's shorter reach at the time, leaving it permanently dangling —
+// the "dropped between two Activations but it didn't connect" symptom.
+// This is the Sequence-diagram-specific counterpart to
+// attachVertexToDanglingEdges above: that one's a euclidean
+// distance-from-center test, which is the wrong shape of test entirely for
+// a tall, narrow bar (a message dangling near one end of a 400px-tall
+// Activation can easily be 150+px from its *center*, well outside
+// CONNECTOR_SNAP_DISTANCE) — this instead reuses the same "does the
+// message's Y fall within this timeline shape's span" test
+// findSequenceMessageEndpoints already uses at drop time.
+function attachDanglingSequenceMessages(graph: Graph, timelineCell: any) {
+  const shape = getCellStyleShapeName(timelineCell);
+  if (!shape || !SEQUENCE_TIMELINE_STYLES.has(shape)) return;
+  const geo = timelineCell.getGeometry();
+  if (!geo) return;
+  for (const edge of graph.getChildEdges(graph.getDefaultParent())) {
+    if (edge.source && edge.target) continue;
+    const role = getShapeRole(edge);
+    if (!role || !SEQUENCE_MESSAGE_SHAPE_IDS.has(role)) continue;
+    const edgeGeo = edge.getGeometry();
+    if (!edgeGeo) continue;
+    if (!edge.source && timelineCell !== edge.target) {
+      const p = edgeGeo.getTerminalPoint(true);
+      if (p && p.y >= geo.y && p.y <= geo.y + geo.height) {
+        graph.getDataModel().setTerminal(edge, timelineCell, true);
+        applySequenceEndpointStyle(graph, edge, timelineCell, true, p.y);
+        continue;
+      }
+    }
+    if (!edge.target && timelineCell !== edge.source) {
+      const p = edgeGeo.getTerminalPoint(false);
+      if (p && p.y >= geo.y && p.y <= geo.y + geo.height) {
+        graph.getDataModel().setTerminal(edge, timelineCell, false);
+        applySequenceEndpointStyle(graph, edge, timelineCell, false, p.y);
+      }
+    }
+  }
+}
+
+// The reattach-time equivalent of sequenceMessageConnectionStyle above —
+// that one computes both ends at once from a fresh drop point, this patches
+// just the one end that's newly attaching, at whatever height it was
+// already dangling at.
+function applySequenceEndpointStyle(graph: Graph, edge: any, cell: any, isSource: boolean, y: number) {
+  const geo = cell.getGeometry();
+  if (!geo || geo.height <= 0) return;
+  const style = edge.getStyle();
+  const base = typeof style === 'object' && style !== null ? style : {};
+  const fraction = Math.min(1, Math.max(0, (y - geo.y) / geo.height));
+  const patch = isSource
+    ? { exitX: 1, exitY: fraction, exitDx: 0, exitDy: 0 }
+    : { entryX: 0, entryY: fraction, entryDx: 0, entryDy: 0 };
+  graph.getDataModel().setStyle(edge, { ...base, ...patch } as CellStateStyle);
 }
 
 interface DiagramCanvasProps {
@@ -607,6 +1274,15 @@ export interface DiagramCanvasHandle {
   // viewer's canvas shouldn't even let them try to drag/edit a shape that
   // any resulting save would just get rejected for anyway.
   setReadOnly: (readOnly: boolean) => void;
+  // Live collaboration presence: highlights whichever shape a remote
+  // collaborator (identified by userId) currently has selected, in that
+  // person's own color — see app/(tabs)/create.tsx's cell-select wiring.
+  // cellId null clears that user's highlight (they deselected/left).
+  setRemoteSelection: (userId: string, cellId: string | null, color: string) => void;
+  // Clears every remote highlight at once — used when leaving/switching
+  // diagrams, so a stale highlight from the old room can't linger into the
+  // next one.
+  clearAllRemoteSelections: () => void;
 }
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -637,6 +1313,19 @@ export function getShapeStyle(styleKey: string): CellStateStyle {
     // a fixed spacingTop here reliably lands inside it too.
     'igraph.umlLifeline': {
       shape: 'igraph.umlLifeline',
+      fillColor: '#ffffff',
+      strokeColor: BLACK,
+      strokeWidth: 2,
+      verticalAlign: 'top' as VAlignValue,
+      align: 'center' as AlignValue,
+      spacingTop: 6,
+    },
+    // Same reasoning as umlLifeline just above: each lane's name belongs
+    // inside its own header band (see UMLSwimlaneShapeCanvas's `header`,
+    // capped at 40px) at the top of the lane, not centered on the whole
+    // tall body below it.
+    'igraph.umlSwimlane': {
+      shape: 'igraph.umlSwimlane',
       fillColor: '#ffffff',
       strokeColor: BLACK,
       strokeWidth: 2,
@@ -846,14 +1535,14 @@ export function getShapeStyle(styleKey: string): CellStateStyle {
       strokeColor: BLACK,
       strokeWidth: 0,
     },
-    'igraph.umlMerge': {
-      shape: 'igraph.umlMerge',
+    'igraph.umlFork': {
+      shape: 'igraph.umlFork',
       fillColor: BLACK,
       strokeColor: BLACK,
       strokeWidth: 0,
     },
-    'igraph.umlFork': {
-      shape: 'igraph.umlFork',
+    'igraph.umlJoin': {
+      shape: 'igraph.umlJoin',
       fillColor: BLACK,
       strokeColor: BLACK,
       strokeWidth: 0,
@@ -1089,6 +1778,127 @@ export function insertUmlClassCell(graph: Graph, x: number, y: number, w: number
   [nameCell, attrCell, methodCell].forEach((c) => c.setConnectable(false));
 
   return container;
+}
+
+// ─── Activity Diagram Swimlane lanes ───────────────────────────────────────
+// A real Activity Diagram swimlane is a set of adjoining lanes sharing one
+// continuous header row — not independent boxes wired together by a
+// connector (every professional tool — draw.io's Pool/Lane, Visio's cross-
+// functional flowchart, Lucidchart's swimlane — models it that way: lanes
+// are contiguous by construction, and adding one is a structural insert,
+// never a "draw an edge to the next box" action). This models each lane as
+// its own top-level vertex — the same flat, role-tagged-siblings approach
+// Fishbone's cause boxes and ERD's split cardinality already use elsewhere
+// in this file — rather than true maxGraph parent/child containment like
+// insertUmlClassCell just above (that one needs real containment so each
+// compartment can resize independently; lanes only ever need to stay
+// flush, which plain geometry math handles fine). A shared `swimlaneGroup`
+// id in each lane's style is what ties them together.
+//
+// Both entry points that can add a lane — handleDrop's drag-and-drop
+// magnet-attach and createShapeInDirection's click-arrow — funnel through
+// insertSwimlaneLane, so a new lane always lands flush against its
+// neighbor (zero gap, matching height, no connecting edge) instead of the
+// generic "new shape + connector" treatment every other shape gets.
+
+function getSwimlaneGroupId(cell: any): string | undefined {
+  const style = cell?.getStyle?.();
+  return typeof style === 'object' && style !== null
+    ? ((style as Record<string, unknown>).swimlaneGroup as string | undefined)
+    : undefined;
+}
+
+// Lazy-init: a lane created before this feature (or a lone first lane with
+// nothing to group with yet) has no id until the moment it actually needs
+// one — the first time a second lane attaches to it.
+function ensureSwimlaneGroupId(graph: Graph, cell: any): string {
+  const existing = getSwimlaneGroupId(cell);
+  if (existing) return existing;
+  const id = `swimlane-${Date.now()}-${Math.round(Math.random() * 1e6)}`;
+  const style = cell.getStyle();
+  const base = (typeof style === 'object' && style !== null ? style : {}) as Record<string, unknown>;
+  graph.getDataModel().setStyle(cell, { ...base, swimlaneGroup: id } as CellStateStyle);
+  return id;
+}
+
+// Repositions every lane in `orderedLanes` (already sorted in the desired
+// left-to-right order) flush against each other, anchored at wherever the
+// first one already sits — so inserting or reordering a lane only ever
+// closes gaps, never shifts the group's overall position on the canvas.
+function restackSwimlaneGroup(graph: Graph, orderedLanes: any[]) {
+  const model = graph.getDataModel();
+  let x = orderedLanes[0]?.getGeometry()?.x ?? 0;
+  orderedLanes.forEach((lane) => {
+    const geo = lane.getGeometry();
+    if (!geo) return;
+    if (geo.x !== x) {
+      const newGeo = geo.clone();
+      newGeo.x = x;
+      model.setGeometry(lane, newGeo);
+    }
+    x += geo.width;
+  });
+}
+
+// Inserts a new lane immediately beside `neighborLane` (on `side`), matching
+// its height and width, tags it into the same group, and restacks the whole
+// group so every lane stays contiguous — never a floating standalone box,
+// never a connector between lanes. Used by both handleDrop (drag a fresh
+// Swimlane next to an existing one) and createShapeInDirection (click a
+// lane's own left/right arrow).
+function insertSwimlaneLane(graph: Graph, neighborLane: any, side: 'left' | 'right'): any {
+  let newLane: any;
+  graph.batchUpdate(() => {
+    const groupId = ensureSwimlaneGroupId(graph, neighborLane);
+    const geo = neighborLane.getGeometry();
+    const style = neighborLane.getStyle();
+    const base = (typeof style === 'object' && style !== null ? style : {}) as Record<string, unknown>;
+    newLane = graph.insertVertex(null, null, '', geo.x, geo.y, geo.width, geo.height, {
+      ...base,
+      swimlaneGroup: groupId,
+    } as CellStateStyle);
+    tagShapeRole(newLane, 'act-swimlane');
+
+    const siblings = graph
+      .getChildVertices(graph.getDefaultParent())
+      .filter((c: any) => c !== newLane && getShapeRole(c) === 'act-swimlane' && getSwimlaneGroupId(c) === groupId)
+      .sort((a: any, b: any) => (a.getGeometry()?.x ?? 0) - (b.getGeometry()?.x ?? 0));
+    const neighborIndex = siblings.indexOf(neighborLane);
+    siblings.splice(side === 'right' ? neighborIndex + 1 : neighborIndex, 0, newLane);
+    restackSwimlaneGroup(graph, siblings);
+  });
+  return newLane;
+}
+
+// The drag-and-drop counterpart of createShapeInDirection's click-arrow
+// entry point: a fresh Swimlane dropped close to an existing lane's left or
+// right edge attaches as another lane in that group instead of landing as
+// an unrelated floating box a few pixels away. Also requires the drop point
+// to fall within the lane's own vertical span (+ threshold) — lanes only
+// ever grow sideways, so a drop that's horizontally close but far above or
+// below the lane shouldn't misfire.
+function findNearestSwimlaneNeighbor(
+  graph: Graph, x: number, y: number, threshold: number,
+): { lane: any; side: 'left' | 'right' } | null {
+  let best: { lane: any; side: 'left' | 'right' } | null = null;
+  let bestDistance = Infinity;
+  for (const cell of graph.getChildVertices(graph.getDefaultParent())) {
+    if (getShapeRole(cell) !== 'act-swimlane') continue;
+    const geo = cell.getGeometry();
+    if (!geo) continue;
+    if (y < geo.y - threshold || y > geo.y + geo.height + threshold) continue;
+    const distLeft = Math.abs(x - geo.x);
+    if (distLeft <= threshold && distLeft < bestDistance) {
+      bestDistance = distLeft;
+      best = { lane: cell, side: 'left' };
+    }
+    const distRight = Math.abs(x - (geo.x + geo.width));
+    if (distRight <= threshold && distRight < bestDistance) {
+      bestDistance = distRight;
+      best = { lane: cell, side: 'right' };
+    }
+  }
+  return best;
 }
 
 const CLASS_COMPARTMENT_LINE_HEIGHT = 17;
@@ -1360,6 +2170,114 @@ function resizeLifelineHeaderToFitText(graph: Graph, cell: any, liveValue?: stri
   });
 }
 
+// A Fork/Join bar's "arrow" needs to be a real, draggable, extendable
+// connector — not paint — so a user can actually move it or stretch it to
+// reach a real target, same as any other connector in this app. This wires
+// up the bar's standard starting set (Fork: 1 in/2 out, Join: 2 in/1 out,
+// matching the reference notation) as real Control Flow edges: one end
+// pinned to the bar at a fixed fraction of its length (so it tracks the bar
+// if it's later lengthened — the interactive equivalent of the universal
+// floating-connection-pin fix in initGraph's CELL_CONNECTED listener, which
+// only fires for an interactive drag-connect; this pins the same way by
+// hand since these are created programmatically, not dragged), the other
+// end left dangling a fixed distance away for the user to grab and drag
+// onto whatever it should actually lead to/from — same pattern as a
+// Fishbone cause's line starting dangling until dropped near the spine.
+// Doing this at creation time also means a fresh Fork/Join immediately
+// satisfies its own "needs 2+ outgoing"/"needs 2+ incoming" validation
+// instead of nagging until the user draws the exact same arrows by hand.
+// Shared by handleDrop (dragged from the palette) and createShapeInDirection
+// (added via a lane's own click-arrow), so a bar looks and behaves
+// identically regardless of which way it was created.
+const FORK_JOIN_STUB_LENGTH = 40;
+
+export function insertForkJoinStubs(graph: Graph, bar: any, shapeId: 'act-fork' | 'act-join') {
+  const geo = bar.getGeometry();
+  if (!geo || geo.height <= 0) return;
+
+  const barThickness = Math.min(geo.height, 10);
+  const topFrac = (geo.height - barThickness) / 2 / geo.height;
+  const bottomFrac = ((geo.height - barThickness) / 2 + barThickness) / geo.height;
+  const inFracs = shapeId === 'act-join' ? [0.25, 0.75] : [0.5];
+  const outFracs = shapeId === 'act-join' ? [0.5] : [0.25, 0.75];
+
+  const styleKey = IGRAPH_ID_STYLE_MAP['act-control-flow'] ?? 'igraph.umlControlFlow';
+  const baseStyle: CellStateStyle = {
+    ...getShapeStyle(styleKey),
+    fontColor: BLACK,
+    fontSize: 12,
+    labelBackgroundColor: CANVAS_BG,
+  };
+
+  graph.batchUpdate(() => {
+    inFracs.forEach((frac) => {
+      const sx = geo.x + geo.width * frac;
+      const style: CellStateStyle = { ...baseStyle, entryX: frac, entryY: topFrac, entryPerimeter: false };
+      const edge = graph.insertEdge(null, null, '', null, bar, style);
+      const geometry = new Geometry(0, 0, 0, 0);
+      geometry.setTerminalPoint(new Point(sx, geo.y - FORK_JOIN_STUB_LENGTH), true);
+      graph.getDataModel().setGeometry(edge, geometry);
+      tagShapeRole(edge, 'act-control-flow');
+    });
+
+    outFracs.forEach((frac) => {
+      const sx = geo.x + geo.width * frac;
+      const style: CellStateStyle = { ...baseStyle, exitX: frac, exitY: bottomFrac, exitPerimeter: false };
+      const edge = graph.insertEdge(null, null, '', bar, null, style);
+      const geometry = new Geometry(0, 0, 0, 0);
+      geometry.setTerminalPoint(new Point(sx, geo.y + geo.height + FORK_JOIN_STUB_LENGTH), false);
+      graph.getDataModel().setGeometry(edge, geometry);
+      tagShapeRole(edge, 'act-control-flow');
+    });
+  });
+}
+
+// insertForkJoinStubs above pins the attached end to a fraction of the
+// bar's width, so it already tracks a resize — but the *dangling* end was
+// set to a fixed absolute point at creation time, which nothing kept in
+// sync. Left alone, lengthening or moving the bar slides the attached end
+// along with it while the dangling end stays exactly where it started,
+// turning what should be a straight up/down stub into an increasingly
+// diagonal line. Re-run after any move or resize of a Fork/Join bar (see
+// the MOVE_CELLS/CELLS_RESIZED listeners in initGraph) to re-anchor each
+// still-dangling stub directly above/below its current attach point again.
+// Only touches a stub whose far end is *still* dangling — one the user has
+// already dragged onto a real shape is a real connection now, governed by
+// its own entry/exit fraction on that shape, not this bar's geometry.
+function realignForkJoinStubs(graph: Graph, bar: any) {
+  const geo = bar.getGeometry();
+  if (!geo) return;
+  const edges = bar.getEdges(true, true, false) ?? [];
+  if (!edges.length) return;
+
+  const barThickness = Math.min(geo.height, 10);
+  const barTop = geo.y + (geo.height - barThickness) / 2;
+  const barBottom = barTop + barThickness;
+
+  graph.batchUpdate(() => {
+    edges.forEach((edge: any) => {
+      const style = edge.getStyle();
+      if (typeof style !== 'object' || style === null) return;
+
+      if (edge.getTerminal(true) === bar) {
+        if (edge.getTerminal(false)) return; // far end already attached to something real
+        const frac = (style as Record<string, unknown>).exitX;
+        if (typeof frac !== 'number') return;
+        const geometry = new Geometry(0, 0, 0, 0);
+        geometry.setTerminalPoint(new Point(geo.x + geo.width * frac, barBottom + FORK_JOIN_STUB_LENGTH), false);
+        graph.getDataModel().setGeometry(edge, geometry);
+      } else if (edge.getTerminal(false) === bar) {
+        if (edge.getTerminal(true)) return;
+        const frac = (style as Record<string, unknown>).entryX;
+        if (typeof frac !== 'number') return;
+        const geometry = new Geometry(0, 0, 0, 0);
+        geometry.setTerminalPoint(new Point(geo.x + geo.width * frac, barTop - FORK_JOIN_STUB_LENGTH), true);
+        graph.getDataModel().setGeometry(edge, geometry);
+      }
+    });
+  });
+}
+
 // ════════════════════════════════════════════════════════════════════════════
 // ⭐ MAIN WEBCANVAS COMPONENT
 // ════════════════════════════════════════════════════════════════════════════
@@ -1369,6 +2287,9 @@ const WebCanvas = forwardRef<DiagramCanvasHandle, DiagramCanvasProps>(({ onReady
   const gridCanvasRef = useRef<HTMLCanvasElement>(null);
   const graphDivRef = useRef<HTMLDivElement>(null);
   const graphRef = useRef<Graph | null>(null);
+  // One CellHighlight per remote collaborator currently shown (userId ->
+  // instance) — see setRemoteSelection/clearAllRemoteSelections below.
+  const remoteHighlightsRef = useRef<Map<string, InstanceType<typeof CellHighlight>>>(new Map());
   // Mobile's own label-editing overlay (see openMobileEditor below) — a
   // single always-mounted <textarea>, hidden until needed and repositioned/
   // refocused imperatively rather than conditionally rendered, so focusing
@@ -1489,6 +2410,41 @@ const WebCanvas = forwardRef<DiagramCanvasHandle, DiagramCanvasProps>(({ onReady
       const graph = graphRef.current;
       if (!graph) return;
       graph.setEnabled(!readOnly);
+    },
+    setRemoteSelection: (userId: string, cellId: string | null, color: string) => {
+      const graph = graphRef.current;
+      if (!graph) return;
+      const highlights = remoteHighlightsRef.current;
+      let highlight = highlights.get(userId);
+
+      if (!cellId) {
+        highlight?.hide();
+        return;
+      }
+
+      const cell = graph.getDataModel().getCell(cellId);
+      const state = cell ? graph.getView().getState(cell) : null;
+      if (!state) {
+        // Cell not found (deleted, or not yet loaded on this client) — hide
+        // rather than leave a stale highlight from wherever it last was.
+        highlight?.hide();
+        return;
+      }
+
+      if (!highlight) {
+        highlight = new CellHighlight(graph, color, 3);
+        highlights.set(userId, highlight);
+      } else {
+        highlight.setHighlightColor(color);
+      }
+      highlight.highlight(state);
+    },
+    clearAllRemoteSelections: () => {
+      remoteHighlightsRef.current.forEach((highlight) => {
+        highlight.hide();
+        highlight.destroy();
+      });
+      remoteHighlightsRef.current.clear();
     },
     // Deps stay [] (matching the original loadXml-only handle): resizeGridCanvas/
     // repaintGrid are declared further down this component and would be a
@@ -1999,16 +2955,16 @@ const WebCanvas = forwardRef<DiagramCanvasHandle, DiagramCanvasProps>(({ onReady
         strokeColor: BLACK,
         strokeWidth: 2,
       },
-      'igraph.umlMerge': {
+      'igraph.umlFork': {
         ...base,
-        shape: 'igraph.umlMerge',
+        shape: 'igraph.umlFork',
         fillColor: BLACK,
         strokeColor: BLACK,
         strokeWidth: 2,
       },
-      'igraph.umlFork': {
+      'igraph.umlJoin': {
         ...base,
-        shape: 'igraph.umlFork',
+        shape: 'igraph.umlJoin',
         fillColor: BLACK,
         strokeColor: BLACK,
         strokeWidth: 2,
@@ -2347,7 +3303,21 @@ const WebCanvas = forwardRef<DiagramCanvasHandle, DiagramCanvasProps>(({ onReady
           const centerY = cy + dropH / 2;
           const outerIsAbove = shapeId === 'fishbone-cause-top';
           const outerDy = outerIsAbove ? -dropH : dropH;
-          const spine = findEdgeNearPoint(graph, centerX, centerY, CONNECTOR_SNAP_DISTANCE, new Set(['fishbone-spine']));
+          // The point that actually needs to be near the spine is this
+          // shape's spine-side corner — where the diagonal's tip visually
+          // touches it — not the drop's raw center. Those two points are
+          // sqrt((dropW/2)² + (dropH/2)²) apart (~64px at this shape's
+          // default size), well outside CONNECTOR_SNAP_DISTANCE (40px).
+          // Searching from centerX/centerY meant a user who drags until
+          // the diagonal visually touches the spine was always placing
+          // the *search* origin outside the snap radius, so the search
+          // came up empty every time — landing in the "nothing found"
+          // branch below, whose fallback math happens to place this exact
+          // same corner right where the user was aiming, so it *looked*
+          // attached (sourceCell stayed null the whole time).
+          const spineSideX = centerX + dropW / 2;
+          const spineSideY = centerY - outerDy / 2;
+          const spine = findEdgeNearPoint(graph, spineSideX, spineSideY, CONNECTOR_SNAP_DISTANCE, new Set(['fishbone-spine']));
           if (spine) {
             // The spine is a *line*, not a point-like vertex — once
             // sourceCell is a real cell, maxGraph's floating-perimeter
@@ -2369,9 +3339,9 @@ const WebCanvas = forwardRef<DiagramCanvasHandle, DiagramCanvasProps>(({ onReady
             targetCell = null;
             const spineState = graph.getView().getState(spine);
             const spineX = spineState
-              ? Math.max(spineState.x, Math.min(spineState.x + spineState.width, centerX))
-              : centerX;
-            const spineY = spineState ? spineState.y + spineState.height / 2 : centerY;
+              ? Math.max(spineState.x, Math.min(spineState.x + spineState.width, spineSideX))
+              : spineSideX;
+            const spineY = spineState ? spineState.y + spineState.height / 2 : spineSideY;
             const exitX = spineState && spineState.width > 0 ? (spineX - spineState.x) / spineState.width : 0.5;
             styleObject.exitX = exitX;
             styleObject.exitY = 0.5;
@@ -2381,12 +3351,24 @@ const WebCanvas = forwardRef<DiagramCanvasHandle, DiagramCanvasProps>(({ onReady
           } else {
             sourceCell = null;
             targetCell = null;
-            startPoint = { x: centerX + dropW / 2, y: centerY - outerDy / 2 };
+            startPoint = { x: spineSideX, y: spineSideY };
             endPoint = { x: centerX - dropW / 2, y: centerY + outerDy / 2 };
           }
         } else if (SEQUENCE_MESSAGE_SHAPE_IDS.has(shapeId)) {
           const dropY = cy + dropH / 2;
-          const found = findSequenceMessageEndpoints(graph, x, dropY);
+          // cx/cy are the grid-snapped "intended top-left" this shape
+          // actually lands at (see cx/cy above) — cx + dropW/2 is the
+          // matching intended center every other connector-drop branch in
+          // this function searches from (FISHBONE_MAIN_CAUSE_IDS's
+          // centerX, the generic branch's centerX below). This used to
+          // search from the raw, un-snapped cursor position instead, which
+          // in the ordinary case is close enough not to matter, but for a
+          // search this position-sensitive (see the tolerance comment in
+          // findSequenceMessageEndpoints) it should agree with where the
+          // shape is actually going to render, not wherever the pointer
+          // happened to be mid-gesture.
+          const dropX = cx + dropW / 2;
+          const found = findSequenceMessageEndpoints(graph, dropX, dropY);
           sourceCell = found.source;
           targetCell = found.target;
           const sourceGeo = sourceCell?.getGeometry();
@@ -2534,12 +3516,32 @@ const WebCanvas = forwardRef<DiagramCanvasHandle, DiagramCanvasProps>(({ onReady
         // though the original edge underneath was untouched. Splitting the
         // edge for real (entity -> relationship -> entity, replacing the
         // single edge with two) is what actually wires the diamond into
-        // the connection.
-        const edgeCell = (shapeId === 'erd-relationship' || shapeId === 'erd-identifying-rel')
+        // the connection. A manually-dropped Schematic Wire Connection dot
+        // needs the exact same treatment (a real junction, not a decal —
+        // see splitSchematicWireAtJunction/attemptSchematicAutoJunction,
+        // which auto-place the same dot for an interactively-drawn
+        // T-junction) — 'schematic-no-connection' is deliberately excluded,
+        // it means "these do not connect" and stays a purely visual marker.
+        const isSchematicJunctionDrop = shapeId === 'schematic-connection';
+        const edgeCell = (shapeId === 'erd-relationship' || shapeId === 'erd-identifying-rel' || isSchematicJunctionDrop)
           ? findEdgeNearPoint(graph, x, y, CONNECTOR_SNAP_DISTANCE)
           : null;
 
-        if (edgeCell && typeof edgeCell.isEdge === 'function' && edgeCell.isEdge()) {
+        if (isSchematicJunctionDrop && edgeCell && typeof edgeCell.isEdge === 'function' && edgeCell.isEdge()) {
+          const startPoint = edgeEndpoint(edgeCell, true);
+          const endPoint = edgeEndpoint(edgeCell, false);
+          const midX = startPoint && endPoint ? (startPoint.x + endPoint.x) / 2 : cx + dropW / 2;
+          const midY = startPoint && endPoint ? (startPoint.y + endPoint.y) / 2 : cy + dropH / 2;
+          const centeredX = Math.round((midX - dropW / 2) / GRID_SIZE) * GRID_SIZE;
+          const centeredY = Math.round((midY - dropH / 2) / GRID_SIZE) * GRID_SIZE;
+          finalX = centeredX;
+          finalY = centeredY;
+
+          graph.batchUpdate(() => {
+            cell = graph.insertVertex(null, null, label, centeredX, centeredY, dropW, dropH, fullStyle);
+            splitSchematicWireAtJunction(graph, edgeCell, cell);
+          });
+        } else if (edgeCell && typeof edgeCell.isEdge === 'function' && edgeCell.isEdge()) {
           const source = edgeCell.getTerminal(true);
           const target = edgeCell.getTerminal(false);
           const edgeStyle = edgeCell.getStyle();
@@ -2613,11 +3615,24 @@ const WebCanvas = forwardRef<DiagramCanvasHandle, DiagramCanvasProps>(({ onReady
             }
             tagShapeRole(rightEdge, edgeRole);
           });
+        } else if (shapeId === 'act-swimlane') {
+          const neighbor = findNearestSwimlaneNeighbor(graph, x, y, CONNECTOR_SNAP_DISTANCE);
+          if (neighbor) {
+            cell = insertSwimlaneLane(graph, neighbor.lane, neighbor.side);
+            const newGeo = cell.getGeometry();
+            if (newGeo) { finalX = newGeo.x; finalY = newGeo.y; }
+          } else {
+            cell = graph.insertVertex(null, null, label, cx, cy, dropW, dropH, fullStyle);
+          }
         } else {
           cell = graph.insertVertex(null, null, label, cx, cy, dropW, dropH, fullStyle);
         }
       }
       tagShapeRole(cell, shapeId);
+
+      if ((shapeId === 'act-fork' || shapeId === 'act-join') && cell) {
+        insertForkJoinStubs(graph, cell, shapeId);
+      }
 
       // The reverse order from the spine's own special-case above — a Fish
       // Head/Effect Box dropped after the spine already exists (dangling,
@@ -2670,6 +3685,14 @@ const WebCanvas = forwardRef<DiagramCanvasHandle, DiagramCanvasProps>(({ onReady
             const p = geo?.getTerminalPoint(true);
             if (p && Math.hypot(p.x - anchorX, p.y - anchorY) <= CONNECTOR_SNAP_DISTANCE) {
               graph.getDataModel().setTerminal(edge, cell, true);
+              // A freshly-dropped Schematic part landing on a dangling
+              // wire's end should snap to its nearest real lead, same as
+              // an interactively-drawn connection does (see
+              // applySchematicPinSnap and the CELL_CONNECTED listener
+              // above) — otherwise this magnet-attach would leave it on
+              // the default floating/perimeter connection, anywhere on
+              // the part's body.
+              applySchematicPinSnap(graph, edge, cell, true);
               continue;
             }
           }
@@ -2677,6 +3700,7 @@ const WebCanvas = forwardRef<DiagramCanvasHandle, DiagramCanvasProps>(({ onReady
             const p = geo?.getTerminalPoint(false);
             if (p && Math.hypot(p.x - anchorX, p.y - anchorY) <= CONNECTOR_SNAP_DISTANCE) {
               graph.getDataModel().setTerminal(edge, cell, false);
+              applySchematicPinSnap(graph, edge, cell, false);
             }
           }
         }
@@ -2712,6 +3736,22 @@ const WebCanvas = forwardRef<DiagramCanvasHandle, DiagramCanvasProps>(({ onReady
   ) => {
     const graph = graphRef.current;
     if (!graph) return;
+
+    // A Swimlane lane extends its group instead of spawning an independent
+    // box + connector (see insertSwimlaneLane above) — scoped to left/right
+    // only, since lanes only ever grow sideways; clicking up/down on a lane
+    // falls through to the ordinary "add adjacent shape" behavior below
+    // (e.g. dropping an Activity node below it, genuinely connected by an
+    // edge).
+    if (dir.dx !== 0 && (shapeId === 'act-swimlane' || (!shapeId && getShapeRole(sourceCell) === 'act-swimlane'))) {
+      const newLane = insertSwimlaneLane(graph, sourceCell, dir.dx > 0 ? 'right' : 'left');
+      graph.clearSelection();
+      setTimeout(() => {
+        graph.setSelectionCell(newLane);
+        handleSelectionChange();
+      }, 10);
+      return;
+    }
 
     const { w: newW, h: newH } = shapeId ? getDropSize(shapeId) : { w: geo.width, h: geo.height };
 
@@ -2776,6 +3816,23 @@ const WebCanvas = forwardRef<DiagramCanvasHandle, DiagramCanvasProps>(({ onReady
       newCell = graph.insertVertex(null, null, '', roundedX, roundedY, newW, newH, shapeStyle);
     }
     tagShapeRole(newCell, shapeId ?? getShapeRole(sourceCell));
+
+    // A Fork/Join bar gets its own standard set of real, draggable stub
+    // arrows (see insertForkJoinStubs) instead of the generic single
+    // connector below — matching handleDrop's drag-and-drop path, so a
+    // fresh bar looks and behaves identically no matter which way it was
+    // created, and already satisfies its own "needs 2+ outgoing"/"needs 2+
+    // incoming" validation on arrival instead of nagging until the user
+    // manually draws the same arrows by hand.
+    if (shapeId === 'act-fork' || shapeId === 'act-join') {
+      insertForkJoinStubs(graph, newCell, shapeId);
+      graph.clearSelection();
+      setTimeout(() => {
+        graph.setSelectionCell(newCell);
+        handleSelectionChange();
+      }, 10);
+      return;
+    }
 
     const edgeStyle = {
       strokeColor: BLACK,
@@ -2906,6 +3963,21 @@ const WebCanvas = forwardRef<DiagramCanvasHandle, DiagramCanvasProps>(({ onReady
             e.stopPropagation();
             e.preventDefault();
 
+            // A Swimlane's left/right arrow has exactly one meaning — add
+            // another lane — so unlike every other shape, there's nothing
+            // to pick from a grid for. Goes straight to insertSwimlaneLane
+            // instead of opening the generic shape picker below.
+            if ((dir.label === 'left' || dir.label === 'right') && getShapeRole(cell) === 'act-swimlane') {
+              const newLane = insertSwimlaneLane(graph, cell, dir.label === 'right' ? 'right' : 'left');
+              removeArrowButtons();
+              graph.clearSelection();
+              setTimeout(() => {
+                graph.setSelectionCell(newLane);
+                handleSelectionChange();
+              }, 10);
+              return;
+            }
+
             // Draw.io-style: don't create anything yet — open a picker of
             // shapes the user can choose to connect next. x/y anchor the
             // popup at the same spot as the arrow itself. setShapePicker has a
@@ -2965,7 +4037,7 @@ const WebCanvas = forwardRef<DiagramCanvasHandle, DiagramCanvasProps>(({ onReady
         delDiv.addEventListener('click', (e) => {
           e.stopPropagation();
           e.preventDefault();
-          graph.removeCells([cell]);
+          graph.removeCells([cell], false);
           removeArrowButtons();
         });
 
@@ -3324,6 +4396,34 @@ const WebCanvas = forwardRef<DiagramCanvasHandle, DiagramCanvasProps>(({ onReady
       gc.width = wrapper.offsetWidth;
       gc.height = wrapper.offsetHeight;
 
+      // Mobile browsers collapse/reveal their address bar as the page
+      // scrolls — a routine, near-constant event that shrinks/grows the
+      // *visible viewport* by a few dozen pixels, with the container's
+      // actual layout width completely untouched. Height-only, that's
+      // indistinguishable from a resize this observer genuinely needs to
+      // react to (e.g. the on-screen keyboard opening, handled separately
+      // below) unless something also looks at *how much* it changed and
+      // whether width moved too. Tracked here so the observer below can
+      // tell "address bar toggled" (width same, height jitters by roughly
+      // its own height) apart from a real resize/rotation (width changes,
+      // or a much bigger height jump).
+      let lastWrapperWidth = wrapper.offsetWidth;
+      let lastWrapperHeight = wrapper.offsetHeight;
+      const ADDRESS_BAR_HEIGHT_THRESHOLD = 120;
+
+      // Belt-and-suspenders on top of the height-delta heuristic above:
+      // rather than guessing whether a given resize is small enough to be
+      // "just the address bar", defer reacting to ANY resize at all for as
+      // long as a pan gesture is actively in progress — re-measuring the
+      // graph mid-gesture is what visibly disrupts the user, regardless of
+      // how big the resize turns out to be. Set by the PanningHandler PAN_
+      // START/PAN_END listeners further down (after panningHandler exists);
+      // sizeDidChange() still runs once the gesture ends if a resize came
+      // in during it, so nothing is permanently lost, only postponed to a
+      // moment that won't visibly yank the canvas out from under a drag.
+      let isPanningActive = false;
+      let pendingResizeAfterPan = false;
+
       // Native ResizeObserver, not the focus-event timing DiagramCanvasHandle.
       // refresh() used to rely on alone — it's the browser telling us the
       // container's real post-layout size, guaranteed to fire exactly when
@@ -3352,7 +4452,33 @@ const WebCanvas = forwardRef<DiagramCanvasHandle, DiagramCanvasProps>(({ onReady
         // waiting.
         const graph = graphRef.current as any;
         if (graph?.isEditing?.()) return;
-        if (wrapper.offsetWidth > 0 && wrapper.offsetHeight > 0) {
+
+        const w = wrapper.offsetWidth;
+        const h = wrapper.offsetHeight;
+        const widthChanged = w !== lastWrapperWidth;
+        const heightDelta = Math.abs(h - lastWrapperHeight);
+        lastWrapperWidth = w;
+        lastWrapperHeight = h;
+
+        // Actively panning — hold off entirely and let the PAN_END
+        // listener below apply this once the gesture finishes.
+        if (isPanningActive) {
+          pendingResizeAfterPan = true;
+          return;
+        }
+
+        // Re-measuring the graph against the container's new bounds shifts
+        // how much of the canvas is actually visible — on a phone, doing
+        // that on nearly every scroll (address bar toggling) read as the
+        // diagram itself jumping around. Skip it for a height-only blip
+        // roughly the size of a mobile browser chrome bar; a real resize
+        // still gets through (width changed, or the jump is too big to be
+        // just the address bar).
+        if (!widthChanged && heightDelta > 0 && heightDelta <= ADDRESS_BAR_HEIGHT_THRESHOLD) {
+          return;
+        }
+
+        if (w > 0 && h > 0) {
           graph?.sizeDidChange();
         }
       });
@@ -3370,7 +4496,11 @@ const WebCanvas = forwardRef<DiagramCanvasHandle, DiagramCanvasProps>(({ onReady
       // zoom (which would otherwise race our own pinch handling below).
       graphDiv.style.touchAction = 'none';
 
-      const graph = new Graph(graphDiv);
+      // Swaps in AxisLockedPanningHandler for the default PanningHandler —
+      // everything else about the graph's default plugin set (selection,
+      // connection, tooltips, fit, etc.) stays exactly as maxGraph ships it.
+      const plugins = getDefaultPlugins().map((p) => (p === PanningHandler ? AxisLockedPanningHandler : p));
+      const graph = new Graph(graphDiv, undefined, plugins);
       graphRef.current = graph;
 
       // Off by default in maxGraph (TooltipHandler.enabled starts false) —
@@ -3466,6 +4596,21 @@ const WebCanvas = forwardRef<DiagramCanvasHandle, DiagramCanvasProps>(({ onReady
       graph.setGridEnabled(true);
       graph.setGridSize(GRID_SIZE);
       graph.setConnectable(true);
+      // maxGraph's default hit-tolerance for picking a cell under the
+      // pointer is 4px (Graph.tolerance, see getEventTolerance/intersects) —
+      // fine for a filled vertex, which has real area to land on, but an
+      // edge is a zero-width line, so ConnectionHandler/EdgeHandler/
+      // ConstraintHandler (all of which route their target hit-testing
+      // through this same value) only recognize a drop as "onto that
+      // connector" within 4 physical pixels of its actual path. That's the
+      // main reason attaching one connector's end to another connector
+      // feels fiddly across every diagram type here, not just schematics
+      // (which already get a separate, generous app-level snap via
+      // CONNECTOR_SNAP_DISTANCE for palette-drop/auto-junction, but that
+      // doesn't cover this interactive drag-onto-an-edge path). Widening it
+      // gives every connector a real, comfortable hit margin along its
+      // whole length.
+      graph.setEventTolerance(12);
       // A dangling (one- or both-ends-unattached) edge is already a core,
       // intentional state throughout this app — a connector dropped with
       // no shape nearby to snap onto, or half of a relationship split
@@ -3479,8 +4624,36 @@ const WebCanvas = forwardRef<DiagramCanvasHandle, DiagramCanvasProps>(({ onReady
       // "drags but snaps back" behavior — nothing was actually broken,
       // this flag was just disallowing something the app depends on.
       graph.setAllowDanglingEdges(true);
+      // Several connectors here are themselves valid attachment targets for
+      // *other* connectors — Fishbone's spine (a Main Cause branches off
+      // it, see handleDrop's FISHBONE_MAIN_CAUSE_IDS branch and validate
+      // Fishbone's 5.5), ERD relationships taking a split cardinality, etc.
+      // `setTerminal` at drop time wires that up fine since it bypasses
+      // interactive validation entirely, but connectableEdges defaults to
+      // false, so EdgeHandler's own isValidSource/isValidTarget check
+      // (used whenever the user drags an already-connected end, e.g.
+      // sliding a Main Cause along the spine) never treats the spine as
+      // valid — it silently disconnects instead, turning the drag into a
+      // dangling edge and immediately failing the "must branch from the
+      // spine" check. Without this, any edge-to-edge attachment made at
+      // drop time was one interactive drag away from silently breaking.
+      graph.setConnectableEdges(true);
       graph.setDisconnectOnMove(false);
-      graph.setMultigraph(false);
+      // `false` here makes maxGraph's own interactive connection validation
+      // (EdgeHandler/ConnectionHandler's mouseUp, via getEdgeValidationError)
+      // silently reject dragging an edge's end onto a cell pair that already
+      // has *any* edge between them — surfaced to the user as a blank
+      // `window.alert()` (this app never registered an i18n string for
+      // maxGraph's "already connected" resource key, so the popup shows no
+      // text) and the drag is discarded, leaving that end right back where
+      // it started. That's fatal for a Sequence Diagram in particular —
+      // two lifelines routinely exchange several messages back and forth —
+      // but is exactly the same restriction for a second ERD relationship
+      // between the same two entities, a second Flowchart arrow between the
+      // same two steps, etc. `true` allows what every one of these diagram
+      // types actually needs: as many distinct connectors between the same
+      // two shapes as the notation calls for.
+      graph.setMultigraph(true);
       graph.setTooltips(true);
       graph.setAutoSizeCells(false);
       graph.setEnterStopsCellEditing(true);
@@ -3557,6 +4730,153 @@ const WebCanvas = forwardRef<DiagramCanvasHandle, DiagramCanvasProps>(({ onReady
         }
       });
 
+      // Schematic wiring: unlike Fishbone's spine or ERD's relationship
+      // split (both applied only at palette-drop time in handleDrop), a
+      // schematic wire is drawn the ordinary way — dragging between two
+      // already-placed shapes — so there was previously no hook at all for
+      // "a wire was just interactively connected/reconnected." CELL_CONNECTED
+      // is graph-level (fired by the cellConnected mixin both ConnectionHandler's
+      // new-drag and EdgeHandler's reconnect-drag ultimately call through),
+      // unlike ConnectionHandler's own CONNECT event, which only covers the
+      // former — see applySchematicPinSnap's own comment for why.
+      graph.addListener(InternalEvent.CELL_CONNECTED, (_sender: any, evt: any) => {
+        const edge = evt.getProperty('edge');
+        const terminal = evt.getProperty('terminal');
+        const source = !!evt.getProperty('source');
+        if (!edge || !terminal) return;
+        const role = typeof terminal.isVertex === 'function' && terminal.isVertex() ? getShapeRole(terminal) : undefined;
+        if (!role || !SCHEMATIC_PIN_DEFINITIONS[role]) return;
+        graph.batchUpdate(() => {
+          applySchematicPinSnap(graph, edge, terminal, source);
+          // For a brand-new edge, this end's own CELL_CONNECTED can fire
+          // before the far end exists yet (dragging a wire out of a
+          // component fires source's cellConnected while the target is
+          // still mid-drag) — applySchematicPinSnap's "aim" is the other
+          // end's position, so with no far end yet it has nothing to aim
+          // at and falls back to this part's first pin, regardless of
+          // which way the wire is actually headed. Once the far end IS a
+          // real schematic part too, re-snapping it here (now that its own
+          // aim — this end — genuinely exists) gives it a real shot at
+          // picking the geometrically nearest pin instead of being stuck
+          // on that fallback.
+          const otherTerminal = edge.getTerminal(!source);
+          if (otherTerminal && typeof otherTerminal.isVertex === 'function' && otherTerminal.isVertex()) {
+            applySchematicPinSnap(graph, edge, otherTerminal, !source);
+          }
+          attemptSchematicAutoJunction(graph, edge);
+        });
+      });
+
+      // FDD hierarchy links: a plain Connector drawn between two Function
+      // boxes (i.e. NOT Control/Mechanism/Interface, which mean something
+      // specific — see isAttachmentEdge in validateFDD) is how this app's
+      // palette represents a parent->child decomposition link, since FDD
+      // has no connector of its own for it. Left as a straight line it cuts
+      // diagonally across the tree; real functional-decomposition figures
+      // route it as an org-chart elbow instead — down out of the parent's
+      // bottom, across, into the child. Fixed bottom exit point plus
+      // orthogonalEdgeStyle reproduce that automatically, for both a fresh
+      // drag and a reconnect (CELL_CONNECTED covers both). Which side the
+      // child is entered on depends on how it's actually laid out: a child
+      // placed roughly straight below the parent (the common case when
+      // several children are stacked in a column, like sub-steps under one
+      // process) reads better as an outline-style "L" into its left edge;
+      // a child offset well to the side (siblings spread out in a row,
+      // like Subfunctions under Function) reads better entering the top,
+      // the classic org-chart tree. computeFddEntryPoint below picks
+      // between them from the two boxes' actual geometry rather than
+      // hard-coding one.
+      graph.addListener(InternalEvent.CELL_CONNECTED, (_sender: any, evt: any) => {
+        const edge = evt.getProperty('edge');
+        if (!edge) return;
+        const source = edge.getTerminal(true);
+        const target = edge.getTerminal(false);
+        const isFunctionVertex = (c: any) => !!c && typeof c.isVertex === 'function' && c.isVertex() && getShapeRole(c) === 'function';
+        if (!isFunctionVertex(source) || !isFunctionVertex(target)) return;
+        const edgeRole = getShapeRole(edge);
+        if (edgeRole === 'control' || edgeRole === 'mechanism' || edgeRole === 'fdd-interface') return;
+        const currentStyle = edge.getStyle();
+        const base = typeof currentStyle === 'object' && currentStyle !== null ? currentStyle : {};
+        const { exitX, exitY, entryX, entryY } = computeFddEntryPoint(source.getGeometry(), target.getGeometry());
+        graph.batchUpdate(() => {
+          edge.setStyle({
+            ...base,
+            edgeStyle: 'orthogonalEdgeStyle',
+            exitX, exitY, exitPerimeter: false,
+            entryX, entryY, entryPerimeter: false,
+            rounded: false,
+          } as CellStateStyle);
+          graph.refresh(edge);
+        });
+      });
+
+      // Flowchart's own connector (Flow Line), drawn by dragging rather than
+      // tap-to-connect: same orthogonal routing as the tap-to-connect path
+      // in create.tsx's handleCanvasSelectionChange, so a Flow Line looks
+      // identical regardless of which way it was drawn.
+      graph.addListener(InternalEvent.CELL_CONNECTED, (_sender: any, evt: any) => {
+        const edge = evt.getProperty('edge');
+        if (!edge || getShapeRole(edge) !== 'flow-line') return;
+        const currentStyle = edge.getStyle();
+        const base = typeof currentStyle === 'object' && currentStyle !== null ? currentStyle : {};
+        graph.batchUpdate(() => {
+          edge.setStyle({ ...base, edgeStyle: 'orthogonalEdgeStyle', rounded: false } as CellStateStyle);
+          graph.refresh(edge);
+        });
+      });
+
+      // Catch-all connector-accuracy fix: a "floating" connection (the
+      // maxGraph default whenever a drag lands on a vertex without hitting
+      // one of its few explicit highlighted connection points) doesn't
+      // remember where it was actually attached — it recomputes which point
+      // on the target's perimeter the line touches from scratch on every
+      // redraw, purely from the two shapes' current relative positions. That
+      // reads as exactly the "endpoint jumps" / "lands in the wrong spot"
+      // complaint: the very first render after a drag can already differ
+      // from the actual drop pixel, and it visibly slides to a different
+      // spot the moment either connected shape moves again. Every
+      // diagram-specific listener above already pins an explicit
+      // entry/exit fraction for the connections it cares about (schematic
+      // pins, FDD's org-chart entry, Sequence messages via
+      // sequenceMessageConnectionStyle, etc.) — this is the fallback for
+      // everything else (Flow Line, UML/ERD/DFD associations, the generic
+      // Connector shape...): once an edge's end lands on a real vertex with
+      // no fixed point already set, freeze it at exactly the fraction of
+      // that vertex's bounds it's currently rendered at, so it stays put
+      // instead of drifting. Deferred a tick (queueMicrotask) so the view
+      // has already run its own natural post-connect validate first —
+      // reading state.absolutePoints synchronously here, still mid the
+      // connect's own batchUpdate, would see stale pre-connect geometry.
+      graph.addListener(InternalEvent.CELL_CONNECTED, (_sender: any, evt: any) => {
+        const edge = evt.getProperty('edge');
+        const terminal = evt.getProperty('terminal');
+        const source = !!evt.getProperty('source');
+        if (!edge || !terminal || typeof terminal.isVertex !== 'function' || !terminal.isVertex()) return;
+        queueMicrotask(() => {
+          if (!graph.getDataModel().contains(edge) || edge.getTerminal(source) !== terminal) return;
+          const currentStyle = edge.getStyle();
+          const base = (typeof currentStyle === 'object' && currentStyle !== null ? currentStyle : {}) as Record<string, unknown>;
+          const alreadyFixed = source ? base.exitX !== undefined : base.entryX !== undefined;
+          if (alreadyFixed) return;
+          const edgeState = graph.getView().getState(edge);
+          const points = edgeState?.absolutePoints;
+          const pt = source ? points?.[0] : points?.[points.length - 1];
+          const targetState = graph.getView().getState(terminal);
+          if (!pt || !targetState || targetState.width <= 0 || targetState.height <= 0) return;
+          const fx = Math.min(1, Math.max(0, (pt.x - targetState.x) / targetState.width));
+          const fy = Math.min(1, Math.max(0, (pt.y - targetState.y) / targetState.height));
+          graph.batchUpdate(() => {
+            edge.setStyle({
+              ...base,
+              ...(source
+                ? { exitX: fx, exitY: fy, exitPerimeter: false }
+                : { entryX: fx, entryY: fy, entryPerimeter: false }),
+            } as CellStateStyle);
+            graph.refresh(edge);
+          });
+        });
+      });
+
       // Dragging a class container's own resize handle needs its
       // (non-resizable) compartments kept in sync with the new bounds.
       graph.addListener(InternalEvent.CELLS_RESIZED, (_sender: any, evt: any) => {
@@ -3564,6 +4884,35 @@ const WebCanvas = forwardRef<DiagramCanvasHandle, DiagramCanvasProps>(({ onReady
         resized?.forEach((cell) => {
           if (isUmlClassContainerCell(cell)) syncClassCompartmentsToContainer(graph, cell);
           if (isDfdDataStoreContainerCell(cell)) syncDfdDataStoreCompartmentsToContainer(graph, cell);
+          // Stretching an Activation/Lifeline bar taller to match how long
+          // an interaction actually runs is normal sequence-diagram
+          // workflow — see attachDanglingSequenceMessages — and unlike a
+          // move, a resize never went through runAutoAttachOnMove at all.
+          attachDanglingSequenceMessages(graph, cell);
+          // Widening/narrowing one lane by its own resize handle would
+          // otherwise open a gap or overlap with its neighbors — restack
+          // the whole group (preserving this lane's new width, only
+          // repositioning x) so every lane stays flush, the same guarantee
+          // insertSwimlaneLane gives a freshly-added one.
+          if (getShapeRole(cell) === 'act-swimlane') {
+            const groupId = getSwimlaneGroupId(cell);
+            if (groupId) {
+              const group = graph
+                .getChildVertices(graph.getDefaultParent())
+                .filter((c: any) => getShapeRole(c) === 'act-swimlane' && getSwimlaneGroupId(c) === groupId)
+                .sort((a: any, b: any) => (a.getGeometry()?.x ?? 0) - (b.getGeometry()?.x ?? 0));
+              graph.batchUpdate(() => restackSwimlaneGroup(graph, group));
+            }
+          }
+          // Lengthening a Fork/Join bar by its own resize handle slides its
+          // attached stub ends along with it (they're pinned to a fraction
+          // of the bar's width) — re-anchor any still-dangling far end so
+          // the stub stays a straight perpendicular line instead of going
+          // diagonal (see realignForkJoinStubs).
+          const role = getShapeRole(cell);
+          if (role === 'act-fork' || role === 'act-join') {
+            realignForkJoinStubs(graph, cell);
+          }
         });
       });
 
@@ -3683,6 +5032,25 @@ const WebCanvas = forwardRef<DiagramCanvasHandle, DiagramCanvasProps>(({ onReady
         // touch, so both of maxGraph's are switched off here.
         panningHandler.isForcePanningEvent = () => false;
         panningHandler.setPinchEnabled(false);
+
+        // Feeds the ResizeObserver's pan-deferral above (see
+        // isPanningActive/pendingResizeAfterPan): a container resize that
+        // lands mid-drag is what actually visibly yanks the canvas, so
+        // sizeDidChange() gets held off for the gesture's whole duration
+        // and applied once, right as it ends, instead of possibly several
+        // times mid-drag.
+        panningHandler.addListener(InternalEvent.PAN_START, () => {
+          isPanningActive = true;
+        });
+        panningHandler.addListener(InternalEvent.PAN_END, () => {
+          isPanningActive = false;
+          if (!pendingResizeAfterPan) return;
+          pendingResizeAfterPan = false;
+          const g = graphRef.current as any;
+          if (g && wrapper.offsetWidth > 0 && wrapper.offsetHeight > 0) {
+            g.sizeDidChange();
+          }
+        });
       }
 
       new RubberBandHandler(graph);
@@ -3695,9 +5063,16 @@ const WebCanvas = forwardRef<DiagramCanvasHandle, DiagramCanvasProps>(({ onReady
       (graph as any).undoManager = undoManager;
 
       const keyHandler = new KeyHandler(graph);
-      keyHandler.bindKey(46, () => graph.removeCells());
-      keyHandler.bindKey(8, () => graph.removeCells());
-      keyHandler.bindKey(13, () => graph.removeCells());
+      // includeEdges=false — deleting a shape shouldn't take its connectors
+      // with it. A dangling edge is already a normal, expected state across
+      // every diagram type here (see setAllowDanglingEdges above and G2's
+      // checkDanglingEdges in flowchartRules.ts, which flags exactly this),
+      // so removing e.g. a Category Box now leaves its Main Cause line
+      // behind as a dangling edge the user can reattach or clean up,
+      // instead of silently vanishing along with the box.
+      keyHandler.bindKey(46, () => graph.removeCells(null, false));
+      keyHandler.bindKey(8, () => graph.removeCells(null, false));
+      keyHandler.bindKey(13, () => graph.removeCells(null, false));
       keyHandler.bindControlKey(90, () => undoManager.undo());
       keyHandler.bindControlKey(89, () => undoManager.redo());
       keyHandler.bindControlShiftKey(90, () => undoManager.redo());
@@ -3726,14 +5101,33 @@ const WebCanvas = forwardRef<DiagramCanvasHandle, DiagramCanvasProps>(({ onReady
         Clipboard.paste(graph);
       });
 
+      const NUDGE_STEP = 1;
       const nudge = (dx: number, dy: number) => {
         const cells = graph.getSelectionCells();
         if (cells.length) graph.moveCells(cells, dx, dy);
       };
-      keyHandler.bindKey(37, () => nudge(-GRID_SIZE, 0));
-      keyHandler.bindKey(38, () => nudge(0, -GRID_SIZE));
-      keyHandler.bindKey(39, () => nudge(GRID_SIZE, 0));
-      keyHandler.bindKey(40, () => nudge(0, GRID_SIZE));
+      keyHandler.bindKey(37, () => nudge(-NUDGE_STEP, 0));
+      keyHandler.bindKey(38, () => nudge(0, -NUDGE_STEP));
+      keyHandler.bindKey(39, () => nudge(NUDGE_STEP, 0));
+      keyHandler.bindKey(40, () => nudge(0, NUDGE_STEP));
+
+      // Magnet-attach isn't just a drop-time thing — see runAutoAttachOnMove
+      // above. MOVE_CELLS fires for every move regardless of source
+      // (interactive drag via GraphHandler, the nudge keys just above,
+      // programmatic moveCells elsewhere), so dragging a Category Box onto
+      // its Main Cause's dangling end, or a Main Cause until it's close
+      // enough to the spine, attaches right then — the same as it would
+      // have if it'd landed there on the original drop. dx/dy are also
+      // forwarded so an already-attached Main Cause slides along the spine
+      // (slideMainCauseAlongSpine) and an already-attached Sequence message
+      // slides along its timeline(s) (slideSequenceMessageAlongTimelines),
+      // instead of staying pinned at their original attach point.
+      graph.addListener(InternalEvent.MOVE_CELLS, (_sender: any, evt: any) => {
+        const cells = evt.getProperty('cells') as any[] | undefined;
+        const dx = (evt.getProperty('dx') as number | undefined) ?? 0;
+        const dy = (evt.getProperty('dy') as number | undefined) ?? 0;
+        if (cells && cells.length) runAutoAttachOnMove(graph, cells, dx, dy);
+      });
 
       InternalEvent.addMouseWheelListener((evt: Event, up: boolean) => {
         const e = evt as WheelEvent;
@@ -3872,9 +5266,31 @@ const WebCanvas = forwardRef<DiagramCanvasHandle, DiagramCanvasProps>(({ onReady
       graphDiv.addEventListener('keyup', onSpaceKeyUp);
 
       const reportZoom = () => onZoomChangeRef.current?.(Math.round(graph.getView().getScale() * 100));
-      graph.getView().addListener('scale', () => { repaintGrid(); reportZoom(); });
-      graph.getView().addListener('translate', () => repaintGrid());
-      graph.getView().addListener('scaleAndTranslate', () => { repaintGrid(); reportZoom(); });
+
+      // Raw view 'translate' events fire once per pointermove tick during a
+      // pan (PanningHandler drives panning by continuously translating the
+      // view in JS, not native browser scrolling) — far more often than the
+      // screen can usefully repaint, same reasoning the pinch-zoom rAF
+      // coalescing above already uses. repaintGrid does a full clear+redraw
+      // of every grid line across the visible canvas, so calling it
+      // synchronously on every one of those ticks could fall behind the
+      // (much cheaper) SVG content translating right alongside it — the
+      // grid visibly drifting a frame or two behind the actual diagram
+      // mid-pan is exactly the kind of layered-motion mismatch that reads
+      // as dizzying. Coalescing to one repaint per animation frame keeps
+      // the grid glued to the content no matter how fast the raw events
+      // arrive.
+      let gridRepaintRafId: number | null = null;
+      const scheduleGridRepaint = () => {
+        if (gridRepaintRafId !== null) return;
+        gridRepaintRafId = requestAnimationFrame(() => {
+          gridRepaintRafId = null;
+          repaintGrid();
+        });
+      };
+      graph.getView().addListener('scale', () => { scheduleGridRepaint(); reportZoom(); });
+      graph.getView().addListener('translate', () => scheduleGridRepaint());
+      graph.getView().addListener('scaleAndTranslate', () => { scheduleGridRepaint(); reportZoom(); });
 
       graph.getDataModel().addListener(InternalEvent.CHANGE, () => {
         try {
@@ -3964,6 +5380,9 @@ const WebCanvas = forwardRef<DiagramCanvasHandle, DiagramCanvasProps>(({ onReady
         keyHandler.onDestroy();
         if (cleanupClickArrows) cleanupClickArrows();
         if (pinchRafId !== null) cancelAnimationFrame(pinchRafId);
+        if (gridRepaintRafId !== null) cancelAnimationFrame(gridRepaintRafId);
+        remoteHighlightsRef.current.forEach((highlight) => highlight.destroy());
+        remoteHighlightsRef.current.clear();
         graph.destroy();
         graphRef.current = null;
         setFlowchartIssues([]);

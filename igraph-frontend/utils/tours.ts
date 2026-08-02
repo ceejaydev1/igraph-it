@@ -1,5 +1,5 @@
 import type { DriveStep } from 'driver.js';
-import { advanceWhenElementAppears, markTourWaiting, scheduleTourOnNextFocus, clearNewUserOnboarding } from './onboardingTour';
+import { advanceWhenElementAppears, markTourWaiting, scheduleTourOnNextFocus, destroyForHandoff } from './onboardingTour';
 
 // Bump the trailing version (e.g. -v5) if a tour's steps change enough that
 // past users should see it again — startTour() only skips a tour once its
@@ -74,7 +74,11 @@ const nextModuleStep = (
   popover: {
     ...popover,
     onDoneClick: (_el, _step, opts) => {
-      opts.driver.destroy();
+      // destroyForHandoff (not a plain destroy()) — this is the chain
+      // continuing into the next module's tour, not the user's onboarding
+      // moment ending, so it must not clear the new-user flag the rest of
+      // the chain still depends on. See its own comment in onboardingTour.ts.
+      destroyForHandoff(opts.driver);
       scheduleTourOnNextFocus(nextTourId);
       router.push(nextRoute);
     },
@@ -89,13 +93,13 @@ const finishStep = (popover: { title: string; description: string }, router: any
     ...popover,
     doneBtnText: 'Finish',
     onDoneClick: (_el, _step, opts) => {
+      // destroy() synchronously fires startTour's onDestroyed (onboardingTour.ts),
+      // which already clears the "just signed up" flag that's the only thing
+      // letting the tour chain auto-play at all — reaching Finish (or closing
+      // out early via X, same handler) means nothing should auto-start again
+      // after this, no matter what else changes (tour version bumps, cleared
+      // per-tour "seen" keys, etc).
       opts.driver.destroy();
-      // Clears the "just signed up" flag that's the only thing letting the
-      // tour chain auto-play at all (see startTour in onboardingTour.ts) —
-      // reaching Finish means this user has now seen the whole chain, so
-      // nothing should auto-start again after this, no matter what else
-      // changes (tour version bumps, cleared per-tour "seen" keys, etc).
-      clearNewUserOnboarding();
       router.push('/(tabs)/home');
     },
   },

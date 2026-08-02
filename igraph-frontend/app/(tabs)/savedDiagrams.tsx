@@ -967,17 +967,13 @@ export default function SavedDiagrams() {
     });
   };
 
-  // Handle back navigation with fallback
+  // Always back to Account, regardless of actual navigation history — this
+  // screen is only ever reached from there (see userAccount.tsx's "Saved
+  // diagrams" action), but router.back() follows whatever the real previous
+  // route was, which isn't always Account (e.g. arriving via the tab bar),
+  // and would land back on Home instead.
   const handleBackPress = () => {
-    try {
-      if (router.canGoBack()) {
-        router.back();
-      } else {
-        router.replace('/(tabs)/userAccount');
-      }
-    } catch (error) {
-      router.replace('/(tabs)/userAccount');
-    }
+    router.replace('/(tabs)/userAccount');
   };
 
   return (

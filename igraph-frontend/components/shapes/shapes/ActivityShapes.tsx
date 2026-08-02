@@ -66,23 +66,47 @@ export const UMLDecisionShape: React.FC<ShapeProps> = ({
   );
 };
 
-// ─── 4. Merge Node ────────────────────────────────────────────────────────
+// Small perpendicular arrow stubs that make the Fork/Join bar read as
+// directional at a glance, matching the reference notation chart — one per
+// fraction in `inFracs` entering the top edge, one per fraction in
+// `outFracs` leaving the bottom, both positioned as a fraction of the bar's
+// own width so they stay evenly spread whatever width this preview renders
+// at (the palette icon and the canvas shape use very different sizes for
+// the same component — see maxgraph-custom-shapes.ts's UMLForkShapeCanvas
+// for that version, which this mirrors). `margin` is the vertical room
+// available above/below the bar to draw into.
+function forkJoinStubs(
+  width: number, barTop: number, barBottom: number, margin: number,
+  inFracs: number[], outFracs: number[], color: string,
+): React.ReactNode[] {
+  if (margin < 6) return [];
+  const stubLen = Math.min(margin - 2, margin * 0.7);
+  const arrowDepth = Math.min(5, stubLen * 0.5);
+  const arrowHalf = Math.max(2, arrowDepth * 0.5);
+  const elements: React.ReactNode[] = [];
 
-export const UMLMergeShape: React.FC<ShapeProps> = ({
-  width,
-  height,
-  color = '#1a1f36',
-}) => {
-  const bar = Math.min(height, 10);
-  const y = (height - bar) / 2;
-  return (
-    <Svg width={width} height={height} viewBox={`0 0 ${width} ${height}`}>
-      <Rect x={2} y={y} width={width - 4} height={bar} fill={color} />
-    </Svg>
-  );
-};
+  inFracs.forEach((frac, i) => {
+    const cx = width * frac;
+    const baseY = barTop - arrowDepth;
+    elements.push(
+      <Line key={`in-line-${i}`} x1={cx} y1={barTop - stubLen} x2={cx} y2={baseY} stroke={color} strokeWidth={1.5} />,
+      <Polygon key={`in-arrow-${i}`} points={`${cx},${barTop} ${cx - arrowHalf},${baseY} ${cx + arrowHalf},${baseY}`} fill={color} />,
+    );
+  });
 
-// ─── 5. Fork Node ─────────────────────────────────────────────────────────
+  outFracs.forEach((frac, i) => {
+    const cx = width * frac;
+    const baseY = barBottom + arrowDepth;
+    elements.push(
+      <Line key={`out-line-${i}`} x1={cx} y1={barBottom} x2={cx} y2={baseY} stroke={color} strokeWidth={1.5} />,
+      <Polygon key={`out-arrow-${i}`} points={`${cx},${barBottom + stubLen} ${cx - arrowHalf},${baseY} ${cx + arrowHalf},${baseY}`} fill={color} />,
+    );
+  });
+
+  return elements;
+}
+
+// ─── 4. Fork Node ─────────────────────────────────────────────────────────
 
 export const UMLForkShape: React.FC<ShapeProps> = ({
   width,
@@ -94,6 +118,26 @@ export const UMLForkShape: React.FC<ShapeProps> = ({
   return (
     <Svg width={width} height={height} viewBox={`0 0 ${width} ${height}`}>
       <Rect x={2} y={y} width={width - 4} height={bar} fill={color} />
+      {forkJoinStubs(width, y, y + bar, y, [0.5], [0.25, 0.75], color)}
+    </Svg>
+  );
+};
+
+// ─── 5. Join Node ─────────────────────────────────────────────────────────
+// Same synchronization-bar glyph as Fork just above — UML reuses one shape
+// for both, distinguished only by flow direction (many-in/one-out here).
+
+export const UMLJoinShape: React.FC<ShapeProps> = ({
+  width,
+  height,
+  color = '#1a1f36',
+}) => {
+  const bar = Math.min(height, 10);
+  const y = (height - bar) / 2;
+  return (
+    <Svg width={width} height={height} viewBox={`0 0 ${width} ${height}`}>
+      <Rect x={2} y={y} width={width - 4} height={bar} fill={color} />
+      {forkJoinStubs(width, y, y + bar, y, [0.25, 0.75], [0.5], color)}
     </Svg>
   );
 };

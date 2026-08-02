@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import {
   View,
   Text,
@@ -9,6 +9,7 @@ import {
   ActivityIndicator,
   Platform,
   Dimensions,
+  useWindowDimensions,
   KeyboardAvoidingView,
   Modal,
   Image,
@@ -26,19 +27,23 @@ const OTP_LENGTH = 6;
 // that combination left leftover space unpredictable, which is what made
 // `justifyContent: 'center'` on otpRow flaky on real devices (looked
 // off-center despite the style saying otherwise) and, on narrower phones,
-// rendered noticeably smaller than intended. otpContainer's negative margin
-// (below) fully cancels the card's own horizontal padding for this row only,
-// so OTP_ROW_WIDTH is the card's full outer width — same value used here to
-// size the boxes and there to size the row they sit in, so they always
-// agree.
+// rendered noticeably smaller than intended.
+//
+// This used to also escape the card's own horizontal padding via a negative
+// margin on otpContainer (marginHorizontal: -32), so the row could use the
+// card's full *outer* width instead of its narrower padded content width —
+// recomputing OTP_BOX_SIZE to match. That measure-then-cancel-padding
+// approach kept coming back off-center in practice (React Native Web's
+// TouchableOpacity doesn't necessarily apply a negative margin to the exact
+// same box the width percentage is measured against), so it's gone now:
+// otpContainer is a plain child sized against the card's already-symmetric
+// padded content area, same as everything else in the card, and centers the
+// boring, reliable way — no escaping, no separate width recomputation to
+// keep in sync with it.
 const OTP_GAP = 6;
 const OTP_PAGE_PADDING = 18; // must match scrollContent's paddingHorizontal
 const OTP_CARD_MAX_WIDTH = 430; // must match card's maxWidth
-const OTP_ROW_WIDTH = Math.min(SCREEN_WIDTH - OTP_PAGE_PADDING * 2, OTP_CARD_MAX_WIDTH);
-const OTP_BOX_SIZE = Math.max(
-  44,
-  Math.min(60, Math.floor((OTP_ROW_WIDTH - OTP_GAP * (OTP_LENGTH - 1)) / OTP_LENGTH))
-);
+const OTP_CARD_PADDING_H = 32; // must match card's paddingHorizontal
 
 // DiagramBackground with grid-bg.png
 const DiagramBackground = () => (
@@ -293,6 +298,20 @@ const OTPInput = ({
   const [isFocused, setIsFocused] = useState(false);
   const otpArray = value.split('').concat(Array(OTP_LENGTH - value.length).fill(''));
 
+  // Reactive, unlike the old module-level Dimensions.get('window') read —
+  // recomputes on rotation/resize instead of staying frozen at whatever the
+  // viewport was the first time this screen's module ever evaluated.
+  const { width: windowWidth } = useWindowDimensions();
+  const otpBoxSize = useMemo(() => {
+    // The card's own padded content width — same width every other element
+    // in the card (heading, subtitle, buttons) already lays out against, so
+    // this row centers in exactly the same box they do instead of a
+    // separately-recomputed one.
+    const cardWidth = Math.min(windowWidth - OTP_PAGE_PADDING * 2, OTP_CARD_MAX_WIDTH);
+    const rowWidth = cardWidth - OTP_CARD_PADDING_H * 2;
+    return Math.max(44, Math.min(60, Math.floor((rowWidth - OTP_GAP * (OTP_LENGTH - 1)) / OTP_LENGTH)));
+  }, [windowWidth]);
+
   useEffect(() => {
     setTimeout(() => inputRef.current?.focus(), 100);
   }, []);
@@ -328,12 +347,13 @@ const OTPInput = ({
               key={index}
               style={[
                 styles.otpBox,
+                { width: otpBoxSize, height: otpBoxSize * 1.15 },
                 isActive && styles.otpBoxFocused,
                 hasError && styles.otpBoxError,
                 hasDigit && !hasError && !isActive && styles.otpBoxFilled,
               ]}
             >
-              <Text style={[styles.otpDigit, hasError && styles.otpDigitError]}>
+              <Text style={[styles.otpDigit, { fontSize: Math.round(otpBoxSize * 0.42) }, hasError && styles.otpDigitError]}>
                 {digit}
               </Text>
               {isActive && !hasDigit && <View style={styles.cursor} />}
@@ -503,12 +523,15 @@ export default function VerifyOTP() {
       <SuccessModal
         visible={showSuccessModal}
         title="Email Verified!"
-        message="Your email has been successfully verified. You can now sign in to your account."
+        message="Your account is ready — you're already signed in."
         onClose={() => {
           setShowSuccessModal(false);
-          router.replace('/(auth)/signin');
+          // verifyOTP (authService.js) signs the account straight in as part
+          // of verification now — no separate sign-in step needed, so this
+          // goes directly to Home instead of back to the sign-in screen.
+          router.replace('/(tabs)/home');
         }}
-        buttonText="Sign In Now"
+        buttonText="Continue"
       />
 
       <KeyboardAvoidingView 
@@ -647,21 +670,19 @@ const styles = StyleSheet.create({
   },
   subtitle: { fontSize: 14, color: '#7f8bb3', textAlign: 'center', lineHeight: 22, marginBottom: 32 },
   emailHighlight: { color: '#4c6fff', fontWeight: '700' },
-  // Pulled out past the card's own 32px side padding entirely (negative
-  // margin cancels all of it), so OTP_ROW_WIDTH above — the same value used
-  // to size otpBox — is exactly this row's available width.
-  otpContainer: { width: '100%', marginBottom: 8, marginHorizontal: -32 },
+  otpContainer: { width: '100%', marginBottom: 8 },
   otpRow: { flexDirection: 'row', justifyContent: 'center', gap: OTP_GAP, marginBottom: 8 },
   hiddenInput: {
     position: 'absolute', width: '100%', height: '100%',
     opacity: 0, zIndex: 10, backgroundColor: 'transparent'
   },
-  // Fixed size (OTP_BOX_SIZE, computed above) instead of flex:1 + maxWidth —
-  // a deterministic size is what actually makes justifyContent:'center' on
-  // otpRow reliable, and reads as noticeably bigger on typical phone widths
-  // than the old flex-distributed size did.
+  // width/height/fontSize come from OTPInput's reactive otpBoxSize (inline,
+  // merged with this) instead of a fixed value baked in here — a
+  // deterministic size is what actually makes justifyContent:'center' on
+  // otpRow reliable, and recomputing it live is what keeps that true across
+  // a resize/rotation instead of only on first load.
   otpBox: {
-    width: OTP_BOX_SIZE, height: OTP_BOX_SIZE * 1.15, borderRadius: 16,
+    borderRadius: 16,
     borderWidth: 1.8, borderColor: '#dde3fa', backgroundColor: '#f8faff',
     alignItems: 'center', justifyContent: 'center'
   },
@@ -672,7 +693,7 @@ const styles = StyleSheet.create({
   },
   otpBoxFilled: { borderColor: '#a5b4fc', backgroundColor: '#f0f4ff' },
   otpBoxError: { borderColor: '#ef4444', backgroundColor: '#fff5f5' },
-  otpDigit: { fontSize: Math.round(OTP_BOX_SIZE * 0.42), fontWeight: '700', color: '#1a1f36' },
+  otpDigit: { fontWeight: '700', color: '#1a1f36' },
   otpDigitError: { color: '#ef4444' },
   cursor: { 
     position: 'absolute', bottom: 12, width: 2, height: 20, 

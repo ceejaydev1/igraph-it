@@ -207,16 +207,13 @@ export default function AboutUs() {
     scrollViewRef.current?.scrollTo({ y: 0, animated: true });
   };
 
+  // Always back to Account, regardless of actual navigation history — this
+  // screen is only ever reached from there (see userAccount.tsx's "About
+  // Us" action), but router.back() follows whatever the real previous
+  // route was, which isn't always Account (e.g. arriving via the tab bar),
+  // and would land back on Home instead.
   const handleBackPress = () => {
-    try {
-      if (router.canGoBack()) {
-        router.back();
-      } else {
-        router.replace('/(tabs)/userAccount');
-      }
-    } catch (error) {
-      router.replace('/(tabs)/userAccount');
-    }
+    router.replace('/(tabs)/userAccount');
   };
 
   return (

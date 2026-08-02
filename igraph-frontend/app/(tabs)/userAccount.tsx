@@ -652,7 +652,6 @@ const ChangePasswordModal = ({
   const isDesktop = windowWidth >= 1024;
   const isMobile = windowWidth < 768;
   const modalWidth = isDesktop ? 460 : isMobile ? windowWidth - 32 : 420;
-  const { onFlushDraft } = useSave();
 
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
@@ -691,17 +690,12 @@ const ChangePasswordModal = ({
       const result = await authService.changePassword(currentPassword, newPassword);
 
       if (result.success) {
+        // The backend now only invalidates every *other* session on a
+        // password change, keeping this one signed in (see changePassword
+        // in authController.js) — so there's nothing to flush/log out/
+        // redirect for anymore; the user just stays right where they are.
         handleClose();
         onSuccess();
-        setTimeout(async () => {
-          // Signing out replaces the whole (tabs) route group, unmounting
-          // the create screen (and any in-progress diagram edits) rather
-          // than just backgrounding it — flush its draft to local storage
-          // first so that isn't a race. See onFlushDraft in SaveContext.tsx.
-          await onFlushDraft?.();
-          await authService.logout();
-          router.replace('/(auth)/signin');
-        }, 900);
       } else {
         setError(result.message || 'Failed to change password.');
       }
@@ -1435,7 +1429,7 @@ export default function UserAccount() {
   };
 
   const handlePasswordSuccess = () => {
-    showToast('Password changed. Signing you out…');
+    showToast('Password changed successfully.');
   };
 
   const handleSetPasswordSuccess = () => {

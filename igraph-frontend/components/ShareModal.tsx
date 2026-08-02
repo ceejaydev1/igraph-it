@@ -53,12 +53,15 @@ const BackIcon = () => (
 );
 
 // Matches the same email-hashed color + white-initials look used everywhere
-// else a person's avatar shows (Navbar.tsx, userAccount.tsx) — this file
-// duplicates it rather than importing, same as those two already do with
-// each other, since neither exports its version.
+// else a person's avatar shows (Navbar.tsx, userAccount.tsx) — those two
+// still duplicate it between themselves, but this copy is exported so the
+// Create Diagram screen's presence indicator/live-selection highlight
+// (app/(tabs)/create.tsx) computes the exact same color per userId as this
+// file's own Avatar does, instead of a 4th independent copy drifting out of
+// sync with it.
 const AVATAR_COLORS = ['#4c6fff', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#14b8a6', '#f97316', '#6366f1', '#84cc16'];
 
-const getAvatarColor = (email: string): string => {
+export const getAvatarColor = (email: string): string => {
   if (!email) return AVATAR_COLORS[0];
   let hash = 0;
   for (let i = 0; i < email.length; i++) {
@@ -67,7 +70,13 @@ const getAvatarColor = (email: string): string => {
   return AVATAR_COLORS[Math.abs(hash) % AVATAR_COLORS.length];
 };
 
-const Avatar = ({ name, email, size = 32 }: { name: string; email: string; size?: number }) => {
+// Exported so the Create Diagram toolbar (app/(tabs)/create.tsx) can reuse
+// the exact same avatar look for its real-time "who's here" presence
+// indicator instead of a second, subtly-different implementation. `email`
+// is only ever used here to hash out a stable color, never displayed — the
+// presence list has no email, so that caller passes each viewer's userId
+// instead, which serves the same "stable per-person, no config needed" role.
+export const Avatar = ({ name, email, size = 32 }: { name: string; email: string; size?: number }) => {
   const initials = (name || '?')
     .split(' ')
     .map((p) => p[0])
@@ -295,24 +304,22 @@ export default function ShareModal({ visible, onClose, diagramId, diagramName }:
               {isOwner && (
                 <View style={{ zIndex: 4 }}>
                   <Text style={styles.sectionLabel}>Individual access</Text>
-                  <View style={styles.addRow}>
-                    <TextInput
-                      style={styles.emailInput}
-                      value={emailInput}
-                      onChangeText={setEmailInput}
-                      placeholder="Add people by email"
-                      placeholderTextColor={COLORS.textTertiary}
-                      autoCapitalize="none"
-                      keyboardType="email-address"
-                      onSubmitEditing={handleAdd}
+                  <TextInput
+                    style={[styles.emailInput, styles.emailInputStacked]}
+                    value={emailInput}
+                    onChangeText={setEmailInput}
+                    placeholder="Add people by email"
+                    placeholderTextColor={COLORS.textTertiary}
+                    autoCapitalize="none"
+                    keyboardType="email-address"
+                    onSubmitEditing={handleAdd}
+                  />
+                  <View style={styles.permissionDropdownWrap}>
+                    <Dropdown
+                      value={addPermission}
+                      options={PERMISSION_OPTIONS}
+                      onChange={(key) => setAddPermission(key as CollaboratorPermission)}
                     />
-                    <View style={styles.permissionDropdownWrap}>
-                      <Dropdown
-                        value={addPermission}
-                        options={PERMISSION_OPTIONS}
-                        onChange={(key) => setAddPermission(key as CollaboratorPermission)}
-                      />
-                    </View>
                   </View>
                   {formError && <Text style={styles.errorText}>{formError}</Text>}
                   <TouchableOpacity
@@ -532,11 +539,6 @@ const styles = StyleSheet.create({
     color: COLORS.textSecondary,
     marginBottom: SPACING.sm,
   },
-  addRow: {
-    flexDirection: 'row',
-    gap: SPACING.sm,
-    marginBottom: SPACING.sm,
-  },
   emailInput: {
     flex: 1,
     borderWidth: 1,
@@ -547,8 +549,25 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: COLORS.textPrimary,
   },
+  emailInputStacked: {
+    marginBottom: SPACING.sm,
+  },
+  // Own row now (see the "Individual access" section above) instead of
+  // squeezed beside the email input — on a narrow phone, that fixed-width
+  // dropdown next to a flex:1 input left it cramped enough to visibly
+  // overflow the card's edge instead of just wrapping/shrinking.
+  //
+  // position + zIndex here (not just on Dropdown's own internal wrap) are
+  // load-bearing on Android: Dropdown's open menu raises its OWN wrapper's
+  // zIndex, but that only wins against ITS siblings (the trigger). Without
+  // this wrapper also carrying position:relative + a zIndex above 0, the
+  // "Add" button right below it — plain in-flow, no positioning of its own —
+  // painted on top of the open menu's first row instead of under it.
   permissionDropdownWrap: {
-    width: 150,
+    width: '100%',
+    marginBottom: SPACING.sm,
+    position: 'relative',
+    zIndex: 2,
   },
   requestRow: {
     flexDirection: 'row',

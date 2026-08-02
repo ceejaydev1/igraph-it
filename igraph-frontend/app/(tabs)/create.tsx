@@ -1,4 +1,5 @@
 import React, { useState, useRef, useCallback, useEffect, useMemo } from 'react';
+import jsPDF from 'jspdf';
 import {
   View,
   Text,
@@ -16,12 +17,13 @@ import {
   Animated,
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
+import type { DiagramPrintPayload } from '../print';
 import { useFocusEffect } from '@react-navigation/native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Svg, Path, Rect, Circle } from 'react-native-svg';
 import { SvgCanvas2D, ImageExport, Geometry, Point } from '@maxgraph/core';
-import DiagramCanvas, { DiagramCanvasHandle, getShapeStyle, insertUmlClassCell, insertDfdDataStoreCell, findSequenceMessageEndpoints, sequenceMessageConnectionStyle, SEQUENCE_MESSAGE_SHAPE_IDS } from '@/components/DiagramCanvas';
-import ShareModal from '@/components/ShareModal';
+import DiagramCanvas, { DiagramCanvasHandle, getShapeStyle, insertUmlClassCell, insertDfdDataStoreCell, insertForkJoinStubs, findSequenceMessageEndpoints, sequenceMessageConnectionStyle, SEQUENCE_MESSAGE_SHAPE_IDS } from '@/components/DiagramCanvas';
+import ShareModal, { Avatar, getAvatarColor } from '@/components/ShareModal';
 import RequestAccessModal from '@/components/RequestAccessModal';
 import ShapesPanel from '@/components/shapes/ShapesPanel';
 import ShapesBottomPanel from '../../components/shapes/ShapesBottomPanel';
@@ -32,10 +34,10 @@ import { ICONS } from '../../constants/icons';
 import { COLORS, SPACING } from '@/constants/theme';
 import { IGRAPH_ID_STYLE_MAP } from '@/components/maxgraph-custom-shapes';
 import { getShapeDefinitionById, CONNECTOR_SHAPE_IDS } from '@/constants/shapes';
-import { tagShapeRole } from '@/utils/flowchartRules';
+import { tagShapeRole, getShapeRole, computeFddEntryPoint } from '@/utils/flowchartRules';
 import * as authService from '../../services/authService';
 import * as shareService from '../../services/diagramShareService';
-import { joinDiagram, leaveDiagram, sendDiagramChange } from '../../services/collabSocketClient';
+import { joinDiagram, leaveDiagram, sendDiagramChange, sendCellSelect } from '../../services/collabSocketClient';
 import { useSave } from '../../contexts/SaveContext';
 import { useOnboardingTour } from '@/hooks/useOnboardingTour';
 import { CREATE_TOUR_ID, getCreateTourSteps } from '@/utils/tours';
@@ -229,6 +231,117 @@ const AutosaveIndicator = ({ status }: { status: SyncStatus }) => {
   );
 };
 
+// Real-time "who else has this diagram open right now" indicator — the
+// server already broadcasts this (collabSocketClient.js's 'presence' event,
+// wired up as collabViewers below), it just never had anywhere to render
+// until now. An overlapping avatar stack, same visual language as
+// ShareModal's collaborator row (same Avatar component), capped at
+// PRESENCE_STACK_MAX with a "+N" tile for the rest — an unbounded row would
+// blow out the toolbar's width the moment more than a couple of people join.
+//
+// Each avatar gets a colored ring for its permission level rather than
+// touching Avatar itself (that component's own fill color already encodes
+// *who* someone is, by hashing their id — this is a separate signal, *what
+// they can do here* — green for anyone who can actually edit, amber for the
+// owner, gray for view-only) — same green SaveIcon already uses elsewhere
+// in this toolbar for "editing", so it reads consistently.
+const PRESENCE_STACK_MAX = 4;
+const PRESENCE_RING_COLOR: Record<string, string> = {
+  owner: '#f59e0b',
+  edit_share: '#10b981',
+  edit: '#10b981',
+  view: '#94a3b8',
+};
+
+const PresenceStack = ({
+  viewers,
+  size = 28,
+}: {
+  viewers: { userId: string; userName: string; permission: string }[];
+  size?: number;
+}) => {
+  const shown = viewers.slice(0, PRESENCE_STACK_MAX);
+  const overflow = viewers.length - shown.length;
+  const ringSize = size + 6;
+  const overlap = -Math.round(ringSize * 0.35);
+
+  return (
+    <View style={styles.presenceStack}>
+      {shown.map((v, i) => (
+        <View
+          key={v.userId}
+          style={[
+            styles.presenceRing,
+            {
+              width: ringSize,
+              height: ringSize,
+              borderRadius: ringSize / 2,
+              borderColor: PRESENCE_RING_COLOR[v.permission] ?? PRESENCE_RING_COLOR.view,
+            },
+            i > 0 && { marginLeft: overlap },
+          ]}
+        >
+          <Avatar name={v.userName} email={v.userId} size={size} />
+        </View>
+      ))}
+      {overflow > 0 && (
+        <View
+          style={[
+            styles.presenceOverflow,
+            { width: ringSize, height: ringSize, borderRadius: ringSize / 2, marginLeft: overlap },
+          ]}
+        >
+          <Text style={[styles.presenceOverflowText, { fontSize: size * 0.38 }]}>+{overflow}</Text>
+        </View>
+      )}
+    </View>
+  );
+};
+
+// The "(avatar) Name joined/left" toast itself — up to 3 avatars (same
+// permission-ring color coding as PresenceStack, so the two visually agree)
+// plus a name summary that reads naturally whether it's one person or a
+// handful at once ("Alice joined" / "Alice and Bob joined" / "Alice, Bob
+// and 2 others joined").
+const PresenceToastBanner = ({
+  toast,
+}: {
+  toast: { people: { userId: string; userName: string; permission: string }[]; action: 'joined' | 'left' };
+}) => {
+  const { people, action } = toast;
+  const shown = people.slice(0, 3);
+  const restCount = people.length - shown.length;
+  const names =
+    people.length <= 2
+      ? shown.map((p) => p.userName).join(' and ')
+      : `${shown.map((p) => p.userName).join(', ')} and ${restCount} other${restCount === 1 ? '' : 's'}`;
+
+  return (
+    <View style={styles.presenceToast} pointerEvents="none">
+      <View style={styles.presenceToastAvatars}>
+        {shown.map((p, i) => (
+          <View
+            key={p.userId}
+            style={[
+              styles.presenceRing,
+              {
+                width: 24,
+                height: 24,
+                borderRadius: 12,
+                borderColor: PRESENCE_RING_COLOR[p.permission] ?? PRESENCE_RING_COLOR.view,
+              },
+              i > 0 && { marginLeft: -8 },
+            ]}
+          >
+            <Avatar name={p.userName} email={p.userId} size={20} />
+          </View>
+        ))}
+      </View>
+      <Text style={styles.presenceToastText}>{names} {action}</Text>
+    </View>
+  );
+};
+
 // ─── MAIN COMPONENT ──────────────────────────────────────────────────────────
 
 interface Page {
@@ -238,124 +351,6 @@ interface Page {
 }
 
 const generatePageId = () => `page_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`;
-
-// Prints `bodyHtml` on the current top-level window — not window.open()
-// (blocked/kicks a standalone PWA out to Safari on iOS) and not an iframe's
-// contentWindow.print() (tried that first: Android Chrome doesn't scope
-// printing to a sub-frame at all — it silently prints the top-level page
-// regardless of the iframe's size/visibility/content).
-//
-// A prior version of this tried to physically detach the rest of the page's
-// DOM instead of hiding it, on a hunch that Android's print preview wasn't
-// honoring @media print — that broke worse: React still owns those nodes
-// (including this very Print modal's own portal), so ripping them out from
-// under it mid-render threw a real `removeChild` crash.
-//
-// The @media-print-only version that replaced that (hiding everything via
-// `body > *:not(#igraph-print-root) { display: none }` scoped inside
-// `@media print`) had the same root-cause bug as the iframe attempt: on
-// this Android Chrome build, whatever snapshot the print/PDF pipeline
-// renders from doesn't honor a stylesheet rule inserted this close to the
-// print() call.
-//
-// The version after that swapped the stylesheet for an always-on, fixed,
-// viewport-covering, max-z-index overlay — no `@media print` gate to skip,
-// just whatever was already on screen. Still wrong output: the preview
-// kept showing the live editor underneath. Root cause is `position: fixed`
-// itself — this print pipeline's paginated layout pass doesn't reliably
-// place fixed-position content into the printed page; a fixed element
-// appended last in the DOM instead behaves like it's anchored past the end
-// of the (much taller, scrollable) app content, so it never lands on the
-// one page that gets rendered.
-//
-// This version drops fixed positioning entirely. Every real child of
-// <body> (the RN Web app root, any portaled modals) gets `display: none`
-// set directly as an inline style — not a stylesheet rule, so there's no
-// separate resource for the print pipeline to snapshot stale — and the
-// print root is a plain, static, normal-flow block. With everything else
-// hidden and nothing relying on fixed/absolute placement, whatever layout
-// pass the pipeline runs has only one thing left to paint.
-function printHtmlInPage(bodyHtml: string, documentTitle: string): boolean {
-  if (typeof document === 'undefined' || typeof window === 'undefined') return false;
-
-  let style = document.getElementById('igraph-print-style') as HTMLStyleElement | null;
-  if (!style) {
-    style = document.createElement('style');
-    style.id = 'igraph-print-style';
-    document.head.appendChild(style);
-  }
-  style.textContent = `
-    #igraph-print-root {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      min-height: 100vh;
-      background: #fff;
-      padding: 0.4in;
-      box-sizing: border-box;
-    }
-    #igraph-print-root .print-name { position: absolute; top: 0.2in; left: 0.2in; font: 600 13px Helvetica, Arial, sans-serif; color: #1a1f36; }
-    #igraph-print-root .print-title { position: absolute; top: 0.2in; left: 0; right: 0; margin: 0; font: 600 20px Helvetica, Arial, sans-serif; color: #1a1f36; text-align: center; }
-    #igraph-print-root img { max-width: 100%; max-height: 90vh; object-fit: contain; }
-    @media print { @page { margin: 0; } }
-  `;
-
-  let root = document.getElementById('igraph-print-root');
-  if (!root) {
-    root = document.createElement('div');
-    root.id = 'igraph-print-root';
-    document.body.appendChild(root);
-  }
-  root.innerHTML = bodyHtml;
-
-  // Hide every other real element under <body> imperatively — `!important`
-  // so it wins over whatever class-based display value RN Web already gave
-  // it — instead of leaning on a stylesheet or @media rule this pipeline
-  // has been shown not to pick up reliably.
-  const hiddenSiblings: { el: HTMLElement; display: string }[] = [];
-  Array.from(document.body.children).forEach((child) => {
-    if (child === root) return;
-    const el = child as HTMLElement;
-    hiddenSiblings.push({ el, display: el.style.display });
-    el.style.setProperty('display', 'none', 'important');
-  });
-
-  const originalTitle = document.title;
-  document.title = documentTitle;
-
-  const cleanup = () => {
-    root!.remove();
-    style!.remove();
-    hiddenSiblings.forEach(({ el, display }) => {
-      if (display) {
-        el.style.setProperty('display', display);
-      } else {
-        el.style.removeProperty('display');
-      }
-    });
-    document.title = originalTitle;
-    window.removeEventListener('afterprint', cleanup);
-  };
-
-  window.addEventListener('afterprint', cleanup);
-  // 'afterprint' is the normal signal the dialog closed (Print or Cancel),
-  // but some mobile browsers don't fire it reliably, so a timeout
-  // backstops the cleanup either way.
-  setTimeout(cleanup, 60000);
-
-  // Force a synchronous layout read before printing so the browser can't
-  // defer applying the hidden/visible split — nothing left to race against
-  // but this actually being painted.
-  void root.offsetHeight;
-
-  // Two rAFs (not setTimeout) — long enough for the browser to paint the
-  // injected content, short enough to stay inside the same user-gesture
-  // activation window print() needs on stricter mobile browsers.
-  requestAnimationFrame(() => requestAnimationFrame(() => window.print()));
-
-  return true;
-}
 
 // Printing always hands off to window.print()'s native dialog — the OS's
 // own UI, not this page's, so it already lists every real printer installed
@@ -427,7 +422,27 @@ export default function CreateScreen() {
   // (unreliable on mobile, which has no drag-and-drop), the next two shapes
   // the user taps become its source/target directly. See handleAddShape and
   // handleCanvasSelectionChange.
-  const [pendingConnector, setPendingConnector] = useState<{ shapeId: string; sourceCell: any } | null>(null);
+  const [pendingConnector, setPendingConnectorState] = useState<{ shapeId: string; sourceCell: any } | null>(null);
+  // Mirrors pendingConnector, updated synchronously (state updates from
+  // inside an event handler don't take effect until React re-renders).
+  // handleCanvasSelectionChange needs the *current* value mid-callback:
+  // graph.setSelectionCell(edge) at the end of a completed connection fires
+  // the graph's own selection-change event synchronously, re-entering this
+  // same handler before the setPendingConnector(null) a few lines above it
+  // has actually propagated — reading the stale `pendingConnector` state
+  // there still saw the old, non-null connector, so the re-entrant call
+  // treated the edge it had just created as the "second shape" of a new
+  // connection and inserted another edge onto it, which selected *that*
+  // edge and re-entered again — an unbounded chain, each pass exporting a
+  // larger and larger XML, that only stopped when the tab ran out of
+  // memory and crashed. Every setPendingConnector call site below goes
+  // through updatePendingConnector instead so the ref and state can never
+  // disagree.
+  const pendingConnectorRef = useRef<{ shapeId: string; sourceCell: any } | null>(null);
+  const updatePendingConnector = (next: { shapeId: string; sourceCell: any } | null) => {
+    pendingConnectorRef.current = next;
+    setPendingConnectorState(next);
+  };
   // Mobile-only: Text/Draw/Comment double as direct entry points into the
   // Properties bottom sheet's Text/Style/Arrange tabs (those three buttons
   // had no real tool behind them before — just a visual active state — so
@@ -489,6 +504,10 @@ export default function CreateScreen() {
   // ─── Print state ─────────────────────────────────────────────────────────────
   const [showPrintModal, setShowPrintModal] = useState(false);
   const [printPreviewUrl, setPrintPreviewUrl] = useState<string | null>(null);
+  // Pixel size of the canvas printPreviewUrl was rendered from — needed to
+  // build a correctly-proportioned PDF page in executePrint (a data URL
+  // string alone doesn't carry its own dimensions).
+  const printCanvasSizeRef = useRef<{ width: number; height: number } | null>(null);
   const [isPreparingPrint, setIsPreparingPrint] = useState(false);
   // Optional name (top-left corner) and title (centered) overlaid on the
   // printed page — set via the "Edit" row in the print settings panel.
@@ -545,6 +564,15 @@ export default function CreateScreen() {
   // Who else currently has this diagram open — driven by the collab-socket
   // 'presence' event (see the join effect further down).
   const [collabViewers, setCollabViewers] = useState<{ userId: string; userName: string; permission: string }[]>([]);
+  // Ambient "(avatar) X joined"/"left" banner — set by the presence-diffing
+  // logic in the join effect further down, auto-cleared by
+  // presenceToastTimerRef. Keeps each person's permission (not just name) so
+  // the toast's avatar ring can match PresenceStack's own color coding.
+  const [presenceToast, setPresenceToast] = useState<{
+    people: { userId: string; userName: string; permission: string }[];
+    action: 'joined' | 'left';
+  } | null>(null);
+  const presenceToastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const collabSendTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Last diagramId this instance has actually hydrated from the backend, so a
   // re-render doesn't re-fetch, but switching to a *different* diagramId does.
@@ -620,9 +648,45 @@ export default function CreateScreen() {
     if (!activeDiagramId || !isGraphReady) return;
     let cancelled = false;
 
+    // Populated below before any 'diagram-change' can arrive — used by
+    // onRemoteChange to recognize (and drop) an echo of this same client's
+    // own edit. The server's socket.to(room).emit already excludes the
+    // sending *socket*, but not a second socket for the same user/tab (a
+    // still-connected previous session that hasn't timed out yet, a second
+    // tab, a reconnect after a drop) — either of those receiving its own
+    // broadcast back and re-applying it via loadXml/handleGraphChange is
+    // exactly the shape of an unbounded local<->remote ping-pong, each
+    // round only growing the XML further. fromUserId already rides on
+    // every 'diagram-change' payload (collabSocketClient.js) specifically
+    // for this; it was simply never read here.
+    let myUserId: string | null = null;
+    authService.getCurrentUserId().then((uid) => {
+      if (!cancelled) myUserId = uid;
+    });
+
+    // Diffs each presence update against the previous one to announce who
+    // just joined/left — reset per room-join (a new Map each time this
+    // effect re-runs), not persisted across switching diagrams. The first
+    // presence update after joining is the *existing* roster, not people
+    // "joining" — hasSeenInitialPresence skips announcing that one so
+    // opening a diagram doesn't immediately claim everyone already there
+    // just joined.
+    const knownViewers = new Map<string, { userName: string; permission: string }>();
+    let hasSeenInitialPresence = false;
+
+    const showPresenceToast = (
+      people: { userId: string; userName: string; permission: string }[],
+      action: 'joined' | 'left',
+    ) => {
+      if (presenceToastTimerRef.current) clearTimeout(presenceToastTimerRef.current);
+      setPresenceToast({ people, action });
+      presenceToastTimerRef.current = setTimeout(() => setPresenceToast(null), 3000);
+    };
+
     joinDiagram(activeDiagramId, {
-      onRemoteChange: (xml: string) => {
+      onRemoteChange: (xml: string, fromUserId?: string) => {
         if (cancelled || !xml) return;
+        if (fromUserId && myUserId && fromUserId === myUserId) return;
         isHydratingRef.current = true;
         diagramCanvasRef.current?.loadXml(xml);
         diagramCanvasRef.current?.refresh();
@@ -632,7 +696,37 @@ export default function CreateScreen() {
         if (pageId) pageXmlCache.current.set(pageId, xml);
       },
       onPresence: (viewers: { userId: string; userName: string; permission: string }[]) => {
-        if (!cancelled) setCollabViewers(viewers);
+        if (cancelled) return;
+        // Excludes this same user's own socket — the presence roster is
+        // meant to answer "who ELSE is here right now", the same way no
+        // collaborative editor shows your own avatar back to you.
+        const others = viewers.filter((v) => v.userId !== myUserId);
+
+        if (hasSeenInitialPresence) {
+          const currentIds = new Set(others.map((v) => v.userId));
+          const joined = others.filter((v) => !knownViewers.has(v.userId));
+          const left: { userId: string; userName: string; permission: string }[] = [];
+          knownViewers.forEach((info, userId) => {
+            if (!currentIds.has(userId)) left.push({ userId, ...info });
+          });
+          // Belt-and-suspenders alongside the server's own cell-select(null)
+          // broadcast on disconnect/leave-diagram — cheap, and covers the
+          // rare case that broadcast is missed (e.g. a hard connection drop
+          // the server hasn't noticed yet, but presence already reflects).
+          left.forEach((v) => diagramCanvasRef.current?.setRemoteSelection(v.userId, null, ''));
+
+          if (joined.length && !left.length) {
+            showPresenceToast(joined, 'joined');
+          } else if (left.length && !joined.length) {
+            showPresenceToast(left, 'left');
+          }
+        } else {
+          hasSeenInitialPresence = true;
+        }
+
+        knownViewers.clear();
+        others.forEach((v) => knownViewers.set(v.userId, { userName: v.userName, permission: v.permission }));
+        setCollabViewers(others);
       },
       // Pushed the instant the owner changes this account's access level (or
       // approves its access request) — without this, a tab already open on
@@ -640,6 +734,14 @@ export default function CreateScreen() {
       // read-only, still hiding Share) until the user happens to reload.
       onPermissionChange: (permission: 'owner' | 'edit_share' | 'edit' | 'view') => {
         if (!cancelled) setMyAccessLevel(permission);
+      },
+      // Live "who's pointing at what" — a remote collaborator's own
+      // selection, relayed by the server (see collabSocket.js's cell-select
+      // handler). Colored by that same person's userId-hashed color, so it
+      // visually matches their avatar in the toolbar/toast.
+      onCellSelect: (cellId: string | null, fromUserId: string) => {
+        if (cancelled || !fromUserId || fromUserId === myUserId) return;
+        diagramCanvasRef.current?.setRemoteSelection(fromUserId, cellId, getAvatarColor(fromUserId));
       },
     }).then((result) => {
       if (!cancelled && !result.ok) {
@@ -651,6 +753,9 @@ export default function CreateScreen() {
       cancelled = true;
       leaveDiagram();
       setCollabViewers([]);
+      diagramCanvasRef.current?.clearAllRemoteSelections();
+      if (presenceToastTimerRef.current) clearTimeout(presenceToastTimerRef.current);
+      setPresenceToast(null);
     };
   }, [activeDiagramId, isGraphReady]);
 
@@ -1327,10 +1432,20 @@ export default function CreateScreen() {
   // the mode silently active with no visible way out besides the banner's
   // own Cancel button.
   const handleCanvasSelectionChange = (cell: any) => {
-    if (!pendingConnector) return;
+    // Broadcasts this selection to collaborators regardless of what the
+    // rest of this handler does below (the mobile tap-to-connect flow) —
+    // every user's local selection should update their live highlight
+    // color on everyone else's canvas independent of that unrelated
+    // gesture. No-ops server-side if this diagram was never saved/joined.
+    if (currentDiagramIdRef.current) {
+      sendCellSelect(currentDiagramIdRef.current, cell ? cell.getId() : null);
+    }
+
+    const current = pendingConnectorRef.current;
+    if (!current) return;
 
     if (!cell) {
-      setPendingConnector(null);
+      updatePendingConnector(null);
       return;
     }
     // Edges are valid taps too, not just shapes — Fishbone's spine in
@@ -1342,35 +1457,82 @@ export default function CreateScreen() {
     // cell is set on both ends, so an edge's own less-meaningful x/y/width/
     // height there is harmless.
 
-    if (!pendingConnector.sourceCell) {
-      setPendingConnector({ ...pendingConnector, sourceCell: cell });
+    if (!current.sourceCell) {
+      updatePendingConnector({ ...current, sourceCell: cell });
       return;
     }
-    if (cell === pendingConnector.sourceCell) return; // same shape tapped twice — keep waiting for a different one
+    if (cell === current.sourceCell) return; // same shape tapped twice — keep waiting for a different one
 
     const graph = graphInstance;
-    if (!graph) { setPendingConnector(null); return; }
+    if (!graph) { updatePendingConnector(null); return; }
 
-    const styleKey = IGRAPH_ID_STYLE_MAP[pendingConnector.shapeId] ?? 'igraph.rectangle';
+    const styleKey = IGRAPH_ID_STYLE_MAP[current.shapeId] ?? 'igraph.rectangle';
     const styleObject = {
       ...getShapeStyle(styleKey),
       fontColor: '#1a1f36',
       fontSize: 12,
     };
 
-    const sourceGeo = pendingConnector.sourceCell.getGeometry();
+    const sourceGeo = current.sourceCell.getGeometry();
     const targetGeo = cell.getGeometry();
     const startPoint = { x: sourceGeo.x + sourceGeo.width / 2, y: sourceGeo.y + sourceGeo.height / 2 };
     const endPoint = { x: targetGeo.x + targetGeo.width / 2, y: targetGeo.y + targetGeo.height / 2 };
 
-    const edge = graph.insertEdge(null, null, '', pendingConnector.sourceCell, cell, styleObject);
+    const edge = graph.insertEdge(null, null, '', current.sourceCell, cell, styleObject);
     const geometry = new Geometry(0, 0, 0, 0);
     geometry.setTerminalPoint(new Point(startPoint.x, startPoint.y), true);
     geometry.setTerminalPoint(new Point(endPoint.x, endPoint.y), false);
     graph.getDataModel().setGeometry(edge, geometry);
-    tagShapeRole(edge, pendingConnector.shapeId);
+    tagShapeRole(edge, current.shapeId);
 
-    setPendingConnector(null);
+    // FDD hierarchy link (a plain Connector between two Function boxes,
+    // not Control/Mechanism/Interface — those keep their normal straight
+    // line since they mean something specific, not "parent of"): route it
+    // as an org-chart elbow — down out of the parent's bottom, across,
+    // into the child's top — instead of the default straight diagonal.
+    // FDD has no connector of its own for a hierarchy link (see
+    // isAttachmentEdge in validateFDD), so this is the only place such an
+    // edge gets created; fixed top/bottom exit points are what make it
+    // read as a tree branch rather than an arbitrary elbow.
+    if (
+      current.shapeId !== 'control' && current.shapeId !== 'mechanism' && current.shapeId !== 'fdd-interface' &&
+      getShapeRole(current.sourceCell) === 'function' && getShapeRole(cell) === 'function'
+    ) {
+      const { exitX, exitY, entryX, entryY } = computeFddEntryPoint(sourceGeo, targetGeo);
+      edge.setStyle({
+        ...styleObject,
+        edgeStyle: 'orthogonalEdgeStyle',
+        exitX, exitY, exitPerimeter: false,
+        entryX, entryY, entryPerimeter: false,
+        rounded: false,
+      });
+    }
+
+    // Flowchart's own connector (Flow Line): route it in right angles too,
+    // the standard convention for a flowchart (straight diagonal lines
+    // across a multi-branch flow read as clutter, especially once a loop
+    // crosses back over other steps). Unlike the FDD case above, there's no
+    // "stacked list vs. row" distinction here, and no fixed exit/entry
+    // point — floating perimeter connections plus orthogonalEdgeStyle is
+    // enough to get a clean step route between whichever two points on the
+    // shapes are actually closest.
+    if (current.shapeId === 'flow-line') {
+      edge.setStyle({
+        ...styleObject,
+        edgeStyle: 'orthogonalEdgeStyle',
+        rounded: false,
+      });
+    }
+
+    // Synchronous, not just the state setter — graph.setSelectionCell below
+    // fires the graph's own selection-change event immediately (same call
+    // stack), re-entering this handler before React would otherwise have
+    // applied the update. pendingConnectorRef.current is already null by
+    // then, so that re-entrant call's guard above correctly stops it
+    // instead of mistaking the edge just created for a new tap-to-connect
+    // target (see updatePendingConnector's own comment for the failure
+    // mode this prevents).
+    updatePendingConnector(null);
     graph.setSelectionCell(edge);
     setTimeout(focusGraph, 50);
   };
@@ -1388,7 +1550,7 @@ export default function CreateScreen() {
     // See handleCanvasSelectionChange for the tap-picking half of this.
     if (CONNECTOR_SHAPE_IDS.has(shapeId) && !SEQUENCE_MESSAGE_SHAPE_IDS.has(shapeId)) {
       graphInstance.clearSelection();
-      setPendingConnector({ shapeId, sourceCell: null });
+      updatePendingConnector({ shapeId, sourceCell: null });
       return;
     }
 
@@ -1440,7 +1602,14 @@ export default function CreateScreen() {
         };
 
         const dropY = y + h / 2;
-        const found = findSequenceMessageEndpoints(graph, x, dropY);
+        // x above is this shape's top-left corner (centerX - w/2, see
+        // above), not its center — findSequenceMessageEndpoints needs the
+        // center to correctly decide which side of it counts as "source"
+        // vs "target". Passing the raw left edge biased the search a full
+        // half-width too far left, which for a shape this narrow (Sequence
+        // messages default to 80px) was often enough to miss a target
+        // sitting just to the right entirely.
+        const found = findSequenceMessageEndpoints(graph, x + w / 2, dropY);
         const sourceCell = found.source;
         const targetCell = found.target;
         const sourceGeo = sourceCell?.getGeometry();
@@ -1480,6 +1649,16 @@ export default function CreateScreen() {
       }
       tagShapeRole(cell, shapeId);
 
+      // A Fork/Join bar needs its standard set of real, draggable stub
+      // arrows wired up here too — this tap-to-add flow is a completely
+      // separate insertion path from DiagramCanvas.tsx's handleDrop (no
+      // drag-and-drop on mobile), so it never went through
+      // insertForkJoinStubs on its own. Without this, a Fork/Join dropped
+      // on mobile was just a bare bar with no arrows at all.
+      if (shapeId === 'act-fork' || shapeId === 'act-join') {
+        insertForkJoinStubs(graph, cell, shapeId);
+      }
+
       graph.setSelectionCell(cell);
       console.log(`✅ Added "${shapeId}" as "${styleKey}" at (${x}, ${y})`);
       resolveTourWait('create-shape-drop');
@@ -1502,17 +1681,6 @@ export default function CreateScreen() {
   // drawing. Building the SVG straight from the graph model (via maxGraph's own
   // ImageExport + SvgCanvas2D, sized from graph.getGraphBounds()) always
   // captures the full diagram content, regardless of current pan/zoom.
-
-  // The print title (see PrintModal's "Edit" row) gets written straight into
-  // a hidden iframe's document.write() call in executePrint — escape it so a
-  // title containing '<', '&', etc. can't break out of the surrounding markup.
-  function escapeHtml(value: string): string {
-    return value
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;');
-  }
 
   // Shared scratch canvas for measuring text width during raster export's
   // manual word-wrap below — cheaper than creating one per label.
@@ -2232,20 +2400,19 @@ export default function CreateScreen() {
       const canvas = await renderDiagramToCanvas(graphInstance, format === 'jpg' ? 2 : 3);
 
       if (format === 'pdf') {
-        const dataUrl = canvas.toDataURL('image/png');
-        const pdfBodyHtml = `
-          <h1 class="print-title">${escapeHtml(name)}</h1>
-          <img src="${dataUrl}" alt="Diagram" />
-        `;
-
-        if (!printHtmlInPage(pdfBodyHtml, name)) {
-          // No document access (extremely rare) — fall back to a direct file download.
-          downloadFile(pdfBodyHtml, `${name}.pdf.html`, 'text/html');
-          notify(
-            'PDF Export',
-            'The PDF dialog will open. Please select "Save as PDF" in the print dialog.'
-          );
-        }
+        // A real PDF file, generated client-side — no print dialog involved.
+        // Page size matches the rendered canvas exactly (unit 'px' + an
+        // explicit [width, height] format) so the diagram fills the one
+        // page at full resolution instead of being scaled/cropped to fit a
+        // fixed paper size.
+        const pdf = new jsPDF({
+          orientation: canvas.width >= canvas.height ? 'landscape' : 'portrait',
+          unit: 'px',
+          format: [canvas.width, canvas.height],
+        });
+        pdf.addImage(canvas.toDataURL('image/png'), 'PNG', 0, 0, canvas.width, canvas.height);
+        downloadFile(pdf.output('blob'), `${name}.pdf`, 'application/pdf');
+        notify('Success', 'PDF diagram downloaded successfully!');
         setIsDownloading(false);
         return;
       }
@@ -2291,6 +2458,7 @@ export default function CreateScreen() {
     renderDiagramToCanvas(graphInstance, 2)
       .then((canvas) => {
         const dataUrl = canvas.toDataURL('image/png');
+        printCanvasSizeRef.current = { width: canvas.width, height: canvas.height };
         setPrintPreviewUrl(dataUrl);
         setIsPreparingPrint(false);
         setShowPrintModal(true);
@@ -2317,30 +2485,53 @@ export default function CreateScreen() {
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [handlePrint]);
 
-  // Paper size is stored as e.g. "8.5in" / "297mm" (see PAPER_SIZES) —
-  // normalized to inches since that's the one unit both the @page CSS below
-  // and jsPDF's page-size math can share.
   // Hands off to the browser's native print dialog — the OS's own UI, not
   // anything this page renders — so its printer list is already accurate
   // and up to date with whatever's actually installed on the machine.
+  //
+  // This used to build a PDF (the same jsPDF path Download > PDF still uses)
+  // and open that blob in a new tab, relying on a delayed printWindow.print()
+  // to fire the system dialog once it loaded. On Android Chrome that blob
+  // lands in Chrome's own built-in PDF viewer — a separate, semi-native
+  // surface where a script-triggered .print() call from the opener routinely
+  // does nothing, so the user just saw the PDF sitting there with no print
+  // sheet. Handing the image off to app/print.tsx instead — a real page that
+  // calls window.print() on itself from its own load event — is what
+  // actually turns into the OS print dialog on every mobile browser that's
+  // been tried. (Injecting print content into *this* live page and hiding
+  // everything else — inline display:none, an iframe's own
+  // contentWindow.print(), a full-viewport overlay, a scoped `@media print`
+  // rule — was tried before that and failed for a different reason: Android
+  // Chrome's print pipeline snapshots the DOM as it looked *before* those
+  // late changes took effect. A dedicated route sidesteps that too, since it
+  // loads already in its final, print-ready state.)
   const executePrint = () => {
     if (!printPreviewUrl) return;
+    const size = printCanvasSizeRef.current;
+    if (!size) return;
 
-    const nameHtml = printName.trim() ? `<div class="print-name">${escapeHtml(printName.trim())}</div>` : '';
-    const titleHtml = printTitle.trim() ? `<h1 class="print-title">${escapeHtml(printTitle.trim())}</h1>` : '';
-    const bodyHtml = `
-      ${nameHtml}
-      ${titleHtml}
-      <img src="${printPreviewUrl}" alt="Diagram" />
-    `;
-
-    // Close the modal before touching the DOM ourselves, not after — lets
-    // React's own unmount of this modal's portal happen on its own, instead
-    // of interleaving with our injected print content.
+    // Close the modal before touching anything else — lets React's own
+    // unmount of this modal's portal happen on its own, instead of
+    // interleaving with the window.open() below.
     closePrintModal();
 
-    if (!printHtmlInPage(bodyHtml, printTitle.trim() || printName.trim() || diagramName || 'Diagram')) {
-      Alert.alert('Error', 'Could not prepare the print preview.');
+    const payload: DiagramPrintPayload = {
+      image: printPreviewUrl,
+      width: size.width,
+      height: size.height,
+      name: printName,
+      title: printTitle,
+    };
+
+    // window.open() clones sessionStorage into the new tab, so this is
+    // readable from app/print.tsx as soon as it mounts — see that file's own
+    // comment on PRINT_PAYLOAD_KEY. A data-URL PNG is easily too big for a
+    // URL/query string, which rules out passing it as a route param instead.
+    sessionStorage.setItem('igraphit:print-payload', JSON.stringify(payload));
+
+    const printWindow = window.open('/print', '_blank');
+    if (!printWindow) {
+      Alert.alert('Error', 'Could not open the print preview. Please allow pop-ups for this site and try again.');
     }
   };
 
@@ -2556,6 +2747,8 @@ export default function CreateScreen() {
       <SafeAreaView style={styles.mobileContainer}>
         <StatusBar barStyle="dark-content" backgroundColor="#ffffff" />
 
+        {presenceToast && <PresenceToastBanner toast={presenceToast} />}
+
         {/* ─── TOP BAR ─────────────────────────────────────────────────────── */}
         <View style={styles.mobileTopBar}>
           <View style={styles.mobileTopBarLeft}>
@@ -2594,6 +2787,9 @@ export default function CreateScreen() {
           )}
 
           <View style={styles.mobileTopBarRight}>
+            {/* ─── PRESENCE (who else has this diagram open) ─────────────────── */}
+            {collabViewers.length > 0 && <PresenceStack viewers={collabViewers} size={24} />}
+
             {/* ─── SHARE BUTTON ────────────────────────────────────────────── */}
             {canShareDiagram && (
             <TouchableOpacity
@@ -2673,7 +2869,7 @@ export default function CreateScreen() {
                   {pendingConnector.sourceCell ? 'Tap the second shape' : 'Tap the first shape'}
                 </Text>
                 <TouchableOpacity
-                  onPress={() => setPendingConnector(null)}
+                  onPress={() => updatePendingConnector(null)}
                   style={styles.connectHintCancelBtn}
                   hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                 >
@@ -2887,6 +3083,8 @@ export default function CreateScreen() {
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="dark-content" />
 
+      {presenceToast && <PresenceToastBanner toast={presenceToast} />}
+
       <View style={styles.container}>
         <View style={styles.navbar}>
           <View style={styles.navbarLeft}>
@@ -2919,6 +3117,9 @@ export default function CreateScreen() {
             <AutosaveIndicator status={syncStatus} />
           </View>
           <View style={styles.navbarRight}>
+            {/* ─── PRESENCE (who else has this diagram open) ─────────────────── */}
+            {collabViewers.length > 0 && <PresenceStack viewers={collabViewers} size={28} />}
+
             {/* ─── SHARE BUTTON ────────────────────────────────────────────── */}
             {canShareDiagram && (
             <TouchableOpacity
@@ -3038,7 +3239,7 @@ export default function CreateScreen() {
                     {pendingConnector.sourceCell ? 'Click the second shape' : 'Click the first shape'}
                   </Text>
                   <TouchableOpacity
-                    onPress={() => setPendingConnector(null)}
+                    onPress={() => updatePendingConnector(null)}
                     style={styles.connectHintCancelBtn}
                     hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                   >
@@ -3674,6 +3875,58 @@ const styles = StyleSheet.create({
     color: '#4c6fff',
     textTransform: 'uppercase',
     letterSpacing: 0.3,
+  },
+  presenceStack: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginRight: 10,
+  },
+  presenceOverflow: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#94a3b8',
+    borderWidth: 2,
+    borderColor: '#ffffff',
+  },
+  presenceOverflowText: {
+    color: '#ffffff',
+    fontWeight: '700',
+  },
+  presenceRing: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2,
+  },
+  presenceToast: {
+    position: 'absolute',
+    top: Platform.OS === 'ios' ? 54 : 12,
+    alignSelf: 'center',
+    zIndex: 1000,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#1a1f36',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 999,
+    ...Platform.select({
+      web: { boxShadow: '0 4px 16px rgba(0,0,0,0.25)' } as any,
+      default: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.25,
+        shadowRadius: 8,
+        elevation: 6,
+      },
+    }),
+  },
+  presenceToastAvatars: {
+    flexDirection: 'row',
+    marginRight: 8,
+  },
+  presenceToastText: {
+    color: '#ffffff',
+    fontSize: 13,
+    fontWeight: '600',
   },
   viewOnlyBannerDesktop: {
     justifyContent: 'space-between',

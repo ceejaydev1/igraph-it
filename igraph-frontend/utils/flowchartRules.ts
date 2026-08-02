@@ -1,5 +1,6 @@
 import type { Cell, Graph } from '@maxgraph/core';
-import { isConnectorCell, getShapeIdFromStyle } from '@/constants/shapes';
+import { isConnectorCell, getShapeIdFromStyle, getShapeDefinitionById } from '@/constants/shapes';
+import { SCHEMATIC_PIN_DEFINITIONS } from '@/components/maxgraph-custom-shapes';
 
 // Desktop-only diagram validation, checked against the live cell model on
 // every change, for every diagram type the app supports (see validateDiagram
@@ -61,11 +62,56 @@ export function getShapeRole(cell: Cell): string | undefined {
   return shapeRoles.get(cell) ?? getShapeIdFromStyle(cell);
 }
 
+// Shared by DiagramCanvas.tsx (drag-connect) and create.tsx (tap-to-connect)
+// so a Functional Decomposition hierarchy link picks the same entry side
+// however it was drawn. A child placed roughly straight below its parent —
+// the case when several children are stacked in a column, e.g. sub-steps
+// under one process — reads as an outline-style list, so it enters the
+// parent's trunk from the side (left if the child sits to the right,
+// right if to the left) rather than the top. A child offset well to the
+// side (siblings spread out in a row) keeps the classic org-chart look,
+// entering the top. "Roughly below" is judged by how much the two centers
+// overlap horizontally relative to the parent's own width — comfortably
+// wider than a same-column child's near-zero offset, comfortably narrower
+// than a full sibling-column's spacing.
+export function computeFddEntryPoint(
+  sourceGeo: { x: number; y: number; width: number; height: number } | null | undefined,
+  targetGeo: { x: number; y: number; width: number; height: number } | null | undefined,
+): { exitX: number; exitY: number; entryX: number; entryY: number } {
+  const rowStyle = { exitX: 0.5, exitY: 1, entryX: 0.5, entryY: 0 };
+  if (!sourceGeo || !targetGeo) return rowStyle;
+  const sourceCenterX = sourceGeo.x + sourceGeo.width / 2;
+  const targetCenterX = targetGeo.x + targetGeo.width / 2;
+  // A deliberately tight band (a third of the parent's own width, ~40px
+  // for the usual 120px box) rather than a full box-width: a row of 3+
+  // children centered under one parent inevitably puts the *middle*
+  // child's center within a full box-width of the parent's — that's not
+  // "stacked", it's just a centered row, and a looser band would wrongly
+  // flip that one connector to the side while its siblings stay on top.
+  const nearlyStacked = Math.abs(sourceCenterX - targetCenterX) < sourceGeo.width / 3;
+  if (!nearlyStacked) return rowStyle;
+  // Exiting from the same side as the entry (rather than the parent's
+  // bottom-center, as the row style does) keeps the whole stack's trunk
+  // running straight down one side with a short tick into each child —
+  // exiting from bottom-center instead left the router adding a stray
+  // extra jog around the parent's own box for whichever child sat closest
+  // to it, since bottom-center and a same-column child's left edge aren't
+  // actually aligned.
+  const onRight = targetCenterX >= sourceCenterX;
+  return { exitX: onRight ? 0 : 1, exitY: 1, entryX: onRight ? 0 : 1, entryY: 0.5 };
+}
+
 // ─── Shape roles by structural expectation ───────────────────────────────────
 const BRANCHING_ROLES = new Set(['decision']);
 // Shapes that represent a single jump point — a start/end, or a page
 // connector — and so should only ever be entered OR exited, never both.
 const SINGLE_JUNCTION_ROLES = new Set(['terminator', 'on-page-connector', 'off-page-connector']);
+// The circled-X Merge shape: several flows converging into one (or,
+// symmetrically, one splitting back out) is exactly what it's for, so it's
+// exempt from the "only Decision shapes should branch" warning below —
+// unlike Decision, though, it doesn't require 2+ outgoing paths, since its
+// normal case is many-in/one-out.
+const FLEXIBLE_FANOUT_ROLES = new Set(['merge-junction']);
 // Shapes that legitimately float free of the flow as commentary, not steps.
 const FREE_FLOATING_ROLES = new Set(['annotation']);
 
@@ -96,14 +142,25 @@ function checkEmptyCanvas(count: number): DiagramIssue[] {
 // handleAddShape, which deliberately allows a freshly dropped connector to
 // land with one or both ends unattached until the user drags them onto a
 // shape (or the drop itself snapped one end on already).
-function checkDanglingEdges(edges: Cell[]): DiagramIssue[] {
+// `oneEndExemptRoles`, when given, covers the different case of an edge
+// whose *design*, not just its current state, has exactly one end that's
+// never meant to attach to anything — Fishbone's spine (see its
+// "head !== sourceCell"/attachSpineToHead comments in DiagramCanvas.tsx)
+// always has a permanently-dangling tail on whichever end the Fish Head
+// didn't claim, by design, forever. Only skips the "one end dangling"
+// message for those roles; a role in this set with *both* ends still
+// dangling (not wired to anything real at all yet) is still a genuine
+// problem and still gets flagged.
+function checkDanglingEdges(edges: Cell[], oneEndExemptRoles?: Set<string>): DiagramIssue[] {
   const issues: DiagramIssue[] = [];
   for (const edge of edges) {
     if (!edge.source || !edge.target) {
+      const bothDangling = !edge.source && !edge.target;
+      if (!bothDangling && oneEndExemptRoles?.has(getShapeRole(edge) ?? '')) continue;
       issues.push({
         cell: edge,
         severity: 'error',
-        message: !edge.source && !edge.target
+        message: bothDangling
           ? "This connector isn't attached to anything yet — drag both ends onto a shape."
           : "This connector has one end that isn't attached to a shape yet — drag it onto one to complete the connection.",
       });
@@ -383,7 +440,7 @@ export function validateFlowchart(graph: Graph): FlowchartIssue[] {
       });
     }
 
-    if (role && !BRANCHING_ROLES.has(role) && !SINGLE_JUNCTION_ROLES.has(role) && outgoing > 1) {
+    if (role && !BRANCHING_ROLES.has(role) && !SINGLE_JUNCTION_ROLES.has(role) && !FLEXIBLE_FANOUT_ROLES.has(role) && outgoing > 1) {
       issues.push({
         cell,
         severity: 'warning',
@@ -567,6 +624,11 @@ interface StructuralConfig {
   freeFloatingRoles?: Set<string>;
   disconnectedMessage?: string;
 
+  // G2 — roles with a permanently-by-design dangling end (see the matching
+  // param on checkDanglingEdges above). A role in this set with *both* ends
+  // still dangling is still flagged; only the expected one-end case is exempt.
+  danglingOneEndExemptRoles?: Set<string>;
+
   // Roles where a self-loop is legitimate notation, not a mistake (e.g. a
   // sequence diagram's self-message, or a self-referencing class).
   selfLoopExemptRoles?: Set<string>;
@@ -624,7 +686,7 @@ function runStructuralChecks(
   const vertices = graph.getChildVertices(parent);
   const edges = graph.getChildEdges(parent);
   // G2 — dangling connector ends, independent of palette membership below.
-  issues.push(...checkDanglingEdges(edges));
+  issues.push(...checkDanglingEdges(edges, config.danglingOneEndExemptRoles));
 
   const validVertices: Cell[] = [];
   const sourceCells: Cell[] = [];
@@ -1081,6 +1143,17 @@ export function validateERD(graph: Graph): DiagramIssue[] {
     if ((isEntity(sourceRole) && isRelationship(targetRole)) || (isRelationship(sourceRole) && isEntity(targetRole))) {
       entityRelationshipEdges.push(edge);
     }
+
+    // 4.7 (edge-form cardinality misuse) — a cardinality marker is now a
+    // real connector (see CONNECTOR_SHAPE_IDS), so one dragged straight onto
+    // an attribute link never lands in entityRelationshipEdges above (an
+    // attribute is neither an Entity nor a Relationship) and was falling
+    // through every check below unflagged — only the legacy free-floating-
+    // vertex form of this same marker had the equivalent guard (see the
+    // cardinalityVertices loop further down).
+    if (isCardinality(getShapeRole(edge)) && (isAttribute(sourceRole) || isAttribute(targetRole))) {
+      issues.push({ cell: edge, severity: 'error', message: 'Cardinality markers belong on an Entity<->Relationship leg, not an attribute link.' });
+    }
   }
 
   for (const cell of validVertices) {
@@ -1215,15 +1288,16 @@ export function validateFishbone(graph: Graph): DiagramIssue[] {
     freeFloatingRoles: new Set(['fishbone-note', 'fishbone-spine']),
     annotationRoles: new Set(['fishbone-note']),
     labeledRoles: new Set(['fishbone-head', 'fishbone-problem', 'fishbone-category']),
+    // The spine's tail end (whichever of source/target the Fish Head didn't
+    // claim) is permanently dangling by design — see checkDanglingEdges'
+    // matching comment and attachSpineToHead in DiagramCanvas.tsx. Without
+    // this, G2 flagged every single fishbone spine as broken forever, with
+    // no way to actually resolve it (there's nothing to drag onto that end).
+    danglingOneEndExemptRoles: new Set(['fishbone-spine']),
     disconnectedMessage: "This shape isn't connected to the fishbone yet.",
   });
 
   const causeEdges = edges.filter((e) => causeRoles.has(getShapeRole(e) ?? ''));
-
-  // G4-equivalent for causes — checkEmptyLabels works on any Cell[], edges
-  // included, but runStructuralChecks above only ever runs it over
-  // validVertices, which causes no longer appear in.
-  issues.push(...checkEmptyLabels(causeEdges, causeRoles));
 
   // The spine is a real edge now too (see CONNECTOR_SHAPE_IDS) — checked
   // across both validVertices and edges so an older saved diagram that
@@ -1294,7 +1368,13 @@ export function validateFishbone(graph: Graph): DiagramIssue[] {
       if (!sourceCell && !targetCell) {
         issues.push({ cell: edge, severity: 'error', message: `This cause isn't connected to anything — every cause should branch from ${expected}.` });
       } else {
-        issues.push({ cell: edge, severity: 'warning', message: `This should branch from ${expected}, not connect straight to the spine.` });
+        // Whichever end is actually a real cell is what this is wrongly
+        // attached to — used to be hardcoded as "the spine" regardless,
+        // which was just false whenever the real culprit was something
+        // else entirely (a Category Box, the Fish Head, another cause).
+        const wrongRole = (sourceCell ? sourceRole : targetRole) ?? undefined;
+        const wrongLabel = (wrongRole && getShapeDefinitionById(wrongRole)?.label) || 'this';
+        issues.push({ cell: edge, severity: 'warning', message: `This should branch from ${expected}, not attach directly to ${wrongLabel}.` });
       }
     }
   }
@@ -1359,18 +1439,57 @@ export function validateSchematic(graph: Graph): DiagramIssue[] {
   ]);
   const sourceRoles = new Set(['schematic-battery', 'schematic-ac']);
 
-  // SC1/6.1 — every terminal must be wired. This model has one cell per
-  // component rather than a node per physical pin, so "at least 2 wires"
-  // (3 for the 3-pin NPN) is the closest proxy for "every pin connected"
-  // available from the graph alone.
+  // SC1/6.1 — every terminal must be wired, and SC6/6.6 — NPN needs Base,
+  // Collector, and Emitter individually. Each wire drawn since pin-accurate
+  // wiring was added (see applySchematicPinSnap in DiagramCanvas.tsx) knows
+  // exactly which named lead it's on, stamped onto the edge's own style as
+  // schematicSourcePin/schematicTargetPin — a real persisted key, not
+  // shape-role tagging's in-memory WeakMap (getShapeRole above), so it
+  // survives a reload. That lets "is every terminal wired" catch what the
+  // old proxy couldn't: two wires both landing on the same lead, leaving
+  // another one bare, which "at least N wires touch this component" alone
+  // can't tell apart from every lead being covered. A component with any
+  // untagged wire (drawn before this feature existed, or a self-loop) falls
+  // back to the original link-count proxy instead of guessing.
   for (const cell of validVertices) {
     const role = getShapeRole(cell);
     if (!role) continue;
-    const linkCount = (cell.getEdges(true, true, false) ?? []).length;
+    const pins = SCHEMATIC_PIN_DEFINITIONS[role];
+    const cellEdges = cell.getEdges(true, true, false) ?? [];
+    const linkCount = cellEdges.length;
+
+    if (pins && pins.length > 1 && linkCount > 0) {
+      const wiredPinIds = new Set<string>();
+      let everyEdgeTagged = true;
+      for (const edge of cellEdges) {
+        const style = edge.getStyle();
+        const styleObj = (typeof style === 'object' && style !== null ? style : {}) as Record<string, unknown>;
+        const pinId = edge.getTerminal(true) === cell ? styleObj.schematicSourcePin : styleObj.schematicTargetPin;
+        if (typeof pinId === 'string') {
+          wiredPinIds.add(pinId);
+        } else {
+          everyEdgeTagged = false;
+        }
+      }
+
+      if (everyEdgeTagged) {
+        const unwired = pins.filter((pin) => !wiredPinIds.has(pin.id));
+        if (unwired.length > 0) {
+          const names = unwired.length === 1
+            ? unwired[0].label
+            : `${unwired.slice(0, -1).map((pin) => pin.label).join(', ')} and ${unwired[unwired.length - 1].label}`;
+          const verb = unwired.length === 1 ? "isn't" : "aren't";
+          const noun = role === 'schematic-npn' ? 'transistor' : 'component';
+          const severity: IssueSeverity = role === 'schematic-npn' ? 'warning' : 'error';
+          issues.push({ cell, severity, message: `This ${noun}'s ${names} ${verb} wired yet.` });
+        }
+        continue;
+      }
+    }
+
     if (twoTerminalRoles.has(role) && linkCount === 1) {
       issues.push({ cell, severity: 'error', message: 'This component only has one terminal wired — connect the other end too.' });
     }
-    // SC6/6.6 — NPN transistor needs all three terminals (B, C, E) connected.
     if (role === 'schematic-npn' && linkCount > 0 && linkCount < 3) {
       issues.push({ cell, severity: 'warning', message: 'This transistor has an unconnected terminal — Base, Collector, and Emitter should all be wired.' });
     }
@@ -1623,14 +1742,15 @@ export function validateActivity(graph: Graph): DiagramIssue[] {
   // 8.13 (Object Flow between two pure-control nodes) isn't checked — this
   // palette has no distinct "object/pin" node to tell an object flow's
   // real endpoints apart from a control node's.
+  const freeFloatingRoles = new Set(['act-note', 'act-constraint', 'act-swimlane']);
   const { issues, validVertices } = runStructuralChecks(graph, {
-    freeFloatingRoles: new Set(['act-note', 'act-constraint', 'act-swimlane']),
+    freeFloatingRoles,
     annotationRoles: new Set(['act-note', 'act-constraint']),
     labeledRoles: new Set(['act-activity']),
     branchingRoles: new Set(['act-decision']),
     branchingMessage: 'Decision shapes usually need two or more outgoing paths (e.g. guard conditions).',
-    mergeRoles: new Set(['act-merge']),
-    mergeMessage: 'Merge shapes usually combine two or more incoming paths back into one.',
+    mergeRoles: new Set(['act-join']),
+    mergeMessage: 'Join shapes usually combine two or more incoming parallel paths back into one.',
     forkRoles: new Set(['act-fork']),
     forkMessage: 'Fork shapes usually split into two or more parallel paths.',
     junctionRoles: new Set(['act-initial-node', 'act-final-node', 'act-flow-final']),
@@ -1658,7 +1778,15 @@ export function validateActivity(graph: Graph): DiagramIssue[] {
     }
   }
 
-  // AC6/8.12 — reachability from Initial Node and to a Final Node.
+  // AC6/8.12 — reachability from Initial Node and to a Final Node. Notes,
+  // Constraints and Swimlane lanes (freeFloatingRoles) are annotations/
+  // partitions, not control-flow steps — they're deliberately exempt from
+  // even having to be *connected* at all (see freeFloatingRoles above), so
+  // an unconnected one trivially can't be "reached" either. Without this
+  // exclusion, every ordinary unattached Note or Swimlane lane in a diagram
+  // that already has an Initial/Final Node — which is nearly always — got
+  // flagged here too, on top of (or instead of) the actually-relevant
+  // orphaned-annotation nudge from runStructuralChecks.
   const initials = validVertices.filter((c) => getShapeRole(c) === 'act-initial-node');
   const finals = validVertices.filter((c) => {
     const role = getShapeRole(c);
@@ -1667,6 +1795,8 @@ export function validateActivity(graph: Graph): DiagramIssue[] {
   if (initials.length > 0) {
     const reachable = reachableForward(initials);
     validVertices.forEach((cell) => {
+      const role = getShapeRole(cell);
+      if (role && freeFloatingRoles.has(role)) return;
       if (!reachable.has(cell)) {
         issues.push({ cell, severity: 'warning', message: "This can't be reached from the Initial Node — check the connections leading to it." });
       }
@@ -1675,6 +1805,8 @@ export function validateActivity(graph: Graph): DiagramIssue[] {
   if (finals.length > 0) {
     const canReachFinal = reachableBackward(finals);
     validVertices.forEach((cell) => {
+      const role = getShapeRole(cell);
+      if (role && freeFloatingRoles.has(role)) return;
       if (!canReachFinal.has(cell)) {
         issues.push({ cell, severity: 'warning', message: "This can't reach any Final Node — it leads into a loop or dead branch with no way out." });
       }
@@ -1682,14 +1814,21 @@ export function validateActivity(graph: Graph): DiagramIssue[] {
   }
 
   // AC7/8.11 — a Fork bar (in=1, out>=2) should be balanced by a Join bar
-  // (in>=2, out=1) downstream. Fork and Join share the same shape in this
-  // palette, distinguished only by which degree pattern a given cell has —
-  // so "balance" here is approximated as "at least as many join-pattern
-  // bars as fork-pattern bars", not a full path-matched pairing.
+  // (in>=2, out=1) downstream. Both share the exact same synchronization-bar
+  // shape in real UML notation, so this reads each qualifying cell's own
+  // in/out degree rather than trusting its role alone to say which one it's
+  // acting as — a bar tagged 'act-join' that actually has fork-shaped
+  // degree (e.g. reused/dragged from the wrong palette entry) still counts
+  // toward whichever side its wiring actually matches. "Balance" is
+  // approximated as "at least as many join-pattern bars as fork-pattern
+  // bars", not a full path-matched pairing.
+  const forkJoinCells = validVertices.filter((c) => {
+    const role = getShapeRole(c);
+    return role === 'act-fork' || role === 'act-join';
+  });
   const forkPattern: Cell[] = [];
   let joinPatternCount = 0;
-  for (const cell of validVertices) {
-    if (getShapeRole(cell) !== 'act-fork') continue;
+  for (const cell of forkJoinCells) {
     const incoming = cell.getEdges(true, false, false)?.length ?? 0;
     const outgoing = cell.getEdges(false, true, false)?.length ?? 0;
     if (incoming <= 1 && outgoing >= 2) forkPattern.push(cell);
@@ -1842,7 +1981,31 @@ export function validateSequence(graph: Graph): DiagramIssue[] {
     }
   }
 
-  return issues;
+  // The generic G3 disconnected-check above (disconnectedMessage, in
+  // runStructuralChecks) only ever looks at a cell's *own* edges — but every
+  // message here actually attaches to whichever timeline shape occupies
+  // that row, which for an active lifeline is its Activation bar, a
+  // separate cell (see findSequenceMessageEndpoints in DiagramCanvas.tsx),
+  // never the Actor/Lifeline header itself. A perfectly wired-up Actor —
+  // messages flowing through its Activation bar exactly as intended — still
+  // has zero edges of its own, so G3 flagged it as "not part of any
+  // interaction" even in the middle of one. Drops that specific false
+  // positive: an Actor/Lifeline counts as connected here if any Activation
+  // bar sitting on it (same x-overlap/y-within test as SQ5 above) has a
+  // message of its own.
+  return issues.filter((issue) => {
+    if (!issue.cell || issue.message !== "This actor or lifeline isn't part of any interaction yet.") return true;
+    const llGeo = issue.cell.getGeometry();
+    if (!llGeo) return true;
+    const wiredViaActivation = activations.some((a) => {
+      const aGeo = a.getGeometry();
+      if (!aGeo) return false;
+      const xOverlap = aGeo.x < llGeo.x + llGeo.width && aGeo.x + aGeo.width > llGeo.x;
+      const yWithin = aGeo.y >= llGeo.y - 4 && aGeo.y + aGeo.height <= llGeo.y + llGeo.height + 4;
+      return xOverlap && yWithin && (a.getEdges(true, true, false) ?? []).length > 0;
+    });
+    return !wiredViaActivation;
+  });
 }
 
 // ─── Class Diagram ──────────────────────────────────────────────────────────

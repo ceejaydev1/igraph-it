@@ -204,6 +204,7 @@ function foldedCornerPoints(w: number, h: number, fold: number, inset: number): 
 export const IGRAPH_PERIMETERS: Record<string, CellStateStyle['perimeter']> = {
   // ─── Ellipse / circle outlines ───────────────────────────────────────────
   'igraph.circle': 'ellipsePerimeter',
+  'igraph.mergeJunction': 'ellipsePerimeter',
   'igraph.ellipse': 'ellipsePerimeter',
   'igraph.multiOval': 'ellipsePerimeter',
   'igraph.initialNode': 'ellipsePerimeter',
@@ -1932,7 +1933,6 @@ class SchematicSwitchShapeCanvas extends Shape {
     // stroke draw entirely, which is the only way to make width 0 truly
     // invisible.
     if (this.strokeWidth <= 0) c.setStrokeColor('none');
-    c.setFillColor(this.fill);
     c.begin();
     c.moveTo(x + 2, cy);
     c.lineTo(x + w * 0.2, cy);
@@ -1945,6 +1945,12 @@ class SchematicSwitchShapeCanvas extends Shape {
     c.moveTo(x + w * 0.25, cy);
     c.lineTo(x + w * 0.6, y + h * 0.2);
     c.stroke();
+    // The two terminal dots are drawn solid in the wire color (this.stroke),
+    // not this.fill — a schematic terminal point is always a visible mark
+    // regardless of whatever fill color the component itself has (this
+    // shape's own default is fillColor: 'transparent', which made both
+    // dots literally invisible when they were filled with this.fill instead).
+    c.setFillColor(this.stroke);
     c.ellipse(x + w * 0.2 - 3, cy - 3, 6, 6);
     c.fill();
     c.ellipse(x + w * 0.8 - 3, cy - 3, 6, 6);
@@ -1993,11 +1999,15 @@ class SchematicConnectionShapeCanvas extends Shape {
     // stroke draw entirely, which is the only way to make width 0 truly
     // invisible.
     if (this.strokeWidth <= 0) c.setStrokeColor('none');
-    c.setFillColor(this.fill);
     c.begin();
     c.moveTo(x + 2, cy);
     c.lineTo(x + w - 2, cy);
     c.stroke();
+    // Solid in the wire color (this.stroke), same reasoning as the Switch's
+    // terminal dots above — a junction dot should always read as "wires are
+    // joined here" regardless of the shape's own fill color setting, not go
+    // invisible the moment fillColor isn't opaque.
+    c.setFillColor(this.stroke);
     c.ellipse(cx - 4, cy - 4, 8, 8);
     c.fill();
   }
@@ -2025,6 +2035,90 @@ class SchematicNoConnectionShapeCanvas extends Shape {
     c.stroke();
   }
 }
+
+// ─── Schematic named connection points ("pins") ─────────────────────────────
+// Every placeable Schematic part draws its own leads at fixed fractions of
+// its own width/height in paintBackground above — this table just names each
+// one, read directly off those same coordinates (not guessed/symmetric),
+// so wiring logic in DiagramCanvas.tsx can snap a wire to the actual lead
+// tip instead of anywhere on the shape's bounding box. Keyed by shapeId
+// (the same string getShapeRole/tagShapeRole use everywhere else), not by
+// the igraph.* style/shape name.
+//
+// Most parts' two leads run flush to the shape's own edges (x: 0 / x: 1).
+// Three parts don't, and it matters:
+//  - LED's cathode lead (see SchematicLEDShapeCanvas) stops at 0.7w, short
+//    of the edge, to leave room for the light-ray arrows.
+//  - Switch's actual connection points (see SchematicSwitchShapeCanvas) are
+//    the solid dots drawn at 0.2w/0.8w, not the lead's outer tip.
+//  - NPN's three leads land at their own independent points (base: left
+//    edge; collector: top edge; emitter: the diagonal's own endpoint at
+//    0.7w, not center) — see SchematicNPNShapeCanvas.
+export interface SchematicPin {
+  id: string;
+  label: string;
+  x: number;
+  y: number;
+}
+
+export const SCHEMATIC_PIN_DEFINITIONS: Record<string, SchematicPin[]> = {
+  'schematic-battery': [
+    { id: 'positive', label: 'Positive Terminal', x: 0, y: 0.5 },
+    { id: 'negative', label: 'Negative Terminal', x: 1, y: 0.5 },
+  ],
+  'schematic-ac': [
+    { id: 'terminal1', label: 'Terminal 1', x: 0, y: 0.5 },
+    { id: 'terminal2', label: 'Terminal 2', x: 1, y: 0.5 },
+  ],
+  'schematic-ground': [
+    { id: 'terminal', label: 'Terminal', x: 0.5, y: 0 },
+  ],
+  'schematic-resistor': [
+    { id: 'left', label: 'Terminal 1', x: 0, y: 0.5 },
+    { id: 'right', label: 'Terminal 2', x: 1, y: 0.5 },
+  ],
+  'schematic-variable-resistor': [
+    { id: 'left', label: 'Terminal 1', x: 0, y: 0.5 },
+    { id: 'right', label: 'Terminal 2', x: 1, y: 0.5 },
+  ],
+  'schematic-capacitor': [
+    { id: 'left', label: 'Terminal 1', x: 0, y: 0.5 },
+    { id: 'right', label: 'Terminal 2', x: 1, y: 0.5 },
+  ],
+  'schematic-inductor': [
+    { id: 'left', label: 'Terminal 1', x: 0, y: 0.5 },
+    { id: 'right', label: 'Terminal 2', x: 1, y: 0.5 },
+  ],
+  'schematic-diode': [
+    { id: 'anode', label: 'Anode', x: 0, y: 0.5 },
+    { id: 'cathode', label: 'Cathode', x: 1, y: 0.5 },
+  ],
+  'schematic-led': [
+    { id: 'anode', label: 'Anode', x: 0, y: 0.5 },
+    { id: 'cathode', label: 'Cathode', x: 0.7, y: 0.5 },
+  ],
+  'schematic-npn': [
+    { id: 'base', label: 'Base', x: 0, y: 0.5 },
+    { id: 'collector', label: 'Collector', x: 0.5, y: 0 },
+    { id: 'emitter', label: 'Emitter', x: 0.7, y: 1 },
+  ],
+  'schematic-switch': [
+    { id: 'left', label: 'Terminal 1', x: 0.2, y: 0.6 },
+    { id: 'right', label: 'Terminal 2', x: 0.8, y: 0.6 },
+  ],
+  'schematic-fuse': [
+    { id: 'left', label: 'Terminal 1', x: 0, y: 0.5 },
+    { id: 'right', label: 'Terminal 2', x: 1, y: 0.5 },
+  ],
+  // Not a component — a junction marker. Once wired in via a real edge
+  // split (see the auto-junction logic in DiagramCanvas.tsx), both
+  // resulting wire halves anchor to this single point. 'schematic-no-
+  // connection' deliberately has no entry: it means "these do not
+  // connect" and stays a purely decorative, unwired marker.
+  'schematic-connection': [
+    { id: 'joint', label: 'Junction', x: 0.5, y: 0.5 },
+  ],
+};
 
 // ─── Schematic IC Shape ──────────────────────────────────────────────────────
 class SchematicICShapeCanvas extends Shape {
@@ -2264,7 +2358,16 @@ class UMLInitialNodeShapeCanvas extends Shape {
   }
 }
 
-class UMLMergeShapeCanvas extends Shape {
+// Fork and Join are the exact same synchronization-bar notation — UML
+// reuses one glyph for both, distinguished only by which way the flow
+// crosses it (one-in/many-out here, many-in/one-out there). The bar itself
+// draws no baked-in arrow decoration — unlike a static decal, its in/out
+// arrows need to be real, draggable, extendable connectors (see
+// FORK_JOIN_STUB_OFFSETS/insertForkJoinStubs in DiagramCanvas.tsx, which
+// auto-attaches a starting set of real Control Flow edges at drop time),
+// so the "arrow" a user sees is an actual edge they can grab, move, or
+// stretch to reach a real target — not paint.
+class UMLForkShapeCanvas extends Shape {
   paintBackground(c: AbstractCanvas2D, x: number, y: number, w: number, h: number) {
     const bar = Math.min(h, 10);
     const yPos = y + (h - bar) / 2;
@@ -2282,7 +2385,7 @@ class UMLMergeShapeCanvas extends Shape {
   }
 }
 
-class UMLForkShapeCanvas extends Shape {
+class UMLJoinShapeCanvas extends Shape {
   paintBackground(c: AbstractCanvas2D, x: number, y: number, w: number, h: number) {
     const bar = Math.min(h, 10);
     const yPos = y + (h - bar) / 2;
@@ -3079,6 +3182,47 @@ class PentagonShapeCanvas extends Shape {
     c.lineTo(x, y + h * 0.68);
     c.close();
     c.fillAndStroke();
+  }
+}
+
+// A circled-X merge/junction glyph — the point where two or more flow
+// lines converge before continuing as one (e.g. a main path and a loop-back
+// both feeding into the next step). Not a Decision (it doesn't branch on a
+// condition) and not an On-Page/Off-Page Connector (those jump to a
+// same-labelled partner elsewhere, and are restricted to being entered OR
+// exited, never both — see SINGLE_JUNCTION_ROLES in flowchartRules.ts,
+// which deliberately excludes this shape for that reason).
+class MergeJunctionShapeCanvas extends Shape {
+  paintBackground(c: AbstractCanvas2D, x: number, y: number, w: number, h: number) {
+    c.setFillColor(this.fill);
+    c.setStrokeColor(this.stroke);
+    c.setStrokeWidth(this.strokeWidth);
+    // maxGraph's SVG renderer floors any actually-drawn stroke to 1px
+    // (SvgCanvas2D.minStrokeWidth), so strokeWidth=0 alone still paints a
+    // hairline. Dropping the stroke color to 'none' instead skips the
+    // stroke draw entirely, which is the only way to make width 0 truly
+    // invisible.
+    if (this.strokeWidth <= 0) c.setStrokeColor('none');
+    c.ellipse(x + 2, y + 2, w - 4, h - 4);
+    c.fillAndStroke();
+    // The X's own reach is computed from a square centered inside the
+    // cell's (possibly non-square, if someone resizes it unevenly) bounds
+    // — using w/h independently here would size the X off the full
+    // rectangle while the circle above stays sized off the shorter side,
+    // so the X pokes out past the circle on the long axis and the whole
+    // glyph reads as a bowtie instead of a circled X.
+    const size = Math.min(w, h);
+    const ox = x + (w - size) / 2;
+    const oy = y + (h - size) / 2;
+    const inset = size * 0.28;
+    c.begin();
+    c.moveTo(ox + inset, oy + inset);
+    c.lineTo(ox + size - inset, oy + size - inset);
+    c.stroke();
+    c.begin();
+    c.moveTo(ox + size - inset, oy + inset);
+    c.lineTo(ox + inset, oy + size - inset);
+    c.stroke();
   }
 }
 
@@ -5236,8 +5380,8 @@ const SHAPE_REGISTRY: Record<string, typeof Shape> = {
   'igraph.umlInitialNode': UMLInitialNodeShapeCanvas,
   'igraph.umlActivity': UMLActivityShapeCanvas,
   'igraph.umlDecision': UMLDecisionShapeCanvas,
-  'igraph.umlMerge': UMLMergeShapeCanvas,
   'igraph.umlFork': UMLForkShapeCanvas,
+  'igraph.umlJoin': UMLJoinShapeCanvas,
   'igraph.umlControlFlow': UMLControlFlowShapeCanvas,
   'igraph.umlObjectFlow': UMLObjectFlowShapeCanvas,
   'igraph.umlSwimlane': UMLSwimlaneShapeCanvas,
@@ -5298,6 +5442,7 @@ const SHAPE_REGISTRY: Record<string, typeof Shape> = {
   'igraph.dashedRect': DashedRectShapeCanvas,
   'igraph.predefined': PredefinedShapeCanvas,
   'igraph.pentagon': PentagonShapeCanvas,
+  'igraph.mergeJunction': MergeJunctionShapeCanvas,
   'igraph.trapezoid': TrapezoidShapeCanvas,
   'igraph.dshape': DShapeCanvas,
   'igraph.hexagon': HexagonShapeCanvas,
@@ -5447,6 +5592,7 @@ export const IGRAPH_ID_STYLE_MAP: Record<string, string> = {
   'io': 'igraph.parallelogram',
   'on-page-connector': 'igraph.circle',
   'off-page-connector': 'igraph.pentagon',
+  'merge-junction': 'igraph.mergeJunction',
   'flow-line': 'igraph.connectorArrow',
   'predefined': 'igraph.predefined',
   'database': 'igraph.cylinder',
@@ -5530,8 +5676,8 @@ export const IGRAPH_ID_STYLE_MAP: Record<string, string> = {
   'act-initial-node': 'igraph.umlInitialNode',
   'act-activity': 'igraph.umlActivity',
   'act-decision': 'igraph.umlDecision',
-  'act-merge': 'igraph.umlMerge',
   'act-fork': 'igraph.umlFork',
+  'act-join': 'igraph.umlJoin',
   'act-control-flow': 'igraph.umlControlFlow',
   'act-object-flow': 'igraph.umlObjectFlow',
   'act-swimlane': 'igraph.umlSwimlane',

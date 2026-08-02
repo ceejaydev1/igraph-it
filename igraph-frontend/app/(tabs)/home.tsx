@@ -151,7 +151,14 @@ const CardSkeleton = ({ cardWidth }: { cardWidth: number }) => {
   );
 };
 
-const HomeGridSkeleton = () => {
+// Exported so app/(tabs)/_layout.tsx can show this same skeleton (matching
+// Home's actual responsive grid via useResponsiveLayout, unlike the plain,
+// unused-elsewhere HomeGridSkeleton in components/SkeletonLoader.tsx) while
+// it re-verifies the session on every focus — replacing what used to be a
+// bare transparent View there (nothing behind it but the raw page
+// background, i.e. a white flash) with a loading state that actually reads
+// as "loading" instead of "broken".
+export const HomeGridSkeleton = () => {
   const { cardWidth, numColumns } = useResponsiveLayout();
 
   return (

@@ -4,6 +4,7 @@ import { View, StyleSheet } from 'react-native';
 import * as authService from '../../services/authService';
 import Navbar from '../../components/Navbar';
 import { SaveProvider } from '../../contexts/SaveContext';
+import { HomeGridSkeleton } from './home';
 
 export default function TabLayout() {
   const router = useRouter();
@@ -71,8 +72,12 @@ export default function TabLayout() {
     }, [router])
   );
 
+  // Was a bare transparent View — nothing behind it but the raw page
+  // background, i.e. a white flash — every time this group re-verifies the
+  // session on focus (including right after a successful sign-in's
+  // router.replace). A skeleton reads as "loading" instead of "broken".
   if (!isReady) {
-    return <View style={styles.transparent} />;
+    return <HomeGridSkeleton />;
   }
 
   return (
@@ -112,9 +117,5 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#f8faff',
-  },
-  transparent: {
-    flex: 1,
-    backgroundColor: 'transparent',
   },
 });
