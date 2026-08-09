@@ -375,7 +375,7 @@ export function validateFlowchart(graph: Graph): FlowchartIssue[] {
       // generic "can't connect to itself" error other diagram types use,
       // since a flowchart step retrying itself is unusual but not
       // impossible notation.
-      issues.push({ cell, severity: 'warning', message: 'This shape connects back to itself — confirm this is an intentional loop, not a mistake.' });
+      issues.push({ cell, severity: 'warning', message: "This shape loops back to itself — make sure that's on purpose, not a mistake." });
     }
 
     const incoming = cell.getEdges(true, false)?.length ?? 0;
@@ -427,7 +427,7 @@ export function validateFlowchart(graph: Graph): FlowchartIssue[] {
       const outgoingEdges = cell.getEdges(false, true, false) ?? [];
       for (const edge of outgoingEdges) {
         if (isBlankLabel(edge)) {
-          issues.push({ cell: edge, severity: 'warning', message: 'Label this branch with its condition (e.g. Yes/No) so the decision reads unambiguously.' });
+          issues.push({ cell: edge, severity: 'warning', message: "Label this branch with its condition (e.g. Yes/No) so it's clear which path it is." });
         }
       }
     }
@@ -461,7 +461,7 @@ export function validateFlowchart(graph: Graph): FlowchartIssue[] {
   const checkJumpPairs = (byLabel: Map<string, Cell[]>) => {
     byLabel.forEach((cells) => {
       if (cells.length === 1) {
-        issues.push({ cell: cells[0], severity: 'error', message: "No other connector shares this label — a jump connector needs a matching pair." });
+        issues.push({ cell: cells[0], severity: 'error', message: "No other connector uses this label — a jump connector always needs a matching partner with the same label." });
       }
     });
   };
@@ -930,7 +930,7 @@ export function validateFDD(graph: Graph): DiagramIssue[] {
 
     // F2/1.2 — a tree allows at most one parent per function.
     if (parents.length > 1) {
-      issues.push({ cell: fn, severity: 'error', message: 'This function has more than one parent — decomposition must be a tree, not a web.' });
+      issues.push({ cell: fn, severity: 'error', message: 'This function has more than one parent — a decomposition diagram branches like a tree, so each function should have only one parent.' });
     }
   }
 
@@ -942,10 +942,10 @@ export function validateFDD(graph: Graph): DiagramIssue[] {
   // F3/1.4/1.5 — exactly one root (a function with no parent) is expected.
   const roots = functions.filter((fn) => (parentsOf.get(fn) ?? []).length === 0);
   if (functions.length > 0 && roots.length === 0) {
-    issues.push({ severity: 'error', message: 'No top-level function found — every function has a parent, which usually means the hierarchy is circular.' });
+    issues.push({ severity: 'error', message: 'No top-level function found — every function has a parent, which usually means there\'s a loop somewhere in the chain.' });
   } else if (roots.length > 1) {
     roots.slice(1).forEach((cell) => {
-      issues.push({ cell, severity: 'warning', message: 'Multiple top-level functions found — intended only if this models more than one system.' });
+      issues.push({ cell, severity: 'warning', message: "More than one top-level function found — that's fine only if this diagram covers more than one system." });
     });
   }
 
@@ -953,7 +953,7 @@ export function validateFDD(graph: Graph): DiagramIssue[] {
   // decomposition; leaf functions (0 children) are completely fine.
   for (const fn of functions) {
     if ((childrenOf.get(fn) ?? []).length === 1) {
-      issues.push({ cell: fn, severity: 'warning', message: 'This function has only one child — a single-child decomposition adds no information; merge it or add sibling functions.' });
+      issues.push({ cell: fn, severity: 'warning', message: 'This function has only one child — breaking it into just one part doesn\'t add anything. Merge it back in, or add another sibling function.' });
     }
   }
 
@@ -966,7 +966,7 @@ export function validateFDD(graph: Graph): DiagramIssue[] {
     const touchesFunction = (edge.source && getShapeRole(edge.source) === 'function')
       || (edge.target && getShapeRole(edge.target) === 'function');
     if (!touchesFunction) {
-      issues.push({ cell: edge, severity: 'error', message: 'This should connect to a Function shape — it governs or performs a function rather than standing on its own.' });
+      issues.push({ cell: edge, severity: 'error', message: "Connect this to a Function shape — a Control or Mechanism always belongs to a function, it can't stand on its own." });
     }
   }
 
@@ -980,7 +980,7 @@ export function validateFDD(graph: Graph): DiagramIssue[] {
       return other && getShapeRole(other) === 'function';
     });
     if (treatedAsHierarchyNode) {
-      issues.push({ cell: ee, severity: 'error', message: "External Entities are outside the system and can't be part of the decomposition hierarchy — connect it through an Interface instead." });
+      issues.push({ cell: ee, severity: 'error', message: "An External Entity is outside the system, so it can't be a step in the decomposition tree — connect it through an Interface instead." });
     }
   }
 
@@ -1051,9 +1051,9 @@ export function validateDFD(graph: Graph): DiagramIssue[] {
     const incoming = cell.getEdges(true, false, false)?.length ?? 0;
     const outgoing = cell.getEdges(false, true, false)?.length ?? 0;
     if (incoming > 0 && outgoing === 0) {
-      issues.push({ cell, severity: 'error', message: "This process has input but no output — it's a \"black hole\": data enters and never leaves." });
+      issues.push({ cell, severity: 'error', message: 'This process receives data but never sends any out — it\'s called a "black hole": data goes in and never comes back out.' });
     } else if (outgoing > 0 && incoming === 0) {
-      issues.push({ cell, severity: 'error', message: "This process has output but no input — it's a \"miracle\": data appears from nowhere." });
+      issues.push({ cell, severity: 'error', message: 'This process sends out data but never receives any — it\'s called a "miracle": data appears from nowhere.' });
     }
   }
 
@@ -1152,7 +1152,7 @@ export function validateERD(graph: Graph): DiagramIssue[] {
     // vertex form of this same marker had the equivalent guard (see the
     // cardinalityVertices loop further down).
     if (isCardinality(getShapeRole(edge)) && (isAttribute(sourceRole) || isAttribute(targetRole))) {
-      issues.push({ cell: edge, severity: 'error', message: 'Cardinality markers belong on an Entity<->Relationship leg, not an attribute link.' });
+      issues.push({ cell: edge, severity: 'error', message: 'Cardinality markers belong on the line between an Entity and a Relationship, not on an attribute line.' });
     }
   }
 
@@ -1177,7 +1177,7 @@ export function validateERD(graph: Graph): DiagramIssue[] {
       // 4.2 — a relationship needs at least two entity legs (the same
       // entity twice, for a recursive relationship, still counts as two).
       if (linkedEntities.length < 2) {
-        issues.push({ cell, severity: 'error', message: 'A Relationship needs at least two Entity legs (the same Entity twice for a recursive relationship).' });
+        issues.push({ cell, severity: 'error', message: 'A Relationship needs to connect to at least two Entities (the same Entity twice is fine for a relationship that loops back to itself).' });
       }
     }
 
@@ -1225,14 +1225,14 @@ export function validateERD(graph: Graph): DiagramIssue[] {
     if (!edge) continue;
     const { sourceRole, targetRole } = edgeRoles(edge);
     if (isAttribute(sourceRole) || isAttribute(targetRole)) {
-      issues.push({ cell: marker, severity: 'error', message: 'Cardinality markers belong on an Entity<->Relationship leg, not an attribute link.' });
+      issues.push({ cell: marker, severity: 'error', message: 'Cardinality markers belong on the line between an Entity and a Relationship, not on an attribute line.' });
     } else {
       claimedEdges.add(edge);
     }
   }
   for (const edge of entityRelationshipEdges) {
     if (!claimedEdges.has(edge)) {
-      issues.push({ cell: edge, severity: 'warning', message: 'This leg has no cardinality marker — specify its participation (1, N, M).' });
+      issues.push({ cell: edge, severity: 'warning', message: 'This connection has no cardinality marker yet — add one to show how many (1, N, M).' });
     }
   }
 
@@ -1661,7 +1661,7 @@ export function validateUseCase(graph: Graph): DiagramIssue[] {
     } else if (edgeRole === 'uc-generalization') {
       // UC4 — Generalization is between like kinds only (actor-actor or use case-use case).
       if (sourceCell === targetCell) {
-        issues.push({ cell: edge, severity: 'error', message: "This can't generalize itself." });
+        issues.push({ cell: edge, severity: 'error', message: "A use case or actor can't generalize itself." });
       } else if (!((isActor(sourceRole) && isActor(targetRole)) || (isUseCase(sourceRole) && isUseCase(targetRole)))) {
         issues.push({ cell: edge, severity: 'error', message: 'Generalization must connect two Actors or two Use Cases, not a mix.' });
       } else {
@@ -2071,7 +2071,7 @@ export function validateClass(graph: Graph): DiagramIssue[] {
 
   const relationshipRoles = new Set([
     'class-association', 'class-directed', 'class-aggregation',
-    'class-composition', 'class-dependency', 'class-generalization',
+    'class-composition', 'class-dependency', 'class-generalization', 'class-realization',
   ]);
   const multiplicityRoles = new Set([
     'class-multiplicity-1', 'class-multiplicity-01', 'class-multiplicity-many',
@@ -2113,6 +2113,17 @@ export function validateClass(graph: Graph): DiagramIssue[] {
       generalizationAdjacency.set(sourceCell, list);
     }
 
+    // Realization is its own hierarchy dimension (interface implementation,
+    // not class inheritance) — kept out of generalizationAdjacency/cycle
+    // detection above so a class implementing an interface never gets
+    // conflated with — or falsely flags — an unrelated inheritance chain.
+    // Self-implementation is still nonsensical the same way self-inheritance
+    // is, so that one check carries over.
+    if (role === 'class-realization' && sourceCell === targetCell) {
+      issues.push({ cell: edge, severity: 'error', message: "A class can't implement itself." });
+      continue;
+    }
+
     if (role === 'class-composition') {
       // Diamond sits at the edge's source end (see
       // ConnectorArrowShapeCanvas-style paintEdgeShape overrides for
@@ -2140,7 +2151,7 @@ export function validateClass(graph: Graph): DiagramIssue[] {
   // 10.7 — composition implies exclusive ownership: a part belongs to one whole.
   compositionWholesByPart.forEach((wholes, part) => {
     if (wholes.size > 1) {
-      issues.push({ cell: part, severity: 'warning', message: 'This class is a composed part of more than one whole — composition implies exclusive ownership.' });
+      issues.push({ cell: part, severity: 'warning', message: 'This class is a composed part of more than one whole — composition means a part can only belong to one whole at a time.' });
     }
   });
 
@@ -2148,7 +2159,7 @@ export function validateClass(graph: Graph): DiagramIssue[] {
   // Association-family relationship is possibly redundant (info only).
   relationshipPairs.forEach((roles) => {
     if (roles.has('class-generalization') && [...roles].some((r) => r !== 'class-generalization')) {
-      issues.push({ severity: 'info', message: 'These two classes have both a Generalization and another relationship between them — possibly redundant.' });
+      issues.push({ severity: 'info', message: "These two classes are connected by both an inheritance arrow and another relationship — that's probably redundant, check if you need both." });
     }
   });
 
@@ -2168,6 +2179,10 @@ export function validateClass(graph: Graph): DiagramIssue[] {
     }
     if (role === 'class-dependency') {
       issues.push({ cell: marker, severity: 'error', message: 'Dependency has no multiplicity — remove this marker.' });
+      continue;
+    }
+    if (role === 'class-realization') {
+      issues.push({ cell: marker, severity: 'error', message: 'Realization has no multiplicity — remove this marker.' });
       continue;
     }
     claimedEnds.add(`${hit.edge.getId()}:${hit.end}`);
@@ -2209,7 +2224,7 @@ export function validateClass(graph: Graph): DiagramIssue[] {
 
     const hasRelationship = (cls.getEdges(true, true, false) ?? []).length > 0;
     if (isBlankCompartment(attrsCell) && isBlankCompartment(methodsCell) && !hasRelationship) {
-      issues.push({ cell: cls, severity: 'warning', message: 'This class is empty and unconnected — no attributes, methods, or relationships.' });
+      issues.push({ cell: cls, severity: 'warning', message: 'This class has nothing in it yet — no attributes, methods, or relationships to other classes.' });
     }
   }
 

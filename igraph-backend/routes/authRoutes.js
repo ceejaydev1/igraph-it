@@ -20,7 +20,7 @@ const { issueCsrfToken } = require('../middleware/csrfMiddleware');
 // ENVIRONMENT
 
 const isLabMode = process.env.IS_LAB_MODE === 'true';
-const LAB_MAX   = 100;
+const LAB_MAX   = 5000; // TEMP: raised for local stress-test run, reverting to 100 after
 
 if (isLabMode && process.env.NODE_ENV === 'production') {
   console.error('[SECURITY] IS_LAB_MODE=true is set in a production environment. Ignoring lab mode.');
@@ -97,10 +97,15 @@ const buildLimiters = ({ prefix, windowMs, ipMax, accountMax, message }) => {
   return [ipLimiter, accountLimiter];
 };
 
+// ipMax on every limiter below is sized for a shared-NAT setting (a school
+// computer lab's whole class exits through one public IP) rather than a
+// single person — accountMax stays tight since that one's keyed per email/
+// user id and is the real defense against brute-forcing one account, however
+// many people share the IP it's coming from.
 const otpLimiters = buildLimiters({
   prefix:     'otp',
   windowMs:   15 * 60 * 1000,
-  ipMax:      20,
+  ipMax:      100,
   accountMax: 5,
   message:    'Too many OTP requests. Please wait 15 minutes before trying again.',
 });
@@ -108,7 +113,7 @@ const otpLimiters = buildLimiters({
 const otpVerifyLimiters = buildLimiters({
   prefix:     'otp-verify',
   windowMs:   15 * 60 * 1000,
-  ipMax:      50,
+  ipMax:      200,
   accountMax: 10,
   message:    'Too many verification attempts. Please wait 15 minutes.',
 });
@@ -116,7 +121,7 @@ const otpVerifyLimiters = buildLimiters({
 const authLimiters = buildLimiters({
   prefix:     'auth',
   windowMs:   15 * 60 * 1000,
-  ipMax:      30,
+  ipMax:      150,
   accountMax: 10,
   message:    'Too many attempts. Please try again later.',
 });
@@ -124,7 +129,7 @@ const authLimiters = buildLimiters({
 const resetPasswordLimiters = buildLimiters({
   prefix:     'reset-pw',
   windowMs:   60 * 60 * 1000,
-  ipMax:      20,
+  ipMax:      100,
   accountMax: 5,
   message:    'Too many password reset attempts. Please try again after an hour.',
 });
@@ -152,7 +157,7 @@ const changePasswordLimiters = LAB_ACTIVE
   : [
       rateLimit({
         windowMs:        15 * 60 * 1000,
-        max:             20,
+        max:             80,
         keyGenerator:    ipKey('change-pw'),
         standardHeaders: true,
         legacyHeaders:   false,

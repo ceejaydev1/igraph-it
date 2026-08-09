@@ -117,7 +117,8 @@ const TermsContent = () => (
     <Text style={styles.subSection}>4.2 Your Content</Text>
     <Text style={styles.text}>
       • You retain ownership of diagrams you create{'\n'}
-      • You grant us license to display your content within the Platform{'\n'}
+      • You grant us license to display your content within the Platform, including sharing it with
+      collaborators you invite (or who invite you) to a diagram{'\n'}
       • You are responsible for your content's legality
     </Text>
 
@@ -131,7 +132,7 @@ const TermsContent = () => (
     <Text style={styles.subSection}>5.2 OTP Verification</Text>
     <Text style={styles.text}>
       • OTPs expire after 5 minutes{'\n'}
-      • Maximum 3 OTP requests per 15 minutes{'\n'}
+      • Maximum 5 OTP requests per account every 15 minutes{'\n'}
       • Do not share OTPs with anyone
     </Text>
 
@@ -172,12 +173,14 @@ const PrivacyContent = () => (
     <Text style={styles.text}>
       • Account Information: Full name, email address, password (encrypted){'\n'}
       • Profile Information: Profile picture (optional){'\n'}
-      • Authentication Data: Sign-in methods (email/password or Google OAuth)
+      • Authentication Data: Sign-in methods (email/password, or Sign in with Google via Firebase
+      Authentication)
     </Text>
     <Text style={styles.subSection}>2.2 Automatically Collected Information</Text>
     <Text style={styles.text}>
       • Usage Data: Pages visited, diagrams created, time spent on platform{'\n'}
-      • Device Information: Browser type, operating system, IP address
+      • Device Information: Browser type, operating system, IP address{'\n'}
+      • Cookies: Authentication cookies required to keep you signed in (see Section 9)
     </Text>
 
     <Text style={styles.sectionTitle}>3. How We Use Your Information</Text>
@@ -186,6 +189,8 @@ const PrivacyContent = () => (
       • Create and manage your account{'\n'}
       • Authenticate your identity and secure your access{'\n'}
       • Send OTP verification and password reset emails{'\n'}
+      • Enable real-time collaboration when you share a diagram or accept one shared with you (see
+      Section 10){'\n'}
       • Improve our platform and user experience
     </Text>
 
@@ -193,7 +198,10 @@ const PrivacyContent = () => (
     <Text style={styles.text}>
       • Your password is encrypted using bcrypt (12 rounds){'\n'}
       • Access tokens expire after 15 minutes{'\n'}
-      • Refresh tokens expire after 7 days
+      • Refresh tokens expire after 7 days{'\n'}
+      • Both tokens are stored in secure, httpOnly cookies your browser sends automatically — they
+      can't be read by page scripts, which protects them from theft via cross-site scripting{'\n'}
+      • A separate CSRF-protection token guards state-changing requests
     </Text>
 
     <Text style={styles.sectionTitle}>5. Email Communications</Text>
@@ -204,28 +212,52 @@ const PrivacyContent = () => (
 
     <Text style={styles.sectionTitle}>6. Data Retention</Text>
     <Text style={styles.text}>
-      • Account data: Until you delete your account{'\n'}
-      • Session data: 7 days from last activity
+      • Account data: Retained until you request deletion (see Section 7) — we don't yet offer a
+      self-service "delete account" option inside the app itself{'\n'}
+      • Session data: Your sign-in stays valid for 7 days from when you signed in if "Remember Me"
+      was selected, or until you close your browser if it wasn't — it does not extend automatically
+      just from continued activity
     </Text>
 
     <Text style={styles.sectionTitle}>7. Your Rights</Text>
     <Text style={styles.text}>
-      You have the right to access your data, correct inaccurate data, delete your account, and
-      export your data.
+      You have the right to access, correct, delete, or export your personal data. These requests
+      are currently handled manually rather than through a self-service tool in the app — email
+      privacy@igraphit.com and we will act on your request within 30 days.
     </Text>
 
     <Text style={styles.sectionTitle}>8. Third-Party Services</Text>
     <Text style={styles.text}>
-      We use Firebase (Google) for authentication and database, and Brevo for email delivery.
+      We use Firebase (Google) for authentication and database storage, and Brevo for transactional
+      email delivery (OTPs, password resets). We do not use advertising, analytics, or tracking
+      services, and we do not sell your data to any third party.
     </Text>
 
-    <Text style={styles.sectionTitle}>9. Children's Privacy</Text>
+    <Text style={styles.sectionTitle}>9. Cookies</Text>
+    <Text style={styles.text}>
+      We use httpOnly cookies to keep you signed in — one short-lived cookie for your access token
+      (15 minutes) and one longer-lived cookie for your refresh token (7 days, or session-only if
+      you didn't select "Remember Me"). We also set a CSRF-protection cookie to verify requests
+      genuinely come from your browser. These cookies are essential to the Platform working and
+      aren't used for advertising or cross-site tracking, so there's no cookie consent banner or
+      opt-out — disabling them will sign you out.
+    </Text>
+
+    <Text style={styles.sectionTitle}>10. Collaboration and Sharing</Text>
+    <Text style={styles.text}>
+      When you share a diagram with other users, or someone shares one with you, everyone currently
+      viewing that diagram can see, in real time, your display name, user ID, and permission level
+      (owner, editor, or viewer). We never show your email address or password to other
+      collaborators.
+    </Text>
+
+    <Text style={styles.sectionTitle}>11. Children's Privacy</Text>
     <Text style={styles.text}>
       iGraph IT is not intended for children under 13. We do not knowingly collect information from
       children under 13.
     </Text>
 
-    <Text style={styles.sectionTitle}>10. Contact Us</Text>
+    <Text style={styles.sectionTitle}>12. Contact Us</Text>
     <Text style={styles.text}>
       For privacy concerns, contact us at: privacy@igraphit.com
     </Text>
@@ -270,8 +302,13 @@ export default function PrivacyPage() {
   // action), but router.back() follows whatever the real previous route
   // was, which isn't always Account (e.g. arriving via the tab bar), and
   // would land back on Home instead.
+  //
+  // navigate, not replace: replace still mounts a brand-new instance of the
+  // persistently-anchored (tabs) group on top of the existing one instead of
+  // resurfacing the existing Account screen already sitting there — see
+  // savedDiagrams.tsx's handleBackPress for the full explanation (same fix).
   const handleBackPress = () => {
-    router.replace('/(tabs)/userAccount');
+    router.navigate('/(tabs)/userAccount');
   };
 
   return (

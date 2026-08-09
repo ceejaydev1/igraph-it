@@ -40,12 +40,13 @@ export const UMLDirectedAssociationShape: React.FC<ShapeProps> = ({
   return (
     <Svg width={width} height={height} viewBox={`0 0 ${width} ${height}`}>
       <Line x1={2} y1={cy} x2={width - arrow - 2} y2={cy} stroke={color} strokeWidth={strokeWidth} />
-      <Polygon
-        points={`${width - 2},${cy} ${width - arrow - 2},${cy - 6} ${width - arrow - 2},${cy + 6}`}
-        fill="none"
-        stroke={color}
-        strokeWidth={strokeWidth}
-      />
+      {/* Open "V" arrowhead, not a closed triangle — see the matching
+          canvas shape's own comment (maxgraph-custom-shapes.ts,
+          UMLDirectedAssociationShapeCanvas): a navigable association's
+          arrow is a thin open stick-arrow, distinct from generalization/
+          realization's hollow triangle. */}
+      <Line x1={width - arrow - 2} y1={cy - 6} x2={width - 2} y2={cy} stroke={color} strokeWidth={strokeWidth} />
+      <Line x1={width - 2} y1={cy} x2={width - arrow - 2} y2={cy + 6} stroke={color} strokeWidth={strokeWidth} />
     </Svg>
   );
 };
@@ -119,8 +120,41 @@ export const UMLDependencyShape: React.FC<ShapeProps> = ({
         strokeWidth={strokeWidth}
         strokeDasharray="6,4"
       />
+      {/* Open "V" arrowhead, not a closed triangle — same reasoning as
+          Directed Association's above; dependency's marker is the same
+          open stick-arrow, just on a dashed shaft. */}
+      <Line x1={width - arrow - 2} y1={cy - 6} x2={width - 2} y2={cy} stroke={color} strokeWidth={strokeWidth} />
+      <Line x1={width - 2} y1={cy} x2={width - arrow - 2} y2={cy + 6} stroke={color} strokeWidth={strokeWidth} />
+    </Svg>
+  );
+};
+
+// ─── 5b. Realization / Implementation ────────────────────────────────────
+// Same hollow triangle as Generalization (UseCaseShapes.tsx), on a dashed
+// shaft instead of solid — the same solid/dashed split Association/
+// Dependency use for their own shared marker shape.
+
+export const UMLRealizationShape: React.FC<ShapeProps> = ({
+  width,
+  height,
+  color = '#1a1f36',
+  strokeWidth = 2,
+}) => {
+  const cy = height / 2;
+  const s = 14;
+  return (
+    <Svg width={width} height={height} viewBox={`0 0 ${width} ${height}`}>
+      <Line
+        x1={2}
+        y1={cy}
+        x2={width - s - 2}
+        y2={cy}
+        stroke={color}
+        strokeWidth={strokeWidth}
+        strokeDasharray="6,4"
+      />
       <Polygon
-        points={`${width - 2},${cy} ${width - arrow - 2},${cy - 6} ${width - arrow - 2},${cy + 6}`}
+        points={`${width - s - 2},${cy - s / 2} ${width - 2},${cy} ${width - s - 2},${cy + s / 2}`}
         fill="none"
         stroke={color}
         strokeWidth={strokeWidth}

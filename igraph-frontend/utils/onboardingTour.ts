@@ -47,17 +47,6 @@ const writeSeen = (tourId: string) => {
 
 export const hasSeenTour = (tourId: string): boolean => readSeen(tourId);
 
-// Lets a user re-run a tour on demand (e.g. a "Replay tour" button) instead
-// of only ever seeing it once.
-export const resetTour = (tourId: string) => {
-  if (!isWeb()) return;
-  try {
-    window.localStorage.removeItem(seenKey(tourId));
-  } catch {
-    // Ignore.
-  }
-};
-
 // Onboarding auto-plays only for someone who just created an account, never
 // for a returning sign-in — a fresh browser/device otherwise looks identical
 // to a brand-new signup (no tour-seen keys either way), which used to make
@@ -150,9 +139,9 @@ export const startTour = (tourId: string, steps: DriveStep[], options: StartTour
   if (!isWeb() || steps.length === 0) return;
   // `force` is only ever passed by the tour chain's own hand-off (already
   // gated on the new-user flag being what started the chain in the first
-  // place) and by the manual "Replay tour" button (which should always
-  // work, new user or not) — so only the unforced, auto-play path needs
-  // the new-user check.
+  // place, so a later module's tour still plays even if it happens to have
+  // been marked seen from an earlier, separate visit) — so only the
+  // unforced, auto-play path needs the new-user check.
   if (!options.force) {
     if (!isNewUserPendingOnboarding()) return;
     if (hasSeenTour(tourId)) return;

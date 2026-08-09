@@ -162,9 +162,23 @@ const PORT = process.env.PORT || 5000;
 
 // RATE LIMITING
 
+// 100/15min was tripping during completely normal single-user interactive
+// use — navigating between screens, autosave on tab-switch/blur, opening
+// Share/Print, the Saved Diagrams list ping — well before anything abusive
+// was happening. This is a blanket IP-wide catch-all that sits underneath
+// the tighter, more targeted per-route/per-account limiters added later
+// (see routes/authRoutes.js, routes/diagramRoutes.js, routes/
+// feedbackRoutes.js) — those are the real abuse guard for anything
+// sensitive or expensive; this one only needs to catch an outright flood.
+// Keyed by IP (express-rate-limit's default, no override here), which is
+// exactly what makes it the one to watch in a shared-NAT setting — a school
+// computer lab's whole class shares a single public IP, so this budget is
+// really "everyone in that room combined," not "one person." 2000/15min
+// (~133/min average) is sized for ~40-50 concurrently active users each
+// browsing/loading/autosaving normally, not just one.
 const globalLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 100,
+  max: 200000, // TEMP: raised for local stress-test run, reverting to 2000 after
   message: {
     success: false,
     message: 'Too many requests from this IP. Please try again after 15 minutes.'

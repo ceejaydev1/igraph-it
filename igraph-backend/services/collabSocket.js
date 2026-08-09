@@ -8,13 +8,18 @@
 // is really periodic saves plus a live broadcast layer, not one shared
 // document being mutated transactionally by every editor at once.
 //
-// That's a real, deliberate trade-off: two people editing the exact same
-// shape at the exact same instant can still clobber each other (last
-// broadcast wins), because true conflict-free merging of a graph model
-// would need a dedicated CRDT for shape/edge operations — a project in its
-// own right, well beyond what a share dialog needs. In practice this is the
-// same model plenty of simpler real-time tools use, and collisions are rare
-// since most edits touch different shapes.
+// Broadcasts carry small per-cell patches (see
+// igraph-frontend/utils/diagramPatch.ts), not a full-page snapshot — an
+// earlier full-snapshot design meant *any* two edits close together in
+// time, even to completely unrelated shapes, could silently overwrite one
+// another on arrival, since each broadcast was "here is my entire copy of
+// the page." Patches fix that: two people editing different shapes no
+// longer collide at all. The one remaining, deliberate trade-off is a true
+// same-cell collision — two people editing the *exact same* shape at the
+// exact same instant still resolve last-write-wins per field, because real
+// conflict-free merging (a CRDT) is a project in its own right, well beyond
+// what a share dialog needs. That's now a narrow, rare edge case rather
+// than the general shape of the risk.
 
 const { Server } = require('socket.io');
 const { verifyAccessToken } = require('../utils/generateJWT');
@@ -23,6 +28,18 @@ const { getAccessLevel, canView, canEdit } = require('../utils/diagramAccess');
 const { db } = require('../config/firebase');
 
 const roomName = (diagramId) => `diagram:${diagramId}`;
+
+// Hard cap on concurrent collaborators per diagram. Counted by distinct
+// userId, not socket count, so the same person with two tabs (or a
+// reconnect that hasn't cleaned up the old socket yet) never eats a second
+// slot — the limit is meant to bound how many *people* are broadcasting
+// edit patches at each other, not how many sockets exist.
+const MAX_COLLABORATORS_PER_DIAGRAM = 10;
+
+// Defense-in-depth cap on how many patches a single diagram-change message
+// may carry — see the 'diagram-change' handler below. Not a limit any
+// legitimate edit should ever approach.
+const MAX_PATCHES_PER_MESSAGE = 500;
 
 // Per-socket flood guard for the two high-frequency real-time events
 // (diagram-change, cell-select). The frontend already debounces
@@ -100,6 +117,20 @@ function attachCollabSocket(httpServer, corsOriginFn) {
     }
   });
 
+  // Distinct userIds currently holding a socket in this diagram's room —
+  // the basis for both presence and the collaborator cap below.
+  const roomUserIds = (diagramId) => {
+    const room = io.sockets.adapter.rooms.get(roomName(diagramId));
+    const userIds = new Set();
+    if (room) {
+      for (const socketId of room) {
+        const s = io.sockets.sockets.get(socketId);
+        if (s && s.data.userId) userIds.add(s.data.userId);
+      }
+    }
+    return userIds;
+  };
+
   const broadcastPresence = (diagramId) => {
     const room = io.sockets.adapter.rooms.get(roomName(diagramId));
     const viewers = [];
@@ -132,6 +163,14 @@ function attachCollabSocket(httpServer, corsOriginFn) {
         const level = getAccessLevel(doc.data(), socket.data.userId);
         if (!canView(level)) {
           return typeof ack === 'function' && ack({ ok: false, message: 'No access to this diagram.' });
+        }
+
+        const existingUserIds = roomUserIds(diagramId);
+        if (!existingUserIds.has(socket.data.userId) && existingUserIds.size >= MAX_COLLABORATORS_PER_DIAGRAM) {
+          return typeof ack === 'function' && ack({
+            ok: false,
+            message: `This diagram already has the maximum of ${MAX_COLLABORATORS_PER_DIAGRAM} people editing at once. Try again once someone leaves.`,
+          });
         }
 
         // A client only ever actively edits one diagram at a time — leaving
@@ -171,15 +210,31 @@ function attachCollabSocket(httpServer, corsOriginFn) {
 
     // Broadcast-only — see the file header for why this isn't a merged/CRDT
     // update. permission is re-checked per-message (not just at join time)
-    // since a collaborator's access can be downgraded mid-session.
+    // since a collaborator's access can be downgraded mid-session. pageId is
+    // relayed as-is (untrusted, just an opaque tag) — the receiving client
+    // is the one that decides whether it matches the page it's currently
+    // looking at before applying it (see create.tsx's onRemoteChange); this
+    // relay has no notion of "pages" at all, it just carries the label
+    // through so a change for page B can't get applied on top of page A.
+    //
+    // payload.patches is a small list of what actually changed (see
+    // igraph-frontend/utils/diagramPatch.ts), not a full-page xml snapshot —
+    // this server never needs to understand a patch's contents, only relay
+    // the list opaquely, same as it always did with xml. MAX_PATCHES_PER_MESSAGE
+    // is defense-in-depth against a single runaway/malicious client, not a
+    // real limit any legitimate edit should ever approach — the frontend's
+    // own debounce buffer collapses same-cell updates down to one patch per
+    // field per ~200ms window.
     socket.on('diagram-change', (payload) => {
       if (!withinMessageBudget(socket)) return;
       const { diagramId, permission } = socket.data;
       if (!diagramId || !canEdit(permission)) return;
-      if (!payload || typeof payload.xml !== 'string') return;
+      if (!payload || !Array.isArray(payload.patches)) return;
+      if (payload.patches.length === 0 || payload.patches.length > MAX_PATCHES_PER_MESSAGE) return;
 
       socket.to(roomName(diagramId)).emit('diagram-change', {
-        xml: payload.xml,
+        patches: payload.patches,
+        pageId: typeof payload.pageId === 'string' ? payload.pageId : null,
         fromUserId: socket.data.userId,
       });
     });

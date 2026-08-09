@@ -51,7 +51,8 @@ import {
 import { UniversalVertexHandler, AxisLockedPanningHandler } from './maxgraph-universal-handler';
 import { getShapeDefinitionById, getShapesForDiagram, DIAGRAM_SHAPES, ShapeDefinition, isConnectorCell, CONNECTOR_SHAPE_IDS } from '@/constants/shapes';
 import { ShapePreview } from '@/components/shapes/ShapeIcon';
-import { tagShapeRole, getShapeRole, validateDiagram, computeFddEntryPoint, FlowchartIssue, IssueSeverity } from '@/utils/flowchartRules';
+import { tagShapeRole, getShapeRole, validateDiagram, FlowchartIssue, IssueSeverity } from '@/utils/flowchartRules';
+import { changesToPatches, applyPatches as applyPatchesToModel, DiagramPatch } from '@/utils/diagramPatch';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -133,7 +134,19 @@ function getDropSize(shapeId: string): { w: number; h: number } {
 
 HandleConfig.fillColor = BLUE;
 HandleConfig.strokeColor = BLUE;
-HandleConfig.size = 8;
+// A connector endpoint's hit-test radius is roughly (this size / 2) + the
+// handler's own tolerance — EdgeHandler.tolerance (widened to 20 below, see
+// its own comment) only ever applies to touch/pen input; maxGraph hardcodes
+// a genuine mouse event's tolerance to a flat 1px regardless. At size 8 that
+// left mouse users a real grab radius of only ~5px around the handle's
+// center — confirmed directly (via an automated drag test against the live
+// app) to be the actual reason a repositioning drag could fail to start at
+// all: missing the handle by a handful of pixels doesn't begin a drag, it's
+// simply a no-op click, which reads as "the connector won't move" even
+// though the position/repaint logic itself was never actually exercised.
+// 12 widens that to a still-modest ~7px without the handles looking
+// oversized.
+HandleConfig.size = 12;
 
 VertexHandlerConfig.selectionColor = BLUE;
 VertexHandlerConfig.selectionDashed = true;
@@ -174,8 +187,17 @@ function paintGridOnCanvas(
   const ctx = canvas.getContext('2d');
   if (!ctx) return;
 
-  const W = canvas.width;
-  const H = canvas.height;
+  // canvas.width/height are the device-pixel backing store (set in
+  // resizeGridCanvas as CSS size * devicePixelRatio, for sharp lines on
+  // high-DPR mobile screens — see comment there). Resetting the transform
+  // to that same scale lets everything below keep drawing in CSS-pixel
+  // coordinates, matching `scale`/`tx`, which come from the graph view and
+  // know nothing about device pixels.
+  const dpr = window.devicePixelRatio || 1;
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+  const W = canvas.width / dpr;
+  const H = canvas.height / dpr;
   ctx.clearRect(0, 0, W, H);
   ctx.fillStyle = CANVAS_BG;
   ctx.fillRect(0, 0, W, H);
@@ -288,54 +310,23 @@ export function findNearbyVertex(graph: Graph, x: number, y: number, threshold: 
   return best;
 }
 
-// Finds whichever shape sits immediately to one side of the drop point
-// along a single axis — "immediately" meaning its span on the OTHER axis
-// actually brackets the drop point (so a shape that's merely somewhere off
-// to that side, but not in the same row/column, doesn't count), and closest
-// among those. Distance-unbounded on purpose: unlike findNearbyVertex's
-// small fixed snap radius, this is how two shapes that are simply "next to
-// each other" get found regardless of exactly how far apart they are.
-function findBracketingVertex(
-  vertices: any[],
-  centerX: number,
-  centerY: number,
-  direction: 'left' | 'right' | 'up' | 'down',
-): any {
-  let best: any = null;
-  let bestGap = Infinity;
-  for (const cell of vertices) {
-    if (isConnectorCell(cell)) continue;
-    const geo = cell.getGeometry();
-    if (!geo) continue;
-
-    if (direction === 'left' || direction === 'right') {
-      if (centerY < geo.y || centerY > geo.y + geo.height) continue;
-      const gap = direction === 'left' ? centerX - (geo.x + geo.width) : geo.x - centerX;
-      if (gap >= 0 && gap < bestGap) { bestGap = gap; best = cell; }
-    } else {
-      if (centerX < geo.x || centerX > geo.x + geo.width) continue;
-      const gap = direction === 'up' ? centerY - (geo.y + geo.height) : geo.y - centerY;
-      if (gap >= 0 && gap < bestGap) { bestGap = gap; best = cell; }
-    }
-  }
-  return best;
-}
-
-// A dropped connector's two endpoints should attach to whichever pair of
-// shapes it actually landed between — side by side "(shape) (shape)", or
-// stacked "(shape) / (shape)" — regardless of exactly how far apart those
-// shapes are. Previously this only ever projected a fixed-length line
-// (the connector's own default width) out from the drop's center and
-// snapped whichever end happened to land within a small fixed radius of a
-// shape — so it only worked when the two shapes happened to be spaced
-// almost exactly that far apart; any other spacing left the connector
-// dangling on one or both ends (an on-canvas error badge, not just a
-// cosmetic miss). This instead looks outward in all 4 directions for the
-// shape that actually brackets the drop point in each, and connects
-// whichever axis found a complete pair (horizontal wins on tie, matching
-// the original left-right default). Falls back to the old fixed-length
-// floating segment, still with its small magnet-snap radius, only when
-// neither axis finds two shapes to bridge.
+// A dropped connector always lands as a plain floating segment of its own
+// default length (`reach`), centered on the drop point — no longer reaching
+// out to whichever shapes happen to flank it, however far away those were.
+// That "bracket whichever pair of shapes it landed between" search used to
+// live here (findBracketingVertex, since removed): it made a palette-
+// dropped connector snap onto shapes that could be well outside the user's
+// intended drop radius, purely because they were the nearest thing in the
+// same row/column — a connector could jump onto shapes the user never
+// meant to touch just by being dropped in roughly the right lane, with no
+// way to tell beforehand which pair it would pick. Attaching is now always
+// an explicit, deliberate act: drag an end onto a shape (or another
+// connector) yourself — see the ConnectionHandler/EdgeHandler smooth-
+// connect highlighting further down for that gesture. The only automatic
+// snap left here is the small, close-range magnet below (still
+// CONNECTOR_SNAP_DISTANCE, same as every other "dropped right on top of
+// it" case in this file) — a connector dropped directly on or touching a
+// shape/connector still attaches immediately, same as it always has.
 export function findConnectorDropEndpoints(
   graph: Graph,
   centerX: number,
@@ -347,34 +338,6 @@ export function findConnectorDropEndpoints(
   sourceCell: any;
   targetCell: any;
 } {
-  const vertices = graph.getChildVertices(graph.getDefaultParent());
-
-  const leftCell = findBracketingVertex(vertices, centerX, centerY, 'left');
-  const rightCell = findBracketingVertex(vertices, centerX, centerY, 'right');
-  if (leftCell && rightCell) {
-    const lGeo = leftCell.getGeometry();
-    const rGeo = rightCell.getGeometry();
-    return {
-      startPoint: { x: lGeo.x + lGeo.width, y: centerY },
-      endPoint: { x: rGeo.x, y: centerY },
-      sourceCell: leftCell,
-      targetCell: rightCell,
-    };
-  }
-
-  const upCell = findBracketingVertex(vertices, centerX, centerY, 'up');
-  const downCell = findBracketingVertex(vertices, centerX, centerY, 'down');
-  if (upCell && downCell) {
-    const uGeo = upCell.getGeometry();
-    const dGeo = downCell.getGeometry();
-    return {
-      startPoint: { x: centerX, y: uGeo.y + uGeo.height },
-      endPoint: { x: centerX, y: dGeo.y },
-      sourceCell: upCell,
-      targetCell: downCell,
-    };
-  }
-
   const half = reach / 2;
   const hStart = { x: centerX - half, y: centerY };
   const hEnd = { x: centerX + half, y: centerY };
@@ -405,6 +368,134 @@ function edgeEndpoint(edge: any, isSource: boolean): { x: number; y: number } | 
   return pt ? { x: pt.x, y: pt.y } : null;
 }
 
+// The interactive CELL_CONNECTED catch-all further down (initGraph) pins a
+// fixed exitX/exitY (or entryX/entryY) fraction the instant a user drags an
+// edge end onto a real cell — but every *automatic* attach path in this
+// file (a palette-dropped connector auto-snapping onto whatever it landed
+// near in handleDrop, a dangling connector's end catching a nearby vertex
+// once something drags close enough in attachDanglingEdgeEnds/
+// attachVertexToDanglingEdges) wires the terminal directly via
+// model.setTerminal or insertEdge(source, target, ...) — neither of which
+// fires CELL_CONNECTED — so none of them ever get pinned. Left floating, a
+// vertex target still tracks the two shapes' relative positions closely
+// enough not to matter most of the time, but an EDGE target (a connector
+// auto-attached to another connector) hardcodes the exact MIDPOINT of that
+// target on every single redraw, no matter where it actually landed — the
+// "jumps to another position" bug — and, having no fixed point to begin
+// with, can never be dragged anywhere else afterward either, since nothing
+// is there to slide — the matching "locks in one position" bug. Mirrors
+// the exact fraction math the interactive fix uses, just against
+// model-space geometry/endpoints (this runs synchronously at attach time,
+// against a cell that may not have a CellState yet, not from a live one)
+// so every attach path — drag or automatic — ends up in the identical,
+// re-draggable pinned state.
+function pinnedEdgeEndStyle(target: any, point: { x: number; y: number }, isSource: boolean): Record<string, unknown> {
+  if (typeof target?.isEdge === 'function' && target.isEdge()) {
+    // A connector target: exitX/entryX means PATH-LENGTH fraction here (see
+    // the getConnectionPoint override in initGraph and pointAtPathFraction/
+    // closestFractionOnPath's own comment) — the bounding-box fraction
+    // vertices use doesn't generally land back on a diagonal or bent
+    // target's actual line at all. Built from the target's own model-space
+    // endpoints plus any waypoints (geo.points) it has — the fullest
+    // polyline available synchronously here, before this target necessarily
+    // has a live CellState/absolutePoints to read instead.
+    const a = edgeEndpoint(target, true);
+    const b = edgeEndpoint(target, false);
+    if (!a || !b) return {};
+    const bends: { x: number; y: number }[] = target.getGeometry?.()?.points ?? [];
+    const path = [a, ...bends, b];
+    const f = closestFractionOnPath(path, point.x, point.y);
+    return isSource
+      ? { exitX: f, exitY: 0.5, exitPerimeter: false, igraphAutoPinSource: true }
+      : { entryX: f, entryY: 0.5, entryPerimeter: false, igraphAutoPinTarget: true };
+  }
+  const geo = target?.getGeometry?.();
+  if (!geo) return {};
+  const { x: bx, y: by, width: bw, height: bh } = geo;
+  const fx = bw > 0 ? Math.min(1, Math.max(0, (point.x - bx) / bw)) : 0.5;
+  const fy = bh > 0 ? Math.min(1, Math.max(0, (point.y - by) / bh)) : 0.5;
+  return isSource
+    ? { exitX: fx, exitY: fy, exitPerimeter: false, igraphAutoPinSource: true }
+    : { entryX: fx, entryY: fy, entryPerimeter: false, igraphAutoPinTarget: true };
+}
+
+// Every igraphAutoPinSource/Target marker above is written as a real JS
+// boolean `true` — correct in the live session it was set in. But this
+// app's save/load round-trip (ModelXmlSerializer, the same one loadXml and
+// the backend save use) serializes a style object generically, attribute
+// by attribute, with no per-key type information — a boolean has no
+// native XML attribute representation, so it comes back parsed as the
+// NUMBER 1 (confirmed directly against ModelXmlSerializer: export writes
+// igraphAutoPinTarget="1", import reads it back as 1, not true), the exact
+// same "0/1 stands in for a bool" convention maxGraph's own style keys
+// (e.g. entryPerimeter) already rely on — and maxGraph's own code reads
+// those loosely (`edge.style.exitPerimeter || false`), never with strict
+// equality. Every check against this marker up to now used `=== true` /
+// `!== true`, which silently stops recognizing its OWN marker the instant
+// a diagram round-trips through a save and reload: 1 !== true, so a
+// connector this app itself pinned reads as "not ours" afterward — the
+// concrete mechanism behind "opening the diagram again fixes it, but only
+// until the next save/reload" and "the interactive re-pin refuses to
+// update it" (the CELL_CONNECTED catch-all's fixedByOther treats a
+// corrupted `1` as someone ELSE's deliberate fixed point and backs off).
+function isAutoPinnedFlag(value: unknown): boolean {
+  return value === true || value === 1 || value === '1';
+}
+
+// Whether this cell is an edge with at least one auto-pinned end (see
+// pinnedEdgeEndStyle/isAutoPinnedFlag above) — the marker that means
+// "attached to another shape or connector via this app's own catch-all,
+// not floating and not one of the dedicated cases (Main Cause/spine,
+// Sequence messages, Fork/Join stubs) that already have their own
+// specific slide function." Used below to give exactly this case its own
+// dedicated drag behavior instead of maxGraph's generic one.
+function isAutoPinnedEdge(cell: any): boolean {
+  if (!cell || typeof cell.isEdge !== 'function' || !cell.isEdge()) return false;
+  const style = cell.getStyle();
+  const base = (typeof style === 'object' && style !== null ? style : {}) as Record<string, unknown>;
+  return isAutoPinnedFlag(base.igraphAutoPinSource) || isAutoPinnedFlag(base.igraphAutoPinTarget);
+}
+
+// Every OTHER "dedicated" pinned-edge case (Fishbone Main Cause/spine,
+// Sequence Sync/Async/Return messages, Fork/Join stubs) has its own slide
+// function below for the exact same reason isAutoPinnedEdge's does — a
+// fixed exit/entry fraction that plain translateCell never touches — and
+// each one's own comment already documents the identical symptom this
+// causes: dragging renders a mismatched ghost the whole gesture, then
+// snaps/desyncs at mouseup (confirmed on video for a Sequence Return
+// message specifically: its exitY and entryY desynced mid-drag, leaving it
+// rendered as a diagonal kink flagged by validation, instead of the level
+// line every message should be). isAutoPinnedEdge's own dedicated body-drag
+// fix (see the SelectionHandler wrap in initGraph) only recognized ITS OWN
+// marker, so none of these dedicated cases got the same live, WYSIWYG
+// dragging — they were still left on maxGraph's generic, mismatched ghost
+// path. hasDedicatedEdgeSlide/runDedicatedEdgeSlide generalize that same
+// fix to every one of these, mirroring the exact dispatch runAutoAttachOnMove
+// below already uses for the MOVE_CELLS/mouseup-only version of the same
+// slide.
+function hasDedicatedEdgeSlide(cell: any): boolean {
+  if (!cell || typeof cell.isEdge !== 'function' || !cell.isEdge()) return false;
+  const role = getShapeRole(cell);
+  if (cell.source && role && FISHBONE_MAIN_CAUSE_IDS.has(role)) return true;
+  if (role && SEQUENCE_MESSAGE_SHAPE_IDS.has(role)) return true;
+  if (role === 'act-control-flow') return true;
+  return isAutoPinnedEdge(cell);
+}
+
+function runDedicatedEdgeSlide(graph: Graph, cell: any, dx: number, dy: number) {
+  const role = getShapeRole(cell);
+  if (cell.source && role && FISHBONE_MAIN_CAUSE_IDS.has(role)) {
+    slideMainCauseAlongSpine(graph, cell, dx);
+  }
+  if (role && SEQUENCE_MESSAGE_SHAPE_IDS.has(role)) {
+    slideSequenceMessageAlongTimelines(graph, cell, dy);
+  }
+  if (role === 'act-control-flow') {
+    slideForkJoinStubAlongBar(graph, cell, dx);
+  }
+  slideAutoPinnedEdgeEnd(graph, cell, dx, dy);
+}
+
 function distanceToSegment(px: number, py: number, ax: number, ay: number, bx: number, by: number): number {
   const dx = bx - ax;
   const dy = by - ay;
@@ -426,11 +517,19 @@ function distanceToSegment(px: number, py: number, ax: number, ay: number, bx: n
 // already uses for matching a cardinality marker to its edge.
 // `roles`, when given, restricts the search to edges of just those shape
 // roles (see the Fishbone Main Cause branch in handleDrop, which must only
-// ever find the spine — never any other nearby connector).
-export function findEdgeNearPoint(graph: Graph, x: number, y: number, threshold: number, roles?: Set<string>): any {
+// ever find the spine — never any other nearby connector). `excludeEdge`,
+// when given, skips that one candidate — every existing call site searches
+// from a point that can never coincide with its own line (a fresh drop, or
+// another cell's position), so it's optional and defaults to no exclusion;
+// but a search from an edge's OWN still-dangling terminal point (see
+// attachDanglingEdgeEnds) needs it, the exact same hazard findHostWireFor
+// Junction's own comment already documents — that point IS one of the
+// edge's own two endpoints, which would otherwise always "win" at distance 0.
+export function findEdgeNearPoint(graph: Graph, x: number, y: number, threshold: number, roles?: Set<string>, excludeEdge?: any): any {
   let best: any = null;
   let bestDistance = Infinity;
   for (const edge of graph.getChildEdges(graph.getDefaultParent())) {
+    if (edge === excludeEdge) continue;
     if (roles && !roles.has(getShapeRole(edge) ?? '')) continue;
     const a = edgeEndpoint(edge, true);
     const b = edgeEndpoint(edge, false);
@@ -556,6 +655,89 @@ function closestPointOnSegment(
   const lenSq = dx * dx + dy * dy;
   const t = lenSq === 0 ? 0 : Math.max(0, Math.min(1, ((px - ax) * dx + (py - ay) * dy) / lenSq));
   return { x: ax + t * dx, y: ay + t * dy };
+}
+
+// ─── Path-length-fraction points on a target CONNECTOR ─────────────────────
+// maxGraph's own exitX/exitY (see getConnectionConstraint/getConnectionPoint
+// in @maxgraph/core's ConnectionsMixin) are BOUNDING-BOX fractions — correct
+// and exactly what you want for a vertex target (a rectangle's own corners
+// ARE its bounding box), but wrong for an EDGE target: a bounding-box
+// fraction of a diagonal or bent connector's box doesn't generally land
+// back on the connector's actual drawn line at all, only ever coincidentally
+// for a perfectly horizontal/vertical one. draw.io/mxGraph's own answer to
+// "a point that lives on a specific edge" — used there only for edge
+// LABELS, via getPoint/getRelativePoint in mxGraphView.js, never for
+// connector endpoints, since draw.io leaves connectableEdges permanently
+// false and never needs this for endpoints at all — is a fraction of PATH
+// LENGTH along that edge's actual rendered segments, not its box. That's
+// what these two mirror, reused here for the thing draw.io doesn't
+// attempt: a connector endpoint that lives on another connector, staying
+// correct however bent or reoriented the target is, since it's derived
+// from the real polyline instead of a shape that may not even contain it.
+// Both operate on absolutePoints — already-computed, view-space (scaled +
+// translated) points — so the fraction itself is scale/pan-independent,
+// the same property exitX/exitY have for a vertex.
+
+// Renders a stored path-fraction (0=start, 1=end) back into a point, by
+// walking absolutePoints and accumulating segment lengths until `fraction`
+// of the total is covered. The inverse of closestFractionOnPath below.
+function pointAtPathFraction(points: { x: number; y: number }[], fraction: number): { x: number; y: number } | null {
+  if (points.length < 2) return points[0] ?? null;
+  const clamped = Math.max(0, Math.min(1, fraction));
+  const segLengths: number[] = [];
+  let total = 0;
+  for (let i = 1; i < points.length; i++) {
+    const len = Math.hypot(points[i].x - points[i - 1].x, points[i].y - points[i - 1].y);
+    segLengths.push(len);
+    total += len;
+  }
+  if (total === 0) return points[0];
+  let target = clamped * total;
+  for (let i = 0; i < segLengths.length; i++) {
+    if (target <= segLengths[i] || i === segLengths.length - 1) {
+      const t = segLengths[i] === 0 ? 0 : Math.max(0, Math.min(1, target / segLengths[i]));
+      const a = points[i];
+      const b = points[i + 1];
+      return { x: a.x + t * (b.x - a.x), y: a.y + t * (b.y - a.y) };
+    }
+    target -= segLengths[i];
+  }
+  return points[points.length - 1];
+}
+
+// Finds where (px, py) actually lands on a target edge's polyline — the
+// closest point on any of its segments — and expresses that as a fraction
+// of the path's total length, for storing in exitX/entryX (see
+// pinnedEdgeEndStyle and the CELL_CONNECTED catch-all, both of which use
+// this instead of the plain bounding-box fraction specifically when the
+// target is an edge).
+function closestFractionOnPath(points: { x: number; y: number }[], px: number, py: number): number {
+  if (points.length < 2) return 0.5;
+  const segLengths: number[] = [];
+  let total = 0;
+  for (let i = 1; i < points.length; i++) {
+    const len = Math.hypot(points[i].x - points[i - 1].x, points[i].y - points[i - 1].y);
+    segLengths.push(len);
+    total += len;
+  }
+  if (total === 0) return 0.5;
+  let bestDist = Infinity;
+  let bestLenAlong = 0;
+  let cumulative = 0;
+  for (let i = 0; i < segLengths.length; i++) {
+    const a = points[i];
+    const b = points[i + 1];
+    const closest = closestPointOnSegment(px, py, a.x, a.y, b.x, b.y);
+    const dist = Math.hypot(px - closest.x, py - closest.y);
+    if (dist < bestDist) {
+      bestDist = dist;
+      const segLen = segLengths[i];
+      const t = segLen === 0 ? 0 : Math.hypot(closest.x - a.x, closest.y - a.y) / segLen;
+      bestLenAlong = cumulative + t * segLen;
+    }
+    cumulative += segLengths[i];
+  }
+  return Math.max(0, Math.min(1, bestLenAlong / total));
 }
 
 // Finds a wire for a new wire's still-dangling end to branch into — the
@@ -838,6 +1020,18 @@ function attachMainCauseToSpine(graph: Graph, edge: any, point: { x: number; y: 
 // shape — one end pinned to the bar, the other genuinely dangling only
 // CONNECTOR_SNAP_DISTANCE away to start with, so even a couple of nudge
 // keystrokes toward the bar could cross back into its own snap radius.
+// Sets the terminal AND, same as pinnedEdgeEndStyle's own comment explains,
+// the fixed exitX/entryX fraction it would have gotten from an interactive
+// drag — a raw setTerminal alone leaves this snap in maxGraph's floating
+// mode, which for another connector as the target hardcodes its exact
+// midpoint on every redraw regardless of where this end actually landed.
+function attachEdgeTerminalPinned(graph: Graph, edge: any, target: any, point: { x: number; y: number }, isSource: boolean) {
+  graph.getDataModel().setTerminal(edge, target, isSource);
+  const style = edge.getStyle();
+  const base = (typeof style === 'object' && style !== null ? style : {}) as Record<string, unknown>;
+  graph.getDataModel().setStyle(edge, { ...base, ...pinnedEdgeEndStyle(target, point, isSource) } as CellStateStyle);
+}
+
 function attachDanglingEdgeEnds(graph: Graph, edge: any) {
   if (edge.source && edge.target) return;
   const role = getShapeRole(edge);
@@ -850,16 +1044,24 @@ function attachDanglingEdgeEnds(graph: Graph, edge: any) {
       if (role && FISHBONE_MAIN_CAUSE_IDS.has(role)) {
         attachMainCauseToSpine(graph, edge, p);
       } else if (!role || !RESTRICTED_SOURCE_CAUSE_ROLES.has(role)) {
-        const v = findNearbyVertex(graph, p.x, p.y, CONNECTOR_SNAP_DISTANCE, edge.target);
-        if (v) graph.getDataModel().setTerminal(edge, v, true);
+        // Falls back to the nearest EDGE (same as findConnectorDropEndpoints'
+        // own fallback and handleDrop's magnet-snap) when no vertex is close
+        // enough — dragging a still-dangling connector near ANOTHER
+        // connector should snap onto it exactly the same way dragging it
+        // near a shape already does; a vertex target isn't a special case
+        // here, just the more common one.
+        const target = findNearbyVertex(graph, p.x, p.y, CONNECTOR_SNAP_DISTANCE, edge.target)
+          ?? findEdgeNearPoint(graph, p.x, p.y, CONNECTOR_SNAP_DISTANCE, undefined, edge);
+        if (target) attachEdgeTerminalPinned(graph, edge, target, p, true);
       }
     }
   }
   if (!edge.target) {
     const p = geo.getTerminalPoint(false);
     if (p) {
-      const v = findNearbyVertex(graph, p.x, p.y, CONNECTOR_SNAP_DISTANCE, edge.source);
-      if (v) graph.getDataModel().setTerminal(edge, v, false);
+      const target = findNearbyVertex(graph, p.x, p.y, CONNECTOR_SNAP_DISTANCE, edge.source)
+        ?? findEdgeNearPoint(graph, p.x, p.y, CONNECTOR_SNAP_DISTANCE, undefined, edge);
+      if (target) attachEdgeTerminalPinned(graph, edge, target, p, false);
     }
   }
 }
@@ -883,17 +1085,53 @@ function attachVertexToDanglingEdges(graph: Graph, vertex: any) {
     if (!edge.source && (!role || !RESTRICTED_SOURCE_CAUSE_ROLES.has(role))) {
       const p = edgeGeo?.getTerminalPoint(true);
       if (p && Math.hypot(p.x - anchorX, p.y - anchorY) <= CONNECTOR_SNAP_DISTANCE) {
-        graph.getDataModel().setTerminal(edge, vertex, true);
+        attachEdgeTerminalPinned(graph, edge, vertex, p, true);
         continue;
       }
     }
     if (!edge.target) {
       const p = edgeGeo?.getTerminalPoint(false);
       if (p && Math.hypot(p.x - anchorX, p.y - anchorY) <= CONNECTOR_SNAP_DISTANCE) {
-        graph.getDataModel().setTerminal(edge, vertex, false);
+        attachEdgeTerminalPinned(graph, edge, vertex, p, false);
       }
     }
   }
+}
+
+// Runs on the FDD CELL_CONNECTED listener further down for every connect
+// (or reconnect) of a plain Connector between two Function boxes — applies
+// only the org-chart *routing* (orthogonalEdgeStyle, square corners), never
+// WHERE the ends attach. That's deliberate: this used to also compute a
+// "canonical" entry/exit point from the two boxes' geometry and reapply it
+// on every single reconnect — including a redrag the user just did on
+// purpose — which is what made every FDD link feel permanently locked to
+// one spot. The CELL_CONNECTED catch-all fix further down already updates
+// an edge's fixed point to wherever it was actually just dropped, and lets
+// it be re-dragged again later — the same accurate, drag-respecting
+// behavior every other connector in this app gets. This listener firing
+// for that exact same connect and unconditionally overwriting the position
+// right back to its own computed value undid that the instant it landed.
+// Position is now entirely the catch-all's job here too. edgeStyle/rounded
+// are harmless/idempotent to reapply on every connect — they're the routing
+// shape, not a position, and stay correct regardless of which exact point
+// the ends end up pinned to.
+function applyFddEntryStyle(graph: Graph, edge: any): void {
+  if (!edge) return;
+  const source = edge.getTerminal(true);
+  const target = edge.getTerminal(false);
+  const isFunctionVertex = (c: any) => !!c && typeof c.isVertex === 'function' && c.isVertex() && getShapeRole(c) === 'function';
+  if (!isFunctionVertex(source) || !isFunctionVertex(target)) return;
+  const edgeRole = getShapeRole(edge);
+  if (edgeRole === 'control' || edgeRole === 'mechanism' || edgeRole === 'fdd-interface') return;
+  const currentStyle = edge.getStyle();
+  const base = typeof currentStyle === 'object' && currentStyle !== null ? currentStyle : {};
+  graph.batchUpdate(() => {
+    edge.setStyle({ ...base, edgeStyle: 'orthogonalEdgeStyle', rounded: false } as CellStateStyle);
+    // See the matching comment on the CELL_CONNECTED catch-all fix further
+    // down for why this is revalidate() rather than the narrower
+    // graph.refresh(edge) it used to be.
+    graph.getView().revalidate();
+  });
 }
 
 // The mirror of handleDrop's own spine<->head special case: attaches
@@ -957,6 +1195,34 @@ function slideMainCauseAlongSpine(graph: Graph, edge: any, dx: number) {
   const newAbsX = Math.max(spineState.x, Math.min(spineState.x + spineState.width, currentAbsX + dx * scale));
   const newExitX = (newAbsX - spineState.x) / spineState.width;
   graph.getDataModel().setStyle(edge, { ...base, exitX: newExitX, exitY: 0.5, exitPerimeter: false } as CellStateStyle);
+}
+
+// graph.getView().revalidate() (invalidate() + validate(), both exhaustive —
+// every CellState in the tree gets marked invalid and its geometry
+// recomputed) is what every "pin a fixed exitX/exitY/entryX/entryY fraction
+// via a plain setStyle" fix in this file (the CELL_CONNECTED catch-all,
+// slideAutoPinnedEdgeEnd, slideSequenceMessageAlongTimelines, slideMainCause
+// AlongSpine, slideForkJoinStubAlongBar) already calls afterward, on the
+// belief that it forces the line to actually repaint. It reliably updates
+// the STATE's geometry (state.absolutePoints) — but CellRenderer.redrawShape
+// only repaints the actual SHAPE (the visible SVG) when it decides the
+// state "is invalid" for THAT shape specifically (isShapeInvalid: compares
+// the shape's own currently-painted state.shape.points against the state's
+// freshly-recomputed absolutePoints) OR when told to unconditionally via
+// force=true. That comparison is exactly where this class of bug survives
+// revalidate(): confirmed live (a connector reconnected onto another
+// connector, and a Sequence message body-dragged along its timelines, both
+// end up with the CORRECT exitX/exitY saved into the model — reopening the
+// diagram, which rebuilds every Shape from scratch via loadXml, always
+// renders it right — yet the SAME already-open canvas keeps showing the
+// stale line, no matter how many times revalidate() runs). Whatever the
+// exact reason isShapeInvalid's comparison keeps missing the change for
+// this specific case, forcing it here — instead of continuing to trust the
+// heuristic — is what actually guarantees the visible line matches the
+// model on every single call, with no dependency on that comparison at all.
+function forceEdgeRepaint(graph: Graph, edge: any): void {
+  const state = graph.getView().getState(edge);
+  if (state) graph.cellRenderer.redraw(state, true);
 }
 
 // The Sequence-diagram counterpart of slideMainCauseAlongSpine above, for
@@ -1053,6 +1319,74 @@ function slideForkJoinStubAlongBar(graph: Graph, edge: any, dx: number) {
   graph.getDataModel().setStyle(edge, { ...base, [key]: newFrac } as CellStateStyle);
 }
 
+// The generic counterpart of slideMainCauseAlongSpine/slideForkJoinStubAlong
+// Bar above, for the exact same underlying reason, generalized to ANY
+// connector attached to another connector rather than one specific diagram's
+// named shapes — see the CELL_CONNECTED catch-all fix's igraphAutoPinSource/
+// igraphAutoPinTarget markers. A connector-to-connector attachment is pinned
+// via a fixed exitX/entryX fraction of the *target* connector's own bounds,
+// same mechanism as a fixed point on a vertex — and translateCell (plain
+// dragging) never touches that fraction, only the edge's own waypoints/
+// offset. Left alone, dragging an already-attached connector's body did
+// nothing visible: it recomputed straight back to the same fraction × the
+// same (unmoved) target bounds, reading as "locked in place" the instant it
+// first attached. Only acts on an end THIS app's own catch-all pinned (the
+// igraphAutoPin* marker) — a dedicated case like Main Cause/spine already
+// has its own specific slide function above and never sets that marker, so
+// this doesn't double-handle (or fight) those.
+function slideAutoPinnedEdgeEnd(graph: Graph, edge: any, dx: number, dy: number) {
+  if (dx === 0 && dy === 0) return;
+  const style = edge.getStyle();
+  const base = (typeof style === 'object' && style !== null ? style : {}) as Record<string, unknown>;
+  const scale = graph.getView().getScale();
+  const patch: Record<string, unknown> = {};
+
+  const slideEnd = (isSource: boolean) => {
+    if (!isAutoPinnedFlag(base[isSource ? 'igraphAutoPinSource' : 'igraphAutoPinTarget'])) return;
+    const terminal = edge.getTerminal(isSource);
+    if (!terminal) return;
+    const state = graph.getView().getState(terminal);
+    if (!state) return;
+    const xKey = isSource ? 'exitX' : 'entryX';
+    const yKey = isSource ? 'exitY' : 'entryY';
+    const currentX = typeof base[xKey] === 'number' ? (base[xKey] as number) : 0.5;
+    if (typeof terminal.isEdge === 'function' && terminal.isEdge() && Array.isArray(state.absolutePoints) && state.absolutePoints.length >= 2) {
+      // A connector target: xKey is a PATH-LENGTH fraction (see
+      // pinnedEdgeEndStyle/getConnectionPoint's own comment), so "slide by
+      // (dx, dy)" means moving the CURRENT point on that path by the drag
+      // delta, then re-projecting onto the path to find the new nearest
+      // fraction — free movement in any direction that still always
+      // resolves back onto the line, rather than only ever responding to
+      // whichever single axis the target's bounding box happened to be
+      // wide/tall in.
+      const points = state.absolutePoints.filter((p) => p != null) as { x: number; y: number }[];
+      const current = pointAtPathFraction(points, currentX);
+      if (!current) return;
+      const moved = { x: current.x + dx * scale, y: current.y + dy * scale };
+      patch[xKey] = closestFractionOnPath(points, moved.x, moved.y);
+      return;
+    }
+    if (state.width <= 0 && state.height <= 0) return;
+    const currentY = typeof base[yKey] === 'number' ? (base[yKey] as number) : 0.5;
+    if (state.width > 0) {
+      const currentAbsX = state.x + currentX * state.width;
+      const newAbsX = Math.max(state.x, Math.min(state.x + state.width, currentAbsX + dx * scale));
+      patch[xKey] = (newAbsX - state.x) / state.width;
+    }
+    if (state.height > 0) {
+      const currentAbsY = state.y + currentY * state.height;
+      const newAbsY = Math.max(state.y, Math.min(state.y + state.height, currentAbsY + dy * scale));
+      patch[yKey] = (newAbsY - state.y) / state.height;
+    }
+  };
+
+  slideEnd(true);
+  slideEnd(false);
+  if (Object.keys(patch).length) {
+    graph.getDataModel().setStyle(edge, { ...base, ...patch } as CellStateStyle);
+  }
+}
+
 // Entry point for the MOVE_CELLS listener below — re-runs the same
 // magnet-attach checks handleDrop does, scoped to just the cells that
 // actually moved (plus the always-cheap spine/head check, since either one
@@ -1061,6 +1395,17 @@ function slideForkJoinStubAlongBar(graph: Graph, edge: any, dx: number) {
 // slides any already-attached Sequence message along its timeline(s) by
 // the same vertical distance.
 export function runAutoAttachOnMove(graph: Graph, movedCells: any[], dx = 0, dy = 0) {
+  // Every edge a slide helper below actually repositions (a plain setStyle
+  // on a fixed exitX/entryX fraction, not a geometry change) needs an
+  // explicit forced repaint after — see forceEdgeRepaint's own comment for
+  // why graph.getView().revalidate() alone isn't reliable for this specific
+  // "style-only pin change" case, confirmed live for both this MOVE_CELLS
+  // path (dragging a connector's own body) and the CELL_CONNECTED one
+  // (dragging an endpoint onto a new target). Collected here rather than
+  // called inline in each branch so a cell handled by more than one slide
+  // path in the same pass — never happens today, but nothing prevents it —
+  // still only gets force-repainted once.
+  const slidEdges = new Set<any>();
   graph.batchUpdate(() => {
     for (const cell of movedCells) {
       if (!cell) continue;
@@ -1079,18 +1424,25 @@ export function runAutoAttachOnMove(graph: Graph, movedCells: any[], dx = 0, dy 
         const role = getShapeRole(cell);
         if (cell.source && role && FISHBONE_MAIN_CAUSE_IDS.has(role)) {
           slideMainCauseAlongSpine(graph, cell, dx);
+          slidEdges.add(cell);
         }
         if (role && SEQUENCE_MESSAGE_SHAPE_IDS.has(role)) {
           slideSequenceMessageAlongTimelines(graph, cell, dy);
+          slidEdges.add(cell);
         }
         if (role === 'act-control-flow') {
           slideForkJoinStubAlongBar(graph, cell, dx);
+          slidEdges.add(cell);
         }
+        slideAutoPinnedEdgeEnd(graph, cell, dx, dy);
+        slidEdges.add(cell);
         attachDanglingEdgeEnds(graph, cell);
       }
     }
     attachSpineToHead(graph);
   });
+  graph.getView().revalidate();
+  for (const edge of slidEdges) forceEdgeRepaint(graph, edge);
 }
 
 function getCellStyleShapeName(cell: any): string | undefined {
@@ -1248,7 +1600,7 @@ function applySequenceEndpointStyle(graph: Graph, edge: any, cell: any, isSource
 
 interface DiagramCanvasProps {
   onReady?: (graph: any) => void;
-  onChange?: (xml: string) => void;
+  onChange?: (xml: string, patches: DiagramPatch[]) => void;
   onSelectionChange?: (cell: any) => void;
   onZoomChange?: (scalePercent: number) => void;
   umlType?: string;
@@ -1259,7 +1611,22 @@ interface DiagramCanvasProps {
 }
 
 export interface DiagramCanvasHandle {
-  loadXml: (xml: string) => void;
+  // resetView (default true) re-centers/re-fits the camera after loading —
+  // right for a fresh open/page-switch/undo, wrong for a live collaborative
+  // update, where the viewer's own pan/zoom should never jump just because
+  // someone else edited (see onRemoteChange's call site in create.tsx).
+  loadXml: (xml: string, options?: { resetView?: boolean }) => void;
+  // Applies a small collaboration patch list in place (via the model's own
+  // public setters) instead of a full loadXml reimport — see
+  // utils/diagramPatch.ts. A 'full' patch (the escape hatch for an
+  // unrecognized edit type) is handled internally by delegating to loadXml
+  // with resetView:false, same as a normal remote update. Returns the
+  // freshly re-exported xml (so the caller can keep pageXmlCache/autosave
+  // fed exactly as it does for a received full snapshot today) and whether
+  // any patch referenced a cell that doesn't exist locally — a sign this
+  // client has drifted and needs a full resync. Null only if the graph
+  // isn't ready yet.
+  applyPatches: (patches: DiagramPatch[]) => { xml: string; driftDetected: boolean } | null;
   // Forces the graph's SVG to re-measure/repaint itself. React Navigation
   // hides this screen's whole subtree (rather than unmounting it) while
   // another tab is active. maxGraph sizes its SVG from the container's DOM
@@ -2341,13 +2708,46 @@ const WebCanvas = forwardRef<DiagramCanvasHandle, DiagramCanvasProps>(({ onReady
   useEffect(() => { onSelectionChangeRef.current = onSelectionChange; }, [onSelectionChange]);
   useEffect(() => { onZoomChangeRef.current = onZoomChange; }, [onZoomChange]);
 
-  useImperativeHandle(ref, () => ({
-    loadXml: (xml: string) => {
+  // Shared by the loadXml and applyPatches imperative-handle methods below —
+  // applyPatches's 'full' patch (the escape hatch for an edit type
+  // changesToPatches doesn't recognize) needs to fall back to exactly this
+  // same path, not a re-implementation of it.
+  const loadXmlImpl = (xml: string, options?: { resetView?: boolean }) => {
       const graph = graphRef.current;
       if (!graph || !xml) return;
+      const resetView = options?.resetView ?? true;
       try {
+        // Captured by id (a plain string), not by keeping the Cell objects
+        // themselves — those are about to become stale, see below. Only
+        // worth doing for a live remote update (resetView: false); a fresh
+        // load/page-switch has no prior selection worth restoring.
+        const selectedIdsBeforeImport = !resetView
+          ? graph.getSelectionCells().map((cell: any) => cell.getId())
+          : null;
+
         new ModelXmlSerializer(graph.getDataModel()).import(xml);
+        // Always cleared first, including on a live collaborative update —
+        // this isn't just cosmetic. import() above builds an entirely new
+        // Cell tree (ModelCodec.decodeRoot) and swaps it in via
+        // model.setRoot(), so a selection left pointing at a cell from the
+        // *old* tree would be a dangling reference: GraphSelectionModel
+        // just holds raw Cell objects compared by identity, with no
+        // listener that revalidates them against a replaced model.
         graph.clearSelection();
+
+        // Re-select by id looked up in the *new* model, not by reusing the
+        // pre-import Cell references (same staleness problem as above). A
+        // shape the remote edit deleted just won't resolve to a cell here
+        // and stays deselected, which is the correct outcome for it.
+        if (selectedIdsBeforeImport && selectedIdsBeforeImport.length > 0) {
+          const model = graph.getDataModel();
+          const restored = selectedIdsBeforeImport
+            .map((id: string) => model.getCell(id))
+            .filter((cell: Cell | null): cell is Cell => cell != null);
+          if (restored.length > 0) graph.setSelectionCells(restored);
+        }
+
+        if (!resetView) return;
 
         // Deferred one frame on purpose: fitCenter()/center() below read
         // graph.container.clientWidth/clientHeight, and on this direct-load
@@ -2381,6 +2781,31 @@ const WebCanvas = forwardRef<DiagramCanvasHandle, DiagramCanvasProps>(({ onReady
         });
       } catch (e) {
         console.error('Failed to load diagram XML:', e);
+      }
+  };
+
+  useImperativeHandle(ref, () => ({
+    loadXml: (xml: string, options?: { resetView?: boolean }) => loadXmlImpl(xml, options),
+    applyPatches: (patches: DiagramPatch[]) => {
+      const graph = graphRef.current;
+      if (!graph) return null;
+      try {
+        const fullPatch = patches.find((p) => p.type === 'full') as { type: 'full'; xml: string } | undefined;
+        if (fullPatch) {
+          // Escape hatch: delegate to exactly the same path a normal
+          // remote update already uses. 'full' always arrives alone (see
+          // changesToPatches), so the rest of `patches` is ignored.
+          loadXmlImpl(fullPatch.xml, { resetView: false });
+          const xml = new ModelXmlSerializer(graph.getDataModel()).export();
+          return { xml, driftDetected: false };
+        }
+
+        const { driftDetected } = applyPatchesToModel(graph, patches);
+        const xml = new ModelXmlSerializer(graph.getDataModel()).export();
+        return { xml, driftDetected };
+      } catch (e) {
+        console.error('Failed to apply diagram patches:', e);
+        return null;
       }
     },
     refresh: () => {
@@ -2457,8 +2882,15 @@ const WebCanvas = forwardRef<DiagramCanvasHandle, DiagramCanvasProps>(({ onReady
     const wrapper = wrapperRef.current;
     const gc = gridCanvasRef.current;
     if (!wrapper || !gc) return;
-    gc.width = wrapper.offsetWidth;
-    gc.height = wrapper.offsetHeight;
+    // Backing store sized in device pixels, not CSS pixels — the element
+    // itself stays CSS-sized via its width:100%/height:100% style. Without
+    // the devicePixelRatio factor, this canvas' bitmap is only ever 1
+    // pixel per CSS pixel, and the browser has to upscale it to cover a
+    // typical mobile screen's 2x/3x physical pixels, blurring the thin
+    // grid lines. paintGridOnCanvas compensates with a matching ctx scale.
+    const dpr = window.devicePixelRatio || 1;
+    gc.width = Math.round(wrapper.offsetWidth * dpr);
+    gc.height = Math.round(wrapper.offsetHeight * dpr);
   }, []);
 
   const repaintGrid = useCallback(() => {
@@ -2468,6 +2900,10 @@ const WebCanvas = forwardRef<DiagramCanvasHandle, DiagramCanvasProps>(({ onReady
     paintGridOnCanvas(gc, graph.getView().getScale(), graph.getView().getTranslate());
   }, []);
 
+  // undefined (not null) so the very first call — an empty selection on
+  // mount — still counts as "changed" and gets reported once.
+  const lastReportedSelectedCellRef = useRef<any>(undefined);
+  const lastReportedAtRef = useRef(0);
   const handleSelectionChange = useCallback(() => {
     const graph = graphRef.current;
     if (!graph) return;
@@ -2476,6 +2912,29 @@ const WebCanvas = forwardRef<DiagramCanvasHandle, DiagramCanvasProps>(({ onReady
       const selection = graph.getSelectionCells();
       const selectedCell = selection.length === 1 ? selection[0] : null;
       setSelectedCell(selectedCell);
+
+      // A single click on a cell reliably produces two calls into this
+      // function: the immediate one from graph.getSelectionModel()'s own
+      // CHANGE event, and a second one carrying the identical cell roughly
+      // 200ms later (measured directly — 204ms and 219ms across two
+      // separate clicks). onSelectionChange callers (e.g. create.tsx's
+      // tap-to-connect "tap the source again to undo" logic) treat "the
+      // same cell reported twice" as a deliberate second tap, so without
+      // deduping, a single click picks a shape and immediately un-picks it
+      // again before the user's next real tap ever lands.
+      //
+      // Gated on a time window, not a permanent "same cell" block — a
+      // genuine second click on an already-selected cell (the real "tap
+      // again to undo" gesture) reports that same cell too, just separated
+      // by however long the user actually took, not milliseconds. 300ms
+      // comfortably clears the measured ~200-220ms redundant-refire gap
+      // while still being far shorter than any realistic deliberate second
+      // click.
+      const now = Date.now();
+      const isRedundantRefire = selectedCell === lastReportedSelectedCellRef.current && now - lastReportedAtRef.current < 300;
+      lastReportedSelectedCellRef.current = selectedCell;
+      lastReportedAtRef.current = now;
+      if (isRedundantRefire) return;
 
       if (onSelectionChangeRef.current) {
         onSelectionChangeRef.current(selectedCell);
@@ -3122,6 +3581,7 @@ const WebCanvas = forwardRef<DiagramCanvasHandle, DiagramCanvasProps>(({ onReady
       'igraph.umlDirectedAssociation': { ...base, shape: 'igraph.umlDirectedAssociation' },
       'igraph.umlAggregation': { ...base, shape: 'igraph.umlAggregation' },
       'igraph.umlDependency': { ...base, shape: 'igraph.umlDependency' },
+      'igraph.umlRealization': { ...base, shape: 'igraph.umlRealization' },
       'igraph.umlMultiplicity1': { ...base, shape: 'igraph.umlMultiplicity1' },
       'igraph.umlMultiplicity01': { ...base, shape: 'igraph.umlMultiplicity01' },
       'igraph.umlMultiplicityMany': { ...base, shape: 'igraph.umlMultiplicityMany' },
@@ -3482,6 +3942,27 @@ const WebCanvas = forwardRef<DiagramCanvasHandle, DiagramCanvasProps>(({ onReady
             styleObject.exitY = 0.5;
             styleObject.exitPerimeter = false;
           }
+        }
+
+        // insertEdge below wires sourceCell/targetCell in as real terminals
+        // directly — unlike an interactive drag-to-connect, that never
+        // fires CELL_CONNECTED, so the CELL_CONNECTED catch-all fix further
+        // down (initGraph) never runs for it and this end is left in
+        // maxGraph's floating mode. Fine against a vertex (floating still
+        // tracks it closely enough), but landing on another connector
+        // (sourceCell/targetCell came from findConnectorDropEndpoints'
+        // findEdgeNearPoint fallback — this is exactly how a connector
+        // dropped onto/near another connector attaches) floats to that
+        // target's exact midpoint on every redraw no matter where it was
+        // actually dropped, and can never be dragged anywhere else
+        // afterward either — see pinnedEdgeEndStyle's own comment. Skips
+        // whichever end the fishbone-head special case just above already
+        // pinned deliberately.
+        if (sourceCell && styleObject.exitX === undefined) {
+          Object.assign(styleObject, pinnedEdgeEndStyle(sourceCell, startPoint, true));
+        }
+        if (targetCell && styleObject.entryX === undefined) {
+          Object.assign(styleObject, pinnedEdgeEndStyle(targetCell, endPoint, false));
         }
 
         cell = graph.insertEdge(null, null, '', sourceCell, targetCell, styleObject);
@@ -4547,7 +5028,89 @@ const WebCanvas = forwardRef<DiagramCanvasHandle, DiagramCanvasProps>(({ onReady
         }
         // @ts-ignore
         connectionHandler.highlightColor = BLUE;
+
+        // The actual root cause of the "reposition a connector attached to
+        // another connector and it locks" bug: ConnectionHandler (draws a
+        // BRAND NEW edge by dragging from any connectable cell's body) and
+        // the dedicated body-drag system above (bodyDragEdge, for
+        // repositioning an EXISTING selected edge) both want the exact same
+        // gesture — mousedown on an edge's body — and ConnectionHandler
+        // reaches it first (it's consulted by its own marker's mouseMove/
+        // getCell on every hover, which is what actually decides isStartEvent
+        // below; confirmed live by tracing every InternalMouseEvent.consume()
+        // call during a real drag — it was ConnectionHandler.mouseDown/
+        // mouseMove consuming the event on every tick, not EdgeHandler or
+        // this file's own bodyDragEdge listener, which never even saw an
+        // unconsumed event). setConnectableEdges(true) (below) is what makes
+        // an edge a valid ConnectionHandler source at all — needed for
+        // genuinely drawing a new connector onto/from another connector
+        // elsewhere in this app, but as an unwanted side effect it means
+        // clicking the BODY of an already-selected dedicated-slide edge (an
+        // auto-pinned connector, a Sequence message, Fishbone Main Cause, or
+        // Fork/Join stub) started a brand-new floating edge-in-progress
+        // instead — the dashed line that DID visibly follow the cursor (so
+        // it looked like the drag was "working"), while the ORIGINAL
+        // connector was untouched underneath the entire time, only to be
+        // left with a dangling end once that in-progress edge — created via
+        // EdgeState/createEdgeState off the ORIGINAL edge's terminals or
+        // waypoints — got abandoned/finalized wrong on mouseup with no valid
+        // target under the cursor. isValidSource false for exactly these
+        // cells stops ConnectionHandler's marker (see its getCell override)
+        // from ever treating them as a legitimate "start a new connection
+        // here" source, so isStartEvent never fires and the event is never
+        // consumed — letting it fall through to the dedicated bodyDragEdge
+        // listener (or EdgeHandler's own endpoint drag, unaffected by this)
+        // exactly as intended. Every other connectable cell — vertices,
+        // and any edge that ISN'T one of these dedicated-slide cases — is
+        // completely unaffected, so drawing a genuine new connector by
+        // dragging from a shape or an ordinary connector still works as
+        // before.
+        const defaultIsValidSource = connectionHandler.isValidSource.bind(connectionHandler);
+        connectionHandler.isValidSource = (cell: any, me: any) => {
+          if (cell && typeof cell.isEdge === 'function' && cell.isEdge() && hasDedicatedEdgeSlide(cell)) {
+            return false;
+          }
+          return defaultIsValidSource(cell, me);
+        };
       }
+
+      // draw.io/mxGraph's own getConnectionPoint (ConnectionsMixin) computes
+      // a fixed exitX/entryX point as a fraction of the target's BOUNDING
+      // BOX — correct for a vertex, but never actually reused for connector
+      // endpoints in draw.io, because it leaves connectableEdges false
+      // permanently and never needs one. This app enables it (Fishbone's
+      // spine, ERD cardinality splits, schematic auto-junctions, and any
+      // plain connector genuinely need one connector to attach to another),
+      // so it inherited a problem draw.io's own codebase never has to solve
+      // — and using the vertex-shaped bounding-box formula for it is why a
+      // pin on anything but a perfectly horizontal/vertical target line
+      // could drift off the line entirely. Overriding here, scoped to
+      // exactly the case draw.io itself never hits (terminal is an EDGE),
+      // reinterprets exitX/entryX as a fraction of the target's actual
+      // PATH LENGTH instead — pointAtPathFraction/closestFractionOnPath
+      // mirror the identical technique mxGraphView.js's getPoint/
+      // getRelativePoint already use there, just for edge LABEL placement,
+      // never for a connector's own endpoint. A vertex terminal falls
+      // straight through to the default, completely unaffected.
+      const defaultGetConnectionPoint = graph.getConnectionPoint.bind(graph);
+      graph.getConnectionPoint = (vertexState: any, constraint: any, round = true) => {
+        const terminalCell = vertexState?.cell;
+        if (
+          terminalCell &&
+          typeof terminalCell.isEdge === 'function' &&
+          terminalCell.isEdge() &&
+          constraint?.point &&
+          Array.isArray(vertexState.absolutePoints) &&
+          vertexState.absolutePoints.length >= 2
+        ) {
+          const pt = pointAtPathFraction(
+            vertexState.absolutePoints.filter((p: any) => p != null) as { x: number; y: number }[],
+            constraint.point.x,
+          );
+          if (pt) return new Point(round ? Math.round(pt.x) : pt.x, round ? Math.round(pt.y) : pt.y);
+        }
+        return defaultGetConnectionPoint(vertexState, constraint, round);
+      };
 
       const styleElement = document.createElement('style');
       styleElement.id = 'igraph-force-blue';
@@ -4582,19 +5145,329 @@ const WebCanvas = forwardRef<DiagramCanvasHandle, DiagramCanvasProps>(({ onReady
         .mxEdgeSelection {
           stroke: ${BLUE} !important;
         }
+        /* Draw.io-style "snapped in" feedback (see showConnectSnapPulse
+           below): a brief expanding ring at whichever point a connector's
+           end just attached to — a shape's edge or another connector's
+           line alike, since the CELL_CONNECTED catch-all that triggers
+           this already treats both the same way. Pure animation-only
+           overlay in the view's overlay pane; never touches the actual
+           connector geometry, so it can't desync from the WYSIWYG pinning
+           logic that computes where the ring is drawn. */
+        @keyframes igraph-snap-pulse {
+          0% { r: 3; stroke-opacity: 0.9; }
+          100% { r: 16; stroke-opacity: 0; }
+        }
+        .igraph-snap-pulse-ring {
+          pointer-events: none;
+          fill: none;
+          stroke: ${BLUE};
+          stroke-width: 2px;
+          animation: igraph-snap-pulse 260ms ease-out forwards;
+        }
       `;
       document.head.appendChild(styleElement);
       console.log('🔵 Force blue CSS injected with black edges');
+
+      // A connector's end landing on a valid target — a shape or another
+      // connector, see the unified CELL_CONNECTED handler further down —
+      // used to give no feedback at all beyond the line itself jumping to
+      // its final pinned position, unlike draw.io's small "connected" pulse
+      // at the drop point. cx/cy are already view-space (the same
+      // previewPoint/dropPoint coordinates the pinning fix itself computes
+      // from), matching the overlay pane's own coordinate space directly —
+      // no separate scale/translate conversion needed. Self-removing
+      // (animationend, with a setTimeout fallback in case the animation
+      // never fires — e.g. a tab switched away mid-pulse) so nothing here
+      // can leak nodes into the overlay pane over a long session.
+      const showConnectSnapPulse = (cx: number, cy: number) => {
+        const overlayPane = graph.getView().getOverlayPane();
+        if (!overlayPane) return;
+        const ring = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+        ring.setAttribute('cx', String(cx));
+        ring.setAttribute('cy', String(cy));
+        ring.setAttribute('r', '3');
+        ring.setAttribute('class', 'igraph-snap-pulse-ring');
+        overlayPane.appendChild(ring);
+        const remove = () => ring.parentNode?.removeChild(ring);
+        ring.addEventListener('animationend', remove, { once: true });
+        setTimeout(remove, 400);
+      };
 
       graph.createVertexHandler = (state: CellState) => {
         return new UniversalVertexHandler(state);
       };
       console.log('✅ Universal Vertex Handler bound to graph');
 
+      // EdgeHandler's own endpoint/bend handles hit-test touch input via a
+      // dedicated `tolerance` field (getHandleForEvent) that's completely
+      // separate from graph.setEventTolerance below and defaults to 0 — for
+      // a genuine mouse it's irrelevant (mouse hit-testing there is hardcoded
+      // to 1px, unaffected by this field), but for touch/pen input a 0px
+      // radius means a finger has to land exactly on the small handle dot to
+      // grab it at all. Missing by even a couple of pixels means the touch
+      // isn't recognized as "grabbing the connector's endpoint" — it falls
+      // through to the graph background instead, which on mobile starts a
+      // full-canvas pan (panningHandler.useLeftButtonForPanning is on for
+      // mobile below), reading as "the whole diagram jumps/moves" when the
+      // user only meant to drag the connector's end. Widening it gives a
+      // real, finger-sized grab radius around every connector handle.
+      // Tracks the pointer's last known position in the same view-space
+      // coordinates as CellState bounds (absolutePoints, state.x/y/width/
+      // height) — a fallback for the CELL_CONNECTED catch-all fix below,
+      // used only when no live connector-drag preview point was captured
+      // (e.g. a connect that didn't go through EdgeHandler at all).
+      let lastPointerGraphPoint: { x: number; y: number } | null = null;
+      graph.addMouseListener({
+        mouseDown: () => {},
+        mouseMove: (_sender: any, me: any) => {
+          lastPointerGraphPoint = { x: me.getGraphX(), y: me.getGraphY() };
+        },
+        mouseUp: (_sender: any, me: any) => {
+          lastPointerGraphPoint = { x: me.getGraphX(), y: me.getGraphY() };
+        },
+      });
+
+      // Every redraw of the dashed drag preview (EdgeHandler.mouseMove ->
+      // updatePreviewState) already resolves exactly where this end would
+      // land — snapped to a fixed connection point if the pointer is near
+      // one, perimeter-clipped to the target's boundary if hovering its
+      // body, or following the raw pointer if nothing's under it yet — and
+      // that computed point is what's actually drawn as the dashed line.
+      // The bug the user is hitting: the CELL_CONNECTED catch-all fix below
+      // used to freeze the final position from a value computed AFTER
+      // connecting (either the raw drop pixel or a fresh post-connect
+      // perimeter recompute), not from what the dashed line displayed a
+      // moment earlier — so for a "floating" drop onto a shape's interior
+      // (dashed line shows the perimeter crossing point, which can be well
+      // away from the actual cursor when the shape is large), the final
+      // pin could land somewhere the dashed preview never actually showed.
+      // Capturing the handler's own abspoints on every preview tick and
+      // using that snapshot to pin means the connector always ends up
+      // exactly where the dashed line last showed it — true WYSIWYG.
+      let lastConnectorPreviewPoint: { x: number; y: number } | null = null;
+      const defaultCreateEdgeHandler = graph.createEdgeHandler.bind(graph);
+      graph.createEdgeHandler = (state: CellState, edgeStyle: any) => {
+        const handler = defaultCreateEdgeHandler(state, edgeStyle);
+        handler.tolerance = 20;
+        // A "virtual bend" is EdgeHandler's own always-on hotspot at the
+        // midpoint of every segment, letting a drag there insert a new
+        // waypoint — sensible for an ordinary edge, but never for one of
+        // the dedicated-slide cases above (hasDedicatedEdgeSlide): an
+        // arbitrary kink makes no sense on a connector that's meant to stay
+        // a straight line sliding along whatever it's pinned to. Left
+        // enabled, that hotspot (hit-tested within `tolerance` — the 20px
+        // just set above, specifically for touch) competes directly with
+        // the dedicated body-drag listener below for exactly the cases
+        // that listener exists to handle: dragging near a short Sequence
+        // message's own midpoint, once it's already selected, could land
+        // on this hotspot instead and silently start adding a waypoint —
+        // confirmed directly by an automated drag test landing exactly
+        // there. Disabling it here for these specific edges removes the
+        // competing target entirely rather than trying to arbitrate
+        // between the two on every event.
+        handler.isAddVirtualBendEvent = () => !hasDedicatedEdgeSlide(state.cell);
+        // The SAME widened handle (12px, HandleConfig.size at the top of
+        // this file) that makes an endpoint reliably grabbable also means
+        // a body-drag started just a few px from an already-attached
+        // endpoint can land ON that handle instead — confirmed directly:
+        // SelectionCellsHandler dispatches to this (already-active, since
+        // the cell is already selected) EdgeHandler before either the
+        // dedicated body-drag listener or SelectionHandler ever sees the
+        // event, exactly the same collision isAddVirtualBendEvent above
+        // already fixed for the midpoint hotspot. Landing there starts a
+        // genuine endpoint-reconnect drag — legitimate on its own — but if
+        // it doesn't end up over a valid new target, maxGraph's default
+        // doesn't revert, it DISCONNECTS that end (isAllowDanglingEdges is
+        // on app-wide, for the cases that genuinely need it). For a
+        // dedicated-slide edge that's much worse than a no-op: the OTHER
+        // end is still pinned, so hasDedicatedEdgeSlide keeps claiming
+        // every future click on this cell for the dedicated listener —
+        // meaning the newly-dangling end can never be moved by ANY
+        // gesture again. That's the exact mechanism behind "one end
+        // attached to a shape moves fine, the other doesn't" (confirmed
+        // against a live maxGraph instance: an accidental handle-grab on
+        // the shape-attached end silently dropped its terminal, and
+        // nothing thereafter could move that end again). Capturing the
+        // terminal/style this end actually had the instant the drag
+        // started and restoring both if it comes back disconnected undoes
+        // only that accidental case — a real, successful reconnect
+        // elsewhere in the same gesture leaves a non-null terminal, so
+        // this is a no-op then.
+        let dragStartTerminalInfo: { isSource: boolean; terminal: any; style: Record<string, unknown> } | null = null;
+        const defaultHandlerMouseDown = handler.mouseDown.bind(handler);
+        handler.mouseDown = (sender: any, me: any) => {
+          lastConnectorPreviewPoint = null;
+          dragStartTerminalInfo = null;
+          defaultHandlerMouseDown(sender, me);
+          if ((handler.isSource || handler.isTarget) && hasDedicatedEdgeSlide(state.cell)) {
+            const isSource = handler.isSource;
+            const terminal = state.cell.getTerminal(isSource);
+            if (terminal) {
+              const style = state.cell.getStyle();
+              dragStartTerminalInfo = {
+                isSource,
+                terminal,
+                style: (typeof style === 'object' && style !== null ? { ...style } : {}) as Record<string, unknown>,
+              };
+            }
+          }
+        };
+        const defaultHandlerMouseMove = handler.mouseMove.bind(handler);
+        handler.mouseMove = (sender: any, me: any) => {
+          defaultHandlerMouseMove(sender, me);
+          if (handler.isSource || handler.isTarget) {
+            const points = handler.abspoints;
+            const pt = handler.isSource ? points?.[0] : points?.[points.length - 1];
+            if (pt) lastConnectorPreviewPoint = { x: pt.x, y: pt.y };
+          }
+        };
+        const defaultHandlerMouseUp = handler.mouseUp.bind(handler);
+        handler.mouseUp = (sender: any, me: any) => {
+          const info = dragStartTerminalInfo;
+          dragStartTerminalInfo = null;
+          defaultHandlerMouseUp(sender, me);
+          if (info && !state.cell.getTerminal(info.isSource)) {
+            graph.batchUpdate(() => {
+              graph.getDataModel().setTerminal(state.cell, info.terminal, info.isSource);
+              graph.getDataModel().setStyle(state.cell, info.style as CellStateStyle);
+            });
+            graph.getView().revalidate();
+          }
+        };
+        return handler;
+      };
+
+      // ─── Body-drag of a dedicated-slide connector: dedicated, WYSIWYG logic ──
+      // SelectionHandler (maxGraph's generic single/multi-cell drag handler)
+      // shows a ghost preview that's always a literal, unconstrained
+      // translate of the selection's bounding box — correct for an ordinary
+      // shape, but every "dedicated slide" edge case (see
+      // hasDedicatedEdgeSlide: an edge auto-pinned to another cell, a
+      // Fishbone Main Cause on the spine, a Sequence Sync/Async/Return
+      // message, a Fork/Join stub) can only ever actually reposition by
+      // sliding a fixed fraction along whatever it's pinned to
+      // (runDedicatedEdgeSlide) — a fundamentally different, CONSTRAINED
+      // result that the generic ghost knows nothing about. The ghost tracks
+      // the cursor for the whole gesture; the real change only ever lands
+      // once, at mouseup, via the MOVE_CELLS listener further down — wherever
+      // the constrained slide actually resolves to, which generally isn't
+      // where the ghost was just shown. That mismatch is exactly the "I can
+      // move it but it doesn't land where I dragged it" complaint, and it's
+      // structural, not a rounding bug — no amount of adjusting the slide
+      // math fixes a disagreement with a completely different preview
+      // mechanism. For a Sequence message specifically it's worse than a
+      // mismatch: dragging anywhere other than perfectly in sync desyncs
+      // exitY from entryY, rendering the message as a diagonal kink instead
+      // of a level line (confirmed on video, flagged by validation).
+      //
+      // Fixed by giving a single selected dedicated-slide edge its own
+      // drag path instead of SelectionHandler's generic one. Multi-selection
+      // is deliberately left untouched (see the selectionCount <= 1 guards
+      // below) — dragging a group that happens to include one of these edges
+      // still moves everything together the ordinary way, via the same
+      // MOVE_CELLS/runDedicatedEdgeSlide path this already used (confirmed
+      // against a live maxGraph instance: a multi-selected vertex + pinned
+      // edge dragged together still lands correctly through that mechanism
+      // alone). Only the single-cell case — where the mismatch actually
+      // happens — is redirected here.
+      const selectionHandler = graph.getPlugin('SelectionHandler') as any;
+      if (selectionHandler) {
+        const defaultSelectionHandlerMouseDown = selectionHandler.mouseDown.bind(selectionHandler);
+        selectionHandler.mouseDown = (sender: any, me: any) => {
+          const cell = me.getCell();
+          if (!me.isConsumed() && graph.isEnabled() && graph.getSelectionCount() <= 1 && hasDedicatedEdgeSlide(cell)) {
+            // Same selection side effect SelectionHandler's own mouseDown
+            // would have produced for a plain click — just without also
+            // starting its mismatched ghost-drag. The dedicated mouseDown
+            // below takes over the actual dragging.
+            graph.selectCellForEvent(cell, me.getEvent());
+            return;
+          }
+          defaultSelectionHandlerMouseDown(sender, me);
+        };
+      }
+      let bodyDragEdge: any = null;
+      let bodyDragLastPoint: { x: number; y: number } | null = null;
+      graph.addMouseListener({
+        mouseDown: (_sender: any, me: any) => {
+          if (me.isConsumed()) return;
+          const cell = me.getCell();
+          if (!hasDedicatedEdgeSlide(cell) || graph.getSelectionCount() > 1) return;
+          // A label sits on the same edge and has its own, separate,
+          // already-correct drag (EdgeHandler's own moveLabel, triggered by
+          // its LABEL_HANDLE hit-test) — only take over a click that lands
+          // on the actual line, not its text.
+          const state = me.getState();
+          const labelBounds = (state?.text as any)?.bounds;
+          if (labelBounds) {
+            const x = me.getGraphX();
+            const y = me.getGraphY();
+            if (
+              x >= labelBounds.x && x <= labelBounds.x + labelBounds.width &&
+              y >= labelBounds.y && y <= labelBounds.y + labelBounds.height
+            ) {
+              return;
+            }
+          }
+          bodyDragEdge = cell;
+          bodyDragLastPoint = { x: me.getGraphX(), y: me.getGraphY() };
+        },
+        mouseMove: (_sender: any, me: any) => {
+          if (!bodyDragEdge || !bodyDragLastPoint) return;
+          const x = me.getGraphX();
+          const y = me.getGraphY();
+          const viewDx = x - bodyDragLastPoint.x;
+          const viewDy = y - bodyDragLastPoint.y;
+          bodyDragLastPoint = { x, y };
+          if (viewDx === 0 && viewDy === 0) return;
+          // The dedicated slide functions expect a MODEL-space delta (they
+          // scale up internally to compare against view-space CellState
+          // bounds) — me.getGraphX()/Y() are already view-space (scaled+
+          // translated), so dividing out the current scale here is what
+          // keeps this correct at any zoom level, not just 100%.
+          const scale = graph.getView().getScale() || 1;
+          graph.batchUpdate(() => {
+            runDedicatedEdgeSlide(graph, bodyDragEdge, viewDx / scale, viewDy / scale);
+          });
+          graph.getView().revalidate();
+          // See forceEdgeRepaint's own comment — revalidate() alone
+          // reliably updates this edge's computed geometry but not always
+          // its actual on-screen line, for this same "style-only pin
+          // change" case. Called on every drag tick (not just at mouseup)
+          // so the live drag is genuinely WYSIWYG, not just correct once
+          // released.
+          forceEdgeRepaint(graph, bodyDragEdge);
+          me.consume();
+        },
+        mouseUp: (_sender: any, me: any) => {
+          if (!bodyDragEdge) return;
+          bodyDragEdge = null;
+          bodyDragLastPoint = null;
+          me.consume();
+        },
+      });
+
       registerShapeStyles(graph);
 
       graph.setGridEnabled(true);
       graph.setGridSize(GRID_SIZE);
+      // isGridEnabledEvent is the actual gate every interactive handler
+      // (VertexHandler moving/resizing a shape, EdgeHandler dragging a
+      // connector's endpoint or waypoint, ConnectionHandler drawing a new
+      // one) checks before calling graph.snap() on the LIVE drag preview —
+      // maxGraph's own default is `!isAltDown(evt)`, i.e. "always snap
+      // unless Alt is held". Alt has no touch equivalent, so on mobile this
+      // was unconditionally true for every single move/touchmove tick,
+      // rounding the preview position to the nearest 10px (GRID_SIZE) step
+      // on every tick — that discrete step-to-step jump, not a real
+      // performance issue, is what reads as "jumping"/not smooth while
+      // dragging, for a moved shape and a dragged connector alike. This
+      // only governs the *interactive drag* gesture; a freshly-dropped
+      // shape's placement (handleAddShape) rounds its own coordinates
+      // separately and keeps doing so, so new shapes still land cleanly —
+      // only repositioning/resizing an existing one, or dragging a
+      // connector, becomes a smooth 1:1 follow instead of a stepped snap.
+      graph.isGridEnabledEvent = () => false;
       graph.setConnectable(true);
       // maxGraph's default hit-tolerance for picking a cell under the
       // pointer is 4px (Graph.tolerance, see getEventTolerance/intersects) —
@@ -4773,41 +5646,13 @@ const WebCanvas = forwardRef<DiagramCanvasHandle, DiagramCanvasProps>(({ onReady
       // palette represents a parent->child decomposition link, since FDD
       // has no connector of its own for it. Left as a straight line it cuts
       // diagonally across the tree; real functional-decomposition figures
-      // route it as an org-chart elbow instead — down out of the parent's
-      // bottom, across, into the child. Fixed bottom exit point plus
-      // orthogonalEdgeStyle reproduce that automatically, for both a fresh
-      // drag and a reconnect (CELL_CONNECTED covers both). Which side the
-      // child is entered on depends on how it's actually laid out: a child
-      // placed roughly straight below the parent (the common case when
-      // several children are stacked in a column, like sub-steps under one
-      // process) reads better as an outline-style "L" into its left edge;
-      // a child offset well to the side (siblings spread out in a row,
-      // like Subfunctions under Function) reads better entering the top,
-      // the classic org-chart tree. computeFddEntryPoint below picks
-      // between them from the two boxes' actual geometry rather than
-      // hard-coding one.
+      // route it as an org-chart elbow instead. orthogonalEdgeStyle
+      // reproduces that; see applyFddEntryStyle's own comment for why it no
+      // longer also picks a fixed entry/exit point here — that's the
+      // CELL_CONNECTED catch-all fix's job now, same as every other
+      // connector type.
       graph.addListener(InternalEvent.CELL_CONNECTED, (_sender: any, evt: any) => {
-        const edge = evt.getProperty('edge');
-        if (!edge) return;
-        const source = edge.getTerminal(true);
-        const target = edge.getTerminal(false);
-        const isFunctionVertex = (c: any) => !!c && typeof c.isVertex === 'function' && c.isVertex() && getShapeRole(c) === 'function';
-        if (!isFunctionVertex(source) || !isFunctionVertex(target)) return;
-        const edgeRole = getShapeRole(edge);
-        if (edgeRole === 'control' || edgeRole === 'mechanism' || edgeRole === 'fdd-interface') return;
-        const currentStyle = edge.getStyle();
-        const base = typeof currentStyle === 'object' && currentStyle !== null ? currentStyle : {};
-        const { exitX, exitY, entryX, entryY } = computeFddEntryPoint(source.getGeometry(), target.getGeometry());
-        graph.batchUpdate(() => {
-          edge.setStyle({
-            ...base,
-            edgeStyle: 'orthogonalEdgeStyle',
-            exitX, exitY, exitPerimeter: false,
-            entryX, entryY, entryPerimeter: false,
-            rounded: false,
-          } as CellStateStyle);
-          graph.refresh(edge);
-        });
+        applyFddEntryStyle(graph, evt.getProperty('edge'));
       });
 
       // Flowchart's own connector (Flow Line), drawn by dragging rather than
@@ -4821,7 +5666,10 @@ const WebCanvas = forwardRef<DiagramCanvasHandle, DiagramCanvasProps>(({ onReady
         const base = typeof currentStyle === 'object' && currentStyle !== null ? currentStyle : {};
         graph.batchUpdate(() => {
           edge.setStyle({ ...base, edgeStyle: 'orthogonalEdgeStyle', rounded: false } as CellStateStyle);
-          graph.refresh(edge);
+          // See the matching comment on the CELL_CONNECTED catch-all fix
+          // below for why this is revalidate() rather than the narrower
+          // graph.refresh(edge) it used to be.
+          graph.getView().revalidate();
         });
       });
 
@@ -4847,33 +5695,168 @@ const WebCanvas = forwardRef<DiagramCanvasHandle, DiagramCanvasProps>(({ onReady
       // has already run its own natural post-connect validate first —
       // reading state.absolutePoints synchronously here, still mid the
       // connect's own batchUpdate, would see stale pre-connect geometry.
+      //
+      // "Currently rendered at" used to mean maxGraph's own recomputed
+      // floating-perimeter point (edgeState.absolutePoints), read AFTER
+      // connecting — but that recompute can differ from whatever the dashed
+      // drag preview showed a moment earlier (same math, different inputs:
+      // the preview clones the edge state and floats it live off the
+      // pointer, the post-connect render is the real edge settling fresh),
+      // so pinning to it could freeze the connector somewhere the user
+      // never actually saw it land — the "dashed line wasn't accurate"
+      // complaint. lastConnectorPreviewPoint (EdgeHandler's own abspoints,
+      // sampled on every preview redraw above) is exactly the point the
+      // dashed line was last drawn at, so pinning to that guarantees the
+      // final position always matches what was previewed. Falls back to
+      // the raw pointer position, then the post-connect recompute, only for
+      // connects that didn't go through an interactive EdgeHandler drag.
+      //
+      // Also covers a connector's end landing on ANOTHER connector (this app
+      // deliberately allows that — setConnectableEdges(true) above, used by
+      // e.g. Fishbone's Main Cause branching off the spine, ERD's cardinality
+      // split, or just one Flowchart arrow pointing at another). Previously
+      // restricted to terminal.isVertex() only, so an edge-to-edge connect
+      // got NO pinning at all: maxGraph's floating fallback for an edge
+      // terminal (GraphView.getPoint, given no explicit geometry) doesn't
+      // even try to track the drop point — it hardcodes the target edge's
+      // exact MIDPOINT every time, unconditionally. That's the "jumping to
+      // another position" bug: wherever you actually dropped it, the very
+      // next redraw recenters it dead-center on the target connector. The
+      // same bounds-fraction math already used for a vertex target
+      // (getConnectionPoint/getPerimeterBounds) works identically against an
+      // edge's own bounding box, so no separate branch is needed here —
+      // exitX/entryX and a target's CellState mean the same thing either way.
       graph.addListener(InternalEvent.CELL_CONNECTED, (_sender: any, evt: any) => {
         const edge = evt.getProperty('edge');
         const terminal = evt.getProperty('terminal');
         const source = !!evt.getProperty('source');
-        if (!edge || !terminal || typeof terminal.isVertex !== 'function' || !terminal.isVertex()) return;
+        if (!edge || !terminal || typeof terminal.isVertex !== 'function') return;
+        const previewPoint = lastConnectorPreviewPoint;
+        const dropPoint = lastPointerGraphPoint;
         queueMicrotask(() => {
           if (!graph.getDataModel().contains(edge) || edge.getTerminal(source) !== terminal) return;
           const currentStyle = edge.getStyle();
           const base = (typeof currentStyle === 'object' && currentStyle !== null ? currentStyle : {}) as Record<string, unknown>;
-          const alreadyFixed = source ? base.exitX !== undefined : base.entryX !== undefined;
-          if (alreadyFixed) return;
-          const edgeState = graph.getView().getState(edge);
-          const points = edgeState?.absolutePoints;
-          const pt = source ? points?.[0] : points?.[points.length - 1];
+          // igraphAutoPinSource/Target marks a fixed point THIS catch-all set
+          // on a previous connect — distinct from one a dedicated listener
+          // above (schematic pins, FDD's entry point, sequence messages) set
+          // deliberately. Without that distinction, re-dragging the same end
+          // to a new spot looked "locked": exitX from the first attach was
+          // already non-undefined by the time this same catch-all ran again
+          // on the second connect, so it kept skipping and the position never
+          // updated past wherever it first landed. Only skip for a fixed
+          // point that ISN'T our own — those are the ones with a real reason
+          // to be left alone.
+          //
+          // `!= null` (not `!== undefined`) is deliberate: EdgeHandler's own
+          // connect() (see maxGraph's ConnectionsMixin.setConnectionConstraint)
+          // runs on EVERY interactive connect/reconnect, and since this app
+          // never defines any ConstraintHandler constraints
+          // (getAllConnectionConstraints has nothing to return for a custom
+          // Shape), its constraint.point is always null — which takes the
+          // "clear" branch there, setting exitX/entryX to the literal value
+          // `null` (not removing the key). `null !== undefined` is `true`,
+          // so the strict check misread maxGraph's own routine reset as "a
+          // real fixed point already exists" on every single connect, not
+          // just re-drags — permanently refusing to ever pin this end. A
+          // vertex target survives that fine (its floating-perimeter
+          // fallback already tracks the drop correctly with no pin at all),
+          // which is why "connector onto a shape" looked fine — but an edge
+          // target's floating fallback hardcodes the target's exact midpoint
+          // (see this function's own opening comment), so with the pin
+          // never actually landing, a connector reconnected onto another
+          // connector snapped back to that midpoint on every single release,
+          // live-drag preview notwithstanding — the "locked, can't
+          // reposition" bug. `!= null` treats maxGraph's own null-clear the
+          // same as a genuinely absent key (proceed to compute our own fix),
+          // while still correctly leaving alone a real NUMBER a dedicated
+          // case (schematic pins, FDD, sequence messages, Fishbone) set on
+          // purpose.
+          const autoPinFlag = source ? 'igraphAutoPinSource' : 'igraphAutoPinTarget';
+          const hasFixedPoint = source ? base.exitX != null : base.entryX != null;
+          const fixedByOther = hasFixedPoint && !isAutoPinnedFlag(base[autoPinFlag]);
+          if (fixedByOther) return;
           const targetState = graph.getView().getState(terminal);
-          if (!pt || !targetState || targetState.width <= 0 || targetState.height <= 0) return;
-          const fx = Math.min(1, Math.max(0, (pt.x - targetState.x) / targetState.width));
-          const fy = Math.min(1, Math.max(0, (pt.y - targetState.y) / targetState.height));
+          // A vertex always has real area, but a straight (perfectly
+          // horizontal or vertical) connector's own bounding box is exactly
+          // 0 in one dimension — the common case for a target connector, not
+          // an edge case. Only bail when BOTH dimensions are 0 (a fully
+          // collapsed/zero-length edge, nothing meaningful to pin against);
+          // a single 0 dimension still has a perfectly well-defined fraction
+          // along its other axis, and doesn't matter along the zero one
+          // (every fraction resolves to the same single-point coordinate
+          // there — see getConnectionPoint's own bounds.width/height math).
+          if (!targetState || (targetState.width <= 0 && targetState.height <= 0)) return;
+          // previewPoint (EdgeHandler's own abspoints) is preferred over the
+          // raw pointer for a VERTEX target because a big shape's floating
+          // perimeter clips the drop to its boundary — the raw cursor can be
+          // well inside the shape's interior while the dashed line (and the
+          // actual connection) sits at the edge, so previewPoint is what's
+          // actually accurate there. An EDGE target has no interior to clip
+          // into — you can only be hovering within a few px of its thin
+          // line to register as a valid target at all — so that reasoning
+          // doesn't apply, and empirically (confirmed against a screen
+          // recording of a real drag) abspoints for an edge-target preview
+          // doesn't reliably track the same point the dashed line visually
+          // showed: a re-drag along an already-attached target connector
+          // would visibly preview moving to the new cursor position, then
+          // settle back near its old spot once released. The raw pointer
+          // position is unambiguous in this case and matches what was
+          // actually shown, so it's preferred first for an edge target.
+          const isEdgeTarget = typeof terminal.isEdge === 'function' && terminal.isEdge();
+          let pt: { x: number; y: number } | undefined = (isEdgeTarget ? dropPoint ?? previewPoint : previewPoint ?? dropPoint) ?? undefined;
+          if (!pt) {
+            const edgeState = graph.getView().getState(edge);
+            const points = edgeState?.absolutePoints;
+            pt = (source ? points?.[0] : points?.[points.length - 1]) ?? undefined;
+          }
+          if (!pt) return;
+          // An edge target's fraction means PATH LENGTH along its actual
+          // rendered polyline (absolutePoints, bends included) — see
+          // getConnectionPoint's override and pointAtPathFraction/
+          // closestFractionOnPath's own comment for why the bounding-box
+          // fraction every vertex target uses doesn't work for a target
+          // that might not even be axis-aligned. entryY/exitY stays at 0.5,
+          // unused for an edge target (the override only reads .x).
+          const fx = isEdgeTarget && Array.isArray(targetState.absolutePoints) && targetState.absolutePoints.length >= 2
+            ? closestFractionOnPath(targetState.absolutePoints.filter((p) => p != null) as { x: number; y: number }[], pt.x, pt.y)
+            : targetState.width > 0 ? Math.min(1, Math.max(0, (pt.x - targetState.x) / targetState.width)) : 0.5;
+          const fy = isEdgeTarget
+            ? 0.5
+            : targetState.height > 0 ? Math.min(1, Math.max(0, (pt.y - targetState.y) / targetState.height)) : 0.5;
           graph.batchUpdate(() => {
-            edge.setStyle({
+            // graph.getDataModel().setStyle (NOT edge.setStyle, which was
+            // here before) — edge.setStyle mutates the Cell directly and
+            // skips the data model's own change-tracking entirely, so it
+            // never fires the model's CHANGE event. That event is what
+            // both the view's own automatic revalidation AND
+            // SelectionCellsHandler (which keeps this edge's own selection
+            // handles — its endpoint/bend dots — in sync with its actual
+            // rendered position) listen for. Skipping it is why the
+            // explicit revalidate() below was needed at all — it forced
+            // the LINE to repaint, but never told the active handler to
+            // re-sync its handles, which is exactly the kind of mismatch
+            // that makes a *second* drag land somewhere other than where
+            // it looked like it was grabbed. Routing through the model
+            // properly fixes both the same way, in the correct order.
+            graph.getDataModel().setStyle(edge, {
               ...base,
               ...(source
-                ? { exitX: fx, exitY: fy, exitPerimeter: false }
-                : { entryX: fx, entryY: fy, entryPerimeter: false }),
+                ? { exitX: fx, exitY: fy, exitPerimeter: false, igraphAutoPinSource: true }
+                : { entryX: fx, entryY: fy, entryPerimeter: false, igraphAutoPinTarget: true }),
             } as CellStateStyle);
-            graph.refresh(edge);
+            // Belt-and-suspenders on top of the model's own automatic
+            // revalidation — cheap enough for a one-off user action.
+            graph.getView().revalidate();
           });
+          // See forceEdgeRepaint's own comment — confirmed live that
+          // revalidate() alone leaves the on-screen line stuck at its
+          // pre-drag position even though the model (and every subsequent
+          // save/reload) already has the correct exitX/exitY: reopening the
+          // same diagram always rendered it right, only the already-open
+          // canvas didn't.
+          forceEdgeRepaint(graph, edge);
+          showConnectSnapPulse(pt.x, pt.y);
         });
       });
 
@@ -5055,12 +6038,101 @@ const WebCanvas = forwardRef<DiagramCanvasHandle, DiagramCanvasProps>(({ onReady
 
       new RubberBandHandler(graph);
 
+      // Rubber-band edge auto-scroll — Lucidchart/Figma-style: dragging a
+      // selection box near (or past) the canvas edge keeps panning toward
+      // that edge for as long as the cursor stays there, even without
+      // further mouse movement, so shapes currently off-screen can be
+      // selected without letting go and panning manually first.
+      //
+      // Deliberately NOT using maxGraph's own PanningManager (which is what
+      // a raw drag-pan and would normally drive this) — that pans via a
+      // temporary CSS transform on the SVG canvas (graph.panGraph) and only
+      // commits the real view.translate once the gesture ends, so the grid
+      // background (which repaints off view.translate/scale change events)
+      // would visibly lag behind the live-panning content for the whole
+      // autoscroll. Calling view.setTranslate() directly every frame instead
+      // commits immediately, so the existing 'translate' listener (see
+      // scheduleGridRepaint below) keeps the grid glued to the content just
+      // like it already does for every other kind of pan. The rubber-band
+      // box itself doesn't need any special handling either way — its own
+      // position is anchored to raw cursor/container pixel coordinates, not
+      // to view.translate, so it isn't affected by which technique pans the
+      // content underneath it.
+      const RUBBERBAND_EDGE_ZONE = 48; // px from the edge where autoscroll kicks in
+      const RUBBERBAND_MAX_SPEED = 18; // screen px/frame at (or past) the edge
+      let rubberbandAutoScrollRaf: number | null = null;
+      let lastRubberbandClientX = 0;
+      let lastRubberbandClientY = 0;
+
+      // 0 once `distanceFromEdge` clears the zone; ramps up to MAX_SPEED as
+      // it approaches 0, and stays capped at MAX_SPEED for any negative
+      // distance (cursor already dragged past the edge, e.g. into the
+      // shapes/properties panel or off the browser window entirely).
+      const rubberbandEdgeSpeed = (distanceFromEdge: number): number => {
+        if (distanceFromEdge >= RUBBERBAND_EDGE_ZONE) return 0;
+        const t = 1 - Math.max(0, distanceFromEdge) / RUBBERBAND_EDGE_ZONE;
+        return t * RUBBERBAND_MAX_SPEED;
+      };
+
+      const rubberbandAutoScrollTick = () => {
+        const g = graphRef.current;
+        const gd = graphDivRef.current;
+        if (!g || !gd || !gd.querySelector('.mxRubberband')) {
+          rubberbandAutoScrollRaf = null;
+          return;
+        }
+        const rect = gd.getBoundingClientRect();
+        const relX = lastRubberbandClientX - rect.left;
+        const relY = lastRubberbandClientY - rect.top;
+
+        // Positive screenDx/Dy = content should shift right/down on screen
+        // (revealing more off-screen content to the left/top) — matches
+        // view.translate's own sign convention directly (screen = (model +
+        // translate) * scale), so no extra inversion needed below.
+        const screenDx = rubberbandEdgeSpeed(relX) - rubberbandEdgeSpeed(rect.width - relX);
+        const screenDy = rubberbandEdgeSpeed(relY) - rubberbandEdgeSpeed(rect.height - relY);
+
+        if (screenDx !== 0 || screenDy !== 0) {
+          const view = g.getView();
+          const t = view.getTranslate();
+          const scale = view.getScale();
+          view.setTranslate(t.x + screenDx / scale, t.y + screenDy / scale);
+        }
+
+        rubberbandAutoScrollRaf = requestAnimationFrame(rubberbandAutoScrollTick);
+      };
+
+      const onRubberbandMouseMove = (e: MouseEvent) => {
+        lastRubberbandClientX = e.clientX;
+        lastRubberbandClientY = e.clientY;
+        if (rubberbandAutoScrollRaf === null && graphDivRef.current?.querySelector('.mxRubberband')) {
+          rubberbandAutoScrollRaf = requestAnimationFrame(rubberbandAutoScrollTick);
+        }
+      };
+      // window, not graphDiv — a rubber-band drag routinely continues past
+      // the canvas's own edge (that's the whole point), and only window-
+      // level mousemove keeps firing once the cursor leaves graphDiv's
+      // bounds.
+      window.addEventListener('mousemove', onRubberbandMouseMove);
+
       const undoManager = new UndoManager();
       const undoListener = (_: any, evt: any) =>
         undoManager.undoableEditHappened(evt.getProperty('edit'));
       graph.getDataModel().addListener(InternalEvent.UNDO, undoListener);
       graph.getView().addListener(InternalEvent.UNDO, undoListener);
       (graph as any).undoManager = undoManager;
+
+      // Default createId() is a plain sequential counter seeded by scanning
+      // existing numeric ids on load — every collaborator's tab hydrates
+      // from the same server XML, so two people each creating a new shape
+      // in the same short window would deterministically compute the same
+      // next id on their independent local models. Only matters for
+      // newly-created cells (createId() only fires when a cell has none
+      // yet), so existing saved diagrams and their numeric-string ids are
+      // unaffected. Same collision-avoidance shape as create.tsx's own
+      // generatePageId.
+      graph.getDataModel().createId = () =>
+        `c${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
 
       const keyHandler = new KeyHandler(graph);
       // includeEdges=false — deleting a shape shouldn't take its connectors
@@ -5292,10 +6364,20 @@ const WebCanvas = forwardRef<DiagramCanvasHandle, DiagramCanvasProps>(({ onReady
       graph.getView().addListener('translate', () => scheduleGridRepaint());
       graph.getView().addListener('scaleAndTranslate', () => { scheduleGridRepaint(); reportZoom(); });
 
-      graph.getDataModel().addListener(InternalEvent.CHANGE, () => {
+      graph.getDataModel().addListener(InternalEvent.CHANGE, (_sender: any, evt: any) => {
         try {
           const xml = new ModelXmlSerializer(graph.getDataModel()).export();
-          onChangeRef.current?.(xml);
+          // evt.getProperty('changes') is the same array of atomic change
+          // objects (GeometryChange/StyleChange/ChildChange/...) the
+          // UndoManager above already stores for this transaction — reused
+          // here as the basis for a small collaboration patch instead of
+          // re-broadcasting the whole page's xml on every edit. xml is
+          // still passed through as changesToPatches's fallback: an
+          // unrecognized change type degrades to one full-snapshot patch
+          // for this flush rather than silently dropping the edit.
+          const changes = evt?.getProperty ? evt.getProperty('changes') : null;
+          const patches = changesToPatches(Array.isArray(changes) ? changes : [], xml);
+          onChangeRef.current?.(xml, patches);
         } catch (_) { }
 
         // Debounced so a drag/resize (many CHANGE events in a row) doesn't
@@ -5381,6 +6463,8 @@ const WebCanvas = forwardRef<DiagramCanvasHandle, DiagramCanvasProps>(({ onReady
         if (cleanupClickArrows) cleanupClickArrows();
         if (pinchRafId !== null) cancelAnimationFrame(pinchRafId);
         if (gridRepaintRafId !== null) cancelAnimationFrame(gridRepaintRafId);
+        window.removeEventListener('mousemove', onRubberbandMouseMove);
+        if (rubberbandAutoScrollRaf !== null) cancelAnimationFrame(rubberbandAutoScrollRaf);
         remoteHighlightsRef.current.forEach((highlight) => highlight.destroy());
         remoteHighlightsRef.current.clear();
         graph.destroy();

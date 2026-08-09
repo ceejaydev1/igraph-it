@@ -21,8 +21,9 @@ import type { DiagramPrintPayload } from '../print';
 import { useFocusEffect } from '@react-navigation/native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Svg, Path, Rect, Circle } from 'react-native-svg';
-import { SvgCanvas2D, ImageExport, Geometry, Point } from '@maxgraph/core';
+import { SvgCanvas2D, ImageExport, Geometry, Point, CellHighlight } from '@maxgraph/core';
 import DiagramCanvas, { DiagramCanvasHandle, getShapeStyle, insertUmlClassCell, insertDfdDataStoreCell, insertForkJoinStubs, findSequenceMessageEndpoints, sequenceMessageConnectionStyle, SEQUENCE_MESSAGE_SHAPE_IDS } from '@/components/DiagramCanvas';
+import { DiagramPatch, patchKey } from '@/utils/diagramPatch';
 import ShareModal, { Avatar, getAvatarColor } from '@/components/ShareModal';
 import RequestAccessModal from '@/components/RequestAccessModal';
 import ShapesPanel from '@/components/shapes/ShapesPanel';
@@ -119,10 +120,12 @@ const DownloadDropdown = ({
   onSelectFormat,
   style,
   align = 'right',
+  nativeID,
 }: {
   onSelectFormat: (format: 'png' | 'svg' | 'pdf' | 'jpg') => void;
   style?: any;
   align?: 'left' | 'right';
+  nativeID?: string;
 }) => {
   const formats = [
     { id: 'png', label: 'PNG', description: 'High quality, lossless', icon: '🖼️' },
@@ -133,6 +136,8 @@ const DownloadDropdown = ({
 
   return (
     <View
+      // @ts-ignore - nativeID renders as a DOM id on web (react-native-web); missing from ViewProps' types
+      nativeID={nativeID}
       style={[
         styles.downloadDropdown,
         align === 'left' ? { left: 0 } : { right: 0 },
@@ -182,10 +187,14 @@ const CloudSyncIcon = ({ color, checked }: { color: string; checked: boolean }) 
 type SyncStatus = 'local' | 'syncing' | 'synced' | 'offline';
 
 const SYNC_STATUS_META: Record<SyncStatus, { label: string; color: string }> = {
-  local: { label: 'Saved on device', color: '#d97706' },
+  // "only" is load-bearing here, not just phrasing — paired with a cloud
+  // icon, a plain "Saved on device" read as if the cloud icon meant it was
+  // already backed up. This makes the gap explicit: nothing has reached the
+  // server yet.
+  local: { label: 'Saved on device only', color: '#d97706' },
   syncing: { label: 'Saving…', color: '#4c6fff' },
   synced: { label: 'Saved', color: '#10b981' },
-  offline: { label: 'Saved on device', color: '#94a3b8' },
+  offline: { label: 'Saved on device only', color: '#94a3b8' },
 };
 
 // Sits beside the diagram title so the user always knows whether their work
@@ -369,7 +378,10 @@ const ACCESS_BADGE_LABEL: Record<string, string> = {
 
 export default function CreateScreen() {
   const router = useRouter();
-  const { diagramId, share: shareToken } = useLocalSearchParams<{ diagramId?: string; share?: string }>();
+  // openedAt is a one-off nonce savedDiagrams.tsx stamps onto every
+  // "Continue" navigation (see confirmContinueDiagram there) — see
+  // loadedOpenedAtRef below for why it exists.
+  const { diagramId, share: shareToken, openedAt } = useLocalSearchParams<{ diagramId?: string; share?: string; openedAt?: string }>();
   const { width } = useWindowDimensions();
   const isDesktop = width >= 768;
 
@@ -403,8 +415,6 @@ export default function CreateScreen() {
   const [diagramName, setDiagramName] = useState('Blank diagram');
   const [isGraphReady, setIsGraphReady] = useState(false);
 
-  const createTourSteps = useMemo(() => getCreateTourSteps({ router, isDesktop }), [router, isDesktop]);
-  useOnboardingTour(CREATE_TOUR_ID, createTourSteps, isGraphReady);
   const [graphInstance, setGraphInstance] = useState<any>(null);
   // Resolved once the graph is ready; a late-arriving id (auth settling just
   // after sign-in) re-triggers the hydrate effect below for one more restore
@@ -439,10 +449,31 @@ export default function CreateScreen() {
   // through updatePendingConnector instead so the ref and state can never
   // disagree.
   const pendingConnectorRef = useRef<{ shapeId: string; sourceCell: any } | null>(null);
+  // Highlights the locked-in source shape while tap-to-connect is waiting on
+  // the second tap — the graph's own selection outline alone is too subtle
+  // to read at a glance on a small mobile screen. Lazily created against
+  // whichever graph is live, and torn down whenever the source changes so a
+  // stale highlight never lingers on the wrong shape.
+  const sourceHighlightRef = useRef<CellHighlight | null>(null);
   const updatePendingConnector = (next: { shapeId: string; sourceCell: any } | null) => {
+    const prevSourceCell = pendingConnectorRef.current?.sourceCell ?? null;
+    const nextSourceCell = next?.sourceCell ?? null;
+    if (nextSourceCell !== prevSourceCell) {
+      if (nextSourceCell && graphInstance) {
+        if (!sourceHighlightRef.current) {
+          sourceHighlightRef.current = new CellHighlight(graphInstance, '#4c6fff', 4);
+        }
+        sourceHighlightRef.current.highlight(graphInstance.view.getState(nextSourceCell));
+      } else {
+        sourceHighlightRef.current?.hide();
+      }
+    }
     pendingConnectorRef.current = next;
     setPendingConnectorState(next);
   };
+  useEffect(() => {
+    return () => { sourceHighlightRef.current?.destroy(); };
+  }, []);
   // Mobile-only: Text/Draw/Comment double as direct entry points into the
   // Properties bottom sheet's Text/Style/Arrange tabs (those three buttons
   // had no real tool behind them before — just a visual active state — so
@@ -487,6 +518,10 @@ export default function CreateScreen() {
   const [showDownloadDropdown, setShowDownloadDropdown] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
 
+  // Mobile-only overflow menu (New Diagram / Diagram Type / Print / Download)
+  // — see mobileTopBarRight below.
+  const [showMoreMenu, setShowMoreMenu] = useState(false);
+
   // ─── In-app alert/confirm dialog (web) ───────────────────────────────────────
   // react-native-web's Alert.alert is a no-op, and window.alert/confirm work
   // but show a distracting native browser chrome ("localhost says..."). This
@@ -511,6 +546,27 @@ export default function CreateScreen() {
 
   // ─── Share state ─────────────────────────────────────────────────────────────
   const [showShareModal, setShowShareModal] = useState(false);
+
+  // Mobile tour steps for the overflow menu (Diagram Type/Print/Download) need
+  // to actually open it — and open the Download format list beneath it — so
+  // the tour can walk through items hidden behind a closed menu instead of
+  // just describing them from the toggle button. Declared here (not up with
+  // isDesktop/router above) because it depends on showMoreMenu/
+  // showDownloadDropdown's setters, declared just above.
+  const createTourSteps = useMemo(
+    () => getCreateTourSteps({
+      router,
+      isDesktop,
+      openMobileMoreMenu: () => setShowMoreMenu(true),
+      openMobileDownloadFormats: () => {
+        setShowMoreMenu(false);
+        setShowDownloadDropdown(true);
+      },
+      closeMobileDownloadFormats: () => setShowDownloadDropdown(false),
+    }),
+    [router, isDesktop]
+  );
+  useOnboardingTour(CREATE_TOUR_ID, createTourSteps, isGraphReady);
 
   // ─── Print state ─────────────────────────────────────────────────────────────
   const [showPrintModal, setShowPrintModal] = useState(false);
@@ -575,6 +631,23 @@ export default function CreateScreen() {
   // Who else currently has this diagram open — driven by the collab-socket
   // 'presence' event (see the join effect further down).
   const [collabViewers, setCollabViewers] = useState<{ userId: string; userName: string; permission: string }[]>([]);
+  // Mirrors collabViewers for handleSaveDiagram/attemptBackgroundSync, which
+  // are useCallback-memoized on other deps and would otherwise close over a
+  // stale (usually empty, pre-join) collabViewers from their first render.
+  // Read by the 404-retry guard below: silently forking onto a brand-new
+  // diagram id is fine for a solo stale-local-id case, but actively harmful
+  // while other people are live-collaborating in the same room (see there).
+  const collabViewersRef = useRef<{ userId: string; userName: string; permission: string }[]>([]);
+  useEffect(() => {
+    collabViewersRef.current = collabViewers;
+  }, [collabViewers]);
+  // Page ids deleted locally since the last successful save — sent alongside
+  // the next save so the backend's page-merge (see diagramController.js)
+  // knows to actually drop them server-side instead of a concurrent
+  // collaborator's own save silently resurrecting them (merge otherwise has
+  // no way to distinguish "this client just doesn't know about that page
+  // yet" from "this client deleted that page on purpose").
+  const deletedPageIdsRef = useRef<Set<string>>(new Set());
   // Ambient "(avatar) X joined"/"left" banner — set by the presence-diffing
   // logic in the join effect further down, auto-cleared by
   // presenceToastTimerRef. Keeps each person's permission (not just name) so
@@ -585,9 +658,34 @@ export default function CreateScreen() {
   } | null>(null);
   const presenceToastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const collabSendTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Accumulates patches across every raw handleGraphChange call inside one
+  // 200ms debounce window, keyed by `${id}:${type}` (terminal patches
+  // further split by side) so a later patch for the same cell+field
+  // overwrites the earlier one instead of both being sent — e.g. several
+  // geometry updates during one drag collapse down to just the final
+  // position. Map preserves insertion order on existing-key updates, so an
+  // 'add' patch (always produced before any patch that mutates that same
+  // cell, since you can't edit a cell before it exists) naturally stays
+  // ordered ahead of them with no extra sort step. Cleared on every flush.
+  const pendingPatchesRef = useRef<Map<string, DiagramPatch>>(new Map());
   // Last diagramId this instance has actually hydrated from the backend, so a
   // re-render doesn't re-fetch, but switching to a *different* diagramId does.
   const loadedDiagramIdRef = useRef<string | null>(null);
+  // Last openedAt nonce this instance has actually hydrated for. This screen
+  // deliberately never unmounts across tab switches (see the comment further
+  // down), so re-opening the SAME diagram — e.g. rename it from Saved
+  // Diagrams, then tap Continue on that same diagram again — kept this
+  // effect's diagramId dependency completely unchanged, meaning it never
+  // re-ran and the rename (or any other server-side change) never made it
+  // back into this already-hydrated instance: the title and content just
+  // silently stayed whatever they were before the round trip. openedAt is a
+  // fresh value (see savedDiagrams.tsx's confirmContinueDiagram) on every
+  // single "Continue" tap, even for the diagram already open here, so the
+  // hydrate effect's guard below can tell "the user explicitly chose to
+  // (re)open this diagram" apart from an incidental re-render with the same
+  // params (e.g. isGraphReady flipping) — which must NOT re-fetch, or it'd
+  // clobber whatever unsaved edit is currently in progress.
+  const loadedOpenedAtRef = useRef<string | null>(null);
   // The graphInstance we last hydrated. Mobile viewports often report a
   // different width right after the initial render settles (browser chrome
   // collapsing, etc.), which flips create.tsx's isDesktop layout branch —
@@ -615,6 +713,21 @@ export default function CreateScreen() {
   // gave no visible confirmation) all slip through and each create their own
   // new diagram before the first one's response ever sets currentDiagramIdRef.
   const isSavingRef = useRef(false);
+  // The exact same race, one level up: attemptBackgroundSync has THREE
+  // independent triggers that can each fire within the same short window —
+  // the 5s setInterval tick, document.visibilitychange going 'hidden', and
+  // the focus-loss/navigate-away flush — none of which coordinate with each
+  // other. attemptBackgroundSync already checks isSavingRef (guards against
+  // racing a *manual* Save), but nothing stopped it from racing its OWN
+  // previous, still-in-flight call: two overlapping invocations both read
+  // the same stale currentDiagramIdRef.current (null, for a diagram never
+  // saved yet) before either's response comes back to set it, so both send
+  // id: undefined and the server creates two separate diagram records for
+  // what was really one save — the concrete mechanism behind the stray
+  // duplicate "Blank diagram" entries in Saved Diagrams. Set synchronously
+  // at the top of attemptBackgroundSync (before any await) and cleared in a
+  // finally, same pattern as isSavingRef itself.
+  const isBackgroundSyncingRef = useRef(false);
 
   // ─── SaveContext integration ──────────────────────────────────────────────
   const { setSaveHandler, setIsSaving: setContextIsSaving, setFlushHandler } = useSave();
@@ -641,6 +754,70 @@ export default function CreateScreen() {
   useEffect(() => {
     activePageIdRef.current = activePageId;
   }, [activePageId]);
+
+  // Patches don't self-heal a missed message the way full-page snapshots
+  // used to (any later full snapshot from anyone would silently repair a
+  // stale client) — so this is the safety net: re-fetch this diagram's
+  // current state from the REST/Firestore source of truth and refresh
+  // every page's cache from it. Three callers: a socket reconnect (see
+  // collabSocketClient's onResyncNeeded below), a patch that referenced a
+  // cell id this client doesn't have (driftDetected from applyPatches),
+  // and a patch arriving for a page other than the one on screen (no live
+  // graph model exists for a background page to apply patches into, so its
+  // cache is refreshed from the server instead — see onRemoteChange below).
+  //
+  // Deliberately not a reuse of applyLoadedContent: that resets
+  // pages/activePageId/diagramName wholesale, which is wrong mid-session if
+  // the user has already navigated/renamed locally. This only ever touches
+  // pageXmlCache, and — only when applyToActivePage is true — the live
+  // canvas for whichever page is *currently* active, exactly like a normal
+  // remote update (resetView:false, so it never yanks pan/zoom/selection).
+  const resyncInFlightRef = useRef(false);
+  const resyncQueuedRef = useRef(false);
+  const resyncFromServer = async (opts?: { applyToActivePage?: boolean }) => {
+    const applyToActivePage = opts?.applyToActivePage ?? true;
+    if (resyncInFlightRef.current) {
+      resyncQueuedRef.current = true;
+      return;
+    }
+    const diagramId = currentDiagramIdRef.current;
+    if (!diagramId) return;
+    resyncInFlightRef.current = true;
+    try {
+      const API_URL = process.env.EXPO_PUBLIC_API_URL || 'https://igraph-backend.onrender.com';
+      const response = await authService.authFetch(`${API_URL}/api/diagrams/${diagramId}`);
+      const result = await response.json();
+      if (!result.success || !result.data) return;
+      const content = result.data as { xml?: string; pages?: Page[] };
+      const loadedPages: Page[] = content.pages && content.pages.length > 0
+        ? content.pages
+        : [];
+      loadedPages.forEach((p) => pageXmlCache.current.set(p.id, p.xml || ''));
+      if (loadedPages.length === 0 && content.xml && activePageIdRef.current) {
+        pageXmlCache.current.set(activePageIdRef.current, content.xml);
+      }
+
+      if (applyToActivePage) {
+        const activePage = activePageIdRef.current;
+        const xml = activePage ? pageXmlCache.current.get(activePage) : undefined;
+        if (xml) {
+          isHydratingRef.current = true;
+          diagramCanvasRef.current?.loadXml(xml, { resetView: false });
+          diagramCanvasRef.current?.refresh();
+          isHydratingRef.current = false;
+          setDiagramXml(xml);
+        }
+      }
+    } catch (e) {
+      console.error('Resync from server failed:', e);
+    } finally {
+      resyncInFlightRef.current = false;
+      if (resyncQueuedRef.current) {
+        resyncQueuedRef.current = false;
+        resyncFromServer(opts);
+      }
+    }
+  };
 
   // ─── Real-time collaboration ────────────────────────────────────────────
   // Joins this diagram's room the moment it actually has a real id (a
@@ -695,16 +872,41 @@ export default function CreateScreen() {
     };
 
     joinDiagram(activeDiagramId, {
-      onRemoteChange: (xml: string, fromUserId?: string) => {
-        if (cancelled || !xml) return;
+      onRemoteChange: (patches: DiagramPatch[], pageId?: string | null, fromUserId?: string) => {
+        if (cancelled || !patches || patches.length === 0) return;
         if (fromUserId && myUserId && fromUserId === myUserId) return;
+        // A change tagged for a page other than the one on screen right now
+        // must never touch the live canvas — applying it there is exactly
+        // the "other collaborator's edit replaced/emptied my diagram" bug:
+        // this client would apply a different page's patches onto whatever
+        // it's actually looking at. Unlike the old full-snapshot design,
+        // there's no live graph model for a background page to patch
+        // against here (only a cached xml string, not a Cell tree) — so
+        // instead of caching directly, refresh that page's cache from the
+        // server. A brief round trip is a fine trade for a page that isn't
+        // even being viewed right now. A missing pageId (older/other
+        // senders) is treated as "current page", matching the single-page
+        // behavior this had before multi-page tagging existed.
+        if (pageId && pageId !== activePageIdRef.current) {
+          resyncFromServer({ applyToActivePage: false });
+          return;
+        }
         isHydratingRef.current = true;
-        diagramCanvasRef.current?.loadXml(xml);
+        // resetView: false — a collaborator's edit shouldn't yank this
+        // viewer's own pan/zoom back to centered every time it arrives
+        // (see loadXml's resetView doc comment in DiagramCanvas.tsx).
+        const result = diagramCanvasRef.current?.applyPatches(patches);
         diagramCanvasRef.current?.refresh();
         isHydratingRef.current = false;
-        setDiagramXml(xml);
-        const pageId = activePageIdRef.current;
-        if (pageId) pageXmlCache.current.set(pageId, xml);
+        if (result) {
+          setDiagramXml(result.xml);
+          const activePage = activePageIdRef.current;
+          if (activePage) pageXmlCache.current.set(activePage, result.xml);
+          // A patch referenced a cell this client doesn't have locally —
+          // it's missed an earlier patch and drifted out of sync. Resync
+          // from the server rather than let it silently stay wrong.
+          if (result.driftDetected) resyncFromServer();
+        }
       },
       onPresence: (viewers: { userId: string; userName: string; permission: string }[]) => {
         if (cancelled) return;
@@ -754,9 +956,24 @@ export default function CreateScreen() {
         if (cancelled || !fromUserId || fromUserId === myUserId) return;
         diagramCanvasRef.current?.setRemoteSelection(fromUserId, cellId, getAvatarColor(fromUserId));
       },
+      // Fired on every socket reconnect after the first (see
+      // collabSocketClient's hasConnectedOnce gating) — patches don't
+      // self-heal a gap in missed messages the way full snapshots used to,
+      // so a client that just reconnected needs an explicit resync rather
+      // than silently sitting on whatever it had before the drop.
+      onResyncNeeded: () => {
+        if (!cancelled) resyncFromServer();
+      },
     }).then((result) => {
       if (!cancelled && !result.ok) {
         console.warn('Could not join collaboration room:', result.message);
+        // Previously silent (console-only) — a failed join means this tab
+        // never sees anyone else's live edits at all (falls back to
+        // whatever the initial REST load happened to have), which without
+        // any visible explanation looks identical to "collaboration is
+        // just broken." Covers the room being full (10 concurrent
+        // collaborators) as well as any access/not-found edge case.
+        notify('Live Collaboration Unavailable', result.message || 'Could not connect to real-time collaboration for this diagram. You can keep editing, but you may not see others\' changes right away.');
       }
     });
 
@@ -884,24 +1101,46 @@ export default function CreateScreen() {
     }
   };
 
-  const handleGraphChange = (xml: string) => {
+  const handleGraphChange = (xml: string, patches: DiagramPatch[]) => {
     if (isHydratingRef.current) return;
     console.log('🔄 handleGraphChange — xmlLen:', xml?.length || 0, 'activePageId:', activePageId, 'hydrated:', hasHydratedRef.current);
     setDiagramXml(xml);
-    if (activePageId) {
-      pageXmlCache.current.set(activePageId, xml);
+    // Captured now (the page this edit actually happened on), not read again
+    // inside the debounced setTimeout below — the user can switch pages
+    // during that 200ms window, and this change must stay tagged with the
+    // page it came from either way. See onRemoteChange's matching pageId
+    // guard for why: without it, this same mistake on the *receiving* end
+    // is what let one collaborator's edit on page 2 silently overwrite
+    // another collaborator's page 1 (the "diagram disappeared" bug).
+    const pageIdAtChange = activePageId;
+    if (pageIdAtChange) {
+      pageXmlCache.current.set(pageIdAtChange, xml);
     }
 
-    // Broadcast to any other live collaborators on this same diagram+page.
-    // Debounced so a drag/resize (many CHANGE events in a row) sends one
-    // update shortly after things settle instead of one per intermediate
-    // frame — collaborators see it a couple hundred ms later, not live pixel-
-    // by-pixel, but that's the right trade for not flooding the socket.
+    // Broadcast to any other live collaborators on this same diagram+page —
+    // as a small patch list (what actually changed), not the whole page's
+    // xml, so concurrent edits to different shapes no longer overwrite each
+    // other on arrival. Buffered across every raw CHANGE event and only
+    // flushed on the existing 200ms debounce, same cadence as before; a
+    // 'full' patch (the changesToPatches escape hatch) always arrives alone
+    // and replaces whatever's already buffered, since it supersedes any
+    // more specific patch for the same edit.
+    for (const patch of patches) {
+      if (patch.type === 'full') {
+        pendingPatchesRef.current.clear();
+        pendingPatchesRef.current.set(patchKey(patch), patch);
+        break;
+      }
+      pendingPatchesRef.current.set(patchKey(patch), patch);
+    }
+
     if (canEditDiagram && currentDiagramIdRef.current) {
       const diagramId = currentDiagramIdRef.current;
       if (collabSendTimerRef.current) clearTimeout(collabSendTimerRef.current);
       collabSendTimerRef.current = setTimeout(() => {
-        sendDiagramChange(diagramId, xml);
+        const toSend = Array.from(pendingPatchesRef.current.values());
+        pendingPatchesRef.current.clear();
+        if (toSend.length > 0) sendDiagramChange(diagramId, pageIdAtChange, toSend);
       }, 200);
     }
   };
@@ -1038,12 +1277,14 @@ export default function CreateScreen() {
       diagramCanvasRef.current?.refresh();
       hasHydratedRef.current = true;
       loadedDiagramIdRef.current = diagramId || currentDiagramIdRef.current || null;
+      loadedOpenedAtRef.current = openedAt || null;
       return;
     }
 
     const hydrate = async () => {
-      if (diagramId && diagramId !== loadedDiagramIdRef.current) {
+      if (diagramId && (diagramId !== loadedDiagramIdRef.current || openedAt !== loadedOpenedAtRef.current)) {
         loadedDiagramIdRef.current = diagramId;
+        loadedOpenedAtRef.current = openedAt || null;
         try {
           // savedDiagrams.tsx kicks this fetch off the moment its diagram
           // card is tapped, well before navigation lands here — reusing it
@@ -1137,7 +1378,7 @@ export default function CreateScreen() {
 
     hydrate();
     return () => { cancelled = true; };
-  }, [isGraphReady, graphInstance, diagramId, authUserId]);
+  }, [isGraphReady, graphInstance, diagramId, openedAt, authUserId]);
 
   // Resolves the signed-in uid once the graph is ready. Right after a fresh
   // sign-in, authService.getCurrentUserId() inside the hydrate effect above
@@ -1197,9 +1438,22 @@ export default function CreateScreen() {
     // background server sync) instead of only waiting for the next 5s tick.
     pendingAutosaveFlushRef.current = () => {
       flushLocalAutosave();
-      attemptBackgroundSyncRef.current();
+      attemptBackgroundSyncRef.current(true);
     };
-    const interval = setInterval(flushLocalAutosave, 5000);
+    // Both the local-storage flush and the server sync run on this same 5s
+    // clock, not just on tab-switch/focus-loss — a long, uninterrupted
+    // editing session (the common case) used to only ever get the local
+    // write, leaving the server copy (and therefore any live collaborator's
+    // "confirmed" state, plus the ability to recover this work from another
+    // device) stale until the user happened to switch away. Both calls
+    // already no-op on their own when there's nothing new to send
+    // (isDirtyRef for the local write, hasUnsyncedServerChangesRef for the
+    // server one), so ticking every 5s regardless of activity costs nothing
+    // extra while idle.
+    const interval = setInterval(() => {
+      flushLocalAutosave();
+      attemptBackgroundSyncRef.current();
+    }, 5000);
     return () => clearInterval(interval);
   }, [flushLocalAutosave]);
 
@@ -1222,7 +1476,7 @@ export default function CreateScreen() {
     const onVisibilityChange = () => {
       if (document.visibilityState === 'hidden') {
         flushLocalAutosave();
-        attemptBackgroundSyncRef.current();
+        attemptBackgroundSyncRef.current(true);
       } else if (document.visibilityState === 'visible') {
         // Returning from another system/browser tab — RN focus never changed,
         // so useFocusEffect didn't fire. Force the same repaint it would have.
@@ -1353,6 +1607,7 @@ export default function CreateScreen() {
           style: 'destructive',
           onPress: () => {
             pageXmlCache.current.delete(pageId);
+            deletedPageIdsRef.current.add(pageId);
 
             const newPages = pages.filter(p => p.id !== pageId);
             setPages(newPages);
@@ -1511,7 +1766,13 @@ export default function CreateScreen() {
       updatePendingConnector({ ...current, sourceCell: cell });
       return;
     }
-    if (cell === current.sourceCell) return; // same shape tapped twice — keep waiting for a different one
+    if (cell === current.sourceCell) {
+      // Tapping the source again undoes the pick instead of no-op'ing —
+      // gives the user a way to correct a wrong first shape without
+      // hitting Cancel and restarting from the toolbar.
+      updatePendingConnector({ ...current, sourceCell: null });
+      return;
+    }
 
     const graph = graphInstance;
     if (!graph) { updatePendingConnector(null); return; }
@@ -2224,6 +2485,12 @@ export default function CreateScreen() {
           name: p.name,
           xml: pageXmlCache.current.get(p.id) || ''
         })),
+        // Pages this client deleted locally since its last successful save
+        // — tells the backend's merge to actually drop them server-side
+        // rather than treating their absence from `pages` above as "this
+        // client just hasn't loaded that page" and keeping it (see
+        // diagramController.js's saveDiagram merge).
+        deletedPageIds: Array.from(deletedPageIdsRef.current),
         activePageId: activePageId
       };
 
@@ -2256,7 +2523,19 @@ export default function CreateScreen() {
       // "the diagram to keep updating". Don't lose the user's work over a
       // dangling reference: retry once as a brand-new diagram instead of
       // surfacing a confusing "Diagram not found" error.
-      if (response.status === 404 && payload.id) {
+      //
+      // Skipped while other people currently have this same diagram open
+      // (collabViewersRef, driven by socket presence): silently forking
+      // onto a new id here would save this user's edits to a document
+      // nobody else is in the room for, while everyone else keeps editing
+      // the original — their next save then has no idea this fork ever
+      // happened. That's a second, worse version of the "diagram
+      // disappeared" bug, self-inflicted by the save path instead of the
+      // live-sync path. A genuinely deleted-while-collaborating diagram is
+      // rare enough (and serious enough — the room itself is now editing
+      // something that doesn't exist) that surfacing it plainly is better
+      // than quietly working around it.
+      if (response.status === 404 && payload.id && collabViewersRef.current.length === 0) {
         console.warn('⚠️ Referenced diagram id not found on server, retrying as a new diagram');
         setMyAccessLevel('owner');
         setHasPendingAccessRequest(false);
@@ -2271,6 +2550,9 @@ export default function CreateScreen() {
           body: JSON.stringify(retryPayload)
         });
         console.log('📥 Retry response status:', response.status);
+      } else if (response.status === 404 && payload.id) {
+        notify('Diagram Not Found', 'This diagram no longer exists on the server, but other collaborators are still shown as present in it. Please refresh before continuing to avoid losing work.');
+        return;
       }
 
       // Check if response is OK before parsing JSON
@@ -2285,6 +2567,7 @@ export default function CreateScreen() {
 
       if (result.success) {
         console.log('✅ Diagram saved successfully!');
+        deletedPageIdsRef.current.clear();
         const savedId: string | undefined = result.data?.diagram?.id;
         if (savedId) {
           setCurrentDiagramId(savedId);
@@ -2328,82 +2611,106 @@ export default function CreateScreen() {
   // above — the backend creates a new record and the returned id is captured
   // below, so a diagram never worked on with the explicit Save button still
   // makes it to the server and survives sign-out/sign-in on another device.
-  const attemptBackgroundSync = useCallback(async () => {
+  //
+  // `urgent` (set by pendingAutosaveFlushRef and the visibilitychange-hidden
+  // handler below, both firing right as the screen/tab is disappearing) marks
+  // the request `keepalive: true`, which tells the browser to let it finish
+  // even after the page is hidden or torn down — a plain fetch() has no such
+  // guarantee, and mobile browsers in particular can suspend a backgrounded
+  // tab's JS fast enough to kill an in-flight save before it reaches the
+  // server. That's what let shapes added right before switching away/locking
+  // the phone show "Saved" locally while never actually reaching the
+  // database. Also skips the preview-image render on this path — keepalive
+  // requests share a small (~64KB) total body budget across a browser, and
+  // getting the real diagram content out the door matters far more here than
+  // a fresh thumbnail (the next normal sync regenerates it anyway).
+  const attemptBackgroundSync = useCallback(async (urgent: boolean = false) => {
     if (!graphInstance) return;
     if (isSavingRef.current) return; // a manual save is already in flight
+    if (isBackgroundSyncingRef.current) return; // a previous background sync hasn't resolved yet
     if (!hasUnsyncedServerChangesRef.current) return; // nothing new since the last confirmed sync
 
-    const signedIn = await authService.hasActiveSession();
-    if (!signedIn) return; // not signed in — the local copy is all there is to offer
-
-    const xml = diagramXmlRef.current;
-    const isEmptyXml = !xml ||
-      xml.trim().length === 0 ||
-      xml === '<mxGraphModel/>' ||
-      xml === '<root/>' ||
-      xml === '<mxGraphModel><root><mxCell id="0"/><mxCell id="1" parent="0"/></mxGraphModel>';
-    if (isEmptyXml) return;
-
-    setSyncStatus('syncing');
+    isBackgroundSyncingRef.current = true;
     try {
-      let imageDataUrl = '';
+      const signedIn = await authService.hasActiveSession();
+      if (!signedIn) return; // not signed in — the local copy is all there is to offer
+
+      const xml = diagramXmlRef.current;
+      const isEmptyXml = !xml ||
+        xml.trim().length === 0 ||
+        xml === '<mxGraphModel/>' ||
+        xml === '<root/>' ||
+        xml === '<mxGraphModel><root><mxCell id="0"/><mxCell id="1" parent="0"/></mxGraphModel>';
+      if (isEmptyXml) return;
+
+      setSyncStatus('syncing');
       try {
-        const canvas = await renderDiagramToCanvas(graphInstance, 0.5, {
-          minSize: DIAGRAM_THUMBNAIL_MIN_SIZE,
-          gridBackground: true,
-          // Caps the actual output resolution regardless of how big the
-          // diagram itself is — this image is only ever shown at ~150px
-          // tall in a list card (see cardPreview in savedDiagrams.tsx) and
-          // is what gets stored in Firestore and re-sent on every diagram
-          // list fetch, so a large diagram no longer means a proportionally
-          // large (and proportionally expensive) thumbnail.
-          maxDimension: 480,
-        });
-        imageDataUrl = canvas.toDataURL('image/png');
-      } catch {
-        // Preview is optional — a failed render shouldn't block the sync.
-      }
-
-      const payload = {
-        id: currentDiagramIdRef.current || undefined,
-        name: diagramNameRef.current || 'Untitled Diagram',
-        xml,
-        previewImage: imageDataUrl,
-        type: activeUmlType || 'General',
-        pages: pages.map(p => ({
-          id: p.id,
-          name: p.name,
-          xml: pageXmlCache.current.get(p.id) || ''
-        })),
-        activePageId,
-      };
-
-      const API_URL = process.env.EXPO_PUBLIC_API_URL || 'https://igraph-backend.onrender.com';
-      const response = await authService.authFetch(`${API_URL}/api/diagrams/save`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
-      if (!response.ok) throw new Error(`Server error: ${response.status}`);
-
-      const result = await response.json();
-      if (result.success) {
-        const savedId: string | undefined = result.data?.diagram?.id;
-        if (savedId) {
-          setCurrentDiagramId(savedId);
-          loadedDiagramIdRef.current = savedId;
-          authService.getCurrentUserId().then((uid) => {
-            if (uid) persistDraft(uid, savedId);
-          });
+        let imageDataUrl = '';
+        if (!urgent) {
+          try {
+            const canvas = await renderDiagramToCanvas(graphInstance, 0.5, {
+              minSize: DIAGRAM_THUMBNAIL_MIN_SIZE,
+              gridBackground: true,
+              // Caps the actual output resolution regardless of how big the
+              // diagram itself is — this image is only ever shown at ~150px
+              // tall in a list card (see cardPreview in savedDiagrams.tsx) and
+              // is what gets stored in Firestore and re-sent on every diagram
+              // list fetch, so a large diagram no longer means a proportionally
+              // large (and proportionally expensive) thumbnail.
+              maxDimension: 480,
+            });
+            imageDataUrl = canvas.toDataURL('image/png');
+          } catch {
+            // Preview is optional — a failed render shouldn't block the sync.
+          }
         }
-        hasUnsyncedServerChangesRef.current = false;
-        setSyncStatus('synced');
-      } else {
+
+        const payload = {
+          id: currentDiagramIdRef.current || undefined,
+          name: diagramNameRef.current || 'Untitled Diagram',
+          xml,
+          previewImage: imageDataUrl,
+          type: activeUmlType || 'General',
+          pages: pages.map(p => ({
+            id: p.id,
+            name: p.name,
+            xml: pageXmlCache.current.get(p.id) || ''
+          })),
+          deletedPageIds: Array.from(deletedPageIdsRef.current),
+          activePageId,
+        };
+
+        const API_URL = process.env.EXPO_PUBLIC_API_URL || 'https://igraph-backend.onrender.com';
+        const response = await authService.authFetch(`${API_URL}/api/diagrams/save`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+          ...(urgent ? { keepalive: true } : {}),
+        });
+        if (!response.ok) throw new Error(`Server error: ${response.status}`);
+
+        const result = await response.json();
+        if (result.success) {
+          deletedPageIdsRef.current.clear();
+          const savedId: string | undefined = result.data?.diagram?.id;
+          if (savedId) {
+            setCurrentDiagramId(savedId);
+            loadedDiagramIdRef.current = savedId;
+            authService.getCurrentUserId().then((uid) => {
+              if (uid) persistDraft(uid, savedId);
+            });
+          }
+          hasUnsyncedServerChangesRef.current = false;
+          setSyncStatus('synced');
+        } else {
+          setSyncStatus('offline');
+        }
+      } catch (e) {
+        console.warn('Background sync to server failed (local copy is still safe):', e);
         setSyncStatus('offline');
       }
-    } catch (e) {
-      console.warn('Background sync to server failed (local copy is still safe):', e);
-      setSyncStatus('offline');
+    } finally {
+      isBackgroundSyncingRef.current = false;
     }
   }, [graphInstance, activeUmlType, pages, activePageId]);
 
@@ -2880,6 +3187,7 @@ export default function CreateScreen() {
               style={styles.mobileTopBarBtn}
               onPress={() => router.navigate('/(tabs)/home')}
               activeOpacity={0.7}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
             >
               <ICONS.Close color="#4a5568" />
             </TouchableOpacity>
@@ -2889,16 +3197,9 @@ export default function CreateScreen() {
               style={styles.mobileTopBarBtn}
               onPress={handleNewDiagram}
               activeOpacity={0.7}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
             >
               <ICONS.NewDiagram color="#4a5568" />
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.mobileTopBarBtn}
-              onPress={() => setShowTypeModal(true)}
-              activeOpacity={0.7}
-              accessibilityLabel={`Diagram type: ${activeUmlType}. Tap to change.`}
-            >
-              <ICONS.Tag color="#4a5568" />
             </TouchableOpacity>
           </View>
 
@@ -2931,6 +3232,7 @@ export default function CreateScreen() {
               onPress={handleShare}
               disabled={!isGraphReady}
               activeOpacity={0.7}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
             >
               <ShareIcon color={isGraphReady ? '#4a5568' : '#cbd5e1'} />
             </TouchableOpacity>
@@ -2945,6 +3247,7 @@ export default function CreateScreen() {
               onPress={handleSaveDiagram}
               disabled={!isGraphReady || isSaving}
               activeOpacity={0.7}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
             >
               {isSaving ? (
                 <View style={styles.saveSpinner} />
@@ -2956,27 +3259,13 @@ export default function CreateScreen() {
 
             <TouchableOpacity
               // @ts-ignore - nativeID renders as a DOM id on web (react-native-web); missing from TouchableOpacityProps' types
-              nativeID="tour-create-print"
-              style={[styles.mobileTopBarBtn, !isGraphReady && styles.mobileTopBarBtnDisabled]}
-              onPress={handlePrint}
-              disabled={!isGraphReady || isPreparingPrint}
+              nativeID="tour-create-more"
+              style={styles.mobileTopBarBtn}
+              onPress={() => setShowMoreMenu((v) => !v)}
               activeOpacity={0.7}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
             >
-              <PrintIcon color={isGraphReady ? '#4a5568' : '#cbd5e1'} />
-            </TouchableOpacity>
-            <TouchableOpacity
-              // @ts-ignore - nativeID renders as a DOM id on web (react-native-web); missing from TouchableOpacityProps' types
-              nativeID="tour-create-download"
-              style={[styles.mobileTopBarBtn, !isGraphReady && styles.mobileTopBarBtnDisabled]}
-              onPress={() => setShowDownloadDropdown(prev => !prev)}
-              disabled={!isGraphReady || isDownloading}
-              activeOpacity={0.7}
-            >
-              {isDownloading ? (
-                <View style={styles.downloadSpinner} />
-              ) : (
-                <DownloadIcon color={isGraphReady ? '#4a5568' : '#cbd5e1'} />
-              )}
+              <ICONS.More color="#4a5568" />
             </TouchableOpacity>
           </View>
         </View>
@@ -3012,26 +3301,35 @@ export default function CreateScreen() {
             </View>
           )}
 
-          {/* Floating Undo/Redo buttons */}
+          {/* Floating Undo/Redo buttons — hidden while any bottom sheet
+              (Shapes/Properties/Connectors) is open. Each sheet always
+              animates to its full EXPANDED_HEIGHT as soon as it opens (see
+              ShapesBottomPanel's visible-effect), and on a landscape phone
+              that height can reach up into this container's top:12 position,
+              so the two would otherwise overlap. */}
+          {!(showShapesPanel || showMobileProperties || showConnectorsPanel) && (
           <View nativeID="tour-create-undo-redo" style={styles.floatingUndoRedoContainer}>
             <TouchableOpacity
               style={[styles.floatingUndoRedoBtn, !isGraphReady && styles.floatingUndoRedoBtnDisabled]}
               onPress={handleUndo}
               disabled={!isGraphReady}
               activeOpacity={0.7}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
             >
               <UndoIcon color={isGraphReady ? '#4a5568' : '#cbd5e1'} size={20} />
             </TouchableOpacity>
-            
+
             <TouchableOpacity
               style={[styles.floatingUndoRedoBtn, !isGraphReady && styles.floatingUndoRedoBtnDisabled]}
               onPress={handleRedo}
               disabled={!isGraphReady}
               activeOpacity={0.7}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
             >
               <RedoIcon color={isGraphReady ? '#4a5568' : '#cbd5e1'} size={20} />
             </TouchableOpacity>
           </View>
+          )}
 
         </View>
 
@@ -3162,6 +3460,65 @@ export default function CreateScreen() {
           graph={graphInstance}
         />
 
+        {showMoreMenu && (
+          <>
+            <Pressable
+              style={styles.dropdownOverlay}
+              onPress={() => setShowMoreMenu(false)}
+            />
+            <View style={[styles.moreDropdown, { top: 60, right: 16 }]}>
+              <TouchableOpacity
+                // @ts-ignore - nativeID renders as a DOM id on web (react-native-web); missing from TouchableOpacityProps' types
+                nativeID="tour-create-moremenu-type"
+                style={styles.moreDropdownItem}
+                onPress={() => {
+                  setShowMoreMenu(false);
+                  setShowTypeModal(true);
+                }}
+                activeOpacity={0.6}
+                accessibilityLabel={`Diagram type: ${activeUmlType}. Tap to change.`}
+              >
+                <ICONS.Tag color="#4a5568" />
+                <Text style={styles.moreDropdownLabel}>Diagram Type</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                // @ts-ignore - nativeID renders as a DOM id on web (react-native-web); missing from TouchableOpacityProps' types
+                nativeID="tour-create-moremenu-print"
+                style={[styles.moreDropdownItem, !isGraphReady && styles.moreDropdownItemDisabled]}
+                onPress={() => {
+                  if (!isGraphReady || isPreparingPrint) return;
+                  setShowMoreMenu(false);
+                  handlePrint();
+                }}
+                disabled={!isGraphReady || isPreparingPrint}
+                activeOpacity={0.6}
+              >
+                <PrintIcon color={isGraphReady ? '#4a5568' : '#cbd5e1'} />
+                <Text style={[styles.moreDropdownLabel, !isGraphReady && styles.moreDropdownLabelDisabled]}>Print</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                // @ts-ignore - nativeID renders as a DOM id on web (react-native-web); missing from TouchableOpacityProps' types
+                nativeID="tour-create-moremenu-download"
+                style={[styles.moreDropdownItem, styles.moreDropdownItemLast, !isGraphReady && styles.moreDropdownItemDisabled]}
+                onPress={() => {
+                  if (!isGraphReady || isDownloading) return;
+                  setShowMoreMenu(false);
+                  setShowDownloadDropdown(true);
+                }}
+                disabled={!isGraphReady || isDownloading}
+                activeOpacity={0.6}
+              >
+                {isDownloading ? (
+                  <View style={styles.downloadSpinner} />
+                ) : (
+                  <DownloadIcon color={isGraphReady ? '#4a5568' : '#cbd5e1'} />
+                )}
+                <Text style={[styles.moreDropdownLabel, !isGraphReady && styles.moreDropdownLabelDisabled]}>Download</Text>
+              </TouchableOpacity>
+            </View>
+          </>
+        )}
+
         {showDownloadDropdown && (
           <>
             <Pressable
@@ -3169,6 +3526,7 @@ export default function CreateScreen() {
               onPress={() => setShowDownloadDropdown(false)}
             />
             <DownloadDropdown
+              nativeID="tour-create-download-formats"
               onSelectFormat={handleDownload}
               style={{ top: 60, right: 16 }}
             />
@@ -3893,7 +4251,7 @@ function PrintModal({
               src={previewUrl}
               style={{
                 maxWidth: '100%',
-                maxHeight: title.trim() ? 'calc(100% - 28px)' : '100%',
+                maxHeight: '100%',
                 objectFit: 'contain',
               }}
             />
@@ -4577,6 +4935,52 @@ const styles = StyleSheet.create({
     borderColor: '#4c6fff',
     borderTopColor: 'transparent',
   },
+  // Mobile-only overflow menu (New Diagram / Diagram Type / Print /
+  // Download) — same box chrome as downloadDropdown, but single-line
+  // icon+label rows instead of icon+label+description, since these don't
+  // need a second line of explanation.
+  moreDropdown: {
+    position: 'absolute',
+    width: 180,
+    backgroundColor: '#ffffff',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    paddingVertical: 6,
+    zIndex: 999,
+    ...(Platform.OS === 'web'
+      ? { boxShadow: '0 8px 24px rgba(15, 23, 42, 0.12)' }
+      : {
+          shadowColor: '#0f172a',
+          shadowOffset: { width: 0, height: 8 },
+          shadowOpacity: 0.12,
+          shadowRadius: 16,
+          elevation: 8,
+        }),
+  },
+  moreDropdownItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    gap: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f1f5f9',
+  },
+  moreDropdownItemLast: {
+    borderBottomWidth: 0,
+  },
+  moreDropdownItemDisabled: {
+    opacity: 0.6,
+  },
+  moreDropdownLabel: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#1a1f36',
+  },
+  moreDropdownLabelDisabled: {
+    color: '#cbd5e1',
+  },
   saveSpinner: {
     width: 20,
     height: 20,
@@ -4694,12 +5098,14 @@ const styles = StyleSheet.create({
     color: '#64748b',
   },
   printEditInput: {
-    height: 34,
+    height: 32,
     borderWidth: 1,
     borderColor: '#d1d5db',
     borderRadius: 6,
     paddingHorizontal: 10,
+    paddingVertical: 0,
     fontSize: 13,
+    lineHeight: 16,
     color: '#1a1a1a',
     backgroundColor: '#ffffff',
   },
@@ -4753,10 +5159,13 @@ const styles = StyleSheet.create({
     color: '#1a1f36',
   },
   printPreviewTitle: {
+    position: 'absolute',
+    top: 12,
+    left: 0,
+    right: 0,
     fontSize: 15,
     fontWeight: '600',
     color: '#1a1f36',
-    marginBottom: 10,
     textAlign: 'center',
   },
   printZoomRow: {

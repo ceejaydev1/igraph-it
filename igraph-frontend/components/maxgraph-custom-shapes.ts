@@ -425,6 +425,41 @@ function openTriangleAt(
   return { x: baseX, y: baseY };
 }
 
+// A plain open "V" — two strokes meeting at the tip, never closed into a
+// triangle. This is the standard UML notation for a directed/navigable
+// association's arrow and for dependency, and needs to look distinctly
+// thinner/sparser than generalization/realization's hollow triangle
+// (openTriangleAt above) — the two were previously sharing that same closed-
+// triangle primitive, which made a dependency's dashed arrow read as a
+// smaller version of a solid generalization arrow instead of its own,
+// spec-correct open-arrow shape. No third side means no "base" edge to trim
+// the shaft back from — the shaft is meant to run all the way to the tip,
+// same as the two wings, so this returns the tip itself rather than a
+// receded point.
+function openArrowAt(
+  c: AbstractCanvas2D,
+  tip: { x: number; y: number },
+  towards: { x: number; y: number },
+  depth: number,
+  halfWidth: number,
+): { x: number; y: number } {
+  const dx = towards.x - tip.x;
+  const dy = towards.y - tip.y;
+  const len = Math.hypot(dx, dy) || 1;
+  const ux = dx / len;
+  const uy = dy / len;
+  const px = -uy;
+  const py = ux;
+  const baseX = tip.x + ux * depth;
+  const baseY = tip.y + uy * depth;
+  c.begin();
+  c.moveTo(baseX + px * halfWidth, baseY + py * halfWidth);
+  c.lineTo(tip.x, tip.y);
+  c.lineTo(baseX - px * halfWidth, baseY - py * halfWidth);
+  c.stroke();
+  return { x: tip.x, y: tip.y };
+}
+
 // A diamond whose near tip sits at `tip` — aggregation's (hollow, via a
 // white fill) and composition's (solid, via a black fill) relationship
 // marker. Fill color is the only difference between the two, already
@@ -3022,9 +3057,16 @@ class ConnectorArrowShapeCanvas extends Shape {
     const lineEnd = showArrow ? triangleAt(c, end, before, 8, 5) : end;
 
     c.begin();
-    c.moveTo(start.x, start.y);
-    for (let i = 1; i < pts.length - 1; i++) c.lineTo(pts[i].x, pts[i].y);
-    c.lineTo(lineEnd.x, lineEnd.y);
+    // Rounds the corner at every interior waypoint the user has dragged in
+    // (draw.io's default "rounded" line look) via addPoints — the same
+    // corner-smoothing Shape's own built-in rounded/arcSize style keys use
+    // elsewhere in maxGraph, reused here rather than reimplemented. A plain
+    // 2-point connector (start -> end, no waypoints — the overwhelming
+    // majority: most connectors are never bent) has no interior corner to
+    // round in the first place, so this is a no-op for it; it only changes
+    // how a connector someone HAS bent looks, smoothing the kink instead of
+    // a sharp right angle.
+    this.addPoints(c, [start, ...pts.slice(1, -1), new Point(lineEnd.x, lineEnd.y)], true, 12, false);
     c.stroke();
   }
 }
@@ -4576,6 +4618,55 @@ class UMLGeneralizationShapeCanvas extends Shape {
   }
 }
 
+// Realization/Implementation — a class implementing an interface. Same
+// hollow triangle as Generalization (an implemented interface is still a
+// "is-a-kind-of" relationship at the type level), but on a dashed shaft
+// instead of solid, exactly the same solid/dashed split as
+// Association/Dependency share their own open-arrow marker. This type was
+// previously missing from the app entirely — Class Diagram had no way to
+// draw it at all.
+class UMLRealizationShapeCanvas extends Shape {
+  paintBackground(c: AbstractCanvas2D, x: number, y: number, w: number, h: number) {
+    const cy = y + h / 2;
+    const s = 14;
+    c.setStrokeColor(this.stroke);
+    c.setStrokeWidth(this.strokeWidth);
+    // maxGraph's SVG renderer floors any actually-drawn stroke to 1px
+    // (SvgCanvas2D.minStrokeWidth), so strokeWidth=0 alone still paints a
+    // hairline. Dropping the stroke color to 'none' instead skips the
+    // stroke draw entirely, which is the only way to make width 0 truly
+    // invisible.
+    if (this.strokeWidth <= 0) c.setStrokeColor('none');
+    c.setDashed(true);
+    c.setDashPattern('6 4');
+    c.begin();
+    c.moveTo(x + 2, cy);
+    c.lineTo(x + w - s - 2, cy);
+    c.stroke();
+    c.setDashed(false);
+    c.begin();
+    c.moveTo(x + w - s - 2, cy - s / 2);
+    c.lineTo(x + w - 2, cy);
+    c.lineTo(x + w - s - 2, cy + s / 2);
+    c.close();
+    c.stroke();
+  }
+
+  paintEdgeShape(c: AbstractCanvas2D, pts: Point[]) {
+    if (pts.length < 2) return;
+    c.setStrokeColor(this.stroke);
+    c.setStrokeWidth(this.strokeWidth);
+    if (this.strokeWidth <= 0) c.setStrokeColor('none');
+    const end = pts[pts.length - 1];
+    const before = pts[pts.length - 2] ?? pts[0];
+    const lineEnd = openTriangleAt(c, end, before, 14, 7);
+    c.setDashed(true);
+    c.setDashPattern('6 4');
+    edgeLine(c, pts[0], pts, lineEnd);
+    c.setDashed(false);
+  }
+}
+
 class UMLNoteShapeCanvas extends Shape {
   paintBackground(c: AbstractCanvas2D, x: number, y: number, w: number, h: number) {
     const fold = Math.min(w, h) * 0.2;
@@ -5139,11 +5230,14 @@ class UMLDirectedAssociationShapeCanvas extends Shape {
     c.moveTo(x + 2, cy);
     c.lineTo(x + w - arrow - 2, cy);
     c.stroke();
+    // Open "V" arrowhead, not a closed triangle — see openArrowAt's own
+    // comment: a navigable association's arrow is meant to look like a thin
+    // open stick-arrow, distinct from generalization/realization's hollow
+    // triangle, matching the standard UML relationship-notation reference.
     c.begin();
-    c.moveTo(x + w - 2, cy);
-    c.lineTo(x + w - arrow - 2, cy - 6);
+    c.moveTo(x + w - arrow - 2, cy - 6);
+    c.lineTo(x + w - 2, cy);
     c.lineTo(x + w - arrow - 2, cy + 6);
-    c.close();
     c.stroke();
   }
 
@@ -5154,7 +5248,7 @@ class UMLDirectedAssociationShapeCanvas extends Shape {
     if (this.strokeWidth <= 0) c.setStrokeColor('none');
     const end = pts[pts.length - 1];
     const before = pts[pts.length - 2] ?? pts[0];
-    const lineEnd = openTriangleAt(c, end, before, 14, 6);
+    const lineEnd = openArrowAt(c, end, before, 14, 6);
     edgeLine(c, pts[0], pts, lineEnd);
   }
 }
@@ -5217,11 +5311,17 @@ class UMLDependencyShapeCanvas extends Shape {
     c.lineTo(x + w - arrow - 2, cy);
     c.stroke();
     c.setDashed(false);
+    // Open "V" arrowhead, not a closed triangle — see openArrowAt's own
+    // comment: dependency's arrow is meant to look like the same thin open
+    // stick-arrow a navigable association uses (just on a dashed shaft),
+    // distinct from generalization/realization's hollow triangle. Drawn
+    // solid (dash left off) even though the shaft is dashed, same as every
+    // other UML relationship here — only the line, never the marker, is
+    // dashed.
     c.begin();
-    c.moveTo(x + w - 2, cy);
-    c.lineTo(x + w - arrow - 2, cy - 6);
+    c.moveTo(x + w - arrow - 2, cy - 6);
+    c.lineTo(x + w - 2, cy);
     c.lineTo(x + w - arrow - 2, cy + 6);
-    c.close();
     c.stroke();
   }
 
@@ -5232,7 +5332,7 @@ class UMLDependencyShapeCanvas extends Shape {
     if (this.strokeWidth <= 0) c.setStrokeColor('none');
     const end = pts[pts.length - 1];
     const before = pts[pts.length - 2] ?? pts[0];
-    const lineEnd = openTriangleAt(c, end, before, 14, 6);
+    const lineEnd = openArrowAt(c, end, before, 14, 6);
     c.setDashed(true);
     c.setDashPattern('6 4');
     edgeLine(c, pts[0], pts, lineEnd);
@@ -5412,6 +5512,7 @@ const SHAPE_REGISTRY: Record<string, typeof Shape> = {
   'igraph.umlDirectedAssociation': UMLDirectedAssociationShapeCanvas,
   'igraph.umlAggregation': UMLAggregationShapeCanvas,
   'igraph.umlDependency': UMLDependencyShapeCanvas,
+  'igraph.umlRealization': UMLRealizationShapeCanvas,
   'igraph.umlMultiplicity1': UMLMultiplicity1ShapeCanvas,
   'igraph.umlMultiplicity01': UMLMultiplicity01ShapeCanvas,
   'igraph.umlMultiplicityMany': UMLMultiplicityManyShapeCanvas,
@@ -5708,6 +5809,7 @@ export const IGRAPH_ID_STYLE_MAP: Record<string, string> = {
   'class-aggregation': 'igraph.umlAggregation',
   'class-composition': 'igraph.umlComposition',
   'class-dependency': 'igraph.umlDependency',
+  'class-realization': 'igraph.umlRealization',
   'class-generalization': 'igraph.umlGeneralization',
   'class-note': 'igraph.umlNote',
   'class-note-connector': 'igraph.umlNoteConnector',

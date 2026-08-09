@@ -152,6 +152,22 @@ const Avatar = ({ fullName, email, size = 28 }: { fullName: string; email: strin
 // NAVBAR COMPONENT
 // ============================================================================
 
+// (tabs)/_layout.tsx renders exactly one <Navbar> in its own JSX — but under
+// certain repeated-navigation patterns (Saved Diagrams/Account/Create round
+// trips stacking duplicate top bars; the bottom dock rendering garbled after
+// closing and reopening the installed PWA) the router still ends up with
+// more than one instance of the persistently-anchored (tabs) group mounted
+// at once (see unstable_settings.anchor in app/_layout.tsx) — each with its
+// own Navbar. Rather than depend on nailing the exact router-level trigger,
+// this registry makes the visible symptom structurally impossible: every
+// Navbar instance announces itself here on mount, which tells any
+// *previously* mounted instance it's no longer the latest one — see
+// isStaleInstance below. Only the most-recently-mounted instance ever
+// renders anything; every earlier one renders null instead of leaving two
+// top bars, or two absolutely-positioned bottom docks fighting over the
+// same screen space.
+const staleNotifiers = new Set<() => void>();
+
 export default function Navbar({
   fullName = 'User',
   userEmail = '',
@@ -196,19 +212,86 @@ export default function Navbar({
   // background can leave these floating, elevation/shadow-composited mobile
   // bars painted incorrectly: reported as the bottom dock showing only the
   // raised Create FAB, with the pill background and the other three tabs
-  // missing until something forces a real repaint. Bumping this key remounts
-  // both mobile bars fresh on resume instead of trying to coax the stale
-  // compositor layer into repainting itself.
-  const [mobileBarRepaintKey, setMobileBarRepaintKey] = useState(0);
+  // missing until something forces a real repaint.
+  //
+  // This used to force a repaint by bumping a `key` on each bar, so React
+  // would unmount and remount them fresh. That turned out to be the wrong
+  // tool for the job and is exactly what caused a *different*, worse bug:
+  // on this app's React/react-native-web combination, a keyed remount of
+  // these particular Views didn't reliably tear down the old DOM node
+  // before the new one painted, leaving both alive at once — the actual
+  // cause of the duplicated top bar and garbled bottom dock reported after
+  // that fix shipped (confirmed by removing the two `key` props, which
+  // eliminated the duplication outright). Nudging the existing DOM node's
+  // own transform via refs forces the browser to recompute that element's
+  // compositing layer without ever touching React's tree, so there's no
+  // window where an old and new copy could coexist.
+  //
+  // Four triggers, because "closed then reopened" covers more than one
+  // real scenario and each needs its own signal:
+  //  - Backgrounded, not killed (switched app, came back): visibilitychange
+  //    fires reliably for this.
+  //  - Backgrounded, restored from the bfcache (some Android/Chrome resume
+  //    paths): visibilitychange can miss this; pageshow's persisted flag is
+  //    the one built specifically to catch it.
+  //  - Actually closed (swiped away in the app switcher, killing the
+  //    process) and reopened: this is a genuine cold launch, not a resume —
+  //    neither event above ever fires, since there's no surviving page to
+  //    fire them on. What's actually going on then is Android's own system
+  //    UI (status/nav bar) still settling into place right after a fresh
+  //    launch, which can leave the very first layout pass measuring the
+  //    wrong viewport before it settles a moment later.
+  //  - The settle from the case above finishing *after* a fixed-delay nudge
+  //    already fired: a single setTimeout was a guess at how long Android
+  //    takes to settle its system UI, and guessing wrong left the corrupted
+  //    paint uncaught until the next visibilitychange (i.e. the user had to
+  //    background/resume once more). The system UI settling is itself what
+  //    fires a real `resize` (visualViewport is the reliable one for mobile
+  //    browser-chrome changes) once it's done, so listening for that catches
+  //    the moment layout actually stabilizes instead of guessing a delay.
+  const mobileTopBarRef = useRef<any>(null);
+  const mobileBottomDockRef = useRef<any>(null);
   useEffect(() => {
     if (Platform.OS !== 'web' || typeof document === 'undefined') return;
-    const onVisibilityChange = () => {
-      if (document.visibilityState === 'visible') {
-        setMobileBarRepaintKey((k) => k + 1);
-      }
+    const nudgeRepaint = () => {
+      [mobileTopBarRef.current, mobileBottomDockRef.current].forEach((node) => {
+        if (!node || !node.style) return;
+        node.style.transform = 'translateZ(0)';
+        void node.offsetHeight; // forces a synchronous layout read
+        node.style.transform = '';
+      });
     };
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'visible') nudgeRepaint();
+    };
+    const onPageShow = (e: PageTransitionEvent) => {
+      if (e.persisted) nudgeRepaint();
+    };
+    const onViewportResize = () => nudgeRepaint();
+
     document.addEventListener('visibilitychange', onVisibilityChange);
-    return () => document.removeEventListener('visibilitychange', onVisibilityChange);
+    window.addEventListener('pageshow', onPageShow);
+
+    // visualViewport reports mobile browser-chrome (status/nav bar) size
+    // changes more reliably than window's own resize event; fall back to
+    // window if it's unavailable.
+    const viewport = (window as any).visualViewport as VisualViewport | undefined;
+    viewport?.addEventListener('resize', onViewportResize);
+    window.addEventListener('resize', onViewportResize);
+
+    // Cheap early nudges for the common case where system UI was already
+    // settled before mount, so there's nothing left to resize into.
+    const earlyNudge1 = setTimeout(nudgeRepaint, 300);
+    const earlyNudge2 = setTimeout(nudgeRepaint, 1000);
+
+    return () => {
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+      window.removeEventListener('pageshow', onPageShow);
+      viewport?.removeEventListener('resize', onViewportResize);
+      window.removeEventListener('resize', onViewportResize);
+      clearTimeout(earlyNudge1);
+      clearTimeout(earlyNudge2);
+    };
   }, []);
 
   const handleNavigation = (route: string) => {
@@ -270,6 +353,20 @@ export default function Navbar({
     ]).start();
   }, [activeSideIndex, itemWidth]);
 
+  // See staleNotifiers' own comment above. Every mount claims "latest" for
+  // itself and tells whichever instance held that title before to stand
+  // down; every unmount removes this instance from the registry so it can't
+  // wrongly mark a genuinely-new instance stale later.
+  const [isStaleInstance, setIsStaleInstance] = useState(false);
+  useEffect(() => {
+    staleNotifiers.forEach((markStale) => markStale());
+    const markThisStale = () => setIsStaleInstance(true);
+    staleNotifiers.add(markThisStale);
+    return () => {
+      staleNotifiers.delete(markThisStale);
+    };
+  }, []);
+
   // ─── ✅ FIXED: Handle Save - Guard against accidental auto-saves ──────────
   const handleSavePress = async () => {
     if (isSaving) {
@@ -287,6 +384,10 @@ export default function Navbar({
       console.log('❌ No save handler registered!');
     }
   };
+
+  // A newer Navbar instance has taken over — see staleNotifiers' own
+  // comment. Covers both branches below in one place.
+  if (isStaleInstance) return null;
 
   // ─────────────────────────────────────────────
   // DESKTOP  (≥ 1024 px)
@@ -399,7 +500,7 @@ export default function Navbar({
 
       {/* Top Bar — fully removed on the create screen (mobile) */}
       {shouldShowTopBar && (
-        <View key={mobileBarRepaintKey} style={[styles.mobileContainer, { height: navbarHeight }]}>
+        <View ref={mobileTopBarRef} style={[styles.mobileContainer, { height: navbarHeight }]}>
           <View style={[styles.mobileNav, { height: navbarHeight }]}>
             <Pressable
               onPress={() => handleNavigation('/(tabs)/home')}
@@ -455,7 +556,7 @@ export default function Navbar({
           (mobile): it has its own bottom toolbar + shapes panel, and this
           floating bar (zIndex 200) was sitting on top of and hiding them. */}
       {!isCreateScreen && (
-      <View key={mobileBarRepaintKey} style={styles.bottomNavWrapper}>
+      <View ref={mobileBottomDockRef} style={styles.bottomNavWrapper}>
         <View
           nativeID="tour-navbar-mobile-dock"
           style={styles.bottomNavCard}

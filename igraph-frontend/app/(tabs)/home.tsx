@@ -452,8 +452,14 @@ export default function Home() {
     }
   }, []);
 
+  // navigate, not push: push mounts a brand-new instance of the
+  // persistently-anchored (tabs) group on top of the existing one instead of
+  // resurfacing it — browsing several reference diagrams in a row (open one,
+  // back, open another...) stacked one more duplicate (extra Navbar, extra
+  // everything) on every round trip. See diagram/[id].tsx's handleGoHome for
+  // the other half of this same fix.
   const handleDiagramPress = useCallback((id: number) => {
-    router.push({
+    router.navigate({
       pathname: `/(tabs)/diagram/${id}` as any,
     });
   }, [router]);

@@ -680,45 +680,68 @@ export const resetPassword = async (email, otp, newPassword) => {
   }
 };
 
+// Single-flight guard: every request that 401s calls refreshToken()
+// independently (see the response interceptor above and verifyToken()
+// below), so a page load that fires several authenticated requests at once
+// — the auth check, a saved-diagrams fetch, whatever else mounts in
+// parallel — used to fire that many concurrent POST /auth/refresh-token
+// calls. On web, the backend rotates the refresh token cookie on each use,
+// so only the first of those concurrent calls actually succeeds; the rest
+// race it with an already-consumed or not-yet-updated cookie and come back
+// 400/401/403, which was tearing down a session that was never actually
+// invalid. Concurrent callers now all await this one shared promise instead
+// of each starting their own request.
+let inFlightRefresh = null;
+
 export const refreshToken = async () => {
-  let refresh = null;
-  if (Platform.OS !== 'web') {
-    refresh = await getRefreshToken();
-    if (!refresh) throw new Error('No refresh token');
-  }
-  // Web sends no body at all — the refresh_token cookie carries the
-  // credential automatically, and the backend reissues access_token as a
-  // fresh cookie in its response.
+  if (inFlightRefresh) return inFlightRefresh;
+
+  inFlightRefresh = (async () => {
+    let refresh = null;
+    if (Platform.OS !== 'web') {
+      refresh = await getRefreshToken();
+      if (!refresh) throw new Error('No refresh token');
+    }
+    // Web sends no body at all — the refresh_token cookie carries the
+    // credential automatically, and the backend reissues access_token as a
+    // fresh cookie in its response.
+
+    try {
+      const body = Platform.OS === 'web' ? {} : { refreshToken: refresh };
+      // Same generous cold-start allowance as googleAuth/verifyResetOTP above
+      // — this fires mid-session, on whatever request happened to catch the
+      // access token just after it expired, so it's exactly as likely to land
+      // on a sleeping free-tier backend as those are.
+      const response = await api.post('/auth/refresh-token', body, { timeout: 45000 });
+      if (response.data.success && response.data.data?.accessToken) {
+        if (Platform.OS !== 'web') {
+          await storage.setItem('accessToken', response.data.data.accessToken);
+        }
+        return response.data.data.accessToken;
+      }
+      return null;
+    } catch (error) {
+      console.error('Refresh token error:', error);
+      // Only a genuine rejection from the server (401/403 — invalid/expired
+      // refresh token, session not found) means this session is actually
+      // dead. A network error or timeout (e.g. the backend still waking up
+      // from a Render free-tier cold start) means the request just never got
+      // a real answer — the refresh token itself was never told "no". Wiping
+      // valid tokens in that case is what silently signed people out of an
+      // active session over nothing more than a slow response; see the
+      // matching guard on the response interceptor above.
+      const isAuthRejection = error.response && [401, 403].includes(error.response.status);
+      if (isAuthRejection) {
+        await clearTokens();
+      }
+      throw error;
+    }
+  })();
 
   try {
-    const body = Platform.OS === 'web' ? {} : { refreshToken: refresh };
-    // Same generous cold-start allowance as googleAuth/verifyResetOTP above
-    // — this fires mid-session, on whatever request happened to catch the
-    // access token just after it expired, so it's exactly as likely to land
-    // on a sleeping free-tier backend as those are.
-    const response = await api.post('/auth/refresh-token', body, { timeout: 45000 });
-    if (response.data.success && response.data.data?.accessToken) {
-      if (Platform.OS !== 'web') {
-        await storage.setItem('accessToken', response.data.data.accessToken);
-      }
-      return response.data.data.accessToken;
-    }
-    return null;
-  } catch (error) {
-    console.error('Refresh token error:', error);
-    // Only a genuine rejection from the server (401/403 — invalid/expired
-    // refresh token, session not found) means this session is actually
-    // dead. A network error or timeout (e.g. the backend still waking up
-    // from a Render free-tier cold start) means the request just never got
-    // a real answer — the refresh token itself was never told "no". Wiping
-    // valid tokens in that case is what silently signed people out of an
-    // active session over nothing more than a slow response; see the
-    // matching guard on the response interceptor above.
-    const isAuthRejection = error.response && [401, 403].includes(error.response.status);
-    if (isAuthRejection) {
-      await clearTokens();
-    }
-    throw error;
+    return await inFlightRefresh;
+  } finally {
+    inFlightRefresh = null;
   }
 };
 

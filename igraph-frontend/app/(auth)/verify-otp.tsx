@@ -14,6 +14,7 @@ import {
   Modal,
   Image,
   Animated,
+  AppState,
 } from 'react-native';
 import { useRouter, useLocalSearchParams, Stack } from 'expo-router';
 import { Svg, Circle, Rect, Path } from 'react-native-svg';
@@ -265,16 +266,40 @@ const SuccessModal = ({ visible, title, message, onClose, buttonText = 'Continue
 };
 
 function useCountdown(initial: number) {
+  // Counts down against a fixed wall-clock deadline instead of subtracting 1
+  // per tick — a tick-based countdown only reflects real elapsed time while
+  // its setTimeout/setInterval keeps firing on schedule, but browsers (and
+  // mobile OSes) throttle timers heavily in a backgrounded tab/app, so
+  // switching away for a couple minutes and back left this stuck a few
+  // ticks after where it left off instead of showing the time actually
+  // spent away.
+  const endAtRef = useRef(Date.now() + initial * 1000);
   const [seconds, setSeconds] = useState(initial);
   const [active, setActive] = useState(true);
 
+  const recompute = () => {
+    const remaining = Math.max(0, Math.ceil((endAtRef.current - Date.now()) / 1000));
+    setSeconds(remaining);
+    if (remaining <= 0) setActive(false);
+  };
+
   useEffect(() => {
-    if (!active || seconds <= 0) return;
-    const t = setTimeout(() => setSeconds((s) => s - 1), 1000);
-    return () => clearTimeout(t);
-  }, [seconds, active]);
+    if (!active) return;
+    const t = setInterval(recompute, 1000);
+    // Resync immediately when the app/tab regains focus rather than waiting
+    // for the next (possibly still-throttled) interval tick.
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state === 'active') recompute();
+    });
+    return () => {
+      clearInterval(t);
+      sub.remove();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [active]);
 
   const reset = () => {
+    endAtRef.current = Date.now() + initial * 1000;
     setSeconds(initial);
     setActive(true);
   };

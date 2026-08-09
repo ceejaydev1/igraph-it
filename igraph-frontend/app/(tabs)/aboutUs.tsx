@@ -54,6 +54,13 @@ const RADIUS = {
 // in privacy.tsx so both screens feel consistent.
 const CONTENT_MAX_WIDTH = 720;
 
+// The bottom navbar (Navbar.tsx's bottomNavCard) is a docked, absolutely-
+// positioned overlay, not part of normal document flow — this screen's own
+// ScrollView has no idea it's there and needs to reserve this much space
+// itself or the last row of content ends up underneath it. Same value/
+// pattern as userAccount.tsx's TAB_BAR_ALLOWANCE.
+const TAB_BAR_ALLOWANCE = 90;
+
 // ICONS
 
 const BackIcon = () => (
@@ -96,24 +103,20 @@ const MemberCard = ({
 
   return (
     <View style={styles.memberCard}>
-      <View style={[styles.memberAvatarRing, { borderColor: `${accentColor}30` }]}>
-        <View style={[styles.memberAvatar, { borderColor: accentColor }]}>
-          {imageUrl ? (
-            <Image
-              source={{ uri: imageUrl }}
-              style={styles.memberImage}
-              resizeMode="cover"
-            />
-          ) : (
-            <View style={[styles.memberAvatarPlaceholder, { backgroundColor: `${accentColor}15` }]}>
-              <View style={[styles.memberAvatarInner, { backgroundColor: accentColor }]}>
-                <Text style={styles.memberInitials}>
-                  {name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)}
-                </Text>
-              </View>
-            </View>
-          )}
-        </View>
+      <View style={[styles.memberAvatar, { borderColor: accentColor }]}>
+        {imageUrl ? (
+          <Image
+            source={{ uri: imageUrl }}
+            style={styles.memberImage}
+            resizeMode="cover"
+          />
+        ) : (
+          <View style={[styles.memberAvatarPlaceholder, { backgroundColor: accentColor }]}>
+            <Text style={styles.memberInitials}>
+              {name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)}
+            </Text>
+          </View>
+        )}
       </View>
       <Text style={styles.memberName}>{name}</Text>
       <Text style={styles.memberRole}>{role}</Text>
@@ -126,16 +129,16 @@ const MemberCard = ({
 const AboutContent = () => (
   <View style={styles.tabContent}>
     <Text style={styles.aboutText}>
-      iGraph IT is a learning platform built for students who want to get better at creating
-      SDLC and UML diagrams. Instead of just reading about diagrams in a textbook, you can
-      actually practice making them — flowcharts, use case diagrams, class diagrams, and more —
-      all in one place. It's basically a hands-on way to understand how systems and software
-      projects come together, step by step.
+      iGraph IT began as a school project built by a small team who wanted to get better at
+      drawing SDLC and UML diagrams. It lets you build flowcharts, use case diagrams, class
+      diagrams, and more in one place, without switching between separate tools to finish a
+      single diagram.
     </Text>
     <Text style={styles.aboutTextSecondary}>
-      We made this because diagramming can feel confusing at first, especially when you're just
-      starting out. iGraph IT breaks it down and lets you learn by doing, so by the time you need
-      these skills for school projects.
+      Diagramming was the part of our own coursework that never fully made sense from a
+      textbook. It only clicked once we sat down and started drawing things out for ourselves.
+      That is the idea behind this app: practice it enough here, and it becomes second nature by
+      the time you actually need it for a real project.
     </Text>
   </View>
 );
@@ -212,8 +215,13 @@ export default function AboutUs() {
   // Us" action), but router.back() follows whatever the real previous
   // route was, which isn't always Account (e.g. arriving via the tab bar),
   // and would land back on Home instead.
+  //
+  // navigate, not replace: replace still mounts a brand-new instance of the
+  // persistently-anchored (tabs) group on top of the existing one instead of
+  // resurfacing the existing Account screen already sitting there — see
+  // savedDiagrams.tsx's handleBackPress for the full explanation (same fix).
   const handleBackPress = () => {
-    router.replace('/(tabs)/userAccount');
+    router.navigate('/(tabs)/userAccount');
   };
 
   return (
@@ -260,7 +268,7 @@ export default function AboutUs() {
         scrollEventThrottle={16}
         contentContainerStyle={[
           styles.scrollContentOuter,
-          { paddingBottom: isMobile ? SPACING.xxl : SPACING.xxxl },
+          { paddingBottom: insets.bottom + (isMobile ? TAB_BAR_ALLOWANCE : SPACING.xxxl) },
         ]}
       >
         <View style={[styles.scrollContentInner, isDesktop && { maxWidth: CONTENT_MAX_WIDTH }]}>
@@ -409,23 +417,15 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     width: 160,
   },
-  memberAvatarRing: {
-    width: 130,
-    height: 130,
-    borderRadius: 65,
-    borderWidth: 2,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: SPACING.lg,
-  },
   memberAvatar: {
-    width: 110,
-    height: 110,
-    borderRadius: 55,
-    borderWidth: 3,
+    width: 96,
+    height: 96,
+    borderRadius: 48,
+    borderWidth: 2,
     overflow: 'hidden',
     justifyContent: 'center',
     alignItems: 'center',
+    marginBottom: SPACING.lg,
     ...Platform.select({
       ios: {
         shadowColor: COLORS.shadow,
@@ -441,7 +441,6 @@ const styles = StyleSheet.create({
   memberImage: {
     width: '100%',
     height: '100%',
-    borderRadius: 55,
   },
   memberAvatarPlaceholder: {
     width: '100%',
@@ -449,15 +448,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  memberAvatarInner: {
-    width: 90,
-    height: 90,
-    borderRadius: 45,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
   memberInitials: {
-    fontSize: 32,
+    fontSize: 28,
     fontWeight: '700',
     color: COLORS.surface,
     letterSpacing: -0.5,

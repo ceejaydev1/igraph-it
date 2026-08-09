@@ -55,7 +55,8 @@ export default function RequestAccessModal({ visible, onClose, diagramId, onSent
             value={message}
             onChangeText={setMessage}
             multiline
-            placeholder=""
+            placeholder="e.g. I need edit access to add the Q3 numbers"
+            placeholderTextColor={COLORS.textTertiary}
             textAlignVertical="top"
           />
 

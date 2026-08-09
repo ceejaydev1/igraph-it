@@ -6,7 +6,7 @@ import { advanceWhenElementAppears, markTourWaiting, scheduleTourOnNextFocus, de
 // exact id has been marked seen.
 
 export const HOME_TOUR_ID = 'home-v4';
-export const CREATE_TOUR_ID = 'create-v5';
+export const CREATE_TOUR_ID = 'create-v6';
 export const REFERENCE_TOUR_ID = 'reference-v4';
 export const ACCOUNT_TOUR_ID = 'account-v5';
 
@@ -24,6 +24,14 @@ type TourCtx = {
    *  each layout (always-open desktop panel vs. a closed-by-default mobile
    *  bottom sheet), so the "add a shape" step's copy/behavior branches on it. */
   isDesktop?: boolean;
+  /** Mobile-only: Diagram Type/Print/Download live behind a closed "..."
+   *  overflow menu, and Download's own format list only opens from inside
+   *  that menu — the tour drives both open itself (instead of just
+   *  describing them from a closed toggle button) so each item can get its
+   *  own highlighted step, same as desktop's always-visible buttons do. */
+  openMobileMoreMenu?: () => void;
+  openMobileDownloadFormats?: () => void;
+  closeMobileDownloadFormats?: () => void;
 };
 
 // An un-anchored intro step (no `element`) renders as a plain centered
@@ -100,7 +108,9 @@ const finishStep = (popover: { title: string; description: string }, router: any
       // after this, no matter what else changes (tour version bumps, cleared
       // per-tour "seen" keys, etc).
       opts.driver.destroy();
-      router.push('/(tabs)/home');
+      // navigate, not push — see savedDiagrams.tsx's handleBackPress for why
+      // (avoids mounting a duplicate instance of the anchored (tabs) group).
+      router.navigate('/(tabs)/home');
     },
   },
 });
@@ -189,7 +199,13 @@ export function getHomeTourSteps({ router }: TourCtx): DriveStep[] {
   ];
 }
 
-export function getCreateTourSteps({ router, isDesktop = true }: TourCtx): DriveStep[] {
+export function getCreateTourSteps({
+  router,
+  isDesktop = true,
+  openMobileMoreMenu,
+  openMobileDownloadFormats,
+  closeMobileDownloadFormats,
+}: TourCtx): DriveStep[] {
   // Branches by layout because the shape palette itself is different UI on
   // each: desktop's panel is open by default, so anchoring the step to it
   // and withholding the Next button (until a shape is actually added) works
@@ -223,19 +239,108 @@ export function getCreateTourSteps({ router, isDesktop = true }: TourCtx): Drive
         },
       };
 
+  // New Diagram sits right beside the title on both layouts, so it keeps
+  // its own always-visible step. Desktop keeps Diagram Type/Print/Download
+  // visible separately too. Mobile collapses those three behind a single
+  // overflow ("More") button — see create.tsx's mobileTopBarRight — so the
+  // mobile branch below opens that menu itself (openMobileMoreMenu) and
+  // gives each item its own step, same as desktop's separate buttons do,
+  // instead of just describing them from the closed toggle.
+  const newDiagramStep: DriveStep = {
+    element: '#tour-create-new',
+    popover: {
+      title: 'Start a new diagram',
+      description: 'Clears the canvas so you can start fresh.',
+      side: 'bottom',
+    },
+  };
+
+  const printDownloadSteps: DriveStep[] = isDesktop
+    ? [
+        {
+          element: '#tour-create-print',
+          popover: {
+            title: 'Print',
+            description: 'Send your diagram straight to a printer.',
+            side: 'bottom',
+          },
+        },
+        {
+          element: '#tour-create-download',
+          popover: {
+            title: 'Download',
+            description: 'Export your diagram as a PNG, SVG, JPG, or PDF.',
+            side: 'bottom',
+          },
+        },
+      ]
+    : [
+        {
+          element: '#tour-create-more',
+          popover: {
+            title: 'More actions',
+            description: "Change your diagram's type, print it, or download it as an image or PDF — all live here.",
+            side: 'bottom',
+            // Opens the overflow menu itself instead of waiting for a real
+            // tap, then waits for its first item to mount before advancing
+            // — same pattern as the Home tour's screen-to-screen hand-off
+            // (advanceWhenElementAppears), just opening a menu instead of
+            // navigating a route.
+            onNextClick: () => {
+              openMobileMoreMenu?.();
+              advanceWhenElementAppears('#tour-create-moremenu-type');
+            },
+          },
+        },
+        {
+          element: '#tour-create-moremenu-type',
+          popover: {
+            title: 'Diagram type',
+            description: 'Change what kind of diagram this is — flowchart, ERD, sequence, and more.',
+            side: 'left',
+          },
+        },
+        {
+          element: '#tour-create-moremenu-print',
+          popover: {
+            title: 'Print',
+            description: 'Send your diagram straight to a printer.',
+            side: 'left',
+          },
+        },
+        {
+          element: '#tour-create-moremenu-download',
+          popover: {
+            title: 'Download',
+            description: 'Export your diagram as an image or document.',
+            side: 'left',
+            onNextClick: () => {
+              openMobileDownloadFormats?.();
+              advanceWhenElementAppears('#tour-create-download-formats');
+            },
+          },
+        },
+        {
+          element: '#tour-create-download-formats',
+          popover: {
+            title: 'Choose a format',
+            description: 'PNG and JPG for images, SVG to keep it scalable, or PDF for a document.',
+            side: 'left',
+          },
+          // Fires moving either direction (Next or Back) — closes the format
+          // list so it doesn't stay floating open over whatever step comes
+          // next (Multiple pages on desktop; skipped on mobile, so really
+          // just Save — see skipMissingElement in onboardingTour.ts's THEME).
+          onDeselected: () => closeMobileDownloadFormats?.(),
+        },
+      ];
+
   return [
     welcomeStep(
       'Let’s build something',
       "Here's a quick walkthrough of the Create Diagram workspace."
     ),
-    {
-      element: '#tour-create-new',
-      popover: {
-        title: 'Start a new diagram',
-        description: 'Clears the canvas so you can start fresh.',
-        side: 'bottom',
-      },
-    },
+    newDiagramStep,
     {
       element: '#tour-create-title',
       popover: {
@@ -333,22 +438,7 @@ export function getCreateTourSteps({ router, isDesktop = true }: TourCtx): Drive
         side: 'bottom',
       },
     },
-    {
-      element: '#tour-create-print',
-      popover: {
-        title: 'Print',
-        description: 'Send your diagram straight to a printer.',
-        side: 'bottom',
-      },
-    },
-    {
-      element: '#tour-create-download',
-      popover: {
-        title: 'Download',
-        description: 'Export your diagram as a PNG, SVG, JPG, or PDF.',
-        side: 'bottom',
-      },
-    },
+    ...printDownloadSteps,
     {
       element: '#tour-create-pages',
       popover: {
@@ -476,13 +566,3 @@ export function getAccountTourSteps({ router }: TourCtx): DriveStep[] {
   ];
 }
 
-// Route -> tour lookup, used by Navbar's "Replay tour" entry point to figure
-// out which tour applies to the screen currently on-screen. Steps are built
-// lazily (via getSteps) since every tour's last step now needs a live router
-// reference to hand off to the next module.
-export const TAB_TOURS: Record<string, { id: string; getSteps: (ctx: TourCtx) => DriveStep[] }> = {
-  '/(tabs)/home': { id: HOME_TOUR_ID, getSteps: getHomeTourSteps },
-  '/(tabs)/create': { id: CREATE_TOUR_ID, getSteps: getCreateTourSteps },
-  '/(tabs)/reference': { id: REFERENCE_TOUR_ID, getSteps: getReferenceTourSteps },
-  '/(tabs)/userAccount': { id: ACCOUNT_TOUR_ID, getSteps: getAccountTourSteps },
-};

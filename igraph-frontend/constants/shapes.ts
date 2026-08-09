@@ -217,6 +217,7 @@ export const DIAGRAM_SHAPES: Record<string, ShapeDefinition[]> = {
     { id: 'class-composition', svgComponent: 'UMLCompositionShape', label: 'Composition', description: 'Has-a (strong)', width: 80, height: 40, category: 'UML' },
     { id: 'class-dependency', svgComponent: 'UMLDependencyShape', label: 'Dependency', description: 'Uses relationship', width: 80, height: 40, category: 'UML' },
     { id: 'class-generalization', svgComponent: 'UMLGeneralizationShape', label: 'Generalization', description: 'Inheritance', width: 80, height: 40, category: 'UML' },
+    { id: 'class-realization', svgComponent: 'UMLRealizationShape', label: 'Realization', description: 'Interface implementation', width: 80, height: 40, category: 'UML' },
     { id: 'class-note', svgComponent: 'UMLNoteShape', label: 'Note', description: 'Comment/note', width: 100, height: 70, category: 'UML' },
     { id: 'class-note-connector', svgComponent: 'UMLNoteConnectorShape', label: 'Note Connector', description: 'Note connection', width: 80, height: 20, category: 'UML' },
     { id: 'class-multiplicity-1', svgComponent: 'UMLMultiplicity1Shape', label: 'Exactly One', description: '1', width: 30, height: 20, category: 'UML' },
@@ -594,6 +595,7 @@ export const IGRAPH_ID_STYLE_MAP: Record<string, string> = {
   'class-composition': 'igraph.umlComposition',
   'class-dependency': 'igraph.umlDependency',
   'class-generalization': 'igraph.umlGeneralization',
+  'class-realization': 'igraph.umlRealization',
   'class-note': 'igraph.umlNote',
   'class-note-connector': 'igraph.umlNoteConnector',
   'class-multiplicity-1': 'igraph.umlMultiplicity1',
@@ -839,7 +841,7 @@ export const CONNECTOR_SHAPE_IDS = new Set([
   'seq-sync-msg', 'seq-async-msg', 'seq-return-msg',
   // Class Diagram
   'class-association', 'class-directed', 'class-aggregation', 'class-composition',
-  'class-dependency', 'class-generalization', 'class-note-connector',
+  'class-dependency', 'class-generalization', 'class-realization', 'class-note-connector',
 ]);
 
 // The style keys those ids render as (via IGRAPH_ID_STYLE_MAP below), so a

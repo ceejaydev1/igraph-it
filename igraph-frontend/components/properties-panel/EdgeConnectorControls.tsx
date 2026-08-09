@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { Svg, Path } from 'react-native-svg';
 import { InternalEvent } from '@maxgraph/core';
-import { COLORS, RADIUS } from '@/constants/theme';
+import { COLORS } from '@/constants/theme';
 import { getCommonStyleValue, applyStylePatch } from './PropertiesPanel';
 import { Dropdown, Tooltip } from './shared';
 
@@ -225,24 +225,17 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 6,
   },
-  // Matches Line Style's own box 1:1: same 96px width (up from a cramped
-  // 76px), same 1px border in the same color, same border radius — the
-  // preview content is now sized to fill that width the way Line Style's
-  // line does, instead of leaving a visibly narrower, oddly-bordered box
-  // next to it.
+  // Matches Line Style's own box 1:1: same 96px width, and — like
+  // lineStyleDropdown in QuickFormatBar — no border/radius/background of
+  // its own. Dropdown's inner dropdownTrigger already draws exactly that
+  // (rowStyles.dropdownTrigger), so adding a second one here on the outer
+  // wrapper stacked a duplicate border directly on top of it, reading as a
+  // heavier/uneven edge next to Line Style's single clean border.
   connectionDropdown: {
     width: 96,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    borderRadius: RADIUS.sm,
-    backgroundColor: COLORS.white,
   },
   waypointsDropdown: {
     width: 96,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    borderRadius: RADIUS.sm,
-    backgroundColor: COLORS.white,
   },
   // No paddingVertical here (unlike a first pass at this that added 8, to
   // "match" LinePreview's own padding) — dropdownTrigger, the parent both

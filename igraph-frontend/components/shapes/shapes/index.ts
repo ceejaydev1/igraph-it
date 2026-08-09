@@ -161,6 +161,7 @@ export {
   UMLAggregationShape,
   UMLCompositionShape,
   UMLDependencyShape,
+  UMLRealizationShape,
   UMLMultiplicity1Shape,
   UMLMultiplicity01Shape,
   UMLMultiplicityManyShape,

@@ -999,7 +999,14 @@ export default function SavedDiagrams() {
     closeContinueModal();
     router.navigate({
       pathname: '/(tabs)/create',
-      params: { diagramId },
+      // openedAt: a fresh value on every single tap, even re-opening the
+      // diagram already sitting open there — create.tsx's own screen
+      // instance never unmounts across tab switches, so without something
+      // that changes on every navigation, re-opening a diagram whose only
+      // change was e.g. a rename made right here wouldn't register as
+      // anything worth re-fetching for. See loadedOpenedAtRef's comment in
+      // create.tsx for the full story.
+      params: { diagramId, openedAt: String(Date.now()) },
     });
   };
 
@@ -1008,8 +1015,17 @@ export default function SavedDiagrams() {
   // diagrams" action), but router.back() follows whatever the real previous
   // route was, which isn't always Account (e.g. arriving via the tab bar),
   // and would land back on Home instead.
+  //
+  // navigate, not replace/push: both of the latter mount a brand-new
+  // instance of the (tabs) group on top of the persistently-mounted
+  // anchored one (see unstable_settings.anchor in app/_layout.tsx) instead
+  // of resurfacing the existing Account screen already sitting there —
+  // repeating Account -> Saved Diagrams -> back stacked one more duplicate
+  // (extra Navbar, extra everything) on every round trip. navigate reuses
+  // the existing route instead of stacking a new one, same fix already
+  // applied to Create's own nav entry (see Navbar's handleNavigation).
   const handleBackPress = () => {
-    router.replace('/(tabs)/userAccount');
+    router.navigate('/(tabs)/userAccount');
   };
 
   return (
@@ -1072,7 +1088,10 @@ export default function SavedDiagrams() {
             </Text>
             <TouchableOpacity
               style={styles.browseButton}
-              onPress={() => router.push('/(tabs)/create')}
+              // Create lives on a plain Stack, not real tabs (see Navbar's
+              // own handleNavigation) — router.push would mount a brand-new
+              // instance on top instead of resurfacing the existing one.
+              onPress={() => router.navigate('/(tabs)/create')}
             >
               <Text style={styles.browseButtonText}>Create Diagram</Text>
             </TouchableOpacity>

@@ -14,9 +14,17 @@ let remoteChangeHandler = null;
 let presenceHandler = null;
 let permissionChangeHandler = null;
 let cellSelectHandler = null;
+let resyncNeededHandler = null;
 
 const getSocket = () => {
   if (socket) return socket;
+
+  // Scoped to this socket instance (reset whenever disconnectCollabSocket()
+  // forces a fresh one to be created later) — only a *reconnect* of an
+  // already-connected socket should trigger a resync; the very first
+  // connect doesn't need one, since joinDiagram's own initial call site in
+  // create.tsx already loads fresh state over REST before ever joining.
+  let hasConnectedOnce = false;
 
   socket = io(API_BASE_URL, {
     path: '/socket.io',
@@ -34,7 +42,7 @@ const getSocket = () => {
   });
 
   socket.on('diagram-change', (payload) => {
-    if (remoteChangeHandler) remoteChangeHandler(payload.xml, payload.fromUserId);
+    if (remoteChangeHandler) remoteChangeHandler(payload.patches, payload.pageId, payload.fromUserId);
   });
 
   socket.on('presence', (viewers) => {
@@ -60,23 +68,34 @@ const getSocket = () => {
   // brand new one after any reconnect — rejoin whatever diagram we were
   // last in so a dropped wifi connection doesn't silently end collaboration.
   socket.on('connect', () => {
+    const isReconnect = hasConnectedOnce;
+    hasConnectedOnce = true;
     if (joinedDiagramId) {
-      socket.emit('join-diagram', joinedDiagramId, () => {});
+      socket.emit('join-diagram', joinedDiagramId, (result) => {
+        // Patches don't self-heal a message missed while disconnected the
+        // way full-page snapshots used to — resync once the rejoin is
+        // actually confirmed, not on every reconnect attempt regardless of
+        // outcome.
+        if (isReconnect && result && result.ok && resyncNeededHandler) {
+          resyncNeededHandler();
+        }
+      });
     }
   });
 
   return socket;
 };
 
-// handlers.onRemoteChange(xml, fromUserId), handlers.onPresence(viewers),
-// handlers.onPermissionChange(permission), and handlers.onCellSelect(cellId,
-// fromUserId) stay registered until joinDiagram is called again or
-// leaveDiagram() runs.
+// handlers.onRemoteChange(patches, pageId, fromUserId), handlers.onPresence(viewers),
+// handlers.onPermissionChange(permission), handlers.onCellSelect(cellId,
+// fromUserId), and handlers.onResyncNeeded() stay registered until
+// joinDiagram is called again or leaveDiagram() runs.
 export const joinDiagram = (diagramId, handlers = {}) => {
   remoteChangeHandler = handlers.onRemoteChange || null;
   presenceHandler = handlers.onPresence || null;
   permissionChangeHandler = handlers.onPermissionChange || null;
   cellSelectHandler = handlers.onCellSelect || null;
+  resyncNeededHandler = handlers.onResyncNeeded || null;
   joinedDiagramId = diagramId;
 
   const s = getSocket();
@@ -96,14 +115,22 @@ export const leaveDiagram = () => {
   presenceHandler = null;
   permissionChangeHandler = null;
   cellSelectHandler = null;
+  resyncNeededHandler = null;
 };
 
 // No-op if we're not currently the joined diagram's editor — callers don't
 // need to re-check permission themselves before every keystroke's worth of
-// autosave-debounced change.
-export const sendDiagramChange = (diagramId, xml) => {
+// autosave-debounced change. pageId identifies which page these patches
+// belong to (a diagram can have several) — required so a receiving client
+// on a *different* page of the same diagram doesn't apply them onto what
+// it's actually looking at (see onRemoteChange's pageId guard in
+// create.tsx). null/undefined is still accepted for callers that only ever
+// have a single page. patches is the small change list from
+// utils/diagramPatch.ts's changesToPatches, not a full-page xml snapshot —
+// see that module and collabSocket.js's diagram-change handler for why.
+export const sendDiagramChange = (diagramId, pageId, patches) => {
   if (!socket || joinedDiagramId !== diagramId) return;
-  socket.emit('diagram-change', { xml });
+  socket.emit('diagram-change', { patches, pageId: pageId || null });
 };
 
 // No-op if we're not currently the joined diagram's room, same as

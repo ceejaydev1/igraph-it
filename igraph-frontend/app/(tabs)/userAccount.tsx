@@ -127,8 +127,13 @@ const SHADOWS = {
   },
 };
 
+// Shared with the setTimeout calls that open a modal right after collapsing
+// the Profile accordion — they wait out this same duration so the modal
+// never pops in before the collapse animation has actually settled.
+const PROFILE_COLLAPSE_DURATION = 220;
+
 const EASE_LAYOUT = LayoutAnimation.create(
-  220,
+  PROFILE_COLLAPSE_DURATION,
   LayoutAnimation.Types.easeInEaseOut,
   LayoutAnimation.Properties.opacity
 );
@@ -157,8 +162,12 @@ const getInitialsFromName = (name: string, fallbackEmail?: string) => {
 };
 
 // DOT GRID PATTERN (single SVG instead of ~200 mapped Views)
+// Takes no props, so React.memo means it only re-renders when its own
+// useWindowDimensions() hook actually changes (a real resize/rotation) —
+// without this it was rebuilding ~2000 Circle elements on every unrelated
+// UserAccount re-render (toast show/hide, accordion toggle, pull-to-refresh).
 
-const DotGrid = () => {
+const DotGrid = React.memo(() => {
   const { width: screenWidth, height: screenHeight } = useWindowDimensions();
   const DOT_SPACING = 32;
   const DOT_SIZE = 1.4;
@@ -181,7 +190,7 @@ const DotGrid = () => {
       </Svg>
     </View>
   );
-};
+});
 
 // ICONS
 
@@ -658,10 +667,11 @@ const ChangePasswordModal = ({
   onSuccess: () => void;
   router: any;
 }) => {
-  const { width: windowWidth } = useWindowDimensions();
+  const { width: windowWidth, height: windowHeight } = useWindowDimensions();
   const isDesktop = windowWidth >= 1024;
   const isMobile = windowWidth < 768;
   const modalWidth = isDesktop ? 460 : isMobile ? windowWidth - 32 : 420;
+  const maxModalHeight = Math.min(windowHeight * 0.85, 640);
 
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
@@ -734,7 +744,11 @@ const ChangePasswordModal = ({
   return (
     <Modal animationType="fade" transparent visible={visible} onRequestClose={handleClose}>
       <Pressable style={styles.modalOverlay} onPress={handleClose}>
-        <Pressable style={[styles.modalContainer, { width: modalWidth }]}>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          style={[styles.modalWrapper, { padding: isMobile ? SPACING.md : SPACING.xl }]}
+        >
+        <Pressable style={[styles.modalContainer, { width: modalWidth, maxHeight: maxModalHeight }]}>
           <View style={styles.modalHeaderRow}>
             <View style={styles.modalHeaderIconTitle}>
               <View style={styles.modalIconCircleSmall}>
@@ -757,6 +771,7 @@ const ChangePasswordModal = ({
             </TouchableOpacity>
           </View>
 
+          <ScrollView showsVerticalScrollIndicator={false} bounces={false}>
           <View style={styles.passwordInputWrapper}>
             <Text style={[styles.inputLabel, { fontSize: isMobile ? 12 : 14 }]}>Current Password</Text>
             <View style={[styles.passwordInputContainer, errorField === 'current' && styles.inputError, loading && styles.disabledInput]}>
@@ -863,6 +878,7 @@ const ChangePasswordModal = ({
           </View>
 
           {error ? <Text style={[styles.modalError, { fontSize: isMobile ? 12 : 14 }]}>{error}</Text> : null}
+          </ScrollView>
 
           <View style={styles.modalFooterRow}>
             <TouchableOpacity
@@ -888,6 +904,7 @@ const ChangePasswordModal = ({
             </TouchableOpacity>
           </View>
         </Pressable>
+        </KeyboardAvoidingView>
       </Pressable>
     </Modal>
   );
@@ -909,10 +926,11 @@ const SetPasswordModal = ({
   onClose: () => void;
   onSuccess: () => void;
 }) => {
-  const { width: windowWidth } = useWindowDimensions();
+  const { width: windowWidth, height: windowHeight } = useWindowDimensions();
   const isDesktop = windowWidth >= 1024;
   const isMobile = windowWidth < 768;
   const modalWidth = isDesktop ? 460 : isMobile ? windowWidth - 32 : 420;
+  const maxModalHeight = Math.min(windowHeight * 0.85, 640);
 
   const [step, setStep] = useState<'verify' | 'password'>('verify');
   const [verifying, setVerifying] = useState(false);
@@ -999,7 +1017,11 @@ const SetPasswordModal = ({
   return (
     <Modal animationType="fade" transparent visible={visible} onRequestClose={handleClose}>
       <Pressable style={styles.modalOverlay} onPress={handleClose}>
-        <Pressable style={[styles.modalContainer, { width: modalWidth }]}>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          style={[styles.modalWrapper, { padding: isMobile ? SPACING.md : SPACING.xl }]}
+        >
+        <Pressable style={[styles.modalContainer, { width: modalWidth, maxHeight: maxModalHeight }]}>
           <View style={styles.modalHeaderRow}>
             <View style={styles.modalHeaderIconTitle}>
               <View style={styles.modalIconCircleSmall}>
@@ -1024,6 +1046,7 @@ const SetPasswordModal = ({
             </TouchableOpacity>
           </View>
 
+          <ScrollView showsVerticalScrollIndicator={false} bounces={false}>
           {step === 'verify' ? (
             <View style={styles.setPasswordVerifyStep}>
               <Text style={styles.setPasswordVerifyText}>
@@ -1108,33 +1131,37 @@ const SetPasswordModal = ({
               </View>
 
               {error ? <Text style={[styles.modalError, { fontSize: isMobile ? 12 : 14 }]}>{error}</Text> : null}
-
-              <View style={styles.modalFooterRow}>
-                <TouchableOpacity
-                  style={[styles.modalSecondaryButton, loading && styles.disabledTouchable]}
-                  onPress={handleClose}
-                  disabled={loading}
-                  accessibilityRole="button"
-                  accessibilityLabel="Cancel"
-                >
-                  <Text style={styles.modalSecondaryButtonText}>Cancel</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[styles.modalPrimaryButton, loading && styles.modalButtonDisabled]}
-                  onPress={handleSetPassword}
-                  disabled={loading}
-                  activeOpacity={0.85}
-                  accessibilityRole="button"
-                  accessibilityLabel="Set password"
-                >
-                  {loading ? <ActivityIndicator color={COLORS.white} size="small" /> : (
-                    <Text style={[styles.modalButtonText, { fontSize: isMobile ? 15 : 16 }]}>Set Password</Text>
-                  )}
-                </TouchableOpacity>
-              </View>
             </>
           )}
+          </ScrollView>
+
+          {step === 'password' && (
+          <View style={styles.modalFooterRow}>
+            <TouchableOpacity
+              style={[styles.modalSecondaryButton, loading && styles.disabledTouchable]}
+              onPress={handleClose}
+              disabled={loading}
+              accessibilityRole="button"
+              accessibilityLabel="Cancel"
+            >
+              <Text style={styles.modalSecondaryButtonText}>Cancel</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.modalPrimaryButton, loading && styles.modalButtonDisabled]}
+              onPress={handleSetPassword}
+              disabled={loading}
+              activeOpacity={0.85}
+              accessibilityRole="button"
+              accessibilityLabel="Set password"
+            >
+              {loading ? <ActivityIndicator color={COLORS.white} size="small" /> : (
+                <Text style={[styles.modalButtonText, { fontSize: isMobile ? 15 : 16 }]}>Set Password</Text>
+              )}
+            </TouchableOpacity>
+          </View>
+          )}
         </Pressable>
+        </KeyboardAvoidingView>
       </Pressable>
     </Modal>
   );
@@ -1575,7 +1602,7 @@ export default function UserAccount() {
                     style={({ pressed }) => [styles.profileOption, pressed && styles.profileOptionPressed]}
                     onPress={() => {
                       toggleProfileExpanded();
-                      setTimeout(() => setShowEditProfileModal(true), 180);
+                      setTimeout(() => setShowEditProfileModal(true), PROFILE_COLLAPSE_DURATION);
                     }}
                     accessibilityRole="button"
                     accessibilityLabel="Edit profile"
@@ -1598,7 +1625,7 @@ export default function UserAccount() {
                         } else {
                           setShowPasswordModal(true);
                         }
-                      }, 180);
+                      }, PROFILE_COLLAPSE_DURATION);
                     }}
                     accessibilityRole="button"
                     accessibilityLabel={isGoogleUser && !userData.hasPassword ? 'Set password' : 'Change password'}
@@ -1618,7 +1645,15 @@ export default function UserAccount() {
             <Pressable
               nativeID="tour-account-saved"
               style={({ pressed }) => [styles.actionCard, pressed && styles.actionCardPressed]}
-              onPress={() => router.push('/(tabs)/savedDiagrams')}
+              // navigate, not push: both this and the matching back button
+              // in savedDiagrams.tsx used push/replace, which mounted a
+              // brand-new instance of the persistently-anchored (tabs) group
+              // on top of the existing one instead of resurfacing it — a
+              // few round trips through Account -> Saved Diagrams -> back
+              // stacked up that many duplicate Navbars. navigate reuses the
+              // existing route instead (same fix already applied to
+              // Create's own nav entry — see Navbar's handleNavigation).
+              onPress={() => router.navigate('/(tabs)/savedDiagrams')}
               accessibilityRole="button"
               accessibilityLabel={`Saved diagrams, ${savedDiagrams.length} saved`}
             >
@@ -1633,7 +1668,9 @@ export default function UserAccount() {
             <Pressable
               nativeID="tour-account-privacy"
               style={({ pressed }) => [styles.actionCard, pressed && styles.actionCardPressed]}
-              onPress={() => router.push('/(tabs)/privacy')}
+              // navigate, not push — see the Saved Diagrams entry above for
+              // why (same duplicate-(tabs)-instance risk on repeated visits).
+              onPress={() => router.navigate('/(tabs)/privacy')}
               accessibilityRole="button"
               accessibilityLabel="Privacy, terms and policies"
             >
@@ -1648,7 +1685,9 @@ export default function UserAccount() {
             <Pressable
               nativeID="tour-account-about"
               style={({ pressed }) => [styles.actionCard, pressed && styles.actionCardPressed]}
-              onPress={() => router.push('/(tabs)/aboutUs')}
+              // navigate, not push — see the Saved Diagrams entry above for
+              // why (same duplicate-(tabs)-instance risk on repeated visits).
+              onPress={() => router.navigate('/(tabs)/aboutUs')}
               accessibilityRole="button"
               accessibilityLabel="About us, team and system info"
             >
@@ -1740,7 +1779,12 @@ const styles = StyleSheet.create({
     ...SHADOWS.sm,
   },
   actionCardPressed: { backgroundColor: COLORS.gray50, transform: [{ scale: 0.98 }] },
-  signOutCard: { borderWidth: 1, borderColor: COLORS.dangerLight },
+  // Extra marginTop on top of actionsGrid's own `gap` — a destructive/exit
+  // action shouldn't sit in the same visual rhythm as the neutral
+  // navigation rows above it (Profile/Saved Diagrams/Privacy/About Us),
+  // even though color already marks it as different. Matches how iOS/
+  // Android system settings isolate Sign Out into its own group.
+  signOutCard: { borderWidth: 1, borderColor: COLORS.dangerLight, marginTop: SPACING.lg },
   actionContent: { flex: 1, marginLeft: SPACING.md },
   actionTitle: { ...TYPOGRAPHY.bodyBold, color: COLORS.gray900 },
   actionDescription: { ...TYPOGRAPHY.small, color: COLORS.gray500, marginTop: 2 },

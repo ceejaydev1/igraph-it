@@ -4,10 +4,36 @@ const { getAccessLevel, canView, canEdit, canRename } = require('../utils/diagra
 
 const COLLECTION = 'diagrams';
 
+// Each collaborator's client only ever knows about the pages it has loaded
+// into its own `pages` state — a client that joined before another
+// collaborator added a new page, or hasn't switched to it yet, has no way
+// to include it in what it sends here. Blindly replacing the stored `pages`
+// array with whatever a given client's save happens to send would let
+// whichever client saves *last* silently delete every page it doesn't
+// personally know about — the "diagram removes automatically" bug when two
+// people are live-editing different pages of the same multi-page diagram.
+// Merging by page id instead — incoming pages win for content (this client
+// really did just edit them), anything not mentioned is left alone — means
+// a save can only ever add/update pages, never accidentally erase one purely
+// by omission. `deletedPageIds` is the one explicit exception: a page the
+// client actually deleted locally, so its absence here is a real deletion,
+// not "client doesn't know about it".
+const mergePages = (existingPages, incomingPages, deletedPageIds) => {
+  const deleted = new Set(Array.isArray(deletedPageIds) ? deletedPageIds : []);
+  const merged = new Map();
+  (Array.isArray(existingPages) ? existingPages : []).forEach((p) => {
+    if (p && p.id && !deleted.has(p.id)) merged.set(p.id, p);
+  });
+  (Array.isArray(incomingPages) ? incomingPages : []).forEach((p) => {
+    if (p && p.id && !deleted.has(p.id)) merged.set(p.id, p);
+  });
+  return Array.from(merged.values());
+};
+
 const saveDiagram = async (req, res) => {
   try {
     const userId = req.user.uid;
-    const { id, name, xml, previewImage, type, pages, activePageId } = req.body;
+    const { id, name, xml, previewImage, type, pages, activePageId, deletedPageIds } = req.body;
 
     if (!name || !xml) {
       console.log('❌ Missing required fields:', { name: !!name, xml: !!xml });
@@ -60,7 +86,7 @@ const saveDiagram = async (req, res) => {
         xml: xml,
         preview_image: previewImage || null,
         type: type || 'General',
-        pages: pages || [],
+        pages: mergePages(existingData.pages, pages, deletedPageIds),
         active_page_id: activePageId || null,
         updated_at: now,
       });

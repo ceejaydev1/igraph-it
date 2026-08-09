@@ -113,9 +113,12 @@ export default function ShareModal({ visible, onClose, diagramId, diagramName }:
   const [addPermission, setAddPermission] = useState<CollaboratorPermission>('edit_share');
   const [adding, setAdding] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+  const [addSuccess, setAddSuccess] = useState<string | null>(null);
   const [copyLabel, setCopyLabel] = useState('Copy link');
   const [linkBusy, setLinkBusy] = useState(false);
   const [requestBusyId, setRequestBusyId] = useState<string | null>(null);
+  const [confirmRemove, setConfirmRemove] = useState<{ userId: string; name: string; self: boolean } | null>(null);
+  const [removing, setRemoving] = useState(false);
 
   // Only the owner adds/removes people or decides what the link grants.
   // edit_share can still turn the link on/off and copy it — "share the
@@ -149,6 +152,7 @@ export default function ShareModal({ visible, onClose, diagramId, diagramName }:
     setFormError(null);
     setEmailInput('');
     setCopyLabel('Copy link');
+    setConfirmRemove(null);
     load();
     authService.getCurrentUserId().then(setMyUserId);
     // Reloading is intentionally tied only to the modal opening/diagram
@@ -172,12 +176,15 @@ export default function ShareModal({ visible, onClose, diagramId, diagramName }:
       return;
     }
     setFormError(null);
+    setAddSuccess(null);
     setAdding(true);
     try {
       const result = await shareService.addCollaborator(diagramId, email, addPermission);
       if (result.success) {
         setEmailInput('');
         await load(true);
+        setAddSuccess(`Added ${email}`);
+        setTimeout(() => setAddSuccess(null), 2500);
       } else {
         setFormError(result.message || 'Could not add that person.');
       }
@@ -198,13 +205,21 @@ export default function ShareModal({ visible, onClose, diagramId, diagramName }:
     }
   };
 
-  const handleRemove = async (userId: string) => {
-    if (!diagramId) return;
+  const handleRemove = (userId: string, name: string) => {
+    setConfirmRemove({ userId, name, self: userId === myUserId });
+  };
+
+  const confirmRemoveCollaborator = async () => {
+    if (!diagramId || !confirmRemove) return;
+    setRemoving(true);
     try {
-      await shareService.removeCollaborator(diagramId, userId);
+      await shareService.removeCollaborator(diagramId, confirmRemove.userId);
+      setConfirmRemove(null);
       await load(true);
     } catch (e) {
       console.error('Failed to remove collaborator:', e);
+    } finally {
+      setRemoving(false);
     }
   };
 
@@ -268,6 +283,7 @@ export default function ShareModal({ visible, onClose, diagramId, diagramName }:
   };
 
   return (
+    <>
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
       <View style={styles.overlay}>
         <View style={styles.card}>
@@ -307,7 +323,10 @@ export default function ShareModal({ visible, onClose, diagramId, diagramName }:
                   <TextInput
                     style={[styles.emailInput, styles.emailInputStacked]}
                     value={emailInput}
-                    onChangeText={setEmailInput}
+                    onChangeText={(text) => {
+                      setEmailInput(text);
+                      if (addSuccess) setAddSuccess(null);
+                    }}
                     placeholder="Add people by email"
                     placeholderTextColor={COLORS.textTertiary}
                     autoCapitalize="none"
@@ -322,6 +341,7 @@ export default function ShareModal({ visible, onClose, diagramId, diagramName }:
                     />
                   </View>
                   {formError && <Text style={styles.errorText}>{formError}</Text>}
+                  {addSuccess && <Text style={styles.successText}>{addSuccess}</Text>}
                   <TouchableOpacity
                     style={[styles.addButton, adding && styles.addButtonDisabled]}
                     onPress={handleAdd}
@@ -476,7 +496,7 @@ export default function ShareModal({ visible, onClose, diagramId, diagramName }:
                   )}
                   {(isOwner || c.userId === myUserId) && (
                     <TouchableOpacity
-                      onPress={() => handleRemove(c.userId)}
+                      onPress={() => handleRemove(c.userId, c.userId === myUserId ? 'yourself' : c.fullName)}
                       style={styles.removeButton}
                       hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                     >
@@ -494,6 +514,42 @@ export default function ShareModal({ visible, onClose, diagramId, diagramName }:
         </View>
       </View>
     </Modal>
+
+    {confirmRemove && (
+      <Modal visible transparent animationType="fade" onRequestClose={() => (removing ? null : setConfirmRemove(null))}>
+        <View style={styles.overlay}>
+          <View style={styles.confirmCard}>
+            <Text style={styles.confirmTitle}>
+              {confirmRemove.self ? 'Leave this diagram?' : `Remove ${confirmRemove.name}?`}
+            </Text>
+            <Text style={styles.confirmMessage}>
+              {confirmRemove.self
+                ? "You'll lose access immediately and need a new invite to get back in."
+                : `${confirmRemove.name} will lose access immediately and need a new invite to get back in.`}
+            </Text>
+            <View style={styles.confirmActions}>
+              <TouchableOpacity
+                style={styles.confirmCancelButton}
+                onPress={() => setConfirmRemove(null)}
+                disabled={removing}
+              >
+                <Text style={styles.confirmCancelText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.confirmDangerButton, removing && styles.addButtonDisabled]}
+                onPress={confirmRemoveCollaborator}
+                disabled={removing}
+              >
+                <Text style={styles.confirmDangerText}>
+                  {removing ? 'Removing…' : confirmRemove.self ? 'Leave' : 'Remove'}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+    )}
+    </>
   );
 }
 
@@ -606,6 +662,11 @@ const styles = StyleSheet.create({
   },
   errorText: {
     color: COLORS.danger,
+    fontSize: 12,
+    marginBottom: SPACING.sm,
+  },
+  successText: {
+    color: COLORS.successDark,
     fontSize: 12,
     marginBottom: SPACING.sm,
   },
@@ -747,6 +808,54 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
   },
   doneButtonText: {
+    color: COLORS.white,
+    fontWeight: '600',
+    fontSize: 13,
+  },
+  confirmCard: {
+    width: '100%',
+    maxWidth: 360,
+    backgroundColor: COLORS.white,
+    borderRadius: RADIUS.xl,
+    padding: SPACING.xxl,
+    ...Platform.select({ web: { boxShadow: '0 20px 60px rgba(15,23,42,0.25)' } as any, default: {} }),
+  },
+  confirmTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: COLORS.textPrimary,
+    marginBottom: SPACING.sm,
+  },
+  confirmMessage: {
+    fontSize: 13,
+    color: COLORS.textSecondary,
+    lineHeight: 19,
+    marginBottom: SPACING.xl,
+  },
+  confirmActions: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    gap: SPACING.sm,
+  },
+  confirmCancelButton: {
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: RADIUS.md,
+    paddingHorizontal: SPACING.lg,
+    paddingVertical: 8,
+  },
+  confirmCancelText: {
+    color: COLORS.textSecondary,
+    fontWeight: '600',
+    fontSize: 13,
+  },
+  confirmDangerButton: {
+    backgroundColor: COLORS.danger,
+    borderRadius: RADIUS.md,
+    paddingHorizontal: SPACING.lg,
+    paddingVertical: 8,
+  },
+  confirmDangerText: {
     color: COLORS.white,
     fontWeight: '600',
     fontSize: 13,
