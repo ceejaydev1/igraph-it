@@ -764,7 +764,12 @@ export default function SavedDiagrams() {
         return;
       }
 
-      const API_URL = API_BASE_URL || 'https://igraph-backend.onrender.com';
+      // No `|| 'https://...'` fallback here on purpose: API_BASE_URL is '' on
+      // a Vercel web deployment (same-origin, proxied through vercel.json —
+      // see that file's own comment), and '' is falsy, so a fallback here
+      // would silently send this request straight back to the cross-site
+      // URL the proxy exists to avoid.
+      const API_URL = API_BASE_URL;
       console.log(`📋 Fetching saved diagrams from: ${API_URL}/api/diagrams/user`);
 
       const response = await authService.authFetch(`${API_URL}/api/diagrams/user`, {
@@ -775,22 +780,18 @@ export default function SavedDiagrams() {
 
       console.log(`📥 Response status: ${response.status}`);
 
-      // hasActiveSession() above is only a cheap local-cache check (see its
-      // own comment in authService.js) — by design, this request is the real
-      // source of truth, via authFetch's own 401->refresh->retry. If it's
-      // STILL 401 after that, the session is actually dead (or never really
-      // existed — a stale cache said otherwise), not just "a diagram list
-      // failed to load". Falling through to the generic error branch below
-      // used to dump the raw backend string ("Access denied. No token
-      // provided.") into an inline "Error Loading Diagrams" card — a
-      // confusing, technical message for what's really just "please sign in
-      // again". Treating it the same as the upfront !signedIn check above
-      // (clear the stale cache, redirect) is what every other real auth wall
-      // in this app already does instead of surfacing a raw error.
+      // A still-401 after authFetch's own 401->refresh->retry means this one
+      // request couldn't get a fresh token right now — it does NOT mean the
+      // session should be torn down. Only the user explicitly clicking Sign
+      // Out ever does that; this just surfaces as a load failure (with the
+      // cached list, if any, left in place) so the next pull-to-refresh or
+      // screen revisit can simply try again.
       if (response.status === 401) {
-        console.log('🔴 Session actually expired (401 after retry), redirecting to signin');
-        await authService.clearTokens();
-        router.replace('/(auth)/signin');
+        console.log('🔴 Diagram list request still 401 after retry — showing load error, not signing out');
+        if (!authService.getCachedDiagrams()) {
+          setSavedDiagrams([]);
+        }
+        setError('Could not load your diagrams right now. Please try again.');
         return;
       }
 
@@ -854,7 +855,12 @@ export default function SavedDiagrams() {
         return;
       }
 
-      const API_URL = API_BASE_URL || 'https://igraph-backend.onrender.com';
+      // No `|| 'https://...'` fallback here on purpose: API_BASE_URL is '' on
+      // a Vercel web deployment (same-origin, proxied through vercel.json —
+      // see that file's own comment), and '' is falsy, so a fallback here
+      // would silently send this request straight back to the cross-site
+      // URL the proxy exists to avoid.
+      const API_URL = API_BASE_URL;
       const url = `${API_URL}/api/diagrams/${diagram.id}`;
       console.log(`🗑️ DELETE request to: ${url}`);
       console.log(`🗑️ Diagram ID: ${diagram.id}`);
@@ -938,7 +944,12 @@ export default function SavedDiagrams() {
         return;
       }
 
-      const API_URL = API_BASE_URL || 'https://igraph-backend.onrender.com';
+      // No `|| 'https://...'` fallback here on purpose: API_BASE_URL is '' on
+      // a Vercel web deployment (same-origin, proxied through vercel.json —
+      // see that file's own comment), and '' is falsy, so a fallback here
+      // would silently send this request straight back to the cross-site
+      // URL the proxy exists to avoid.
+      const API_URL = API_BASE_URL;
       const url = `${API_URL}/api/diagrams/${renamingDiagram.id}`;
       console.log(`📝 PUT request to: ${url}`);
       console.log(`📝 New name: "${newName}"`);

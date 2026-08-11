@@ -1,6 +1,7 @@
 const { db } = require('../config/firebase');
 const { v4: uuidv4 } = require('uuid');
 const { getAccessLevel, canView, canEdit, canRename } = require('../utils/diagramAccess');
+const simpleCache = require('../utils/simpleCache');
 
 const COLLECTION = 'diagrams';
 
@@ -92,6 +93,7 @@ const saveDiagram = async (req, res) => {
       });
 
       console.log(`✅ Diagram "${name}" updated in place with ID: ${id}`);
+      simpleCache.invalidate(`saved-diagrams:${userId}`);
 
       return res.status(200).json({
         success: true,
@@ -132,6 +134,7 @@ const saveDiagram = async (req, res) => {
     await db.collection(COLLECTION).doc(diagramId).set(diagramData);
 
     console.log(`✅ Diagram "${name}" saved successfully with ID: ${diagramId}`);
+    simpleCache.invalidate(`saved-diagrams:${userId}`);
 
     res.status(201).json({
       success: true,
@@ -155,9 +158,24 @@ const saveDiagram = async (req, res) => {
   }
 };
 
+// 30s TTL — short enough that "I just saved/deleted and immediately checked
+// my list" never feels stale for more than a beat, long enough to absorb
+// the realistic hot-path (opening the Diagram Library, switching tabs and
+// back) without a fresh pair of Firestore queries every single time. Only
+// the *acting* user's own cache entry gets invalidated on save/delete/
+// rename below — a diagram shared with someone else changing in the
+// meantime is covered by the TTL alone, not an explicit invalidation; that's
+// a deliberate, reasonable tradeoff for a cache this simple, not a gap.
+const SAVED_DIAGRAMS_CACHE_TTL_MS = 30 * 1000;
+
 const getSavedDiagrams = async (req, res) => {
   try {
     const userId = req.user.uid;
+
+    const cached = simpleCache.get(`saved-diagrams:${userId}`);
+    if (cached) {
+      return res.status(200).json({ success: true, data: cached });
+    }
 
     console.log(`📋 Fetching diagrams for user: ${userId}`);
 
@@ -201,6 +219,8 @@ const getSavedDiagrams = async (req, res) => {
     diagrams.sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime());
 
     console.log(`✅ Found ${diagrams.length} diagrams for user ${userId}`);
+
+    simpleCache.set(`saved-diagrams:${userId}`, diagrams, SAVED_DIAGRAMS_CACHE_TTL_MS);
 
     res.status(200).json({
       success: true,
@@ -332,6 +352,7 @@ const renameDiagram = async (req, res) => {
     });
 
     console.log(`✅ Diagram "${data.name}" renamed to "${name.trim()}" by user ${userId}`);
+    simpleCache.invalidate(`saved-diagrams:${userId}`);
 
     res.status(200).json({
       success: true,
@@ -383,6 +404,7 @@ const deleteDiagram = async (req, res) => {
     await db.collection(COLLECTION).doc(diagramId).delete();
 
     console.log(`🗑️ Diagram "${data.name}" deleted by user ${userId}`);
+    simpleCache.invalidate(`saved-diagrams:${userId}`);
 
     res.status(200).json({
       success: true,

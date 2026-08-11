@@ -1387,11 +1387,11 @@ export default function UserAccount() {
           hasPassword: hasPassword !== false,
         });
       } else {
-        // verifyToken() already clears tokens/cache when the session is
-        // truly expired/invalid (401 after a failed refresh) — hasActiveSession()
-        // will correctly read as false right after that happens. Anything
-        // else (network blip, etc.) leaves the session/cache intact, so it's
-        // a transient failure and shouldn't boot the user out.
+        // Nothing auto-clears the cache/tokens here, ever — only the user
+        // explicitly clicking Sign Out does that. So hasActiveSession() (a
+        // cache check) staying true after a failed live verifyToken() is the
+        // normal, expected case: a network blip or dead session alike just
+        // falls back to the cached user below rather than booting anyone out.
         const stillSignedIn = await authService.hasActiveSession();
         if (!stillSignedIn) {
           router.replace('/(auth)/signin');

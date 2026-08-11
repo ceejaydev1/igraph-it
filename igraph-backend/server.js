@@ -24,6 +24,25 @@ const app = express();
 // attacker-supplied X-Forwarded-For if this app were ever reachable directly.
 app.set('trust proxy', 1);
 
+// Logs any request that takes longer than 1s, start to finish — cheap,
+// always-on visibility into real-world degradation (slow Firestore calls,
+// CPU contention under load, etc.) instead of only finding out from a user
+// complaint or noticing it after the fact in Render's dashboard. Placed
+// before every other middleware so the timer covers the *full* request
+// lifecycle, including anything a rate limiter rejects — a slow rejection
+// is itself a useful signal that the process is under real load, not just
+// slow successes.
+app.use((req, res, next) => {
+  const start = Date.now();
+  res.on('finish', () => {
+    const durationMs = Date.now() - start;
+    if (durationMs > 1000) {
+      console.warn(`🐢 SLOW REQUEST: ${req.method} ${req.originalUrl} — ${durationMs}ms — status ${res.statusCode}`);
+    }
+  });
+  next();
+});
+
 const allowedOrigins = [
 
   'https://igraph-backend.onrender.com',
@@ -178,7 +197,7 @@ const PORT = process.env.PORT || 5000;
 // browsing/loading/autosaving normally, not just one.
 const globalLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 200000, // TEMP: raised for local stress-test run, reverting to 2000 after
+  max: 2000,
   message: {
     success: false,
     message: 'Too many requests from this IP. Please try again after 15 minutes.'

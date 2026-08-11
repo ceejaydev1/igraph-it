@@ -5,7 +5,15 @@
 // there only ever being one Create Diagram screen open at once.
 import { io } from 'socket.io-client';
 import { Platform } from 'react-native';
-import API_BASE_URL from '../constants/api';
+// Deliberately the always-absolute export, not the default — Vercel's
+// same-origin /api/* proxy (see constants/api.js's own comment) only covers
+// plain HTTP, not a WebSocket upgrade, so this connects straight to the
+// backend's real domain same as before. That does mean realtime
+// collaboration can still be blocked by an in-app browser's cross-site
+// cookie restrictions even after the REST/sign-in fix — a real, known gap,
+// not an oversight; proxying WebSockets through Vercel reliably would be a
+// separate, larger piece of work.
+import { API_BASE_URL_ABSOLUTE } from '../constants/api';
 import { getAccessToken } from './authService';
 
 let socket = null;
@@ -26,7 +34,7 @@ const getSocket = () => {
   // create.tsx already loads fresh state over REST before ever joining.
   let hasConnectedOnce = false;
 
-  socket = io(API_BASE_URL, {
+  socket = io(API_BASE_URL_ABSOLUTE, {
     path: '/socket.io',
     withCredentials: true, // carries the httpOnly access_token cookie on web
     // Function form (not a plain object) so every reconnect attempt reads

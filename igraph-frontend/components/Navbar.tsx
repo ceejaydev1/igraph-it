@@ -353,6 +353,44 @@ export default function Navbar({
     ]).start();
   }, [activeSideIndex, itemWidth]);
 
+  // ─── Desktop nav: same sliding-pill effect as the mobile dock above, not
+  // just the same idea reimplemented — same spring/opacity choreography,
+  // adapted for items whose widths genuinely differ ("Learning References"
+  // vs "Account"), unlike the bottom dock's fixed-width side tabs. That
+  // means position AND width both need to animate, so this can't ride
+  // useNativeDriver (native transforms can't touch layout width) the way
+  // the bottom dock's translateX-only indicator does — still smooth for a
+  // top bar with 4 static-width labels, not a high-frequency gesture.
+  const desktopIndicatorX = useRef(new Animated.Value(0)).current;
+  const desktopIndicatorWidth = useRef(new Animated.Value(0)).current;
+  const desktopIndicatorOpacity = useRef(new Animated.Value(0)).current;
+  const [desktopItemLayouts, setDesktopItemLayouts] = useState<Record<string, { x: number; width: number }>>({});
+
+  const activeDesktopIndex = navItems.findIndex((item) => isRouteActive(pathname, item.route));
+  const activeDesktopLayout = activeDesktopIndex !== -1 ? desktopItemLayouts[navItems[activeDesktopIndex].label] : undefined;
+
+  useEffect(() => {
+    if (!activeDesktopLayout) {
+      Animated.timing(desktopIndicatorOpacity, { toValue: 0, duration: 150, useNativeDriver: false }).start();
+      return;
+    }
+    Animated.parallel([
+      Animated.spring(desktopIndicatorX, {
+        toValue: activeDesktopLayout.x,
+        useNativeDriver: false,
+        friction: 8,
+        tension: 65,
+      }),
+      Animated.spring(desktopIndicatorWidth, {
+        toValue: activeDesktopLayout.width,
+        useNativeDriver: false,
+        friction: 8,
+        tension: 65,
+      }),
+      Animated.timing(desktopIndicatorOpacity, { toValue: 1, duration: 150, useNativeDriver: false }),
+    ]).start();
+  }, [activeDesktopLayout?.x, activeDesktopLayout?.width]);
+
   // See staleNotifiers' own comment above. Every mount claims "latest" for
   // itself and tells whichever instance held that title before to stand
   // down; every unmount removes this instance from the registry so it can't
@@ -418,6 +456,24 @@ export default function Navbar({
             {/* Navigation Items - conditionally hidden */}
             {!hideNavLinks && (
               <View nativeID="tour-navbar-overview" style={styles.navLinks}>
+                {/* Sliding active-tab pill — same glide/fade choreography as
+                    the mobile dock's indicator (see its own comment above),
+                    sized and positioned from each item's own measured
+                    navItemInner bounds since these labels aren't equal-width. */}
+                {activeDesktopLayout && (
+                  <Animated.View
+                    pointerEvents="none"
+                    style={[
+                      styles.desktopSlidingIndicator,
+                      {
+                        left: desktopIndicatorX,
+                        width: desktopIndicatorWidth,
+                        opacity: desktopIndicatorOpacity,
+                      },
+                    ]}
+                  />
+                )}
+
                 {navItems.map((item) => {
                   const isActive = isRouteActive(pathname, item.route);
                   const Icon = item.icon;
@@ -431,6 +487,20 @@ export default function Navbar({
                         { height: navbarHeight },
                         pressed && styles.navItemPressed,
                       ]}
+                      // onLayout here, not on navItemInner — layout x/width are
+                      // relative to the DIRECT parent. navItem is navLinks'
+                      // direct child (the same coordinate space the indicator
+                      // is positioned in); navItemInner is nested one level
+                      // deeper, so its own onLayout only ever reported its
+                      // small, near-constant offset *within* navItem — the
+                      // same tiny value for every tab — which is why the
+                      // indicator looked stuck in one place no matter which
+                      // tab was actually active. The 8px inset mirrors the
+                      // original static underline's own left:8/right:8.
+                      onLayout={(e) => {
+                        const { x, width } = e.nativeEvent.layout;
+                        setDesktopItemLayouts((prev) => ({ ...prev, [item.label]: { x: x + 8, width: width - 16 } }));
+                      }}
                     >
                       <View style={styles.navItemInner}>
                         <Icon active={isActive} color={isActive ? '#2563eb' : '#64748b'} />
@@ -442,7 +512,6 @@ export default function Navbar({
                           {item.label}
                         </Text>
                       </View>
-                      {isActive && <View style={styles.navUnderline} />}
                     </Pressable>
                   );
                 })}
@@ -711,14 +780,15 @@ const styles = StyleSheet.create({
     color: '#2563eb',
     fontWeight: '600',
   },
-  navUnderline: {
+  // Same underline this replaced (bottom: 0, height: 3) — the ask was just
+  // the mobile dock's glide/fade animation applied to it, not a new pill
+  // background; the desktop active-tab look itself stays exactly as it was.
+  desktopSlidingIndicator: {
     position: 'absolute',
     bottom: 0,
-    left: 8,
-    right: 8,
     height: 3,
-    backgroundColor: '#2563eb',
     borderRadius: 2,
+    backgroundColor: '#2563eb',
   },
   navRight: {
     flexDirection: 'row',

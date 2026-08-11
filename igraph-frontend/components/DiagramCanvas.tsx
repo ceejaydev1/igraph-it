@@ -1608,6 +1608,14 @@ interface DiagramCanvasProps {
    *  selected shape — mobile has no Delete key, unlike desktop, so touch
    *  users otherwise have no way to remove a shape at all. */
   isMobile?: boolean;
+  /** Pixels of the graph container's own left edge that are actually
+   *  covered by a floating panel (create.tsx's icon rail + ShapesPanel,
+   *  both `position: absolute` on top of the canvas, not a flex sibling
+   *  that would shrink it) — see loadXmlImpl's desktop re-center branch for
+   *  why this matters: the graph container's clientWidth includes that
+   *  covered strip, so centering against the full width can land a
+   *  freshly-opened diagram partly or fully underneath the panel. */
+  leftObstruction?: number;
 }
 
 export interface DiagramCanvasHandle {
@@ -2645,11 +2653,107 @@ function realignForkJoinStubs(graph: Graph, bar: any) {
   });
 }
 
+// Same fit-then-center math as FitPlugin.fitCenter() (maxGraph core), except
+// the scale and the centering point are both computed against the strip of
+// the container that's actually visible — container.clientWidth minus
+// `leftObstruction` — instead of the full container. fitCenter() has no way
+// to know the icon rail + ShapesPanel are floating on top of the canvas
+// (they're `position: absolute`, not a flex sibling that shrinks
+// container.clientWidth), so it centers the diagram in the full width, which
+// can land it partly or fully underneath the panel. Left-only because that's
+// the one persistent obstruction on a fresh open — the properties panel
+// (right side) only renders once something is selected, which nothing is
+// yet at this point.
+// Returns false when the container/bounds weren't actually measurable yet
+// (e.g. a hard page refresh has far more competing work in that first
+// frame — maxGraph booting, stylesheet registration, etc. — than a normal
+// in-app navigation does, so one requestAnimationFrame isn't always enough
+// there even though it is for a warm open) — the caller retries on a later
+// frame instead of silently applying a scale/translate computed from a
+// zero-sized container, which would leave the diagram scaled to ~0 or
+// translated off-screen instead of merely "not centered."
+// margin default bumped from fitCenter()'s own 2px to 24px — at typical fit
+// scale that's invisible, but for a small diagram in a large container (the
+// common case right after creating one) fitCenter can zoom in aggressively
+// enough that a 2px margin leaves almost no slack against leftObstruction,
+// visibly clipping content flush against the panel's edge (confirmed via a
+// direct repro: a 2-shape diagram fit to ~300%, only ~4px of margin left —
+// enough for a shape's edge/label to land right at, or a hair behind, the
+// panel boundary).
+function fitCenterAvoidingLeftPanel(graph: Graph, leftObstruction: number, margin = 40): boolean {
+  try {
+    // maxGraph registers every other built-in plugin's pluginId as its exact
+    // class name ('CellEditorHandler', 'PanningHandler', etc.) — FitPlugin is
+    // the one exception, registered as the short string 'fit' instead of
+    // 'FitPlugin' (confirmed directly in @maxgraph/core's own source). Lookups
+    // using the class-name string here always silently returned null, so this
+    // whole function's "smart" branch never actually ran — it fell straight
+    // through to the plain fitCenter() no-op path below on every call.
+    const fitPlugin = graph.getPlugin('fit') as FitPlugin | null;
+    const container = graph.container;
+    if (!container || container.clientWidth <= 0 || container.clientHeight <= 0) return false;
+    // No plugin, nothing to size the max scale from — retry rather than
+    // guess (a missing plugin one frame after mount can still resolve).
+    if (!fitPlugin) return false;
+
+    // leftObstruction === 0 (panel closed, or view-only with no rail) isn't
+    // special-cased to plain fitCenter() — that library call has no scale
+    // cap of its own (see the comment below), and the math here already
+    // degrades to an ordinary full-width center when there's nothing to
+    // avoid, so there's no need for two code paths.
+    const view = graph.getView();
+    const visibleWidth = container.clientWidth - leftObstruction - 2 * margin;
+    const clientHeight = container.clientHeight - 2 * margin;
+    const bounds = graph.getGraphBounds();
+    if (!(bounds.width > 0 && bounds.height > 0)) return false;
+
+    const originalScale = view.scale;
+    const width = bounds.width / originalScale;
+    const height = bounds.height / originalScale;
+
+    // Capped at 1 (100%) on top of fitPlugin.maxFitScale (which defaults to
+    // 8, i.e. 800% — sized for shrinking an oversized diagram down to fit,
+    // not for a small one). Without the cap, a diagram with little content
+    // relative to the container — the common case right after adding just a
+    // shape or two — reads "fit the available space" literally and zooms
+    // in aggressively (confirmed live: a single shape opened at 800%).
+    // Real draw.io's own "Fit Page" only ever shrinks an oversized page,
+    // never inflates a small one past its actual size.
+    let newScale = Math.min(1, fitPlugin.maxFitScale ?? Infinity, visibleWidth / width, clientHeight / height);
+    if (!Number.isFinite(newScale) || newScale <= 0) newScale = originalScale;
+
+    // Same shape as fitCenter()'s own translateX/Y, but the horizontal margin
+    // is split around the VISIBLE strip (leftObstruction..containerWidth), not
+    // the full container — the diagram lands centered between the panel's
+    // right edge and the container's right edge, not centered as if the panel
+    // weren't there.
+    const translateX = Math.floor(
+      view.translate.x +
+        (leftObstruction + (container.clientWidth - leftObstruction - width * newScale) / 2) / newScale -
+        (bounds.x ?? 0) / originalScale
+    );
+    const translateY = Math.floor(
+      view.translate.y + (container.clientHeight - height * newScale) / (2 * newScale) - (bounds.y ?? 0) / originalScale
+    );
+
+    newScale = Number(newScale.toFixed(2));
+    view.scaleAndTranslate(newScale, translateX, translateY);
+    return true;
+  } catch (e) {
+    // Never let a centering bug leave the diagram invisible — falling back
+    // to the model import already done above (whatever position/scale it
+    // happened to land at) is strictly better than throwing here and
+    // aborting mid-load.
+    console.warn('fitCenterAvoidingLeftPanel threw, leaving default view:', e);
+    return true; // don't retry — a genuine error won't resolve itself on a later frame
+  }
+}
+
 // ════════════════════════════════════════════════════════════════════════════
 // ⭐ MAIN WEBCANVAS COMPONENT
 // ════════════════════════════════════════════════════════════════════════════
 
-const WebCanvas = forwardRef<DiagramCanvasHandle, DiagramCanvasProps>(({ onReady, onChange, onSelectionChange, onZoomChange, umlType = 'flowchart', isMobile = false }, ref) => {
+const WebCanvas = forwardRef<DiagramCanvasHandle, DiagramCanvasProps>(({ onReady, onChange, onSelectionChange, onZoomChange, umlType = 'flowchart', isMobile = false, leftObstruction = 0 }, ref) => {
   const wrapperRef = useRef<HTMLDivElement>(null);
   const gridCanvasRef = useRef<HTMLCanvasElement>(null);
   const graphDivRef = useRef<HTMLDivElement>(null);
@@ -2759,7 +2863,18 @@ const WebCanvas = forwardRef<DiagramCanvasHandle, DiagramCanvasProps>(({ onReady
         // content-sized box, landing on ~100% instead of the real fit scale.
         // Reading the size from inside requestAnimationFrame guarantees a
         // layout pass has actually run first.
-        requestAnimationFrame(() => {
+        //
+        // One frame covers a normal in-app navigation, but not always a hard
+        // page refresh — that path has far more competing first-frame work
+        // (the whole app booting, maxGraph initializing, stylesheets
+        // registering) than a warm open does, so the container/graph bounds
+        // can still be unmeasurable a frame later. attemptCenter retries a
+        // few more frames before giving up, rather than either applying a
+        // center computed from a zero-sized box (scaling the diagram to
+        // ~nothing / translating it off-screen) or never centering at all —
+        // both of which read as "the diagram disappeared."
+        let centeringAttemptsLeft = 5;
+        const attemptCenter = () => {
           if (graphRef.current !== graph) return; // torn down/replaced before this fired
           if (isMobile) {
             // A diagram authored on desktop can have been left zoomed/panned
@@ -2769,16 +2884,28 @@ const WebCanvas = forwardRef<DiagramCanvasHandle, DiagramCanvasProps>(({ onReady
             // does: 100% zoom, diagram centered in the viewport.
             graph.getView().setScale(1);
             graph.center(true, true);
-          } else {
-            // fit() (used pre-existing elsewhere) only aligns the diagram's
-            // top-left near the container's border — it was never centering
-            // horizontally/vertically, so a diagram authored on mobile (or
-            // panned off to a corner) opened on desktop looking off-center.
-            // fitCenter() does the same fit-to-container scaling but actually
-            // centers the result, matching mobile's now-centered open.
-            (graph.getPlugin('FitPlugin') as FitPlugin | null)?.fitCenter();
+            return;
           }
-        });
+          // fit() (used pre-existing elsewhere) only aligns the diagram's
+          // top-left near the container's border — it was never centering
+          // horizontally/vertically, so a diagram authored on mobile (or
+          // panned off to a corner) opened on desktop looking off-center.
+          // fitCenterAvoidingLeftPanel does the same fit-to-container
+          // scaling as fitCenter(), but centered against the strip that's
+          // actually visible past the ShapesPanel (see its own comment) —
+          // plain fitCenter() would center against the full container and
+          // could land the diagram partly hidden underneath that panel.
+          const centered = fitCenterAvoidingLeftPanel(graph, leftObstruction);
+          if (!centered) {
+            if (centeringAttemptsLeft > 0) {
+              centeringAttemptsLeft -= 1;
+              requestAnimationFrame(attemptCenter);
+            } else {
+              console.warn('fitCenterAvoidingLeftPanel: gave up after retries, diagram left at import-time position/scale');
+            }
+          }
+        };
+        requestAnimationFrame(attemptCenter);
       } catch (e) {
         console.error('Failed to load diagram XML:', e);
       }
@@ -2871,12 +2998,30 @@ const WebCanvas = forwardRef<DiagramCanvasHandle, DiagramCanvasProps>(({ onReady
       });
       remoteHighlightsRef.current.clear();
     },
-    // Deps stay [] (matching the original loadXml-only handle): resizeGridCanvas/
-    // repaintGrid are declared further down this component and would be a
-    // TDZ ReferenceError if referenced directly in this array (it's evaluated
-    // eagerly, unlike the factory body above, which only runs later via
-    // closure once they exist).
-  }), []);
+    // resizeGridCanvas/repaintGrid stay out of this array on purpose: they're
+    // declared further down this component and would be a TDZ ReferenceError
+    // if referenced directly here (this array is evaluated eagerly, unlike
+    // the factory body above, which only runs later via closure once they
+    // exist).
+    //
+    // isMobile IS included, though — loadXml (exposed above) branches on it
+    // to decide how to re-center a freshly-loaded diagram (mobile: forced
+    // 100% + center; desktop: fitCenterAvoidingLeftPanel — see loadXmlImpl).
+    // With an empty array this factory only ever runs once, at mount, so the
+    // exposed loadXml stayed permanently bound to whatever isMobile happened
+    // to read on that very first render — the same class of race documented
+    // in create.tsx's hydrate effect ("useWindowDimensions() settling on a
+    // different width right after the very first mount, flipping
+    // isDesktop"). A diagram opened right as that settles could get
+    // re-centered using the wrong branch and never correct itself for the
+    // rest of the session, which is what made a diagram authored on one
+    // device look off-center when opened on the other.
+    //
+    // leftObstruction is included for the same reason: it feeds directly
+    // into that desktop branch's centering math (see
+    // fitCenterAvoidingLeftPanel), so a stale value here would silently
+    // center against a panel width that's no longer accurate.
+  }), [isMobile, leftObstruction]);
 
   const resizeGridCanvas = useCallback(() => {
     const wrapper = wrapperRef.current;
@@ -6529,7 +6674,12 @@ const WebCanvas = forwardRef<DiagramCanvasHandle, DiagramCanvasProps>(({ onReady
           borderRadius: 4,
           padding: '2px 4px',
           margin: 0,
-          background: '#ffffff',
+          // Transparent, not a solid fill — a filled rectangle sitting on
+          // top of a non-rectangular shape (circle, diamond, etc.) read as
+          // a stray rectangle appearing over the shape while typing. The
+          // blue border still marks the editable bounds; the shape's own
+          // fill now shows through underneath instead of being covered.
+          background: 'transparent',
           fontFamily: 'inherit',
           lineHeight: 1.2,
           outline: 'none',
@@ -6539,10 +6689,13 @@ const WebCanvas = forwardRef<DiagramCanvasHandle, DiagramCanvasProps>(({ onReady
           if (e.key === 'Escape') {
             e.preventDefault();
             commitMobileEdit(true);
-          } else if (e.key === 'Enter' && !e.shiftKey) {
-            e.preventDefault();
-            commitMobileEdit(false);
           }
+          // Plain Enter is intentionally left alone here — same as desktop's
+          // editor (see the CellEditorHandler.resize patch's own comment on
+          // "pressing Enter grows the box"), it inserts a line break like an
+          // ordinary multi-line field. Committing already happens on blur
+          // (tapping away, or the mobile keyboard's own dismiss/done key),
+          // so there's no need for Enter to double as a submit.
         }}
       />
 
@@ -6817,7 +6970,7 @@ const WebCanvas = forwardRef<DiagramCanvasHandle, DiagramCanvasProps>(({ onReady
   );
 });
 
-const DiagramCanvas = forwardRef<DiagramCanvasHandle, DiagramCanvasProps>(({ onReady, onChange, onSelectionChange, onZoomChange, umlType, isMobile }, ref) => {
+const DiagramCanvas = forwardRef<DiagramCanvasHandle, DiagramCanvasProps>(({ onReady, onChange, onSelectionChange, onZoomChange, umlType, isMobile, leftObstruction }, ref) => {
   if (Platform.OS !== 'web') {
     return (
       <View style={styles.nativeNotice}>
@@ -6828,7 +6981,7 @@ const DiagramCanvas = forwardRef<DiagramCanvasHandle, DiagramCanvasProps>(({ onR
   }
   return (
     <View style={styles.container}>
-      <WebCanvas ref={ref} onReady={onReady} onChange={onChange} onSelectionChange={onSelectionChange} onZoomChange={onZoomChange} umlType={umlType} isMobile={isMobile} />
+      <WebCanvas ref={ref} onReady={onReady} onChange={onChange} onSelectionChange={onSelectionChange} onZoomChange={onZoomChange} umlType={umlType} isMobile={isMobile} leftObstruction={leftObstruction} />
     </View>
   );
 });

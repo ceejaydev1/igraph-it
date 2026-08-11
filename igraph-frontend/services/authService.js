@@ -188,30 +188,15 @@ api.interceptors.response.use(
           return api(originalRequest);
         }
       } catch (refreshError) {
-        // A network error/timeout hitting the refresh endpoint (backend
-        // waking up from a Render free-tier cold start, a brief connectivity
-        // drop) isn't the server telling us the session is invalid — it's
-        // just no answer at all. refreshToken() itself only clears tokens on
-        // an actual auth rejection (401/403) now, but this still needs its
-        // own matching guard: without it, *any* refresh failure — including
-        // "the backend hasn't woken up yet" — hard-redirected to signin,
-        // which is what "randomly booted back to sign-in while just using
-        // the diagram canvas" actually was. A real session is still there;
-        // the request just needs to be allowed to fail and retried, not the
-        // whole session torn down out from under an in-progress edit.
-        const isAuthRejection = refreshError.response && [401, 403].includes(refreshError.response.status);
-        if (isAuthRejection && Platform.OS === 'web') {
-          // Group segments like "(auth)" are only ever stripped from the URL
-          // for client-side (SPA) navigation, never from a hard `location.href`
-          // assignment — so this always landed on the literal, non-canonical
-          // "/(auth)/signin". Guarding on the current path (not just fixing the
-          // href) also stops this from ever firing a self-triggering reload
-          // loop again if some other public-page request ever 401s here.
-          const authPaths = ['/signin', '/signup', '/forgot-password', '/verify-otp', '/reset-password'];
-          if (!authPaths.includes(window.location.pathname)) {
-            window.location.href = '/signin';
-          }
-        }
+        // No automatic redirect to signin here, ever — for a network error/
+        // timeout (backend waking up, brief connectivity drop) that's always
+        // been correct, since a real session is still there. But this also
+        // now applies to a genuine 401/403 refresh rejection: the only thing
+        // that should ever end a session and send the user to signin is them
+        // explicitly clicking Sign Out (see logout() below). A dead session
+        // just means this request fails; the caller/UI decides how to show
+        // that, not a forced hard navigation out from under whatever the
+        // user was doing.
         return Promise.reject(refreshError);
       }
     }
@@ -722,18 +707,12 @@ export const refreshToken = async () => {
       return null;
     } catch (error) {
       console.error('Refresh token error:', error);
-      // Only a genuine rejection from the server (401/403 — invalid/expired
-      // refresh token, session not found) means this session is actually
-      // dead. A network error or timeout (e.g. the backend still waking up
-      // from a Render free-tier cold start) means the request just never got
-      // a real answer — the refresh token itself was never told "no". Wiping
-      // valid tokens in that case is what silently signed people out of an
-      // active session over nothing more than a slow response; see the
-      // matching guard on the response interceptor above.
-      const isAuthRejection = error.response && [401, 403].includes(error.response.status);
-      if (isAuthRejection) {
-        await clearTokens();
-      }
+      // Tokens are never cleared here, even on a genuine 401/403 rejection —
+      // the only thing that should ever end a session is the user explicitly
+      // clicking Sign Out (see logout() below). A dead/expired refresh token
+      // just means this call fails; the caller decides how to handle that
+      // (e.g. an individual request quietly not completing), not this
+      // function tearing down the whole session on the user's behalf.
       throw error;
     }
   })();
@@ -774,18 +753,44 @@ export const authFetch = async (url, options = {}) => {
     });
   };
 
-  const token = await getAccessToken(); // null on web (harmless), real value on native (unchanged)
+  let token = await getAccessToken(); // null on web (harmless), real value on native (unchanged)
   let response = await attempt(token);
 
   if (response.status === 401) {
     try {
       const newToken = await refreshToken();
       if (newToken) {
-        response = await attempt(newToken);
+        token = newToken;
+        response = await attempt(token);
       }
     } catch {
       // Refresh failed (e.g. refresh token also expired) — fall through and
       // let the caller handle the still-401 response (e.g. prompt sign-in).
+    }
+  }
+
+  // Mirrors the axios `api` instance's own CSRF_INVALID retry above
+  // (ensureCsrfToken's cached csrfToken can go stale — e.g. another tab's
+  // sign-in/sign-out regenerating the cookie server-side) — authFetch never
+  // had this, so callers on this path (diagram save/load/delete/rename)
+  // surfaced a raw 403 error dialog instead of quietly refreshing the token
+  // and retrying once, the way every axios-based call already does.
+  // response.clone() is required here: the caller still needs to read this
+  // same response's body themselves (e.g. response.json()), and a Response
+  // body stream can only be consumed once.
+  if (Platform.OS === 'web' && response.status === 403) {
+    try {
+      const body = await response.clone().json();
+      if (body?.code === 'CSRF_INVALID') {
+        csrfToken = null;
+        const freshCsrf = await ensureCsrfToken();
+        if (freshCsrf) {
+          response = await attempt(token);
+        }
+      }
+    } catch {
+      // Body wasn't JSON, or couldn't be cloned — nothing to recover from;
+      // let the caller handle the original response as-is.
     }
   }
 
@@ -839,9 +844,9 @@ export const verifyToken = async () => {
     try {
       await refreshToken();
     } catch (_refreshError) {
-      // refreshToken() already clears tokens itself on a genuine 401/403
-      // rejection (an actually-dead session) and leaves them alone on a
-      // network/cold-start hiccup — nothing extra to do here either way.
+      // Tokens are never cleared here — see the matching comment on
+      // refreshToken() itself. A failed refresh just means this particular
+      // check couldn't confirm a live session; it doesn't end one.
       return { success: false };
     }
 
@@ -858,9 +863,6 @@ export const verifyToken = async () => {
       }
       return { success: false };
     } catch (retryError) {
-      if (retryError.response?.status === 401) {
-        await clearTokens();
-      }
       return { success: false };
     }
   }

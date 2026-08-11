@@ -30,18 +30,25 @@ export const ICONS = {
     </Svg>
   ),
 
-  Comment: ({ color = '#4a5568' }: { color?: string }) => (
-    <Svg width={22} height={22} viewBox="0 0 24 24" fill="none">
-      <Path d="M21 15C21 15.5304 20.7893 16.0391 20.4142 16.4142C20.0391 16.7893 19.5304 17 19 17H7L3 21V5C3 4.46957 3.21071 3.96086 3.58579 3.58579C3.96086 3.21071 4.46957 3 5 3H19C19.5304 3 20.0391 3.21071 20.4142 3.58579C20.7893 3.96086 21 4.46957 21 5V15Z" stroke={color} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" />
-    </Svg>
-  ),
-
   Connector: ({ color = '#4a5568' }: { color?: string }) => (
     <Svg width={22} height={22} viewBox="0 0 24 24" fill="none">
       <Circle cx="5" cy="6" r="2.5" stroke={color} strokeWidth={1.8} />
       <Circle cx="19" cy="18" r="2.5" stroke={color} strokeWidth={1.8} />
       <Path d="M7 8L10.5 10.8M13.5 13.2L17 16" stroke={color} strokeWidth={1.8} strokeLinecap="round" />
       <Circle cx="12" cy="12" r="1.6" fill={color} />
+    </Svg>
+  ),
+
+  // Rectangle with corner alignment brackets — the standard "position/size/
+  // arrange" convention (a transform/selection frame), matching the actual
+  // tab this opens: Position (X/Y), Size (W/H), and alignment controls.
+  Arrange: ({ color = '#4a5568' }: { color?: string }) => (
+    <Svg width={22} height={22} viewBox="0 0 24 24" fill="none">
+      <Rect x="7" y="7" width="10" height="10" rx="1" stroke={color} strokeWidth={1.8} />
+      <Path d="M3 7V3H7" stroke={color} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" />
+      <Path d="M21 7V3H17" stroke={color} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" />
+      <Path d="M3 17V21H7" stroke={color} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" />
+      <Path d="M21 17V21H17" stroke={color} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" />
     </Svg>
   ),
 

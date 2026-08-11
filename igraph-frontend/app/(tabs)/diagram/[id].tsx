@@ -2378,7 +2378,12 @@ const LearningFeedbackForm: React.FC<FeedbackFormProps> = ({ color, diagramType,
 
     setIsSubmitting(true);
     try {
-      const API_URL = API_BASE_URL || 'https://igraph-backend.onrender.com';
+      // No `|| 'https://...'` fallback here on purpose: API_BASE_URL is '' on
+      // a Vercel web deployment (same-origin, proxied through vercel.json —
+      // see that file's own comment), and '' is falsy, so a fallback here
+      // would silently send this request straight back to the cross-site
+      // URL the proxy exists to avoid.
+      const API_URL = API_BASE_URL;
       const response = await authService.authFetch(`${API_URL}/api/feedback`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

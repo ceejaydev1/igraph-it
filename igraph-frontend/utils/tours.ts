@@ -349,6 +349,28 @@ export function getCreateTourSteps({
         side: 'bottom',
       },
     },
+    // Desktop-only: the type tag and save status sit directly in the top
+    // bar there. Mobile tucks the type picker into the More menu instead
+    // (see #tour-create-moremenu-type below) and has no room to show save
+    // status in its own top bar at all — skipMissingElement (see THEME in
+    // onboardingTour.ts) quietly skips these two there rather than dangling
+    // on a missing element.
+    {
+      element: '#tour-create-type',
+      popover: {
+        title: 'Diagram type',
+        description: 'Shows what kind of diagram this is. Tap to change it — flowchart, ERD, sequence, and more.',
+        side: 'bottom',
+      },
+    },
+    {
+      element: '#tour-create-saved',
+      popover: {
+        title: 'Save status',
+        description: "Shows whether your work is only on this device or already backed up to the server.",
+        side: 'bottom',
+      },
+    },
     {
       element: '#tour-create-canvas',
       popover: {
@@ -399,7 +421,7 @@ export function getCreateTourSteps({
       },
     },
     {
-      element: '#tour-create-comment',
+      element: '#tour-create-arrange',
       popover: {
         title: 'Arrange',
         description: 'Align, arrange, and organize your shapes.',
@@ -439,14 +461,6 @@ export function getCreateTourSteps({
       },
     },
     ...printDownloadSteps,
-    {
-      element: '#tour-create-pages',
-      popover: {
-        title: 'Multiple pages',
-        description: 'Add extra pages to split a large diagram into sections.',
-        side: 'top',
-      },
-    },
     {
       element: '#tour-create-save',
       popover: {

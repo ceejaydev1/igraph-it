@@ -12,6 +12,7 @@ import {
   LayoutAnimation,
   UIManager,
   Animated,
+  RefreshControl,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Svg, Path, Circle } from 'react-native-svg';
@@ -400,6 +401,7 @@ export default function Home() {
   const [searchQuery, setSearchQuery] = useState('');
   const [activeTab, setActiveTab] = useState<TabType>('All');
   const [showContent, setShowContent] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   const inputRef = useRef<TextInput>(null);
   const router = useRouter();
   
@@ -442,6 +444,16 @@ export default function Home() {
 
   const handleSearchSubmit = useCallback(() => {
     Keyboard.dismiss();
+  }, []);
+
+  // DIAGRAMS below is a static, local reference-template list — there's no
+  // server data to re-fetch here. This still matches the swipe-to-refresh
+  // gesture users expect on this screen (consistent with My Diagrams and
+  // Account, which do have real data to reload), just as a brief pulse
+  // rather than pretending to sync something that doesn't exist.
+  const onRefresh = useCallback(() => {
+    setRefreshing(true);
+    setTimeout(() => setRefreshing(false), 600);
   }, []);
 
   const handleClearSearch = useCallback(() => {
@@ -566,6 +578,14 @@ export default function Home() {
         renderItem={renderItem}
         ListEmptyComponent={ListEmptyComponent}
         showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor="#4c6fff"
+            colors={['#4c6fff']}
+          />
+        }
         contentContainerStyle={[
           styles.scrollContent,
           {

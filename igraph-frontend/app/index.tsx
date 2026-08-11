@@ -21,10 +21,20 @@ export default function Index() {
           authService.verifyToken(),
           authService.getLastRoute(),
         ]);
-        setIsAuthenticated(result.success);
+        // A failed live check alone is NOT "signed out" — it's only ever a
+        // network hiccup, a cold-starting backend, or a momentary server
+        // error, none of which mean this session is actually gone. The only
+        // thing that should ever land someone back on signin is the user
+        // explicitly clicking Sign Out (which also clears the cached user —
+        // see logout() in authService.js), so a cached user surviving from a
+        // prior successful sign-in is what "still signed in" really means
+        // here, not this one live request succeeding.
+        const cached = result.success ? null : await authService.getCachedUser();
+        setIsAuthenticated(result.success || !!cached);
         setLastRoute(savedRoute);
       } catch (error) {
-        setIsAuthenticated(false);
+        const cached = await authService.getCachedUser();
+        setIsAuthenticated(!!cached);
       }
     };
 

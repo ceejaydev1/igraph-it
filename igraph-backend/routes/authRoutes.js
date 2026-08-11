@@ -20,7 +20,7 @@ const { issueCsrfToken } = require('../middleware/csrfMiddleware');
 // ENVIRONMENT
 
 const isLabMode = process.env.IS_LAB_MODE === 'true';
-const LAB_MAX   = 5000; // TEMP: raised for local stress-test run, reverting to 100 after
+const LAB_MAX   = 100;
 
 if (isLabMode && process.env.NODE_ENV === 'production') {
   console.error('[SECURITY] IS_LAB_MODE=true is set in a production environment. Ignoring lab mode.');
@@ -54,8 +54,20 @@ const ipKey = (prefix) => (req) => {
  * @param {number}  opts.ipMax         - Max requests per IP per window (prod)
  * @param {number}  opts.accountMax    - Max requests per account per window (prod)
  * @param {string}  opts.message       - Human-readable rate limit message
+ * @param {boolean} [opts.keyByAccount] - Default true. Set false for a route
+ *   whose body never carries a plain `email` (Google auth sends only an
+ *   idToken) — emailKey() silently falls back to IP keying when email is
+ *   missing (see its own comment), which turns "per-account" into a SECOND,
+ *   tighter cap shared across every account hitting that route from one IP,
+ *   not a per-account limit at all. That's what broke several different
+ *   classmates signing in with Google from the same lab network at once:
+ *   they were all unknowingly sharing one combined budget meant to protect
+ *   a single account from brute-forcing — a threat model Google auth
+ *   doesn't even have (there's no password to guess). false skips the
+ *   redundant/harmful account layer and keys everything (lab mode included)
+ *   by IP only, same as ipLimiter already does correctly on its own.
  */
-const buildLimiters = ({ prefix, windowMs, ipMax, accountMax, message }) => {
+const buildLimiters = ({ prefix, windowMs, ipMax, accountMax, message, keyByAccount = true }) => {
   const baseConfig = {
     windowMs,
     standardHeaders: true,
@@ -69,7 +81,7 @@ const buildLimiters = ({ prefix, windowMs, ipMax, accountMax, message }) => {
       rateLimit({
         ...baseConfig,
         max: LAB_MAX,
-        keyGenerator: emailKey(prefix),
+        keyGenerator: keyByAccount ? emailKey(prefix) : ipKey(prefix),
       }),
     ];
   }
@@ -83,6 +95,10 @@ const buildLimiters = ({ prefix, windowMs, ipMax, accountMax, message }) => {
       message: `${message} (IP blocked)`,
     },
   });
+
+  if (!keyByAccount) {
+    return [ipLimiter];
+  }
 
   const accountLimiter = rateLimit({
     ...baseConfig,
@@ -124,6 +140,20 @@ const authLimiters = buildLimiters({
   ipMax:      150,
   accountMax: 10,
   message:    'Too many attempts. Please try again later.',
+});
+
+// /google and /link-google specifically — same window/IP budget as
+// authLimiters (150/15min, already sized for a shared-NAT lab), but without
+// its account layer: see buildLimiters' keyByAccount doc comment for why
+// pairing it with those two routes was actively counterproductive rather
+// than just redundant.
+const googleAuthLimiters = buildLimiters({
+  prefix:      'google-auth',
+  windowMs:    15 * 60 * 1000,
+  ipMax:       150,
+  accountMax:  10, // unused when keyByAccount is false; kept for symmetry with authLimiters
+  message:     'Too many attempts. Please try again later.',
+  keyByAccount: false,
 });
 
 const resetPasswordLimiters = buildLimiters({
@@ -191,9 +221,9 @@ router.post('/verify-otp', ...otpVerifyLimiters, validateOTP,    authController.
 router.post('/resend-otp', ...otpLimiters,       validateEmail,  authController.resendOTP);
 
 // Authentication
-router.post('/signin',       ...authLimiters, validateSignin,     authController.signin);
-router.post('/google',       ...authLimiters, validateGoogleAuth, authController.googleAuth);
-router.post('/link-google',  ...authLimiters, validateLinkGoogle, authController.linkGoogleAccount);
+router.post('/signin',       ...authLimiters,       validateSignin,     authController.signin);
+router.post('/google',       ...googleAuthLimiters, validateGoogleAuth, authController.googleAuth);
+router.post('/link-google',  ...googleAuthLimiters, validateLinkGoogle, authController.linkGoogleAccount);
 
 // Password Management
 router.post('/forgot-password',  ...otpLimiters,           validateEmail,         authController.forgotPassword);

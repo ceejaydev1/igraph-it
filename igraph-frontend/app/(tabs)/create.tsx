@@ -43,6 +43,7 @@ import { useSave } from '../../contexts/SaveContext';
 import { useOnboardingTour } from '@/hooks/useOnboardingTour';
 import { CREATE_TOUR_ID, getCreateTourSteps } from '@/utils/tours';
 import { resolveTourWait } from '@/utils/onboardingTour';
+import API_BASE_URL from '@/constants/api';
 
 const UndoIcon = ({ color = '#4a5568', size = 20 }: { color?: string; size?: number }) => (
   <Svg width={size} height={size} viewBox="0 0 24 24" fill={color}>
@@ -381,7 +382,24 @@ export default function CreateScreen() {
   // openedAt is a one-off nonce savedDiagrams.tsx stamps onto every
   // "Continue" navigation (see confirmContinueDiagram there) — see
   // loadedOpenedAtRef below for why it exists.
-  const { diagramId, share: shareToken, openedAt } = useLocalSearchParams<{ diagramId?: string; share?: string; openedAt?: string }>();
+  const { diagramId: routerDiagramId, share: shareToken, openedAt } = useLocalSearchParams<{ diagramId?: string; share?: string; openedAt?: string }>();
+  // On web, a hard/full-page refresh of /create?diagramId=X can leave
+  // useLocalSearchParams() reporting diagramId as undefined even though the
+  // address bar still shows it — confirmed via the hydrate effect's own
+  // debug log always reading `diagramId: undefined` in that case, right as
+  // the router boots from scratch and its params state hasn't caught up to
+  // the real URL yet. window.location.search is the browser's own source of
+  // truth and isn't subject to that race, so it's the fallback here — native
+  // has no `window` and gets its params from the navigator instead, so it
+  // was never exposed to this. Without this, hydrate() silently took the
+  // "no diagramId" branch (resume whatever local draft happens to be
+  // pointed at) instead of fetching this specific diagram, which is what
+  // made an opened diagram look like it had vanished on refresh.
+  const diagramId = routerDiagramId || (
+    Platform.OS === 'web' && typeof window !== 'undefined'
+      ? new URLSearchParams(window.location.search).get('diagramId') ?? undefined
+      : undefined
+  );
   const { width } = useWindowDimensions();
   const isDesktop = width >= 768;
 
@@ -484,7 +502,7 @@ export default function CreateScreen() {
   // points + every edge's waypoints on the canvas while its sheet is open —
   // desktop can see these one cell at a time via hover, mobile can't.
   const [showConnectorsPanel, setShowConnectorsPanel] = useState(false);
-  const [activeTool, setActiveTool] = useState<'shapes' | 'text' | 'draw' | 'comment' | 'connectors'>('shapes');
+  const [activeTool, setActiveTool] = useState<'shapes' | 'text' | 'draw' | 'arrange' | 'connectors'>('shapes');
   const [activeUmlType, setActiveUmlType] = useState('Functional Decomposition Diagram');
 
   // ─── ✅ FIX: Use ref to store diagramXml without causing re-renders ───────
@@ -593,8 +611,6 @@ export default function CreateScreen() {
     { id: generatePageId(), name: 'Page 1', xml: '' }
   ]);
   const [activePageId, setActivePageId] = useState<string>(pages[0].id);
-  const [showPageModal, setShowPageModal] = useState(false);
-  const [newPageName, setNewPageName] = useState('');
   const [renamePageId, setRenamePageId] = useState<string | null>(null);
   const [renamePageName, setRenamePageName] = useState('');
 
@@ -784,7 +800,7 @@ export default function CreateScreen() {
     if (!diagramId) return;
     resyncInFlightRef.current = true;
     try {
-      const API_URL = process.env.EXPO_PUBLIC_API_URL || 'https://igraph-backend.onrender.com';
+      const API_URL = API_BASE_URL;
       const response = await authService.authFetch(`${API_URL}/api/diagrams/${diagramId}`);
       const result = await response.json();
       if (!result.success || !result.data) return;
@@ -999,8 +1015,8 @@ export default function CreateScreen() {
   // inside this screen's own container, so it ignores which screen React
   // Navigation actually has focused. Since this screen deliberately stays
   // mounted (frozen, not unmounted) when you navigate to another tab, any
-  // Modal left open here — the network-error dialog, print, or add-page —
-  // would otherwise keep showing on top of whatever screen you go to next.
+  // Modal left open here — the network-error dialog or print — would
+  // otherwise keep showing on top of whatever screen you go to next.
   // Dismiss them all as soon as this screen loses focus.
   useFocusEffect(
     useCallback(() => {
@@ -1014,7 +1030,6 @@ export default function CreateScreen() {
       return () => {
         setDialogState(null);
         setShowPrintModal(false);
-        setShowPageModal(false);
         // The local autosave tick only runs every 5s. Switching tabs faster
         // than that (very easy to do) previously lost whatever was just
         // drawn, because this screen can end up rebuilt from scratch on
@@ -1222,6 +1237,32 @@ export default function CreateScreen() {
     }
   };
 
+  // Last resort when hydrate()'s server fetch for a specific diagramId comes
+  // back empty/failed/offline: check this device's own local draft for that
+  // same id before giving up with an error toast and a blank canvas. A
+  // diagram that's only ever made it to "Saved on device only" (syncStatus
+  // 'local'/'offline' — the background sync hasn't confirmed it server-side
+  // yet) genuinely doesn't exist there to fetch, so a hard refresh — which
+  // re-requests this same diagramId from the server — used to read as the
+  // diagram having vanished, even though its content was sitting right here
+  // the whole time. Returns whether it actually found and applied something.
+  const restoreFromLocalDraft = async (id: string): Promise<boolean> => {
+    try {
+      const uid = await authService.getCurrentUserId();
+      if (!uid) return false;
+      const contentRaw = await AsyncStorage.getItem(draftKey(uid, id));
+      if (!contentRaw) return false;
+      applyLoadedContent(JSON.parse(contentRaw));
+      setMyAccessLevel('owner');
+      setHasPendingAccessRequest(false);
+      setCurrentDiagramId(id);
+      return true;
+    } catch (e) {
+      console.warn('Could not restore local draft as a fallback:', e);
+      return false;
+    }
+  };
+
   // Loads a specific saved diagram when arriving via "Continue" from Saved
   // Diagrams; otherwise resumes this account's last local draft so a shape
   // survives a tab switch (instance never unmounts, see Navbar's create-only
@@ -1285,6 +1326,24 @@ export default function CreateScreen() {
       if (diagramId && (diagramId !== loadedDiagramIdRef.current || openedAt !== loadedOpenedAtRef.current)) {
         loadedDiagramIdRef.current = diagramId;
         loadedOpenedAtRef.current = openedAt || null;
+        // `cancelled` (below) flips true on EVERY cleanup — including a
+        // harmless second invocation of this same effect for the exact same
+        // diagramId (e.g. authUserId resolving moments after mount re-runs
+        // it, well before this fetch's ~400-500ms round trip finishes). That
+        // second run's own guard above correctly no-ops (the refs already
+        // match), but its cleanup still cancels THIS still-in-flight call —
+        // so when the real fetch came back with the correct diagram content,
+        // it silently discarded it here instead of ever rendering it: the
+        // "diagram fetched successfully but the canvas stays blank" bug.
+        // Checking against the refs instead of the flag distinguishes "a
+        // harmless re-run for the same target" (refs still match — safe to
+        // proceed) from "a genuinely different diagram/open started since
+        // I began" (refs now point elsewhere — this result really is stale
+        // and must be discarded, same as `cancelled` originally intended).
+        const targetDiagramId = diagramId;
+        const targetOpenedAt = openedAt || null;
+        const isStale = () =>
+          loadedDiagramIdRef.current !== targetDiagramId || loadedOpenedAtRef.current !== targetOpenedAt;
         try {
           // savedDiagrams.tsx kicks this fetch off the moment its diagram
           // card is tapped, well before navigation lands here — reusing it
@@ -1297,11 +1356,11 @@ export default function CreateScreen() {
           if (prefetched) {
             result = await prefetched;
           } else {
-            const API_URL = process.env.EXPO_PUBLIC_API_URL || 'https://igraph-backend.onrender.com';
+            const API_URL = API_BASE_URL;
             const response = await authService.authFetch(`${API_URL}/api/diagrams/${diagramId}`);
             result = await response.json();
           }
-          if (cancelled) return;
+          if (isStale()) return;
           if (result.success && result.data) {
             const loaded = applyLoadedContent(result.data);
             setMyAccessLevel(result.data.accessLevel || 'owner');
@@ -1329,7 +1388,7 @@ export default function CreateScreen() {
             // via the local draft below — and without this, that draft/
             // pointer wouldn't exist yet, so the canvas would come back blank.
             const uid = await authService.getCurrentUserId();
-            if (uid && !cancelled) {
+            if (uid && !isStale()) {
               try {
                 await AsyncStorage.setItem(draftKey(uid, diagramId), JSON.stringify(loaded));
                 await AsyncStorage.setItem(activePointerKey(uid), JSON.stringify({ diagramId }));
@@ -1338,13 +1397,19 @@ export default function CreateScreen() {
               }
             }
           } else {
-            notify('Error', result.message || 'Could not load that diagram.');
+            const restored = await restoreFromLocalDraft(diagramId);
+            if (!isStale() && !restored) {
+              notify('Error', result.message || 'Could not load that diagram.');
+            }
           }
         } catch (e) {
           console.error('Failed to load diagram:', e);
-          notify('Error', 'Could not load that diagram. Please check your connection.');
+          const restored = await restoreFromLocalDraft(diagramId);
+          if (!isStale() && !restored) {
+            notify('Error', 'Could not load that diagram. Please check your connection.');
+          }
         } finally {
-          if (!cancelled) hasHydratedRef.current = true;
+          if (!isStale()) hasHydratedRef.current = true;
         }
         return;
       }
@@ -1546,38 +1611,6 @@ export default function CreateScreen() {
         isHydratingRef.current = false;
       }
     }
-
-    setTimeout(focusGraph, 100);
-  };
-
-  const addNewPage = () => {
-    const pageName = newPageName.trim() || `Page ${pages.length + 1}`;
-    const newPage: Page = {
-      id: generatePageId(),
-      name: pageName,
-      xml: '',
-    };
-
-    if (activePageId && diagramXml) {
-      pageXmlCache.current.set(activePageId, diagramXml);
-    }
-
-    setPages([...pages, newPage]);
-    setActivePageId(newPage.id);
-    setDiagramXml('');
-    if (graphInstance) {
-      try {
-        const model = graphInstance.getDataModel ? graphInstance.getDataModel() : graphInstance.model;
-        if (model) {
-          model.clear();
-          graphInstance.clearSelection();
-        }
-      } catch (e) {
-        console.error('Error clearing graph for new page:', e);
-      }
-    }
-    setNewPageName('');
-    setShowPageModal(false);
 
     setTimeout(focusGraph, 100);
   };
@@ -2494,7 +2527,7 @@ export default function CreateScreen() {
         activePageId: activePageId
       };
 
-      const API_URL = process.env.EXPO_PUBLIC_API_URL || 'https://igraph-backend.onrender.com';
+      const API_URL = API_BASE_URL;
       const url = `${API_URL}/api/diagrams/save`;
       
       console.log(`📤 Sending POST to: ${url}`);
@@ -2680,7 +2713,7 @@ export default function CreateScreen() {
           activePageId,
         };
 
-        const API_URL = process.env.EXPO_PUBLIC_API_URL || 'https://igraph-backend.onrender.com';
+        const API_URL = API_BASE_URL;
         const response = await authService.authFetch(`${API_URL}/api/diagrams/save`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -3025,10 +3058,10 @@ export default function CreateScreen() {
     }
   };
 
-  // Text/Draw/Comment each open the Properties sheet on a specific tab.
+  // Text/Draw/Arrange each open the Properties sheet on a specific tab.
   // Tapping the one that's already active closes it again (standard toggle-
   // button behavior); tapping a different one jumps straight to its tab.
-  const openMobileProperties = (tool: 'text' | 'draw' | 'comment', tab: 'text' | 'style' | 'arrange') => {
+  const openMobileProperties = (tool: 'text' | 'draw' | 'arrange', tab: 'text' | 'style' | 'arrange') => {
     if (showMobileProperties && activeTool === tool) {
       setShowMobileProperties(false);
       setTimeout(focusGraph, 100);
@@ -3370,14 +3403,14 @@ export default function CreateScreen() {
                 </TouchableOpacity>
                 <TouchableOpacity
                   // @ts-ignore - nativeID renders as a DOM id on web (react-native-web); missing from TouchableOpacityProps' types
-                  nativeID="tour-create-comment"
+                  nativeID="tour-create-arrange"
                   style={[
                     styles.mobileBottomToolBtn,
-                    showMobileProperties && activeTool === 'comment' && styles.mobileBottomToolBtnActive,
+                    showMobileProperties && activeTool === 'arrange' && styles.mobileBottomToolBtnActive,
                   ]}
-                  onPress={() => openMobileProperties('comment', 'arrange')}
+                  onPress={() => openMobileProperties('arrange', 'arrange')}
                 >
-                  <ICONS.Comment color={showMobileProperties && activeTool === 'comment' ? '#4c6fff' : '#64748b'} />
+                  <ICONS.Arrange color={showMobileProperties && activeTool === 'arrange' ? '#4c6fff' : '#64748b'} />
                 </TouchableOpacity>
                 <TouchableOpacity
                   // @ts-ignore - nativeID renders as a DOM id on web (react-native-web); missing from TouchableOpacityProps' types
@@ -3606,6 +3639,8 @@ export default function CreateScreen() {
               maxLength={50}
             />
             <TouchableOpacity
+              // @ts-ignore - nativeID renders as a DOM id on web (react-native-web); missing from TouchableOpacityProps' types
+              nativeID="tour-create-type"
               style={styles.typeChipBtn}
               onPress={() => setShowTypeModal(true)}
               activeOpacity={0.7}
@@ -3618,7 +3653,9 @@ export default function CreateScreen() {
                 <Text style={styles.accessBadgeText}>{ACCESS_BADGE_LABEL[myAccessLevel]}</Text>
               </View>
             )}
-            <AutosaveIndicator status={syncStatus} />
+            <View nativeID="tour-create-saved">
+              <AutosaveIndicator status={syncStatus} />
+            </View>
           </View>
           <View style={styles.navbarRight}>
             {/* ─── PRESENCE (who else has this diagram open) ─────────────────── */}
@@ -3734,6 +3771,14 @@ export default function CreateScreen() {
               onZoomChange={setZoomLevel}
               onSelectionChange={handleCanvasSelectionChange}
               umlType={activeUmlType}
+              // Width of styles.iconRail (always) plus ShapesPanel (only
+              // while open) — both float on top of the canvas via
+              // `position: absolute` rather than sharing space with it, so
+              // DiagramCanvas has no other way to know part of its own
+              // container is covered. Keep the 36/280 here in sync with
+              // iconRail's width and shapesPanelWrapper's `left` below, and
+              // ShapesPanel's own width, respectively.
+              leftObstruction={canEditDiagram ? 36 + (isPanelVisible ? 280 : 0) : 0}
             />
 
 
@@ -3809,43 +3854,42 @@ export default function CreateScreen() {
         )}
 
         <View style={styles.bottomBar}>
-          <View nativeID="tour-create-pages" style={styles.pageTabsRow}>
-            {Platform.OS === 'web' ? (
-              <div
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  height: '100%',
-                  overflowX: 'auto',
-                  maxWidth: '300px',
-                  gap: '2px',
-                }}
-              >
-                {pages.map((page) => (
-                  <PageTab key={page.id} page={page} isActive={activePageId === page.id} />
-                ))}
-              </div>
-            ) : (
-              <ScrollView
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                style={styles.pageTabsScroll}
-                contentContainerStyle={styles.pageTabsContent}
-              >
-                {pages.map((page) => (
-                  <PageTab key={page.id} page={page} isActive={activePageId === page.id} />
-                ))}
-              </ScrollView>
-            )}
-
-            <TouchableOpacity
-              style={styles.pageTabAdd}
-              onPress={() => setShowPageModal(true)}
-              activeOpacity={0.7}
-            >
-              <Text style={styles.pageTabAddText}>+</Text>
-            </TouchableOpacity>
-          </View>
+          {/* A lone "Page 1" tab with nothing to switch to and no way to add
+              another (that button was removed — see pageTabAdd's own history)
+              is dead UI for every new diagram. Only a diagram that already
+              had multiple pages from before that change still needs this row,
+              to switch between and delete them. */}
+          {pages.length > 1 && (
+            <View nativeID="tour-create-pages" style={styles.pageTabsRow}>
+              {Platform.OS === 'web' ? (
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    height: '100%',
+                    overflowX: 'auto',
+                    maxWidth: '300px',
+                    gap: '2px',
+                  }}
+                >
+                  {pages.map((page) => (
+                    <PageTab key={page.id} page={page} isActive={activePageId === page.id} />
+                  ))}
+                </div>
+              ) : (
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  style={styles.pageTabsScroll}
+                  contentContainerStyle={styles.pageTabsContent}
+                >
+                  {pages.map((page) => (
+                    <PageTab key={page.id} page={page} isActive={activePageId === page.id} />
+                  ))}
+                </ScrollView>
+              )}
+            </View>
+          )}
 
           <View nativeID="tour-create-zoom" style={styles.zoomRow}>
             <TouchableOpacity
@@ -3867,56 +3911,6 @@ export default function CreateScreen() {
             </TouchableOpacity>
           </View>
         </View>
-
-        <Modal
-          visible={showPageModal}
-          transparent={true}
-          animationType="fade"
-          onRequestClose={() => setShowPageModal(false)}
-        >
-          <Pressable
-            style={styles.modalOverlay}
-            onPress={() => setShowPageModal(false)}
-          >
-            <Pressable
-              style={styles.modalContent}
-              onPress={(e) => e.stopPropagation()}
-            >
-              <Text style={styles.modalTitle}>Add New Page</Text>
-              <Text style={styles.modalSubtitle}>Enter a name for the new page</Text>
-
-              <TextInput
-                style={styles.modalInput}
-                placeholder="Page name..."
-                placeholderTextColor="#94a3b8"
-                value={newPageName}
-                onChangeText={setNewPageName}
-                autoFocus
-                onSubmitEditing={addNewPage}
-                returnKeyType="done"
-              />
-
-              <View style={styles.modalButtons}>
-                <TouchableOpacity
-                  style={[styles.modalButton, styles.modalCancelButton]}
-                  onPress={() => {
-                    setShowPageModal(false);
-                    setNewPageName('');
-                    setTimeout(focusGraph, 100);
-                  }}
-                >
-                  <Text style={styles.modalCancelText}>Cancel</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[styles.modalButton, styles.modalCreateButton]}
-                  onPress={addNewPage}
-                >
-                  <Text style={styles.modalCreateText}>Create Page</Text>
-                </TouchableOpacity>
-              </View>
-            </Pressable>
-          </Pressable>
-        </Modal>
 
         {showDownloadDropdown && (
           <>
@@ -4767,23 +4761,18 @@ const styles = StyleSheet.create({
     padding: 2,
     marginLeft: 4,
   },
-  pageTabAdd: {
-    width: 24,
-    height: 24,
-    borderRadius: 6,
-    backgroundColor: '#f1f5f9',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  pageTabAddText: {
-    fontSize: 16,
-    color: '#64748b',
-    lineHeight: 20,
-  },
   zoomRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
+    // Was relying on bottomBar's justifyContent: space-between to push this
+    // to the right against pageTabsRow — worked fine as long as that row was
+    // always rendered, but with it now conditionally hidden for a single-
+    // page diagram, zoomRow became bottomBar's only child and space-between
+    // has nothing left to push it away from, so it fell back to the left.
+    // marginLeft: 'auto' pins it to the right on its own, regardless of
+    // whether pageTabsRow is present.
+    marginLeft: 'auto',
   },
   zoomBtn: {
     width: 24,
