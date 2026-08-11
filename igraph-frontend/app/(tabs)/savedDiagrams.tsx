@@ -22,6 +22,8 @@ import { Svg, Path, Rect, Circle } from 'react-native-svg';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as authService from '../../services/authService';
 import API_BASE_URL from '../../constants/api';
+import { usePullToRefreshWeb } from '../../hooks/usePullToRefreshWeb';
+import { PullToRefreshIndicator } from '../../components/PullToRefreshIndicator';
 
 // ============================================================================
 // COLORS
@@ -749,6 +751,10 @@ export default function SavedDiagrams() {
     setRefreshing(false);
   }, []);
 
+  // <RefreshControl> is a no-op on web (see the hook's own comment) — this
+  // drives the same onRefresh via a hand-rolled swipe-down gesture there.
+  const pullToRefreshWeb = usePullToRefreshWeb(onRefresh);
+
   const showToast = (message: string, type: 'success' | 'error' = 'success') => {
     setToast({ message, type });
   };
@@ -1086,7 +1092,13 @@ export default function SavedDiagrams() {
             colors={[COLORS.primary]}
           />
         }
+        {...pullToRefreshWeb.scrollHandlers}
       >
+        <PullToRefreshIndicator
+          pullDistance={pullToRefreshWeb.pullDistance}
+          refreshing={pullToRefreshWeb.refreshing}
+          tintColor={COLORS.primary}
+        />
         {savedDiagrams.length === 0 ? (
           // Empty State
           <View style={styles.emptyState}>

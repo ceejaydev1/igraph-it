@@ -18,7 +18,9 @@ import { useRouter } from 'expo-router';
 import { Svg, Path, Circle } from 'react-native-svg';
 import { DIAGRAM_ICON_MAP, GenericDiagramGlyph } from '../../constants/diagramTypeIcons';
 import { useOnboardingTour } from '../../hooks/useOnboardingTour';
+import { usePullToRefreshWeb } from '../../hooks/usePullToRefreshWeb';
 import { HOME_TOUR_ID, getHomeTourSteps } from '../../utils/tours';
+import { PullToRefreshIndicator } from '../../components/PullToRefreshIndicator';
 
 // Enable LayoutAnimation on Android (safe check)
 if (Platform.OS === 'android') {
@@ -456,6 +458,10 @@ export default function Home() {
     setTimeout(() => setRefreshing(false), 600);
   }, []);
 
+  // <RefreshControl> is a no-op on web (see the hook's own comment) — this
+  // drives the same onRefresh via a hand-rolled swipe-down gesture there.
+  const pullToRefreshWeb = usePullToRefreshWeb(onRefresh);
+
   const handleClearSearch = useCallback(() => {
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
     setSearchQuery('');
@@ -584,6 +590,14 @@ export default function Home() {
             onRefresh={onRefresh}
             tintColor="#4c6fff"
             colors={['#4c6fff']}
+          />
+        }
+        {...pullToRefreshWeb.scrollHandlers}
+        ListHeaderComponent={
+          <PullToRefreshIndicator
+            pullDistance={pullToRefreshWeb.pullDistance}
+            refreshing={pullToRefreshWeb.refreshing}
+            tintColor="#4c6fff"
           />
         }
         contentContainerStyle={[

@@ -28,7 +28,9 @@ import { getAuth, signOut as firebaseSignOut, GoogleAuthProvider, signInWithPopu
 import * as authService from '../../services/authService';
 import { useSave } from '../../contexts/SaveContext';
 import { useOnboardingTour } from '../../hooks/useOnboardingTour';
+import { usePullToRefreshWeb } from '../../hooks/usePullToRefreshWeb';
 import { ACCOUNT_TOUR_ID, getAccountTourSteps } from '../../utils/tours';
+import { PullToRefreshIndicator } from '../../components/PullToRefreshIndicator';
 
 // authService.logout() only clears iGraph IT's own tokens/session — it can't
 // touch Google's own browser session, but it should at least drop Firebase's
@@ -1343,6 +1345,10 @@ export default function UserAccount() {
     setRefreshing(false);
   }, []);
 
+  // <RefreshControl> is a no-op on web (see the hook's own comment) — this
+  // drives the same onRefresh via a hand-rolled swipe-down gesture there.
+  const pullToRefreshWeb = usePullToRefreshWeb(onRefresh);
+
   // LOAD USER DATA
 
   const loadUserData = async () => {
@@ -1552,7 +1558,13 @@ export default function UserAccount() {
           refreshControl={
             <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={COLORS.primary} colors={[COLORS.primary]} />
           }
+          {...pullToRefreshWeb.scrollHandlers}
         >
+          <PullToRefreshIndicator
+            pullDistance={pullToRefreshWeb.pullDistance}
+            refreshing={pullToRefreshWeb.refreshing}
+            tintColor={COLORS.primary}
+          />
           {/* Profile Card */}
           <View nativeID="tour-account-profile" style={[styles.profileCard, { marginBottom: SPACING.xxxl }]}>
             <View style={styles.profileBanner}>
