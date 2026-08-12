@@ -22,6 +22,7 @@ import {
 import { useRouter } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
 import { Svg, Path, Circle, Rect } from 'react-native-svg';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { initializeApp, getApps, FirebaseApp } from 'firebase/app';
 import { getAuth, signOut as firebaseSignOut, GoogleAuthProvider, signInWithPopup, Auth } from 'firebase/auth';
@@ -70,6 +71,12 @@ const COLORS = {
   warning: '#f59e0b',
   warningLight: '#fef3c7',
   danger: '#ef4444',
+  // danger (#ef4444) is ~3.8:1 against white — under WCAG AA's 4.5:1 floor
+  // for text this size/weight. Fine as a button fill (paired with white
+  // text) or an icon on dangerLight's pale circle, but too washed out for
+  // red text/icons read directly against a white card. dangerText (Tailwind
+  // red-600, ~4.8:1) is for exactly that pairing — see signOutText below.
+  dangerText: '#dc2626',
   dangerLight: '#fef2f2',
   gray50: '#f8fafc',
   gray100: '#f1f5f9',
@@ -151,6 +158,18 @@ const getAvatarColor = (email: string) => {
   return AVATAR_COLORS[Math.abs(hash) % AVATAR_COLORS.length];
 };
 
+// Darkens a hex color by `amount` (0-1) toward black — used to build the
+// profile banner's gradient end-point from the user's own avatar color
+// instead of a second, unrelated fixed color, so the banner reads as "this
+// person's" rather than a generic app-wide blue block.
+const darkenHex = (hex: string, amount: number) => {
+  const num = parseInt(hex.replace('#', ''), 16);
+  const r = Math.max(0, Math.round(((num >> 16) & 0xff) * (1 - amount)));
+  const g = Math.max(0, Math.round(((num >> 8) & 0xff) * (1 - amount)));
+  const b = Math.max(0, Math.round((num & 0xff) * (1 - amount)));
+  return `#${((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1)}`;
+};
+
 const getInitialsFromName = (name: string, fallbackEmail?: string) => {
   const source = name?.trim() ? name.trim() : fallbackEmail?.split('@')[0] || '';
   if (!source) return 'U';
@@ -193,6 +212,26 @@ const DotGrid = React.memo(() => {
     </View>
   );
 });
+
+// Small "node + connector" motif for the profile banner — the same visual
+// language the app already uses for its diagrams (and its signin/signup
+// illustrations), scaled down into a quiet corner watermark rather than a
+// generic decorative gradient/blob unrelated to what this app actually is.
+const ProfileBannerAccent = React.memo(() => (
+  <Svg
+    width={140}
+    height={100}
+    viewBox="0 0 140 100"
+    style={styles.profileBannerAccent}
+    pointerEvents="none"
+  >
+    <Path d="M58 78 L92 50" stroke="#ffffff" strokeWidth={1.5} opacity={0.22} />
+    <Path d="M92 50 L118 66" stroke="#ffffff" strokeWidth={1.5} opacity={0.22} />
+    <Rect x={38} y={68} width={40} height={22} rx={6} fill="#ffffff" opacity={0.14} />
+    <Circle cx={92} cy={50} r={7} fill="#ffffff" opacity={0.18} />
+    <Circle cx={118} cy={66} r={5} stroke="#ffffff" strokeWidth={1.5} fill="none" opacity={0.22} />
+  </Svg>
+));
 
 // ICONS
 
@@ -276,10 +315,10 @@ const CheckCircleIcon = () => (
   </Svg>
 );
 
-const AlertCircleIcon = () => (
-  <Svg width={16} height={16} viewBox="0 0 24 24" fill="none">
-    <Circle cx="12" cy="12" r="10" stroke="#ffffff" strokeWidth={2} />
-    <Path d="M12 8v5M12 16h.01" stroke="#ffffff" strokeWidth={2} strokeLinecap="round" />
+const AlertCircleIcon = ({ color = '#ffffff', size = 16 }: { color?: string; size?: number }) => (
+  <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+    <Circle cx="12" cy="12" r="10" stroke={color} strokeWidth={2} />
+    <Path d="M12 8v5M12 16h.01" stroke={color} strokeWidth={2} strokeLinecap="round" />
   </Svg>
 );
 
@@ -923,10 +962,16 @@ const SetPasswordModal = ({
   visible,
   onClose,
   onSuccess,
+  currentEmail,
+  verifiedToken,
+  onVerified,
 }: {
   visible: boolean;
   onClose: () => void;
   onSuccess: () => void;
+  currentEmail: string;
+  verifiedToken: string | null;
+  onVerified: (token: string | null) => void;
 }) => {
   const { width: windowWidth, height: windowHeight } = useWindowDimensions();
   const isDesktop = windowWidth >= 1024;
@@ -934,26 +979,51 @@ const SetPasswordModal = ({
   const modalWidth = isDesktop ? 460 : isMobile ? windowWidth - 32 : 420;
   const maxModalHeight = Math.min(windowHeight * 0.85, 640);
 
-  const [step, setStep] = useState<'verify' | 'password'>('verify');
+  const [step, setStep] = useState<'verify' | 'password'>(verifiedToken ? 'password' : 'verify');
   const [verifying, setVerifying] = useState(false);
-  const [verifiedIdToken, setVerifiedIdToken] = useState<string | null>(null);
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  // Popup instead of inline text for this one specific error — picking the
+  // wrong account in the Google picker is easy to miss as a small red line
+  // under a button that's already gone from the screen; a popup makes sure
+  // it's actually seen.
+  const [wrongAccountEmail, setWrongAccountEmail] = useState<string | null>(null);
+
+  // This modal's own component instance never unmounts between opens (only
+  // its `visible` prop toggles the native Modal) — this is what lands the
+  // user straight on the password step on a reopen when a verification from
+  // earlier in this visit is still cached (verifiedToken lives in the
+  // parent for exactly that reason; see its own comment there).
+  useEffect(() => {
+    if (visible) {
+      setStep(verifiedToken ? 'password' : 'verify');
+      setError('');
+    }
+  }, [visible]);
 
   const handleClose = () => {
     if (loading || verifying) return;
-    setStep('verify');
-    setVerifiedIdToken(null);
     setNewPassword('');
     setConfirmPassword('');
     setShowNewPassword(false);
     setShowConfirmPassword(false);
     setError('');
+    setWrongAccountEmail(null);
     onClose();
+  };
+
+  // Distinct from handleClose — this steps back within the same modal
+  // session instead of abandoning it, so a verification the user already
+  // completed moments ago isn't thrown away just for glancing back at the
+  // verify screen (e.g. to redo it with a different Google account).
+  const handleBack = () => {
+    if (loading) return;
+    setStep('verify');
+    setError('');
   };
 
   const handleVerifyGoogle = async () => {
@@ -970,8 +1040,18 @@ const SetPasswordModal = ({
       provider.addScope('profile');
       provider.setCustomParameters({ prompt: 'login' });
       const result = await signInWithPopup(firebaseAuth, provider);
+      // The backend also enforces this (decodedToken.uid must match the
+      // signed-in user), but that check only fires later, after the user
+      // has already typed and submitted a new password — surfacing it here
+      // instead means picking the wrong account in the Google picker fails
+      // immediately, with a clear reason, not several steps later.
+      const pickedEmail = result.user.email?.toLowerCase();
+      if (pickedEmail && currentEmail && pickedEmail !== currentEmail.toLowerCase()) {
+        setWrongAccountEmail(result.user.email || pickedEmail);
+        return;
+      }
       const idToken = await result.user.getIdToken();
-      setVerifiedIdToken(idToken);
+      onVerified(idToken);
       setStep('password');
     } catch (err: any) {
       if (err.code !== 'auth/popup-closed-by-user' && err.code !== 'auth/cancelled-popup-request') {
@@ -994,7 +1074,7 @@ const SetPasswordModal = ({
       setError('Passwords do not match.');
       return;
     }
-    if (!verifiedIdToken) {
+    if (!verifiedToken) {
       setError('Your Google verification expired — please verify again.');
       setStep('verify');
       return;
@@ -1002,8 +1082,9 @@ const SetPasswordModal = ({
 
     setLoading(true);
     try {
-      const result = await authService.setPassword(verifiedIdToken, newPassword);
+      const result = await authService.setPassword(verifiedToken, newPassword);
       if (result.success) {
+        onVerified(null); // password is set now — nothing left to reuse this for
         handleClose();
         onSuccess();
       } else {
@@ -1017,6 +1098,7 @@ const SetPasswordModal = ({
   };
 
   return (
+    <>
     <Modal animationType="fade" transparent visible={visible} onRequestClose={handleClose}>
       <Pressable style={styles.modalOverlay} onPress={handleClose}>
         <KeyboardAvoidingView
@@ -1051,24 +1133,63 @@ const SetPasswordModal = ({
           <ScrollView showsVerticalScrollIndicator={false} bounces={false}>
           {step === 'verify' ? (
             <View style={styles.setPasswordVerifyStep}>
-              <Text style={styles.setPasswordVerifyText}>
-                You signed in with Google. To also sign in with your email and a password, confirm your Google account first.
-              </Text>
-              {error ? <Text style={[styles.modalError, { fontSize: isMobile ? 12 : 14, marginTop: 0 }]}>{error}</Text> : null}
-              <TouchableOpacity
-                style={[styles.googleVerifyButton, verifying && styles.modalButtonDisabled]}
-                onPress={handleVerifyGoogle}
-                disabled={verifying}
-                accessibilityRole="button"
-                accessibilityLabel="Continue with Google"
-              >
-                {verifying ? <ActivityIndicator color={COLORS.gray700} size="small" /> : (
-                  <>
-                    <GoogleIcon />
-                    <Text style={styles.googleVerifyButtonText}>Continue with Google</Text>
-                  </>
-                )}
-              </TouchableOpacity>
+              {verifiedToken ? (
+                // Landed back here via the password step's Back button, not
+                // a fresh open — the Google verification from moments ago is
+                // still valid, so this offers to reuse it instead of forcing
+                // it to be redone. "Use a different account" is here for the
+                // one real reason to come back: picking the wrong account.
+                <>
+                  <View style={styles.setPasswordVerifiedRow}>
+                    <View style={styles.setPasswordVerifiedCheck}>
+                      <CheckCircleIcon />
+                    </View>
+                    <Text style={styles.setPasswordVerifyText}>
+                      Google account confirmed as {currentEmail}.
+                    </Text>
+                  </View>
+                  {error ? <Text style={[styles.modalError, { fontSize: isMobile ? 12 : 14, marginTop: 0 }]}>{error}</Text> : null}
+                  <TouchableOpacity
+                    style={styles.modalPrimaryButton}
+                    onPress={() => setStep('password')}
+                    accessibilityRole="button"
+                    accessibilityLabel="Continue"
+                  >
+                    <Text style={[styles.modalButtonText, { fontSize: isMobile ? 15 : 16 }]}>Continue</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    onPress={handleVerifyGoogle}
+                    disabled={verifying}
+                    accessibilityRole="button"
+                    accessibilityLabel="Use a different Google account"
+                  >
+                    <Text style={styles.setPasswordSwitchAccountText}>
+                      {verifying ? 'Verifying…' : 'Use a different Google account'}
+                    </Text>
+                  </TouchableOpacity>
+                </>
+              ) : (
+                <>
+                  <Text style={styles.setPasswordVerifyText}>
+                    You signed in with Google. To also sign in with your email and a password, confirm your Google account first.
+                  </Text>
+                  {error ? <Text style={[styles.modalError, { fontSize: isMobile ? 12 : 14, marginTop: 0 }]}>{error}</Text> : null}
+                  <TouchableOpacity
+                    style={[styles.googleVerifyButton, verifying && styles.modalButtonDisabled]}
+                    onPress={handleVerifyGoogle}
+                    disabled={verifying}
+                    accessibilityRole="button"
+                    accessibilityLabel="Continue with Google"
+                  >
+                    {verifying ? <ActivityIndicator color={COLORS.gray700} size="small" /> : (
+                      <>
+                        <GoogleIcon />
+                        <Text style={styles.googleVerifyButtonText}>Continue with Google</Text>
+                      </>
+                    )}
+                  </TouchableOpacity>
+                </>
+              )}
             </View>
           ) : (
             <>
@@ -1141,12 +1262,12 @@ const SetPasswordModal = ({
           <View style={styles.modalFooterRow}>
             <TouchableOpacity
               style={[styles.modalSecondaryButton, loading && styles.disabledTouchable]}
-              onPress={handleClose}
+              onPress={handleBack}
               disabled={loading}
               accessibilityRole="button"
-              accessibilityLabel="Cancel"
+              accessibilityLabel="Back"
             >
-              <Text style={styles.modalSecondaryButtonText}>Cancel</Text>
+              <Text style={styles.modalSecondaryButtonText}>Back</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={[styles.modalPrimaryButton, loading && styles.modalButtonDisabled]}
@@ -1166,6 +1287,33 @@ const SetPasswordModal = ({
         </KeyboardAvoidingView>
       </Pressable>
     </Modal>
+
+    <Modal animationType="fade" transparent visible={!!wrongAccountEmail} onRequestClose={() => setWrongAccountEmail(null)}>
+      <Pressable style={styles.modalOverlay} onPress={() => setWrongAccountEmail(null)}>
+        <Pressable style={[styles.signOutModalContainer, { width: isDesktop ? 400 : isMobile ? windowWidth - 32 : 380 }]}>
+          <View style={styles.signOutIconWrapper}>
+            <View style={[styles.signOutIconCircle, { width: isDesktop ? 72 : 64, height: isDesktop ? 72 : 64, backgroundColor: COLORS.dangerLight }]}>
+              <AlertCircleIcon color={COLORS.danger} size={28} />
+            </View>
+          </View>
+
+          <Text style={[styles.signOutModalTitle, { fontSize: isDesktop ? 20 : 18 }]}>Wrong Google Account</Text>
+          <Text style={[styles.signOutModalMessage, { fontSize: isMobile ? 14 : 16 }]}>
+            That's {wrongAccountEmail}, but you're signed in as {currentEmail}. Please pick your {currentEmail} Google account instead.
+          </Text>
+
+          <TouchableOpacity
+            style={[styles.modalPrimaryButton, { width: '100%', marginTop: SPACING.lg }]}
+            onPress={() => setWrongAccountEmail(null)}
+            accessibilityRole="button"
+            accessibilityLabel="OK"
+          >
+            <Text style={[styles.modalButtonText, { fontSize: isMobile ? 15 : 16 }]}>OK</Text>
+          </TouchableOpacity>
+        </Pressable>
+      </Pressable>
+    </Modal>
+    </>
   );
 };
 
@@ -1314,6 +1462,13 @@ export default function UserAccount() {
   const [showEditProfileModal, setShowEditProfileModal] = useState(false);
   const [showPasswordModal, setShowPasswordModal] = useState(false);
   const [showSetPasswordModal, setShowSetPasswordModal] = useState(false);
+  // Lives here, not inside SetPasswordModal, specifically so it survives
+  // the modal being closed and reopened — SetPasswordModal itself never
+  // unmounts (its `visible` prop just toggles the native Modal), but its
+  // own local state doesn't matter if a close handler resets it anyway.
+  // Verifying via Google is what should only need doing once per visit to
+  // this screen, not once per time the modal happens to be open.
+  const [googleVerifiedToken, setGoogleVerifiedToken] = useState<string | null>(null);
   const [showSignOutModal, setShowSignOutModal] = useState(false);
   const [signOutLoading, setSignOutLoading] = useState(false);
   const [toast, setToast] = useState({ visible: false, message: '', isError: false });
@@ -1567,10 +1722,18 @@ export default function UserAccount() {
           />
           {/* Profile Card */}
           <View nativeID="tour-account-profile" style={[styles.profileCard, { marginBottom: SPACING.xxxl }]}>
-            <View style={styles.profileBanner}>
+            <LinearGradient
+              colors={[avatarColor, darkenHex(avatarColor, 0.35)]}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={styles.profileBanner}
+            >
+              <ProfileBannerAccent />
               <View style={styles.profileInfo}>
-                <View style={[styles.avatar, styles.avatarPlaceholder, { backgroundColor: avatarColor }]}>
-                  <Text style={styles.avatarInitials}>{avatarInitials}</Text>
+                <View style={styles.avatarRing}>
+                  <View style={[styles.avatar, styles.avatarPlaceholder, { backgroundColor: avatarColor }]}>
+                    <Text style={styles.avatarInitials}>{avatarInitials}</Text>
+                  </View>
                 </View>
 
                 <View style={styles.userInfo}>
@@ -1582,7 +1745,7 @@ export default function UserAccount() {
                   </Text>
                 </View>
               </View>
-            </View>
+            </LinearGradient>
           </View>
 
           {/* Action Cards */}
@@ -1717,11 +1880,11 @@ export default function UserAccount() {
               accessibilityRole="button"
               accessibilityLabel="Sign out"
             >
-              <SignOutIcon color={COLORS.danger} />
+              <SignOutIcon color={COLORS.dangerText} />
               <View style={styles.actionContent}>
                 <Text style={[styles.actionTitle, styles.signOutText, { fontSize: isMobile ? 15 : 16 }]}>Sign Out</Text>
               </View>
-              <ChevronRight color={COLORS.danger} />
+              <ChevronRight color={COLORS.dangerText} />
             </Pressable>
           </View>
         </ScrollView>
@@ -1746,6 +1909,9 @@ export default function UserAccount() {
         visible={showSetPasswordModal}
         onClose={() => setShowSetPasswordModal(false)}
         onSuccess={handleSetPasswordSuccess}
+        currentEmail={userData.email}
+        verifiedToken={googleVerifiedToken}
+        onVerified={setGoogleVerifiedToken}
       />
 
       <SignOutModal
@@ -1772,8 +1938,22 @@ const styles = StyleSheet.create({
   skeletonContainer: { flex: 1, backgroundColor: COLORS.gray50 },
 
   profileCard: { borderRadius: RADIUS.xxl, overflow: 'hidden', ...SHADOWS.md },
-  profileBanner: { backgroundColor: COLORS.primary, minHeight: 120 },
+  // backgroundColor removed — the LinearGradient wrapping this style now
+  // provides it, built from the user's own avatar color (see avatarColor)
+  // instead of a fixed app-wide blue, so the banner reads as personal.
+  profileBanner: { minHeight: 120 },
+  profileBannerAccent: { position: 'absolute', right: 0, bottom: 0 },
   profileInfo: { flexDirection: 'row', alignItems: 'center', padding: SPACING.xxl, gap: SPACING.lg },
+  // A soft halo behind the avatar's own white ring — reads as a subtle glow
+  // instead of the avatar sitting flat against the gradient.
+  avatarRing: {
+    width: 92,
+    height: 92,
+    borderRadius: RADIUS.full,
+    backgroundColor: 'rgba(255,255,255,0.15)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
   avatar: { width: 80, height: 80, borderRadius: RADIUS.full, borderWidth: 3, borderColor: COLORS.white },
   avatarPlaceholder: { justifyContent: 'center', alignItems: 'center' },
   avatarInitials: { fontSize: 28, fontWeight: '700', color: COLORS.white },
@@ -1795,12 +1975,15 @@ const styles = StyleSheet.create({
   // action shouldn't sit in the same visual rhythm as the neutral
   // navigation rows above it (Profile/Saved Diagrams/Privacy/About Us),
   // even though color already marks it as different. Matches how iOS/
-  // Android system settings isolate Sign Out into its own group.
-  signOutCard: { borderWidth: 1, borderColor: COLORS.dangerLight, marginTop: SPACING.lg },
+  // Android system settings isolate Sign Out into its own group. No border
+  // here (dangerLight against a white card was ~1.02:1 — imperceptible);
+  // the red icon/text/chevron already carry the "this one's different"
+  // signal on their own.
+  signOutCard: { marginTop: SPACING.lg },
   actionContent: { flex: 1, marginLeft: SPACING.md },
   actionTitle: { ...TYPOGRAPHY.bodyBold, color: COLORS.gray900 },
   actionDescription: { ...TYPOGRAPHY.small, color: COLORS.gray500, marginTop: 2 },
-  signOutText: { color: COLORS.danger },
+  signOutText: { color: COLORS.dangerText },
 
   profileExpandableCard: { backgroundColor: COLORS.white, borderRadius: RADIUS.lg, overflow: 'hidden', ...SHADOWS.sm },
   profileExpandableHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: SPACING.lg },
@@ -1876,7 +2059,23 @@ const styles = StyleSheet.create({
   modalTitle: { ...TYPOGRAPHY.h3, color: COLORS.gray900 },
   modalClose: { padding: SPACING.xs, borderRadius: RADIUS.full },
   modalError: { ...TYPOGRAPHY.small, color: COLORS.danger, marginTop: SPACING.sm, paddingHorizontal: SPACING.xl },
-  modalButton: { backgroundColor: COLORS.primary, margin: SPACING.xl, paddingVertical: SPACING.lg, borderRadius: RADIUS.lg, alignItems: 'center' },
+  // Colored shadow matching the fill (not a generic black one) + a
+  // slightly darker border — same "lifted" treatment signin/signup's
+  // primary button already uses, brought here for consistency.
+  modalButton: {
+    backgroundColor: COLORS.primary,
+    margin: SPACING.xl,
+    paddingVertical: SPACING.lg,
+    borderRadius: RADIUS.lg,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: COLORS.primaryDark,
+    shadowColor: COLORS.primary,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.2,
+    shadowRadius: 12,
+    elevation: 6,
+  },
   modalButtonText: { ...TYPOGRAPHY.bodyBold, color: COLORS.white },
 
   signOutModalContainer: { backgroundColor: COLORS.white, borderRadius: RADIUS.xxl, padding: SPACING.xxl, alignItems: 'center', ...SHADOWS.lg },
@@ -1887,7 +2086,14 @@ const styles = StyleSheet.create({
   signOutModalButtons: { flexDirection: 'row', gap: SPACING.md, width: '100%' },
   signOutModalButton: { flex: 1, paddingVertical: SPACING.md, borderRadius: RADIUS.lg, alignItems: 'center', justifyContent: 'center', minHeight: 48 },
   signOutModalCancelButton: { backgroundColor: COLORS.gray100 },
-  signOutModalConfirmButton: { backgroundColor: COLORS.danger },
+  signOutModalConfirmButton: {
+    backgroundColor: COLORS.danger,
+    shadowColor: COLORS.danger,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.2,
+    shadowRadius: 12,
+    elevation: 6,
+  },
   signOutModalCancelText: { ...TYPOGRAPHY.bodyBold, color: COLORS.gray700 },
   signOutModalConfirmText: { ...TYPOGRAPHY.bodyBold, color: COLORS.white },
 
@@ -1967,7 +2173,23 @@ const styles = StyleSheet.create({
   },
   modalSecondaryButtonText: { ...TYPOGRAPHY.bodyBold, color: COLORS.gray700 },
   setPasswordVerifyStep: { paddingHorizontal: SPACING.xl, paddingVertical: SPACING.xl },
-  setPasswordVerifyText: { ...TYPOGRAPHY.body, color: COLORS.gray600, lineHeight: 21, marginBottom: SPACING.lg },
+  setPasswordVerifyText: { ...TYPOGRAPHY.body, color: COLORS.gray600, lineHeight: 21, marginBottom: SPACING.lg, flex: 1 },
+  setPasswordVerifiedRow: { flexDirection: 'row', alignItems: 'flex-start', gap: SPACING.sm },
+  setPasswordVerifiedCheck: {
+    width: 22,
+    height: 22,
+    borderRadius: RADIUS.full,
+    backgroundColor: COLORS.success,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginTop: 1,
+  },
+  setPasswordSwitchAccountText: {
+    ...TYPOGRAPHY.small,
+    color: COLORS.primary,
+    textAlign: 'center',
+    marginTop: SPACING.md,
+  },
   googleVerifyButton: {
     flexDirection: 'row',
     alignItems: 'center',

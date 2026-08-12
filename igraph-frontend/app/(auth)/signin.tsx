@@ -65,9 +65,12 @@ const getResponsiveLogoSize = (windowWidth: number, windowHeight: number): numbe
   if (Platform.OS === 'web') {
     if (windowWidth < 480) return 42;
     if (windowWidth < 768) return 48;
-    if (windowWidth < 1024) return 52;
-    if (windowWidth < 1440) return 56;
-    return 64;
+    // Capped here rather than continuing to scale up with viewport width —
+    // the card itself stops growing past maxWidth: 400 (see styles.cardOuter),
+    // so a logo that kept scaling with the window made it proportionally
+    // bigger against that fixed card the wider the screen got, instead of
+    // staying visually consistent with how it reads on mobile.
+    return 52;
   }
   if (Platform.OS === 'ios') return 44;
   if (Platform.OS === 'android') return 42;
@@ -1083,7 +1086,7 @@ export default function SignIn() {
 
               <View style={styles.divider}>
                 <View style={styles.line} />
-                <Text style={styles.orText}>OR</Text>
+                <Text style={styles.orText}>or</Text>
                 <View style={styles.line} />
               </View>
 

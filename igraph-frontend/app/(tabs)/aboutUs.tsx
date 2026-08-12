@@ -11,7 +11,7 @@ import {
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Svg, Path } from 'react-native-svg';
+import { Svg, Path, Circle } from 'react-native-svg';
 
 // COLORS
 
@@ -75,6 +75,39 @@ const BackIcon = () => (
   </Svg>
 );
 
+// A small chain of connected nodes — the same visual language the app uses
+// for its own diagrams — as a quiet visual anchor above the origin-story
+// text, instead of it opening straight into a wall of plain paragraphs.
+const AboutAccent = () => (
+  <Svg width={72} height={24} viewBox="0 0 72 24" style={styles.aboutAccent}>
+    <Path d="M8 12 H64" stroke={COLORS.primary} strokeWidth={1.5} opacity={0.35} />
+    <Circle cx={8} cy={12} r={4} fill={COLORS.primary} opacity={0.85} />
+    <Circle cx={36} cy={12} r={5} fill={COLORS.primary} />
+    <Circle cx={64} cy={12} r={4} fill={COLORS.primary} opacity={0.85} />
+  </Svg>
+);
+
+// A flowchart decision-diamond divider between the two paragraphs — draws
+// on the same SDLC/UML shape vocabulary this app is actually about, instead
+// of a generic tinted-box-with-colored-border "AI blockquote" treatment.
+const AboutDivider = () => (
+  <Svg width={56} height={16} viewBox="0 0 56 16" style={styles.aboutDivider}>
+    <Path d="M2 8 H21" stroke={COLORS.border} strokeWidth={1.2} strokeDasharray="3 3" />
+    <Path d="M35 8 H54" stroke={COLORS.border} strokeWidth={1.2} strokeDasharray="3 3" />
+    <Path d="M28 1.5 L34.5 8 L28 14.5 L21.5 8 Z" stroke={COLORS.primary} strokeWidth={1.4} fill={COLORS.primaryLight} />
+  </Svg>
+);
+
+// Generic "no profile photo" placeholder — same head-and-shoulders
+// silhouette-on-flat-gray look Facebook (and most social apps) fall back to
+// when an account has no photo, rather than this app inventing its own.
+const PersonSilhouetteIcon = () => (
+  <Svg width={40} height={40} viewBox="0 0 24 24" fill="none">
+    <Circle cx={12} cy={8.5} r={4} fill="#bec3c9" />
+    <Path d="M4 20.5c0-4.5 3.6-7 8-7s8 2.5 8 7" fill="#bec3c9" />
+  </Svg>
+);
+
 // MEMBER CARD COMPONENT
 
 const MemberCard = ({
@@ -111,10 +144,8 @@ const MemberCard = ({
             resizeMode="cover"
           />
         ) : (
-          <View style={[styles.memberAvatarPlaceholder, { backgroundColor: accentColor }]}>
-            <Text style={styles.memberInitials}>
-              {name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)}
-            </Text>
+          <View style={styles.memberAvatarPlaceholder}>
+            <PersonSilhouetteIcon />
           </View>
         )}
       </View>
@@ -128,12 +159,14 @@ const MemberCard = ({
 
 const AboutContent = () => (
   <View style={styles.tabContent}>
+    <AboutAccent />
     <Text style={styles.aboutText}>
       iGraph IT began as a school project built by a small team who wanted to get better at
       drawing SDLC and UML diagrams. It lets you build flowcharts, use case diagrams, class
       diagrams, and more in one place, without switching between separate tools to finish a
       single diagram.
     </Text>
+    <AboutDivider />
     <Text style={styles.aboutTextSecondary}>
       Diagramming was the part of our own coursework that never fully made sense from a
       textbook. It only clicked once we sat down and started drawing things out for ourselves.
@@ -386,19 +419,31 @@ const styles = StyleSheet.create({
   tabContent: {
     paddingVertical: SPACING.sm,
   },
+  aboutAccent: {
+    alignSelf: 'center',
+    marginBottom: SPACING.lg,
+  },
   aboutText: {
     fontSize: 17,
-    color: COLORS.textSecondary,
+    color: COLORS.textPrimary,
     lineHeight: 26,
-    marginBottom: SPACING.lg,
+    marginBottom: SPACING.xxl,
     fontWeight: '400',
     textAlign: 'center',
   },
+  aboutDivider: {
+    alignSelf: 'center',
+    marginBottom: SPACING.xxl,
+  },
+  // The reflective "why we built this" paragraph reads differently from the
+  // factual lead above it — italic and a touch muted, set off by the
+  // decision-diamond divider above rather than a boxed/bordered treatment.
   aboutTextSecondary: {
-    fontSize: 17,
+    fontSize: 16,
     color: COLORS.textSecondary,
-    lineHeight: 26,
+    lineHeight: 25,
     textAlign: 'center',
+    fontStyle: 'italic',
   },
   teamRowTop: {
     flexDirection: 'row',
@@ -445,14 +490,9 @@ const styles = StyleSheet.create({
   memberAvatarPlaceholder: {
     width: '100%',
     height: '100%',
+    backgroundColor: '#e4e6eb',
     justifyContent: 'center',
     alignItems: 'center',
-  },
-  memberInitials: {
-    fontSize: 28,
-    fontWeight: '700',
-    color: COLORS.surface,
-    letterSpacing: -0.5,
   },
   memberName: {
     fontSize: 15,

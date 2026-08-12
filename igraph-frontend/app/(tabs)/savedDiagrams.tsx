@@ -1273,11 +1273,20 @@ const styles = StyleSheet.create({
     lineHeight: 20,
     marginBottom: SPACING.xxl,
   },
+  // Colored shadow matching the fill + a slightly darker border — same
+  // "lifted" treatment signin/signup's primary button already uses.
   browseButton: {
     backgroundColor: COLORS.primary,
     paddingHorizontal: SPACING.xxl,
     paddingVertical: SPACING.md,
     borderRadius: RADIUS.md,
+    borderWidth: 1,
+    borderColor: COLORS.primaryDark,
+    shadowColor: COLORS.primary,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.2,
+    shadowRadius: 12,
+    elevation: 6,
   },
   browseButtonText: {
     color: COLORS.white,
