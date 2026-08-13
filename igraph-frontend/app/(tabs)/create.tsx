@@ -2398,6 +2398,30 @@ export default function CreateScreen() {
     }
   };
 
+  // Real OS-level notification (shows in the phone's notification shade,
+  // same as any native app) on top of the in-app toast above — only fires
+  // if permission was already granted; requests it lazily on the first
+  // successful export rather than on page load, since a permission prompt
+  // fired unprompted on load is exactly the pattern browsers auto-suppress
+  // ("this site has been blocked from asking again"). Native platforms and
+  // browsers without Notification support (older iOS Safari, etc.) just
+  // silently skip this — it's a nice-to-have, never something the actual
+  // download should depend on or be blocked by.
+  const notifyExportComplete = async (message: string) => {
+    if (Platform.OS !== 'web' || typeof window === 'undefined' || !('Notification' in window)) return;
+    try {
+      let permission = Notification.permission;
+      if (permission === 'default') {
+        permission = await Notification.requestPermission();
+      }
+      if (permission === 'granted') {
+        new Notification('iGraph IT', { body: message, icon: '/icon-192.png' });
+      }
+    } catch {
+      // Best-effort only — never surface this as an error to the user.
+    }
+  };
+
   const confirmDialog = (title: string, message: string, confirmText: string, onConfirm: () => void) => {
     if (Platform.OS === 'web') {
       setDialogState({ title, message, confirmText, onConfirm });
@@ -2873,6 +2897,7 @@ export default function CreateScreen() {
         }
         downloadFile(svgContent, `${name}.svg`, 'image/svg+xml;charset=utf-8');
         notify('Success', 'SVG diagram downloaded successfully!');
+        notifyExportComplete(`"${name}.svg" downloaded successfully.`);
         setIsDownloading(false);
         return;
       }
@@ -2893,6 +2918,7 @@ export default function CreateScreen() {
         pdf.addImage(canvas.toDataURL('image/png'), 'PNG', 0, 0, canvas.width, canvas.height);
         downloadFile(pdf.output('blob'), `${name}.pdf`, 'application/pdf');
         notify('Success', 'PDF diagram downloaded successfully!');
+        notifyExportComplete(`"${name}.pdf" downloaded successfully.`);
         setIsDownloading(false);
         return;
       }
@@ -2904,6 +2930,7 @@ export default function CreateScreen() {
         if (blob) {
           downloadFile(blob, `${name}.${extension}`, mimeType);
           notify('Success', `${format.toUpperCase()} diagram downloaded successfully!`);
+          notifyExportComplete(`"${name}.${extension}" downloaded successfully.`);
         } else {
           console.error('toBlob returned null', { width: canvas.width, height: canvas.height });
           notify('Error', 'Failed to generate image. The diagram may be too large to export from this device.');
