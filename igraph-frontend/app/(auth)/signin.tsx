@@ -629,7 +629,7 @@ export default function SignIn() {
         if (result) {
           setLoading(true);
           const idToken = await result.user.getIdToken();
-          const apiResult = await authService.googleAuth(idToken);
+          const apiResult = await authService.googleAuth(idToken, null, rememberMe);
           if (apiResult.success) {
             if (apiResult.data?.isNewUser) markNewUserForOnboarding();
             setShowSuccessAnimation(true);
@@ -768,7 +768,7 @@ export default function SignIn() {
       // separate lexical scope — can still reach them if googleAuth throws.
       pendingGoogleIdTokenRef.current = idToken;
       pendingGoogleEmailRef.current = result.user.email || '';
-      const apiResult = await authService.googleAuth(idToken);
+      const apiResult = await authService.googleAuth(idToken, null, rememberMe);
 
       if (apiResult.success) {
         if (apiResult.data?.isNewUser) markNewUserForOnboarding();

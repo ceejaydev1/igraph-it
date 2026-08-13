@@ -395,7 +395,11 @@ export default function ForgotPassword() {
       const result = await signInWithPopup(auth, provider);
       const user = result.user;
       const idToken = await user.getIdToken();
-      const apiResult = await authService.googleAuth(idToken);
+      // No "Remember me" checkbox on this screen — true matches signin.tsx's
+      // own default state for that checkbox (checked unless the user
+      // unchecks it), since this button is just a shortcut to the same
+      // sign-in action from a different screen.
+      const apiResult = await authService.googleAuth(idToken, null, true);
       
       if (apiResult.success) {
         router.replace('/(tabs)/home');

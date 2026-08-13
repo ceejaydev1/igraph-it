@@ -831,7 +831,11 @@ export default function SignUp() {
   const handleGoogleSignInResult = async (result: any) => {
     try {
       const idToken = await result.user.getIdToken();
-      const apiResult = await authService.googleAuth(idToken);
+      // No "Remember me" checkbox on signup (there's nothing to remember
+      // yet) — true matches the email/password signup path, which the
+      // backend already hardcodes to a persistent session for exactly the
+      // same reason (see verifyOTP's getRefreshCookieOptions(true)).
+      const apiResult = await authService.googleAuth(idToken, null, true);
 
       if (apiResult.success) {
         if (apiResult.data?.isNewUser) markNewUserForOnboarding();

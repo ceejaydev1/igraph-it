@@ -24,7 +24,17 @@ export default function Root({ children }: PropsWithChildren) {
             browser behavior that no amount of CSS overflow/position:fixed on
             body can touch, since it happens beneath the layout/CSS layer
             entirely. */}
-        <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, shrink-to-fit=no" />
+        {/* viewport-fit=cover is what lets the page render behind system UI
+            (notches, home indicators, on-screen nav bars) in the first
+            place — without it, env(safe-area-inset-*) (what
+            useSafeAreaInsets() reads on web) can never report anything but
+            0, no matter what a component does with the value. See
+            Navbar.tsx's bottomNavCard for the fix this enables: the docked
+            mobile bottom bar was using a hardcoded, platform-guessed
+            padding instead of the device's actual inset, so it rendered
+            underneath (not above) 3-button Android nav bars taller than
+            that guess. */}
+        <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, shrink-to-fit=no, viewport-fit=cover" />
         <ScrollViewStyleReset />
         <style
           dangerouslySetInnerHTML={{

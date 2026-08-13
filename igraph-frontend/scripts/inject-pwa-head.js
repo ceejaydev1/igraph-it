@@ -55,7 +55,13 @@ if (bodyTags.length > 0) {
 // and a zoomed page can be panned — indistinguishable from "the screen
 // scrolling" and untouchable by any CSS overflow/position fix, since it's a
 // compositor-level browser behavior beneath the layout layer entirely.
-const desiredViewport = 'width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, shrink-to-fit=no';
+// viewport-fit=cover: without it, env(safe-area-inset-*) — what
+// useSafeAreaInsets() reads on web — can never report anything but 0, which
+// is what let Navbar.tsx's docked mobile bottom bar ship with a hardcoded
+// padding guess instead of the device's real inset (see that file for the
+// other half of this fix). Keep in sync with app/+html.tsx's own copy of
+// this string.
+const desiredViewport = 'width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, shrink-to-fit=no, viewport-fit=cover';
 const viewportRegex = /<meta name="viewport" content="[^"]*"\s*\/?>/;
 if (viewportRegex.test(html)) {
   const replaced = html.replace(viewportRegex, `<meta name="viewport" content="${desiredViewport}">`);

@@ -2843,6 +2843,22 @@ export default function CreateScreen() {
       return;
     }
 
+    // Same validation rules that already drive the on-canvas badges and the
+    // issues panel (see utils/flowchartRules.ts) — an exported file is a
+    // snapshot someone else will read without the editor's own warnings
+    // next to it, so a diagram with an actual error (not just a warning/
+    // info-level nudge) shouldn't be exportable at all until it's fixed.
+    const errorIssues = (diagramCanvasRef.current?.getIssues() ?? []).filter((issue) => issue.severity === 'error');
+    if (errorIssues.length > 0) {
+      notify(
+        'Fix errors before exporting',
+        errorIssues.length === 1
+          ? errorIssues[0].message
+          : `This diagram has ${errorIssues.length} errors that need fixing first: ${errorIssues.map((i) => i.message).join(' ')}`
+      );
+      return;
+    }
+
     setIsDownloading(true);
 
     try {

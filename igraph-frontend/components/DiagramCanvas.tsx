@@ -1658,6 +1658,11 @@ export interface DiagramCanvasHandle {
   // diagrams, so a stale highlight from the old room can't linger into the
   // next one.
   clearAllRemoteSelections: () => void;
+  // Current validation issues (see utils/flowchartRules.ts) as of the last
+  // run — create.tsx reads this before export/download to block it while
+  // any 'error'-severity issue is present, same rule set that already
+  // drives the on-canvas badges and the issues panel.
+  getIssues: () => FlowchartIssue[];
 }
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -2776,6 +2781,12 @@ const WebCanvas = forwardRef<DiagramCanvasHandle, DiagramCanvasProps>(({ onReady
   const [loading, setLoading] = useState(true);
   const [selectedCell, setSelectedCell] = useState<any>(null);
   const [flowchartIssues, setFlowchartIssues] = useState<FlowchartIssue[]>([]);
+  // Mirrors flowchartIssues for getIssues() below (exposed via
+  // useImperativeHandle) — that handle's own deps array deliberately stays
+  // minimal (see its comment), so a plain closure over the state value
+  // would go stale the same way loadXml's isMobile once did. A ref doesn't
+  // need to be in the deps array to stay current.
+  const flowchartIssuesRef = useRef<FlowchartIssue[]>([]);
   // Defaults open (not collapsed behind a click) so the actual "what's wrong"
   // messages are visible the moment an issue appears, not just a bare count.
   const [showIssuesList, setShowIssuesList] = useState(true);
@@ -2998,6 +3009,7 @@ const WebCanvas = forwardRef<DiagramCanvasHandle, DiagramCanvasProps>(({ onReady
       });
       remoteHighlightsRef.current.clear();
     },
+    getIssues: () => flowchartIssuesRef.current,
     // resizeGridCanvas/repaintGrid stay out of this array on purpose: they're
     // declared further down this component and would be a TDZ ReferenceError
     // if referenced directly here (this array is evaluated eagerly, unlike
@@ -3808,6 +3820,7 @@ const WebCanvas = forwardRef<DiagramCanvasHandle, DiagramCanvasProps>(({ onReady
     });
 
     setFlowchartIssues(issues);
+    flowchartIssuesRef.current = issues;
   }, [umlType]);
 
   // Called from the model CHANGE listener inside initGraph, which is set up once
@@ -4460,12 +4473,28 @@ const WebCanvas = forwardRef<DiagramCanvasHandle, DiagramCanvasProps>(({ onReady
       return;
     }
 
+    // Fixed exit/entry constraints (paired with exitPerimeter/entryPerimeter:
+    // false, same convention used everywhere else in this file — see e.g.
+    // the drag-to-connect pinning above) instead of leaving both ends
+    // floating. Without these, insertEdge falls back to maxGraph's
+    // automatic "closest point on the perimeter" routing, which doesn't
+    // reliably land on the center of the side actually facing the new
+    // shape — the new shape sits directly up/down/left/right of the
+    // source, so the connector should always exit dead-center on that
+    // exact side and enter dead-center on the opposite side of the new
+    // shape, not wherever the perimeter heuristic happens to pick.
     const edgeStyle = {
       strokeColor: BLACK,
       strokeWidth: 2,
       edgeStyle: 'orthogonalEdgeStyle',
       fontColor: BLACK,
       labelBackgroundColor: CANVAS_BG,
+      exitX: 0.5 + dir.dx * 0.5,
+      exitY: 0.5 + dir.dy * 0.5,
+      exitPerimeter: false,
+      entryX: 0.5 - dir.dx * 0.5,
+      entryY: 0.5 - dir.dy * 0.5,
+      entryPerimeter: false,
     };
     graph.insertEdge(null, null, '', sourceCell, newCell, edgeStyle);
 
@@ -6615,6 +6644,7 @@ const WebCanvas = forwardRef<DiagramCanvasHandle, DiagramCanvasProps>(({ onReady
         graph.destroy();
         graphRef.current = null;
         setFlowchartIssues([]);
+        flowchartIssuesRef.current = [];
       };
     } catch (err: any) {
       console.error('❌ maxGraph init error:', err);

@@ -13,6 +13,7 @@ import {
 import { useRouter, usePathname, Href } from 'expo-router';
 import { Svg, Path, Rect, Circle } from 'react-native-svg';
 import * as Haptics from 'expo-haptics'; // npx expo install expo-haptics
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useSave } from '../contexts/SaveContext';
 
 // One nativeID per tab link, so each tab's onboarding tour (utils/tours.ts)
@@ -181,6 +182,7 @@ export default function Navbar({
   const router = useRouter();
   const pathname = usePathname();
   const { onSave, isSaving } = useSave();
+  const insets = useSafeAreaInsets();
 
   const [screenWidth, setScreenWidth] = useState(Dimensions.get('window').width);
 
@@ -628,7 +630,15 @@ export default function Navbar({
       <View ref={mobileBottomDockRef} style={styles.bottomNavWrapper}>
         <View
           nativeID="tour-navbar-mobile-dock"
-          style={styles.bottomNavCard}
+          style={[
+            styles.bottomNavCard,
+            // Real device inset (home indicator / 3-button nav bar height)
+            // instead of the old hardcoded per-platform guess, which was
+            // nowhere near tall enough to clear a real Android nav bar —
+            // see this file's viewport-fit=cover comment in app/+html.tsx
+            // for why insets.bottom couldn't report anything useful before.
+            { paddingBottom: insets.bottom + (Platform.OS === 'ios' ? 8 : 14) },
+          ]}
           onLayout={(e) => setBarWidth(e.nativeEvent.layout.width)}
         >
           {/* Sliding active-tab indicator, sits behind Diagram Library / Learning References */}
@@ -912,7 +922,9 @@ const styles = StyleSheet.create({
     borderTopRightRadius: 28,
     paddingTop: 12,
     paddingHorizontal: 4,
-    paddingBottom: Platform.OS === 'ios' ? 22 : 14,
+    // paddingBottom is applied inline where this style is used — it needs
+    // useSafeAreaInsets()'s runtime value, not available in a static
+    // StyleSheet object.
     shadowColor: '#0f172a',
     shadowOffset: { width: 0, height: -6 },
     shadowOpacity: 0.10,

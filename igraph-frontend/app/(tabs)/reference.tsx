@@ -404,25 +404,25 @@ const REFERENCE_DATA: ReferenceTerm[] = [
   },
   {
     id: 'step-vmodel-requirements-acceptance',
-    term: 'Requirements Analysis paired with Acceptance Testing',
+    term: 'Requirements Analysis / Acceptance Testing',
     category: 'SDLC',
     definition: 'Define what the system must do, and plan how that will ultimately be validated with users. The first phase pair of the V Model.',
   },
   {
     id: 'step-vmodel-system-design-testing',
-    term: 'System Design paired with System Testing',
+    term: 'System Design / System Testing',
     category: 'SDLC',
     definition: 'Design the overall system, and plan the tests that will confirm it works as designed. A phase pair in the V Model.',
   },
   {
     id: 'step-vmodel-architecture-integration',
-    term: 'Architecture Design paired with Integration Testing',
+    term: 'Architecture Design / Integration Testing',
     category: 'SDLC',
     definition: 'Design how components fit together, and plan the tests that confirm they work correctly together. A phase pair in the V Model.',
   },
   {
     id: 'step-vmodel-module-unit',
-    term: 'Module Design paired with Unit Testing',
+    term: 'Module Design / Unit Testing',
     category: 'SDLC',
     definition: 'Design individual components in detail, and plan the tests for each one. A phase pair in the V Model.',
   },
@@ -1279,7 +1279,12 @@ const ReferenceCard = ({
             <ChevronIcon color={colors.primary} />
           </Animated.View>
         </View>
-        {isExpanded && <Text style={styles.cardDefinition}>{item.definition}</Text>}
+        {isExpanded && (
+          <>
+            <View style={styles.cardDivider} />
+            <Text style={styles.cardDefinition}>{item.definition}</Text>
+          </>
+        )}
       </Pressable>
     </Animated.View>
   );
@@ -1639,8 +1644,13 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     letterSpacing: 0.2,
   },
+  cardDivider: {
+    height: 1,
+    backgroundColor: '#e2e8f0',
+    marginTop: 12,
+  },
   cardDefinition: {
-    marginTop: 10,
+    marginTop: 12,
     fontSize: 13,
     lineHeight: 19,
     color: '#475569',
