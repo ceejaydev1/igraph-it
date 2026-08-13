@@ -2576,12 +2576,28 @@ const DiagramDetail: React.FC = () => {
   const router = useRouter();
   const { width } = useWindowDimensions();
   const scrollY = useRef(new Animated.Value(0)).current;
+  // Animated.ScrollView's own type doesn't expose scrollTo cleanly through
+  // useRef's generic — any is the pragmatic choice here, same as this
+  // codebase already does for other wrapped-library refs.
+  const scrollViewRef = useRef<any>(null);
 
   const isDesktop = width >= BREAKPOINTS.desktop;
   const isTablet = width >= BREAKPOINTS.tablet;
 
   const diagramId = parseInt(id ?? '1', 10);
   const content = DIAGRAM_CONTENT[diagramId];
+
+  // This screen persists across diagram navigation instead of unmounting
+  // (see the matching comment on ShapesUsed's own key={content.id} fix for
+  // its internal state) — the same is true of the ScrollView itself: it's
+  // the same DOM/native node the whole time, so its scroll offset carries
+  // over untouched. Without this, opening a new diagram while scrolled
+  // partway down the previous one landed you at that same Y position on
+  // the new diagram — sometimes already inside its Shapes Used section
+  // instead of at the top.
+  useEffect(() => {
+    scrollViewRef.current?.scrollTo({ y: 0, animated: false });
+  }, [diagramId]);
   const colors = content ? TYPE_CONFIG[content.type] : TYPE_CONFIG.UML;
   const hasRealVideo = content ? content.videoId !== PLACEHOLDER_VIDEO_ID : false;
 
@@ -2841,6 +2857,7 @@ const DiagramDetail: React.FC = () => {
       </Animated.View>
 
       <Animated.ScrollView
+        ref={scrollViewRef}
         showsVerticalScrollIndicator={false}
         onScroll={handleScroll}
         scrollEventThrottle={16}
@@ -2870,24 +2887,13 @@ const DiagramDetail: React.FC = () => {
               <Text style={styles.heroTagline}>{content.tagline}</Text>
             </View>
             
-            {/* Diagram preview — only once in hero */}
+            {/* Diagram preview — only once in hero.
+                Images temporarily disabled — always falls back to
+                DiagramPlaceholder regardless of content.placeholderImage
+                for now. That data/the requires are untouched, so this is a
+                one-line revert (restore the ternary below) when re-enabled. */}
             <View nativeID="tour-detail-image">
-              {content.placeholderImage ? (
-                <Image
-                  source={content.placeholderImage}
-                  // height: 'auto' is load-bearing, not decorative — RN Web's
-                  // Image injects a raw pixel height from the source asset's
-                  // own dimensions ahead of this style array (see its
-                  // imageSizeStyle), so without an explicit override here,
-                  // that fixed height wins over aspectRatio below and the
-                  // box never actually changes shape from image to image.
-                  style={[styles.heroImage, { aspectRatio: heroImageAspectRatio, height: 'auto' }]}
-                  accessibilityLabel={content.imageAlt}
-                  resizeMode="contain"
-                />
-              ) : (
-                <DiagramPlaceholder color={colors.primary} label={content.imageAlt} title={content.title} />
-              )}
+              <DiagramPlaceholder color={colors.primary} label={content.imageAlt} title={content.title} />
             </View>
 
             {/* Video directly below diagram on mobile/tablet only */}
