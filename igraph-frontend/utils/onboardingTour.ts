@@ -83,6 +83,20 @@ const isNewUserPendingOnboarding = (): boolean => {
   }
 };
 
+// Inline SVGs (not plain arrow characters) for the nav buttons — driver.js
+// sets nextBtnText/prevBtnText/doneBtnText via .innerHTML, not .textContent,
+// so real markup renders here same as anywhere else. `currentColor` picks up
+// each button's own text color from tourTheme.css (white on the filled Next/
+// Done buttons, blue on the outlined Back button) without needing separate
+// light/dark variants. Same stroke width/linecap as the app's own chevron
+// icon (see create.tsx's dropdown arrow, `M13 6l6 6-6 6`) for a matching feel.
+const CHEVRON_RIGHT_SVG = '<svg class="tour-btn-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg>';
+const CHEVRON_LEFT_SVG = '<svg class="tour-btn-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M15 6l-6 6 6 6"/></svg>';
+// Exported so tours.ts's finishStep — the one place that overrides
+// doneBtnText per-step instead of using THEME's default — can stay visually
+// consistent with it.
+export const CHECK_SVG = '<svg class="tour-btn-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>';
+
 // Shared look/feel so every tab's tour reads as one product, not four
 // separately-configured popovers.
 const THEME: Config = {
@@ -94,9 +108,9 @@ const THEME: Config = {
   stageRadius: 12,
   popoverClass: 'igraphit-tour-popover',
   showProgress: true,
-  nextBtnText: 'Next →',
-  prevBtnText: '← Back',
-  doneBtnText: 'Got it',
+  nextBtnText: `Next ${CHEVRON_RIGHT_SVG}`,
+  prevBtnText: `${CHEVRON_LEFT_SVG} Back`,
+  doneBtnText: `Got it ${CHECK_SVG}`,
   // A step whose target hasn't mounted yet (e.g. a conditionally-rendered
   // toolbar button) is skipped rather than left dangling on a missing element.
   skipMissingElement: true,

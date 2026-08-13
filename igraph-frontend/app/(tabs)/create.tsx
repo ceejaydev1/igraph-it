@@ -2869,16 +2869,22 @@ export default function CreateScreen() {
 
     // Same validation rules that already drive the on-canvas badges and the
     // issues panel (see utils/flowchartRules.ts) — an exported file is a
-    // snapshot someone else will read without the editor's own warnings
-    // next to it, so a diagram with an actual error (not just a warning/
-    // info-level nudge) shouldn't be exportable at all until it's fixed.
-    const errorIssues = (diagramCanvasRef.current?.getIssues() ?? []).filter((issue) => issue.severity === 'error');
-    if (errorIssues.length > 0) {
+    // snapshot someone else will read without the editor's own issues list
+    // next to it, so a diagram with an unresolved error OR warning (just
+    // not an info-level nudge, which is a style suggestion rather than a
+    // correctness problem) shouldn't be exportable until it's addressed.
+    const blockingIssues = (diagramCanvasRef.current?.getIssues() ?? []).filter(
+      (issue) => issue.severity === 'error' || issue.severity === 'warning'
+    );
+    if (blockingIssues.length > 0) {
+      const hasErrors = blockingIssues.some((issue) => issue.severity === 'error');
+      const hasWarnings = blockingIssues.some((issue) => issue.severity === 'warning');
+      const kind = hasErrors && hasWarnings ? 'errors and warnings' : hasErrors ? 'errors' : 'warnings';
       notify(
-        'Fix errors before exporting',
-        errorIssues.length === 1
-          ? errorIssues[0].message
-          : `This diagram has ${errorIssues.length} errors that need fixing first: ${errorIssues.map((i) => i.message).join(' ')}`
+        `Fix ${kind} before exporting`,
+        blockingIssues.length === 1
+          ? blockingIssues[0].message
+          : `This diagram has ${blockingIssues.length} issues that need fixing first: ${blockingIssues.map((i) => i.message).join(' ')}`
       );
       return;
     }
@@ -3134,46 +3140,6 @@ export default function CreateScreen() {
       setTimeout(focusGraph, 150);
     }
   }, [showShapesPanel, isGraphReady, focusGraph]);
-
-  const AppDialog = () => {
-    if (!dialogState) return null;
-    const { title, message, confirmText, onConfirm } = dialogState;
-
-    return (
-      <Modal
-        visible
-        transparent
-        animationType="fade"
-        onRequestClose={() => setDialogState(null)}
-      >
-        <Pressable style={styles.modalOverlay} onPress={() => setDialogState(null)}>
-          <Pressable style={styles.modalContent} onPress={(e) => e.stopPropagation()}>
-            <Text style={styles.modalTitle}>{title}</Text>
-            {message ? <Text style={styles.modalSubtitle}>{message}</Text> : null}
-            <View style={styles.modalButtons}>
-              {onConfirm && (
-                <TouchableOpacity
-                  style={[styles.modalButton, styles.modalCancelButton]}
-                  onPress={() => setDialogState(null)}
-                >
-                  <Text style={styles.modalCancelText}>Cancel</Text>
-                </TouchableOpacity>
-              )}
-              <TouchableOpacity
-                style={[styles.modalButton, styles.modalCreateButton]}
-                onPress={() => {
-                  setDialogState(null);
-                  onConfirm?.();
-                }}
-              >
-                <Text style={styles.modalCreateText}>{confirmText || 'OK'}</Text>
-              </TouchableOpacity>
-            </View>
-          </Pressable>
-        </Pressable>
-      </Modal>
-    );
-  };
 
   const PageTab = ({ page, isActive }: { page: Page; isActive: boolean }) => {
     if (Platform.OS === 'web') {
@@ -3644,7 +3610,7 @@ export default function CreateScreen() {
             onSent={() => setHasPendingAccessRequest(true)}
           />
         )}
-        <AppDialog />
+        <AppDialog dialogState={dialogState} onDismiss={() => setDialogState(null)} />
       </SafeAreaView>
     );
   }
@@ -4003,7 +3969,7 @@ export default function CreateScreen() {
             onSent={() => setHasPendingAccessRequest(true)}
           />
         )}
-        <AppDialog />
+        <AppDialog dialogState={dialogState} onDismiss={() => setDialogState(null)} />
       </View>
     </SafeAreaView>
   );
@@ -4072,6 +4038,68 @@ const PropertiesToggleIcon = ({ collapsed, color = '#4a5568' }: { collapsed: boo
     )}
   </Svg>
 );
+
+// ─── APP DIALOG ─────────────────────────────────────────────────────────────
+// In-app replacement for react-native-web's no-op Alert.alert / the native
+// browser chrome of window.alert (see notify()'s own comment in CreateScreen).
+// Hoisted to module scope like DiagramTypeModal/PrintModal below rather than
+// declared inline inside CreateScreen — an inline const there is a brand-new
+// component identity on every CreateScreen re-render, so React unmounts and
+// remounts this Modal (restarting its fade-in) on every UNRELATED re-render
+// that happens to land while it's open — autosave ticks, collaboration
+// presence updates, canvas onChange, etc. That's what made the download-
+// success popup visibly flicker: nothing about dialogState itself was
+// changing, just the component's identity.
+
+interface AppDialogProps {
+  dialogState: {
+    title: string;
+    message?: string;
+    confirmText?: string;
+    onConfirm?: () => void;
+  } | null;
+  onDismiss: () => void;
+}
+
+function AppDialog({ dialogState, onDismiss }: AppDialogProps) {
+  if (!dialogState) return null;
+  const { title, message, confirmText, onConfirm } = dialogState;
+
+  return (
+    <Modal
+      visible
+      transparent
+      animationType="fade"
+      onRequestClose={onDismiss}
+    >
+      <Pressable style={styles.modalOverlay} onPress={onDismiss}>
+        <Pressable style={styles.modalContent} onPress={(e) => e.stopPropagation()}>
+          <Text style={styles.modalTitle}>{title}</Text>
+          {message ? <Text style={styles.modalSubtitle}>{message}</Text> : null}
+          <View style={styles.modalButtons}>
+            {onConfirm && (
+              <TouchableOpacity
+                style={[styles.modalButton, styles.modalCancelButton]}
+                onPress={onDismiss}
+              >
+                <Text style={styles.modalCancelText}>Cancel</Text>
+              </TouchableOpacity>
+            )}
+            <TouchableOpacity
+              style={[styles.modalButton, styles.modalCreateButton]}
+              onPress={() => {
+                onDismiss();
+                onConfirm?.();
+              }}
+            >
+              <Text style={styles.modalCreateText}>{confirmText || 'OK'}</Text>
+            </TouchableOpacity>
+          </View>
+        </Pressable>
+      </Pressable>
+    </Modal>
+  );
+}
 
 // ─── DIAGRAM TYPE MODAL ─────────────────────────────────────────────────────
 // Explicit picker for the diagram's declared type — see showTypeModal's own
@@ -4514,7 +4542,11 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '600',
     color: '#4a5568',
-    maxWidth: 160,
+    // 260 comfortably fits the longest DIAGRAM_TABS name ("Functional
+    // Decomposition Diagram", ~241px at this size) without truncating —
+    // numberOfLines={1} below stays as a safety net for names longer than
+    // that, not as the primary fit mechanism.
+    maxWidth: 260,
   },
   autosaveIndicator: {
     flexDirection: 'row',

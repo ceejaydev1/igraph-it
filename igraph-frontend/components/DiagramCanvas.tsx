@@ -28,6 +28,7 @@ import {
 
 import type {
   ConnectionHandler,
+  SelectionHandler,
   FitPlugin,
   CellStateStyle,
   AlignValue,
@@ -5245,6 +5246,44 @@ const WebCanvas = forwardRef<DiagramCanvasHandle, DiagramCanvasProps>(({ onReady
             return false;
           }
           return defaultIsValidSource(cell, me);
+        };
+      }
+
+      // SelectionHandler.createPreviewShape is hardcoded in maxGraph itself
+      // to always build a plain dashed RectangleShape while dragging a
+      // vertex — true for every shape in this app's palette (diamonds,
+      // ellipses, every custom igraph.* shape), not just literal rectangles,
+      // since the library never looks at the cell's own shape at all. This
+      // rebuilds the same drag-ghost using the cell's ACTUAL shape class
+      // (via cellRenderer's own shape-constructor lookup — the identical
+      // mechanism real rendering already uses, so every custom shape stays
+      // in sync automatically) instead of a generic box.
+      const previewSelectionHandler = graph.getPlugin('SelectionHandler') as SelectionHandler | null;
+      if (previewSelectionHandler) {
+        const defaultCreatePreviewShape = previewSelectionHandler.createPreviewShape.bind(previewSelectionHandler);
+        previewSelectionHandler.createPreviewShape = (bounds: any) => {
+          const cell = previewSelectionHandler.cell;
+          const state = cell ? graph.getView().getState(cell) : null;
+          if (!state?.style) return defaultCreatePreviewShape(bounds);
+
+          try {
+            // @ts-ignore — reaching into CellRenderer internals, same as
+            // the constraintHandler access above.
+            const ShapeCtor = graph.cellRenderer.getShapeConstructor(state);
+            const shape = new ShapeCtor();
+            shape.apply(state); // pulls fill/stroke/rotation/etc. straight from the real style
+            shape.bounds = bounds;
+            shape.isDashed = true;
+            shape.opacity = 55; // ghosted, not a solid duplicate sitting over the original
+            shape.stroke = previewSelectionHandler.previewColor || BLACK;
+            shape.dialect = 'svg';
+            shape.init(graph.getView().getOverlayPane());
+            shape.pointerEvents = false;
+            return shape;
+          } catch (e) {
+            console.warn('Shape-accurate drag preview failed, falling back to the default rectangle:', e);
+            return defaultCreatePreviewShape(bounds);
+          }
         };
       }
 

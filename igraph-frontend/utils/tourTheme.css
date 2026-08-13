@@ -1,5 +1,65 @@
-/* Overrides driver.js's default gray footer buttons to match the app's
-   primary blue (#4c6fff, same blue used across Home/Reference/Navbar). */
+/* Themes driver.js's popover shell to match this app's own modal/card
+   language (see modalContent/modalTitle/modalSubtitle/modalButton in
+   create.tsx: 16px card radius, #1a1f36 title / #64748b description text,
+   8px button radius, #4c6fff primary blue) instead of leaving the library's
+   plain defaults (5px radius, generic shadow, untouched gray close button)
+   sitting next to UI that's otherwise been deliberately designed throughout
+   this app. The spotlight/overlay mechanics (dimming, cutout) are driver.js's
+   own and already look right — only the popover shell needed this pass. */
+
+.driver-popover {
+  border-radius: 16px !important;
+  padding: 20px !important;
+  box-shadow:
+    0 20px 40px -8px rgba(15, 23, 42, 0.25),
+    0 4px 12px rgba(15, 23, 42, 0.08) !important;
+  border: 1px solid #eef2f6;
+}
+
+.driver-popover-title {
+  color: #1a1f36 !important;
+  font-size: 17px !important;
+}
+
+.driver-popover-description {
+  color: #64748b !important;
+  font-size: 14px !important;
+}
+
+.driver-popover-progress-text {
+  color: #94a3b8 !important;
+}
+
+.driver-popover-close-btn {
+  color: #94a3b8 !important;
+  width: 28px !important;
+  height: 28px !important;
+  font-size: 20px !important;
+  border-radius: 8px !important;
+  display: flex !important;
+  align-items: center;
+  justify-content: center;
+}
+
+.driver-popover-close-btn:hover,
+.driver-popover-close-btn:focus {
+  color: #4a5568 !important;
+  background-color: #f1f5f9 !important;
+}
+
+/* Nav buttons now carry an inline SVG chevron/check alongside their text
+   (see nextBtnText/prevBtnText/doneBtnText in onboardingTour.ts, and
+   finishStep in tours.ts) — flex-center keeps the icon vertically aligned
+   with the label instead of sitting on the text baseline. */
+.driver-popover-footer-btn {
+  display: inline-flex !important;
+  align-items: center;
+  gap: 6px;
+  border-radius: 8px !important;
+  padding: 7px 14px !important;
+  font-size: 13px !important;
+  font-weight: 600 !important;
+}
 
 .driver-popover-footer-btn.driver-popover-next-btn,
 .driver-popover-footer-btn.driver-popover-done-btn {
@@ -25,4 +85,8 @@
 .driver-popover-footer-btn.driver-popover-prev-btn:hover,
 .driver-popover-footer-btn.driver-popover-prev-btn:focus {
   background-color: #eef2ff !important;
+}
+
+.tour-btn-icon {
+  flex-shrink: 0;
 }

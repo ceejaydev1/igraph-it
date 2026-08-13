@@ -575,6 +575,12 @@ const REFERENCE_DATA: ReferenceTerm[] = [
     definition: 'A pentagon marking where the flow continues on a different page. Used in Flowcharts and Data Flow Diagrams.',
   },
   {
+    id: 'shape-merge-junction',
+    term: 'Merge',
+    category: 'UML',
+    definition: 'A small point where two or more flow lines converge back into one. Used in Flowcharts.',
+  },
+  {
     id: 'shape-flow-line',
     term: 'Flow Line',
     category: 'UML',

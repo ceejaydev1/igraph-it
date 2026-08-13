@@ -1,5 +1,5 @@
 import type { DriveStep } from 'driver.js';
-import { advanceWhenElementAppears, markTourWaiting, scheduleTourOnNextFocus, destroyForHandoff } from './onboardingTour';
+import { advanceWhenElementAppears, markTourWaiting, scheduleTourOnNextFocus, destroyForHandoff, CHECK_SVG } from './onboardingTour';
 
 // Bump the trailing version (e.g. -v5) if a tour's steps change enough that
 // past users should see it again — startTour() only skips a tour once its
@@ -99,7 +99,7 @@ const nextModuleStep = (
 const finishStep = (popover: { title: string; description: string }, router: any): DriveStep => ({
   popover: {
     ...popover,
-    doneBtnText: 'Finish',
+    doneBtnText: `Finish ${CHECK_SVG}`,
     onDoneClick: (_el, _step, opts) => {
       // destroy() synchronously fires startTour's onDestroyed (onboardingTour.ts),
       // which already clears the "just signed up" flag that's the only thing
