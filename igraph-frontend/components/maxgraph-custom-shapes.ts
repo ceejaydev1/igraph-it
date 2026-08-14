@@ -5764,6 +5764,7 @@ export const IGRAPH_ID_STYLE_MAP: Record<string, string> = {
   'uc-actor': 'igraph.ucActor',
   'use-case': 'igraph.umlUseCase',
   'system-boundary': 'igraph.umlSystemBoundary',
+  'uc-database': 'igraph.cylinder',
   'uc-association': 'igraph.umlAssociation',
   'uc-include': 'igraph.umlInclude',
   'uc-extend': 'igraph.umlExtend',

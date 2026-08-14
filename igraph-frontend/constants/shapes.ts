@@ -159,6 +159,7 @@ export const DIAGRAM_SHAPES: Record<string, ShapeDefinition[]> = {
     { id: 'uc-actor', svgComponent: 'UMLActorShape', label: 'Actor', description: 'System user', width: 60, height: 80, category: 'UML' },
     { id: 'use-case', svgComponent: 'UMLUseCaseShape', label: 'Use Case', description: 'System functionality', width: 120, height: 60, category: 'UML' },
     { id: 'system-boundary', svgComponent: 'UMLSystemBoundaryShape', label: 'System Boundary', description: 'System scope', width: 340, height: 280, category: 'UML', defaultLabel: 'App' },
+    { id: 'uc-database', svgComponent: 'CylinderShape', label: 'Database', description: 'Data storage used by a use case', width: 100, height: 70, category: 'UML' },
     { id: 'uc-association', svgComponent: 'UMLAssociationShape', label: 'Association', description: 'Communication', width: 80, height: 20, category: 'UML' },
     { id: 'uc-include', svgComponent: 'UMLIncludeShape', label: 'Include', description: 'Mandatory behavior', width: 80, height: 40, category: 'UML' },
     { id: 'uc-extend', svgComponent: 'UMLExtendShape', label: 'Extend', description: 'Optional behavior', width: 80, height: 40, category: 'UML' },

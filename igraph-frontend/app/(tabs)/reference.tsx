@@ -905,6 +905,12 @@ const REFERENCE_DATA: ReferenceTerm[] = [
     definition: 'A frame separating what the system does from the actors around it.',
   },
   {
+    id: 'shape-usecase-database',
+    term: 'Database (Use Case Diagram)',
+    category: 'UML',
+    definition: 'A cylinder representing data storage a use case reads from or writes to.',
+  },
+  {
     id: 'shape-usecase-association',
     term: 'Association (Use Case Diagram)',
     category: 'UML',
@@ -1113,6 +1119,12 @@ const REFERENCE_DATA: ReferenceTerm[] = [
     term: 'Generalization (Class Diagram)',
     category: 'UML',
     definition: 'A hollow triangle arrow pointing from a subclass up to its parent class.',
+  },
+  {
+    id: 'shape-class-realization',
+    term: 'Realization',
+    category: 'UML',
+    definition: 'A dashed arrow with a hollow triangle head, showing a class implementing the behavior an interface promises. Used in Class Diagrams.',
   },
   {
     id: 'shape-class-mult-1',
