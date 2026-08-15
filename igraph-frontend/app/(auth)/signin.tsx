@@ -1093,7 +1093,7 @@ export default function SignIn() {
               {Platform.OS === 'web' ? (
                 <TouchableOpacity style={[styles.btnGoogle, loading && styles.btnDisabled]} onPress={handleFirebaseGoogleSignIn} activeOpacity={0.85} disabled={loading}>
                   {loading ? <ActivityIndicator color="#3b5bdb" size="small" /> : <GoogleIcon />}
-                  <Text style={styles.btnGoogleText}>Continue with Google</Text>
+                  <Text style={styles.btnGoogleText}>Sign in with Google</Text>
                 </TouchableOpacity>
               ) : null}
 
