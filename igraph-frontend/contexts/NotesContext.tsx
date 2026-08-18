@@ -16,6 +16,7 @@ interface NotesContextType {
   notes: LearningNote[];
   addNote: (note: Omit<LearningNote, 'id' | 'timestamp'>) => void;
   removeNote: (id: string) => void;
+  refreshNotes: () => Promise<void>;
 }
 
 const NotesContext = createContext<NotesContextType | undefined>(undefined);
@@ -44,6 +45,26 @@ const toDisplayTimestamp = (rawDate: any): string => {
 export const NotesProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [notes, setNotes] = useState<LearningNote[]>([]);
 
+  // Fetch notes from the backend and replace local state when signed in.
+  // No-op (keeps local notes) when there's no active session.
+  const fetchServerNotes = async () => {
+    const signedIn = await authService.hasActiveSession();
+    if (!signedIn) return;
+    const result = await authService.authFetch(`${API_BASE_URL}/api/notes`);
+    if (result.ok) {
+      const data = await result.json();
+      if (data.success && Array.isArray(data.data)) {
+        // Format timestamps safely
+        const formattedNotes = data.data.map((note: any) => ({
+          ...note,
+          timestamp: toDisplayTimestamp(note.createdAt || note.timestamp),
+        }));
+        setNotes(formattedNotes);
+        await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(formattedNotes));
+      }
+    }
+  };
+
   // Load local notes first, then fetch from server if authenticated
   useEffect(() => {
     const loadNotes = async () => {
@@ -54,22 +75,7 @@ export const NotesProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         }
 
         // If signed in, fetch from backend to sync cross-device
-        const signedIn = await authService.hasActiveSession();
-        if (signedIn) {
-          const result = await authService.authFetch(`${API_BASE_URL}/api/notes`);
-          if (result.ok) {
-            const data = await result.json();
-            if (data.success && Array.isArray(data.data)) {
-              // Format timestamps safely
-              const formattedNotes = data.data.map((note: any) => ({
-                ...note,
-                timestamp: toDisplayTimestamp(note.createdAt || note.timestamp),
-              }));
-              setNotes(formattedNotes);
-              await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(formattedNotes));
-            }
-          }
-        }
+        await fetchServerNotes();
       } catch (error) {
         console.warn('Failed to load notes:', error);
       }
@@ -143,8 +149,16 @@ export const NotesProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     }
   };
 
+  const refreshNotes = async () => {
+    try {
+      await fetchServerNotes();
+    } catch (error) {
+      console.warn('Failed to refresh notes:', error);
+    }
+  };
+
   return (
-    <NotesContext.Provider value={{ notes, addNote, removeNote }}>
+    <NotesContext.Provider value={{ notes, addNote, removeNote, refreshNotes }}>
       {children}
     </NotesContext.Provider>
   );

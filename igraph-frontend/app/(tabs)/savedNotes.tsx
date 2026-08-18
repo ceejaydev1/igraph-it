@@ -14,7 +14,7 @@ import {
   useWindowDimensions,
   ActivityIndicator,
 } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useRouter, useFocusEffect } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Svg, Path, Rect, Circle, Defs, Pattern } from 'react-native-svg';
 import { useNotes, LearningNote } from '../../contexts/NotesContext';
@@ -356,14 +356,23 @@ const Toast = ({ toast, onHide }: { toast: ToastState; onHide: () => void }) => 
 export default function SavedNotes() {
   // isLoading is optional — only used if NotesContext exposes a hydration
   // flag. Defaults to false (skeleton skipped) if it doesn't exist yet.
-  const { notes, removeNote, isLoading } = useNotes() as {
+  const { notes, removeNote, isLoading, refreshNotes } = useNotes() as {
     notes: LearningNote[];
     removeNote: (id: string) => void | Promise<void>;
     isLoading?: boolean;
+    refreshNotes: () => Promise<void>;
   };
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
+
+  // Re-fetch from the backend every time this screen gains focus, so notes
+  // saved on another device appear here without a full reload.
+  useFocusEffect(
+    useCallback(() => {
+      refreshNotes();
+    }, [refreshNotes])
+  );
 
   const [noteToDelete, setNoteToDelete] = useState<LearningNote | null>(null);
   const [toast, setToast] = useState<ToastState>(null);
