@@ -69,7 +69,7 @@ const SHADOWS = {
 };
 
 // Undo window before a soft-deleted note is actually removed.
-const UNDO_WINDOW_MS = 4000;
+const UNDO_WINDOW_MS = 5000;
 
 // ─── Icons ──────────────────────────────────────────────────────────────────
 
@@ -437,14 +437,16 @@ export default function SavedNotes() {
       try {
         await removeNote(id);
       } catch (error) {
-        // Removal failed — bring the note back and let the user know.
-        setPendingDeleteIds((prev) => {
-          const next = new Set(prev);
-          next.delete(id);
-          return next;
-        });
         showToast('Failed to delete note.', 'error');
       }
+      // Always drop the soft-delete marker once the undo window elapses.
+      // Leaving it behind makes hasAnyNotes undercount and, with 2 notes,
+      // hides the remaining note behind the empty state.
+      setPendingDeleteIds((prev) => {
+        const next = new Set(prev);
+        next.delete(id);
+        return next;
+      });
     }, UNDO_WINDOW_MS);
 
     timersRef.current.set(id, timer);
@@ -486,7 +488,7 @@ export default function SavedNotes() {
     return Array.from(map.entries()).map(([title, items]) => ({ title, items }));
   }, [visibleNotes]);
 
-  const hasAnyNotes = notes.length - pendingDeleteIds.size > 0;
+  const hasAnyNotes = notes.some((note) => !pendingDeleteIds.has(note.id));
 
   return (
     <View style={styles.container}>
