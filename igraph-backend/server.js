@@ -10,6 +10,7 @@ const compression = require('compression');
 const authRoutes = require('./routes/authRoutes');
 const diagramRoutes = require('./routes/diagramRoutes');
 const feedbackRoutes = require('./routes/feedbackRoutes');
+const notesRoutes = require('./routes/notesRoutes'); // ✅ Added notes routes
 const { verifyCsrfToken } = require('./middleware/csrfMiddleware');
 const { attachCollabSocket } = require('./services/collabSocket');
 
@@ -228,6 +229,7 @@ app.use(verifyCsrfToken);
 app.use('/api/auth', authRoutes);
 app.use('/api/diagrams', diagramRoutes);
 app.use('/api/feedback', feedbackRoutes);
+app.use('/api/notes', notesRoutes); // ✅ Added notes routes
 
 app.use((req, res) => {
   res.status(404).json({
