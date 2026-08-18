@@ -427,11 +427,30 @@ const ConfirmContinueModal = ({
 type ToastState = { message: string; type: 'success' | 'error' } | null;
 
 const Toast = ({ toast, onHide }: { toast: ToastState; onHide: () => void }) => {
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   useEffect(() => {
-    if (toast) {
-      const timer = setTimeout(onHide, 2800);
-      return () => clearTimeout(timer);
+    // Clear any existing timer
+    if (timerRef.current) {
+      clearTimeout(timerRef.current);
+      timerRef.current = null;
     }
+
+    // Set new timer if toast exists
+    if (toast) {
+      timerRef.current = setTimeout(() => {
+        onHide();
+        timerRef.current = null;
+      }, 2800);
+    }
+
+    // Cleanup on unmount or when toast changes
+    return () => {
+      if (timerRef.current) {
+        clearTimeout(timerRef.current);
+        timerRef.current = null;
+      }
+    };
   }, [toast, onHide]);
 
   if (!toast) return null;
@@ -953,8 +972,7 @@ export default function SavedDiagrams() {
       // No `|| 'https://...'` fallback here on purpose: API_BASE_URL is '' on
       // a Vercel web deployment (same-origin, proxied through vercel.json —
       // see that file's own comment), and '' is falsy, so a fallback here
-      // would silently send this request straight back to the cross-site
-      // URL the proxy exists to avoid.
+      // would silently send this request straight back to the cross-site      // URL the proxy exists to avoid.
       const API_URL = API_BASE_URL;
       const url = `${API_URL}/api/diagrams/${renamingDiagram.id}`;
       console.log(`📝 PUT request to: ${url}`);
@@ -1627,7 +1645,7 @@ const styles = StyleSheet.create({
     }),
   },
   toastSuccess: {
-    backgroundColor: COLORS.textPrimary,
+    backgroundColor: COLORS.primary, // Changed to match savedNotes.tsx (was COLORS.textPrimary)
   },
   toastError: {
     backgroundColor: COLORS.danger,

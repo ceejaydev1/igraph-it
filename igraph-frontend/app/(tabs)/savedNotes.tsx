@@ -71,6 +71,9 @@ const SHADOWS = {
 // Undo window before a soft-deleted note is actually removed.
 const UNDO_WINDOW_MS = 5000;
 
+// Maximum characters before showing "See More" button
+const MAX_NOTE_PREVIEW_LENGTH = 150;
+
 // ─── Icons ──────────────────────────────────────────────────────────────────
 
 const BackIcon = () => (
@@ -79,10 +82,10 @@ const BackIcon = () => (
   </Svg>
 );
 
-const NoteIcon = ({ color = COLORS.gray700 }: { color?: string }) => (
-  <Svg width={24} height={24} viewBox="0 0 24 24" fill="none">
-    <Rect x="4" y="3" width="16" height="18" rx="2" stroke={color} strokeWidth={2} />
-    <Path d="M8 7h8M8 11h6M8 15h4" stroke={color} strokeWidth={2} strokeLinecap="round" />
+const EmptyNotesIcon = () => (
+  <Svg width={80} height={80} viewBox="0 0 24 24" fill="none">
+    <Rect x="3" y="3" width="18" height="18" rx="2" stroke="#cbd5e1" strokeWidth={1.5} />
+    <Path d="M8 8h8M8 12h6M8 16h4" stroke="#cbd5e1" strokeWidth={1.5} strokeLinecap="round" />
   </Svg>
 );
 
@@ -128,10 +131,6 @@ const SearchClearIcon = () => (
     <Path d="M15 9L9 15M9 9L15 15" stroke="#8896b3" strokeWidth={1.8} strokeLinecap="round" />
   </Svg>
 );
-
-
-// Uses a single repeating SVG <pattern> instead of one <Circle> per grid
-// cell. Width/height are rounded so minor resizes don't regenerate it.
 
 const DOT_SPACING = 32;
 const DOT_SIZE = 1.4;
@@ -191,23 +190,31 @@ const SkeletonList = () => (
 );
 
 // ─── Note Card ──────────────────────────────────────────────────────────────
-// Mirrors reference.tsx's ReferenceCard hover treatment: local isHovered
-// state driven by onMouseEnter/onMouseLeave (web only — a no-op on native,
-// same as reference.tsx), swapping in a brighter border + deeper shadow so
-// desktop users get a hover cue while scanning the list.
 
 const NoteCard = ({
   note,
   canOpen,
   onOpen,
   onDelete,
+  isDeleting,
 }: {
   note: LearningNote;
   canOpen: boolean;
   onOpen: () => void;
   onDelete: () => void;
+  isDeleting?: boolean;
 }) => {
   const [isHovered, setIsHovered] = useState(false);
+  const [isExpanded, setIsExpanded] = useState(false);
+
+  const isLongText = note.text.length > MAX_NOTE_PREVIEW_LENGTH;
+  const displayText = isExpanded || !isLongText
+    ? note.text
+    : `${note.text.slice(0, MAX_NOTE_PREVIEW_LENGTH)}...`;
+
+  const toggleExpand = () => {
+    setIsExpanded(!isExpanded);
+  };
 
   return (
     <Pressable
@@ -233,14 +240,32 @@ const NoteCard = ({
             accessibilityRole="button"
             accessibilityLabel="Delete note"
             hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            disabled={isDeleting}
           >
-            <TrashIcon />
+            {isDeleting ? (
+              <ActivityIndicator size="small" color={COLORS.danger} />
+            ) : (
+              <TrashIcon />
+            )}
           </TouchableOpacity>
           {canOpen && <ChevronIcon />}
         </View>
       </View>
 
-      <Text style={styles.noteText}>{note.text}</Text>
+      <Text style={styles.noteText}>{displayText}</Text>
+
+      {isLongText && (
+        <TouchableOpacity
+          onPress={toggleExpand}
+          style={styles.seeMoreButton}
+          accessibilityRole="button"
+          accessibilityLabel={isExpanded ? "See less" : "See more"}
+        >
+          <Text style={styles.seeMoreText}>
+            {isExpanded ? 'See Less' : 'See More'}
+          </Text>
+        </TouchableOpacity>
+      )}
     </Pressable>
   );
 };
@@ -252,11 +277,13 @@ const ConfirmDeleteModal = ({
   onClose,
   onConfirm,
   noteText,
+  isLoading,
 }: {
   visible: boolean;
   onClose: () => void;
   onConfirm: () => void;
   noteText: string;
+  isLoading?: boolean;
 }) => {
   const preview = noteText.length > 120 ? `${noteText.slice(0, 120)}…` : noteText;
 
@@ -276,6 +303,7 @@ const ConfirmDeleteModal = ({
               style={styles.modalCloseBtn}
               accessibilityRole="button"
               accessibilityLabel="Close dialog"
+              disabled={isLoading}
             >
               <CloseIcon />
             </TouchableOpacity>
@@ -297,16 +325,22 @@ const ConfirmDeleteModal = ({
               onPress={onClose}
               accessibilityRole="button"
               accessibilityLabel="Cancel deletion"
+              disabled={isLoading}
             >
               <Text style={styles.modalCancelText}>Cancel</Text>
             </TouchableOpacity>
             <TouchableOpacity
-              style={[styles.modalButton, styles.modalDeleteButton]}
+              style={[styles.modalButton, styles.modalDeleteButton, isLoading && styles.modalButtonDisabled]}
               onPress={onConfirm}
               accessibilityRole="button"
               accessibilityLabel="Confirm deletion"
+              disabled={isLoading}
             >
-              <Text style={styles.modalDeleteText}>Delete</Text>
+              {isLoading ? (
+                <ActivityIndicator color={COLORS.white} size="small" />
+              ) : (
+                <Text style={styles.modalDeleteText}>Delete</Text>
+              )}
             </TouchableOpacity>
           </View>
         </Pressable>
@@ -320,11 +354,27 @@ const ConfirmDeleteModal = ({
 type ToastState = { message: string; type: 'success' | 'error'; onUndo?: () => void } | null;
 
 const Toast = ({ toast, onHide, bottomOffset }: { toast: ToastState; onHide: () => void; bottomOffset?: number }) => {
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   useEffect(() => {
-    if (toast) {
-      const timer = setTimeout(onHide, UNDO_WINDOW_MS);
-      return () => clearTimeout(timer);
+    if (timerRef.current) {
+      clearTimeout(timerRef.current);
+      timerRef.current = null;
     }
+
+    if (toast) {
+      timerRef.current = setTimeout(() => {
+        onHide();
+        timerRef.current = null;
+      }, UNDO_WINDOW_MS);
+    }
+
+    return () => {
+      if (timerRef.current) {
+        clearTimeout(timerRef.current);
+        timerRef.current = null;
+      }
+    };
   }, [toast, onHide]);
 
   if (!toast) return null;
@@ -358,11 +408,11 @@ const Toast = ({ toast, onHide, bottomOffset }: { toast: ToastState; onHide: () 
 // ─── Main Screen ────────────────────────────────────────────────────────────
 
 export default function SavedNotes() {
-  // isLoading is optional — only used if NotesContext exposes a hydration
-  // flag. Defaults to false (skeleton skipped) if it doesn't exist yet.
-  const { notes, removeNote, isLoading, refreshNotes } = useNotes() as {
+  const { notes, removeNoteLocal, deleteNoteServer, restoreNote, isLoading, refreshNotes } = useNotes() as {
     notes: LearningNote[];
-    removeNote: (id: string) => void | Promise<void>;
+    removeNoteLocal: (id: string) => void;
+    deleteNoteServer: (id: string) => Promise<void>;
+    restoreNote: (note: LearningNote) => void;
     isLoading?: boolean;
     refreshNotes: () => Promise<void>;
   };
@@ -370,8 +420,6 @@ export default function SavedNotes() {
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
 
-  // Re-fetch from the backend every time this screen gains focus, so notes
-  // saved on another device appear here without a full reload.
   useFocusEffect(
     useCallback(() => {
       refreshNotes();
@@ -381,30 +429,29 @@ export default function SavedNotes() {
   const [noteToDelete, setNoteToDelete] = useState<LearningNote | null>(null);
   const [toast, setToast] = useState<ToastState>(null);
   const [searchQuery, setSearchQuery] = useState('');
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
-  // Soft-delete bookkeeping: hidden notes + their pending removal timers.
-  const [pendingDeleteIds, setPendingDeleteIds] = useState<Set<string>>(new Set());
+  const [pendingDeleteIds, setPendingDeleteIds] = useState<string[]>([]);
+  const pendingDeleteSetRef = useRef<Set<string>>(new Set());
   const timersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
 
   const isDesktop = width >= 1024;
   const isMobile = width < 768;
 
-  // Flush any still-pending deletions if the screen unmounts before the
-  // undo window elapses, so a note doesn't silently "come back" later.
   useEffect(() => {
     return () => {
       timersRef.current.forEach((timer, id) => {
         clearTimeout(timer);
-        removeNote(id);
+        deleteNoteServer(id);
       });
       timersRef.current.clear();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const showToast = (message: string, type: 'success' | 'error' = 'success', onUndo?: () => void) => {
+  const showToast = useCallback((message: string, type: 'success' | 'error' = 'success', onUndo?: () => void) => {
     setToast({ message, type, onUndo });
-  };
+  }, []);
 
   const handleBack = useCallback(() => {
     router.navigate('/(tabs)/userAccount');
@@ -412,8 +459,6 @@ export default function SavedNotes() {
 
   const handleOpenNote = useCallback(
     (note: LearningNote) => {
-      // Assumes a diagramId field and a matching route — adjust to match
-      // your router setup if the diagram detail screen lives elsewhere.
       const diagramId = (note as any).diagramId;
       if (!diagramId) return;
       router.navigate(`/(tabs)/diagram/${diagramId}` as any);
@@ -421,32 +466,65 @@ export default function SavedNotes() {
     [router]
   );
 
-  const openDeleteModal = (note: LearningNote) => setNoteToDelete(note);
-  const closeDeleteModal = () => setNoteToDelete(null);
+  const openDeleteModal = useCallback((note: LearningNote) => {
+    if (deletingId === note.id) {
+      console.log('⏳ Delete already in progress for this note');
+      return;
+    }
+    setNoteToDelete(note);
+  }, [deletingId]);
 
-  const confirmDelete = () => {
+  const closeDeleteModal = useCallback(() => {
+    setNoteToDelete(null);
+  }, []);
+
+  const confirmDelete = useCallback(() => {
     if (!noteToDelete) return;
     const id = noteToDelete.id;
-    setNoteToDelete(null);
+    const note = noteToDelete;
 
-    // Hide immediately (optimistic), but don't actually remove it yet.
-    setPendingDeleteIds((prev) => new Set(prev).add(id));
+    setDeletingId(id);
+
+    // Remove from the visible list immediately.
+    removeNoteLocal(id);
+
+    // Shield: keeps the note out of `visibleNotes` even if something
+    // (e.g. the focus-triggered refreshNotes()) refetches the note list
+    // from the server before the server-side delete below has happened.
+    pendingDeleteSetRef.current.add(id);
+    setPendingDeleteIds(Array.from(pendingDeleteSetRef.current));
+
+    setNoteToDelete(null);
 
     const timer = setTimeout(async () => {
       timersRef.current.delete(id);
       try {
-        await removeNote(id);
-      } catch (error) {
-        showToast('Failed to delete note.', 'error');
+        // Delete on the server only after the undo window has passed.
+        await deleteNoteServer(id);
+
+        // BUGFIX: re-assert the local removal. If a background refetch
+        // (e.g. useFocusEffect's refreshNotes()) landed during the undo
+        // window — before the server actually had the note deleted —
+        // it would have silently put the note BACK into `notes`, hidden
+        // only by the shield above. The instant we drop that shield
+        // below, that stale copy would flash back on screen for a frame
+        // before the next refetch corrected it. Explicitly removing it
+        // again here closes that gap for good, regardless of what any
+        // interim refetch did.
+        removeNoteLocal(id);
+      } catch (err) {
+        console.log(`⚠️ Failed to delete note ${id} on server`, err);
+        // Don't leave the note stuck invisible behind the shield forever —
+        // put it back and tell the user.
+        restoreNote(note);
+        showToast('Failed to delete note. Please try again.', 'error');
+      } finally {
+        // Only drop the shield once we've settled on a final state
+        // (confirmed deleted, or restored above), never before.
+        pendingDeleteSetRef.current.delete(id);
+        setPendingDeleteIds(Array.from(pendingDeleteSetRef.current));
+        setDeletingId(null);
       }
-      // Always drop the soft-delete marker once the undo window elapses.
-      // Leaving it behind makes hasAnyNotes undercount and, with 2 notes,
-      // hides the remaining note behind the empty state.
-      setPendingDeleteIds((prev) => {
-        const next = new Set(prev);
-        next.delete(id);
-        return next;
-      });
     }, UNDO_WINDOW_MS);
 
     timersRef.current.set(id, timer);
@@ -457,19 +535,19 @@ export default function SavedNotes() {
         clearTimeout(pending);
         timersRef.current.delete(id);
       }
-      setPendingDeleteIds((prev) => {
-        const next = new Set(prev);
-        next.delete(id);
-        return next;
-      });
+      pendingDeleteSetRef.current.delete(id);
+      setPendingDeleteIds(Array.from(pendingDeleteSetRef.current));
+      setDeletingId(null);
+      restoreNote(note);
+      console.log(`✅ Note ${id} restored via undo`);
       setToast(null);
     });
-  };
+  }, [noteToDelete, removeNoteLocal, deleteNoteServer, restoreNote, showToast]);
 
   const visibleNotes = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
     return notes.filter((note) => {
-      if (pendingDeleteIds.has(note.id)) return false;
+      if (pendingDeleteSetRef.current.has(note.id)) return false;
       if (!query) return true;
       return (
         note.diagramTitle.toLowerCase().includes(query) ||
@@ -488,13 +566,18 @@ export default function SavedNotes() {
     return Array.from(map.entries()).map(([title, items]) => ({ title, items }));
   }, [visibleNotes]);
 
-  const hasAnyNotes = notes.some((note) => !pendingDeleteIds.has(note.id));
+  const hasAnyNotes = notes.some((note) => !pendingDeleteSetRef.current.has(note.id));
+
+  const isShowingEmptyState = !isLoading && (!hasAnyNotes || groupedNotes.length === 0);
+
+  const hideToast = useCallback(() => {
+    setToast(null);
+  }, []);
 
   return (
     <View style={styles.container}>
       <DotGrid />
 
-      {/* Header */}
       <View style={[styles.header, { paddingTop: insets.top + SPACING.sm }]}>
         <TouchableOpacity onPress={handleBack} style={styles.backButton} activeOpacity={0.6}>
           <BackIcon />
@@ -513,15 +596,14 @@ export default function SavedNotes() {
             alignSelf: isDesktop ? 'center' : 'stretch',
             width: '100%',
           },
+          isShowingEmptyState && styles.emptyScrollContent,
         ]}
       >
         {isLoading ? (
           <SkeletonList />
         ) : !hasAnyNotes ? (
           <View style={styles.emptyState}>
-            <View style={styles.emptyIconCircle}>
-              <NoteIcon color={COLORS.gray400} />
-            </View>
+            <EmptyNotesIcon />
             <Text style={styles.emptyTitle}>No saved notes yet</Text>
             <Text style={styles.emptySubtext}>
               Submit notes on any SDLC and UML diagram in diagram library and it will appear here automatically.
@@ -529,7 +611,6 @@ export default function SavedNotes() {
           </View>
         ) : (
           <>
-            {/* Search — exact copy of Home's search bar */}
             <View style={styles.searchBarContainer}>
               <View style={styles.searchBar}>
                 <TextInput
@@ -566,7 +647,6 @@ export default function SavedNotes() {
               </View>
             </View>
 
-
             {groupedNotes.length === 0 ? (
               <View style={styles.emptyState}>
                 <Text style={styles.emptyTitle}>No matches</Text>
@@ -592,6 +672,7 @@ export default function SavedNotes() {
                           canOpen={canOpen}
                           onOpen={() => handleOpenNote(note)}
                           onDelete={() => openDeleteModal(note)}
+                          isDeleting={deletingId === note.id}
                         />
                       );
                     })}
@@ -603,19 +684,17 @@ export default function SavedNotes() {
         )}
       </ScrollView>
 
-      {/* Delete Confirmation Modal */}
       <ConfirmDeleteModal
         visible={!!noteToDelete}
         onClose={closeDeleteModal}
         onConfirm={confirmDelete}
         noteText={noteToDelete?.text || ''}
+        isLoading={!!noteToDelete && deletingId === noteToDelete.id}
       />
 
-      {/* Toast — lifted above the docked bottom nav on mobile so the
-          Undo button stays visible and tappable */}
       <Toast
         toast={toast}
-        onHide={() => setToast(null)}
+        onHide={hideToast}
         bottomOffset={isMobile ? insets.bottom + 96 : SPACING.xxxl}
       />
     </View>
@@ -669,6 +748,10 @@ const styles = StyleSheet.create({
     flexGrow: 1,
     paddingHorizontal: SPACING.xl,
     paddingTop: SPACING.md,
+  },
+  emptyScrollContent: {
+    flexGrow: 1,
+    justifyContent: 'center',
   },
   searchBarContainer: {
     alignSelf: 'center',
@@ -754,26 +837,19 @@ const styles = StyleSheet.create({
   emptyState: {
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 80,
-  },
-  emptyIconCircle: {
-    width: 72,
-    height: 72,
-    borderRadius: RADIUS.full,
-    backgroundColor: COLORS.gray100,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: SPACING.lg,
+    paddingHorizontal: SPACING.xxxl,
+    paddingVertical: SPACING.xxxl * 2,
   },
   emptyTitle: {
-    fontSize: 18,
+    fontSize: 20,
     fontWeight: '700',
-    color: COLORS.gray700,
+    color: COLORS.gray900,
+    marginTop: SPACING.lg,
     marginBottom: SPACING.sm,
   },
   emptySubtext: {
     fontSize: 14,
-    color: COLORS.gray500,
+    color: COLORS.gray400,
     textAlign: 'center',
     lineHeight: 20,
     maxWidth: 280,
@@ -789,9 +865,6 @@ const styles = StyleSheet.create({
     borderColor: 'transparent',
     ...SHADOWS.sm,
   },
-  // Same hover language as reference.tsx's cardHovered: a brighter border
-  // plus a slightly deeper, wider shadow — signals "hoverable" on desktop
-  // without changing layout or shifting content.
   noteCardHovered: {
     borderColor: COLORS.hoverBorder,
     shadowOpacity: 0.1,
@@ -832,6 +905,17 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: COLORS.gray400,
     fontWeight: '500',
+  },
+  seeMoreButton: {
+    marginTop: SPACING.sm,
+    alignSelf: 'flex-start',
+    paddingVertical: SPACING.xs,
+  },
+  seeMoreText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: COLORS.primary,
+    letterSpacing: 0.2,
   },
   skeletonLineWide: {
     height: 16,
@@ -952,6 +1036,9 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: COLORS.white,
   },
+  modalButtonDisabled: {
+    opacity: 0.6,
+  },
   toast: {
     position: 'absolute',
     bottom: SPACING.xxxl,
@@ -976,7 +1063,7 @@ const styles = StyleSheet.create({
     }),
   },
   toastSuccess: {
-    backgroundColor: COLORS.gray900,
+    backgroundColor: COLORS.primary,
   },
   toastError: {
     backgroundColor: COLORS.danger,
@@ -991,7 +1078,7 @@ const styles = StyleSheet.create({
     marginLeft: SPACING.md,
   },
   toastUndoText: {
-    color: COLORS.primaryLight,
+    color: COLORS.white,
     fontSize: 13,
     fontWeight: '800',
     letterSpacing: 0.4,

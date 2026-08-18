@@ -16,6 +16,9 @@ interface NotesContextType {
   notes: LearningNote[];
   addNote: (note: Omit<LearningNote, 'id' | 'timestamp'>) => void;
   removeNote: (id: string) => void;
+  removeNoteLocal: (id: string) => void;
+  deleteNoteServer: (id: string) => Promise<void>;
+  restoreNote: (note: LearningNote) => void;
   refreshNotes: () => Promise<void>;
 }
 
@@ -155,22 +158,35 @@ export const NotesProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     }
   };
 
-  const removeNote = async (id: string) => {
+  const removeNoteLocal = (id: string) => {
     setNotes((prev) => prev.filter((note) => note.id !== id));
+  };
 
-    // If authenticated and the note exists on server (id doesn't start with 'local-'), delete from backend
-    if (!id.startsWith('local-')) {
-      const signedIn = await authService.hasActiveSession();
-      if (signedIn) {
-        try {
-          await authService.authFetch(`${API_BASE_URL}/api/notes/${id}`, {
-            method: 'DELETE',
-          });
-        } catch (error) {
-          console.warn('Failed to delete note on server:', error);
-        }
-      }
+  const deleteNoteServer = async (id: string) => {
+    // Local-only notes have nothing to delete on the backend.
+    if (id.startsWith('local-')) return;
+    const signedIn = await authService.hasActiveSession();
+    if (!signedIn) return;
+    try {
+      await authService.authFetch(`${API_BASE_URL}/api/notes/${id}`, {
+        method: 'DELETE',
+      });
+    } catch (error) {
+      console.warn('Failed to delete note on server:', error);
     }
+  };
+
+  const removeNote = async (id: string) => {
+    removeNoteLocal(id);
+    await deleteNoteServer(id);
+  };
+
+  const restoreNote = (note: LearningNote) => {
+    setNotes((prev) => {
+      // Avoid duplicating a note a server refetch already brought back.
+      if (prev.some((n) => n.id === note.id)) return prev;
+      return [note, ...prev];
+    });
   };
 
   const refreshNotes = async () => {
@@ -182,7 +198,17 @@ export const NotesProvider: React.FC<{ children: ReactNode }> = ({ children }) =
   };
 
   return (
-    <NotesContext.Provider value={{ notes, addNote, removeNote, refreshNotes }}>
+    <NotesContext.Provider
+      value={{
+        notes,
+        addNote,
+        removeNote,
+        removeNoteLocal,
+        deleteNoteServer,
+        restoreNote,
+        refreshNotes,
+      }}
+    >
       {children}
     </NotesContext.Provider>
   );
