@@ -319,7 +319,7 @@ const ConfirmDeleteModal = ({
 
 type ToastState = { message: string; type: 'success' | 'error'; onUndo?: () => void } | null;
 
-const Toast = ({ toast, onHide }: { toast: ToastState; onHide: () => void }) => {
+const Toast = ({ toast, onHide, bottomOffset }: { toast: ToastState; onHide: () => void; bottomOffset?: number }) => {
   useEffect(() => {
     if (toast) {
       const timer = setTimeout(onHide, UNDO_WINDOW_MS);
@@ -331,7 +331,11 @@ const Toast = ({ toast, onHide }: { toast: ToastState; onHide: () => void }) => 
 
   return (
     <View
-      style={[styles.toast, toast.type === 'error' ? styles.toastError : styles.toastSuccess]}
+      style={[
+        styles.toast,
+        { bottom: bottomOffset ?? SPACING.xxxl },
+        toast.type === 'error' ? styles.toastError : styles.toastSuccess,
+      ]}
       accessibilityLiveRegion="polite"
       accessibilityRole="alert"
     >
@@ -605,8 +609,13 @@ export default function SavedNotes() {
         noteText={noteToDelete?.text || ''}
       />
 
-      {/* Toast */}
-      <Toast toast={toast} onHide={() => setToast(null)} />
+      {/* Toast — lifted above the docked bottom nav on mobile so the
+          Undo button stays visible and tappable */}
+      <Toast
+        toast={toast}
+        onHide={() => setToast(null)}
+        bottomOffset={isMobile ? insets.bottom + 96 : SPACING.xxxl}
+      />
     </View>
   );
 }
