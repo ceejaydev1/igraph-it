@@ -21,6 +21,7 @@ import { DIAGRAM_ICON_MAP, GenericDiagramGlyph } from '../../../constants/diagra
 import { ShapeIcon } from '../../../components/shapes/ShapeIcon';
 import * as authService from '../../../services/authService';
 import API_BASE_URL from '../../../constants/api';
+import { useNotes } from '../../../contexts/NotesContext';
 
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -40,10 +41,6 @@ interface DiagramContent {
   videoId: string;
   sections: DiagramSection[];
   steps?: string[];
-  // Split out of `sections` on purpose — see ProsConsCard's comment — so
-  // advantages/disadvantages get their own scannable two-list layout
-  // instead of being blended into one prose paragraph like the other
-  // sections.
   advantages?: string[];
   disadvantages?: string[];
   keyPoints?: string[];
@@ -61,10 +58,6 @@ interface ReferenceLink {
 interface ShapeUsed {
   name: string;
   description: string;
-  // Matches a key in components/shapes/ShapeIcon.tsx's componentMap — the
-  // exact same shape component the editor's real drag-and-drop shape panel
-  // renders (constants/shapes.ts's ShapeDefinition.svgComponent), so this
-  // reference panel shows the identical icon rather than a lookalike redraw.
   svgComponent: string;
 }
 
@@ -77,13 +70,6 @@ interface TypeConfig {
 
 // ─── Content Data ─────────────────────────────────────────────────────────────
 
-// Keyed by the exact title strings used in DIAGRAM_CONTENT below — each UML
-// diagram type gets the notation it actually draws with, not a generic set.
-// Names AND svgComponent values match constants/shapes.ts's DIAGRAM_SHAPES
-// one-for-one, so this reference panel renders the identical icon the
-// editor's real drag-and-drop shape panel uses (via ShapeIcon below) and can
-// never visually drift from it. Descriptions here explain what each shape
-// DOES/means rather than reusing that file's terse editor-tooltip text.
 const SHAPES_BY_TITLE: Record<string, ShapeUsed[]> = {
   'Functional Decomposition Diagram': [
     { name: 'Function', description: 'A rounded box naming one function or sub-function the system performs.', svgComponent: 'FDD_FunctionShape' },
@@ -231,11 +217,6 @@ const SHAPES_BY_TITLE: Record<string, ShapeUsed[]> = {
 
 const PLACEHOLDER_VIDEO_ID = 'dQw4w9WgXcQ';
 
-// Real, researched content (everything except the video, which stays the
-// shared placeholder), sourced from Tutorialspoint's Waterfall write-up and
-// the DEV Community/GitHub/ScienceDirect pieces on the Sashimi ("modified
-// waterfall") model specifically; see the References list below for the
-// same links.
 const MODIFIED_WATERFALL_CONTENT: DiagramContent = {
   id: 12,
   title: 'Modified Waterfall Model',
@@ -288,10 +269,6 @@ const MODIFIED_WATERFALL_CONTENT: DiagramContent = {
   ],
 };
 
-// Real, researched content (everything except the video), sourced from
-// Visual Paradigm, GeeksforGeeks, IBM Developer, Miro, and Creately's
-// sequence-diagram guides; see the References list below for the same
-// links.
 const SEQUENCE_DIAGRAM_CONTENT: DiagramContent = {
   id: 9,
   title: 'Sequence Diagram',
@@ -344,9 +321,6 @@ const SEQUENCE_DIAGRAM_CONTENT: DiagramContent = {
   shapesUsed: SHAPES_BY_TITLE['Sequence Diagram'] || [],
 };
 
-// Real, researched content (everything except the video), sourced from
-// GeeksforGeeks, Visual Paradigm, IONOS, Educba, and Slickplan's class-diagram
-// guides; see the References list below for the same links.
 const CLASS_DIAGRAM_CONTENT: DiagramContent = {
   id: 10,
   title: 'Class Diagram',
@@ -399,10 +373,6 @@ const CLASS_DIAGRAM_CONTENT: DiagramContent = {
   shapesUsed: SHAPES_BY_TITLE['Class Diagram'] || [],
 };
 
-// Real, researched content (everything except the video), sourced from
-// Tutorialspoint, GeeksforGeeks, Guru99, and TechTarget's Waterfall write
-// ups, plus Lesson 9's Methodologies/Software Paradigms course slides. URLs
-// verified directly. Written without hyphen or dash punctuation throughout.
 const WATERFALL_CONTENT: DiagramContent = {
   id: 11,
   title: 'Waterfall Model',
@@ -454,10 +424,6 @@ const WATERFALL_CONTENT: DiagramContent = {
   ],
 };
 
-// Real, researched content (everything except the video), sourced from
-// Tutorialspoint, GeeksforGeeks, and Javatpoint's Prototyping write ups,
-// plus Lesson 9's Methodologies/Software Paradigms course slides. URLs
-// verified directly. Written without hyphen or dash punctuation throughout.
 const PROTOTYPE_CONTENT: DiagramContent = {
   id: 14,
   title: 'Prototype Model',
@@ -508,10 +474,6 @@ const PROTOTYPE_CONTENT: DiagramContent = {
   ],
 };
 
-// Real, researched content (everything except the video), sourced from
-// GeeksforGeeks, the Agile Alliance, and Visual Paradigm's Agile write ups, plus
-// Lesson 9's Methodologies/Software Paradigms course slides. URLs verified
-// directly. Written without hyphen or dash punctuation throughout.
 const AGILE_CONTENT: DiagramContent = {
   id: 15,
   title: 'Agile Model',
@@ -562,12 +524,6 @@ const AGILE_CONTENT: DiagramContent = {
   ],
 };
 
-// Real, researched content (everything except the video), sourced from
-// Tutorialspoint, GeeksforGeeks, Guru99, and Scaler's RAD write ups,
-// plus Lesson 9's Methodologies/Software Paradigms course slides. The four
-// phase breakdown (Requirements Planning, User Design, Construction,
-// Cutover) matches that lesson's slides directly. URLs verified directly.
-// Written without hyphen or dash punctuation throughout.
 const RAD_CONTENT: DiagramContent = {
   id: 18,
   title: 'Rapid Application Development',
@@ -618,10 +574,6 @@ const RAD_CONTENT: DiagramContent = {
   ],
 };
 
-// Real, researched content (everything except the video), sourced from
-// Tutorialspoint, GeeksforGeeks, TechTarget, and Educative's Spiral write
-// ups, plus Lesson 9's Methodologies/Software Paradigms course slides. URLs
-// verified directly. Written without hyphen or dash punctuation throughout.
 const SPIRAL_CONTENT: DiagramContent = {
   id: 19,
   title: 'Spiral Model',
@@ -673,9 +625,6 @@ const SPIRAL_CONTENT: DiagramContent = {
   ],
 };
 
-// Real, researched content (everything except the video), sourced from
-// GeeksforGeeks and Scaler's Big Bang write ups. URLs verified directly.
-// Written without hyphen or dash punctuation throughout.
 const BIG_BANG_CONTENT: DiagramContent = {
   id: 13,
   title: 'Big Bang Model',
@@ -724,9 +673,6 @@ const BIG_BANG_CONTENT: DiagramContent = {
   ],
 };
 
-// Real, researched content (everything except the video), sourced from
-// Tutorialspoint, GeeksforGeeks, Scaler, and Tpoint Tech's Iterative write ups. URLs
-// verified directly. Written without hyphen or dash punctuation throughout.
 const ITERATIVE_CONTENT: DiagramContent = {
   id: 16,
   title: 'Iterative Model',
@@ -777,9 +723,6 @@ const ITERATIVE_CONTENT: DiagramContent = {
   ],
 };
 
-// Real, researched content (everything except the video), sourced from
-// Tutorialspoint, GeeksforGeeks, and Guru99's V Model write ups. URLs
-// verified directly. Written without hyphen or dash punctuation throughout.
 const V_MODEL_CONTENT: DiagramContent = {
   id: 17,
   title: 'V Model',
@@ -830,10 +773,6 @@ const V_MODEL_CONTENT: DiagramContent = {
   ],
 };
 
-// Real, researched content (everything except the video), sourced from
-// Visual Paradigm's system analysis guide and GeeksforGeeks and Baeldung's
-// decomposition write ups. URLs verified directly. Written without hyphen
-// or dash punctuation throughout.
 const FDD_CONTENT: DiagramContent = {
   id: 1,
   title: 'Functional Decomposition Diagram',
@@ -884,9 +823,6 @@ const FDD_CONTENT: DiagramContent = {
   shapesUsed: SHAPES_BY_TITLE['Functional Decomposition Diagram'] || [],
 };
 
-// Real, researched content (everything except the video), sourced from
-// GeeksforGeeks, SmartDraw, and Visual Paradigm's Flowchart write ups. URLs verified directly.
-// Written without hyphen or dash punctuation throughout.
 const FLOWCHART_CONTENT: DiagramContent = {
   id: 2,
   title: 'Flowchart',
@@ -938,9 +874,6 @@ const FLOWCHART_CONTENT: DiagramContent = {
   shapesUsed: SHAPES_BY_TITLE['Flowchart'] || [],
 };
 
-// Real, researched content (everything except the video), sourced from
-// EdrawMax, SmartDraw, and Visual Paradigm's Data Flow Diagram write ups. URLs verified
-// directly. Written without hyphen or dash punctuation throughout.
 const DFD_CONTENT: DiagramContent = {
   id: 3,
   title: 'Data Flow Diagram',
@@ -991,9 +924,6 @@ const DFD_CONTENT: DiagramContent = {
   shapesUsed: SHAPES_BY_TITLE['Data Flow Diagram'] || [],
 };
 
-// Real, researched content (everything except the video), sourced from
-// GeeksforGeeks' Entity Relationship Diagram write ups. URLs
-// verified directly. Written without hyphen or dash punctuation throughout.
 const ERD_CONTENT: DiagramContent = {
   id: 4,
   title: 'Entity Relationship Diagram',
@@ -1044,9 +974,6 @@ const ERD_CONTENT: DiagramContent = {
   shapesUsed: SHAPES_BY_TITLE['Entity Relationship Diagram'] || [],
 };
 
-// Real, researched content (everything except the video), sourced from
-// ASQ and MindTools' Fishbone/Ishikawa write ups. URLs verified
-// directly. Written without hyphen or dash punctuation throughout.
 const FISHBONE_CONTENT: DiagramContent = {
   id: 5,
   title: 'Fishbone Diagram',
@@ -1097,10 +1024,6 @@ const FISHBONE_CONTENT: DiagramContent = {
   shapesUsed: SHAPES_BY_TITLE['Fishbone Diagram'] || [],
 };
 
-// Real, researched content (everything except the video), sourced from All
-// About Circuits, Electronics Tutorials, and SparkFun's Schematic write
-// ups. URLs verified directly. Written without hyphen or dash punctuation
-// throughout.
 const SCHEMATIC_CONTENT: DiagramContent = {
   id: 6,
   title: 'Schematic Diagram',
@@ -1151,9 +1074,6 @@ const SCHEMATIC_CONTENT: DiagramContent = {
   shapesUsed: SHAPES_BY_TITLE['Schematic Diagram'] || [],
 };
 
-// Real, researched content (everything except the video), sourced from
-// Visual Paradigm and GeeksforGeeks' Use Case Diagram write ups. URLs verified
-// directly. Written without hyphen or dash punctuation throughout.
 const USE_CASE_CONTENT: DiagramContent = {
   id: 7,
   title: 'Use Case Diagram',
@@ -1204,9 +1124,6 @@ const USE_CASE_CONTENT: DiagramContent = {
   shapesUsed: SHAPES_BY_TITLE['Use Case Diagram'] || [],
 };
 
-// Real, researched content (everything except the video), sourced from
-// Visual Paradigm and GeeksforGeeks' Activity Diagram write ups. URLs verified
-// directly. Written without hyphen or dash punctuation throughout.
 const ACTIVITY_CONTENT: DiagramContent = {
   id: 8,
   title: 'Activity Diagram',
@@ -1279,8 +1196,6 @@ const DIAGRAM_CONTENT: Record<number, DiagramContent> = {
   19: SPIRAL_CONTENT,
 };
 
-// ─── Color Configuration ─────────────────────────────────────────────────────
-
 const TYPE_CONFIG: Record<'UML' | 'SDLC', TypeConfig> = {
   UML: {
     primary: '#4c6fff',
@@ -1296,15 +1211,11 @@ const TYPE_CONFIG: Record<'UML' | 'SDLC', TypeConfig> = {
   },
 } as const;
 
-// ─── Responsive Breakpoints ──────────────────────────────────────────────────
-
 const BREAKPOINTS = {
   tablet: 768,
   desktop: 1024,
   maxContentWidth: 1280,
 } as const;
-
-// ─── SVG Icons ────────────────────────────────────────────────────────────────
 
 interface IconProps {
   color: string;
@@ -1322,10 +1233,6 @@ const BackIcon: React.FC = () => (
   </Svg>
 );
 
-// Shared by the hero and the floating-header back buttons — same look, same
-// hover behavior, defined once so the two can't silently drift apart. Home/
-// Reference/Saved Diagrams all give their clickable cards a hover state on
-// web; this page previously gave none of its buttons one.
 interface BackButtonProps {
   onPress: () => void;
   style?: any;
@@ -1340,9 +1247,7 @@ const BackButton: React.FC<BackButtonProps> = ({ onPress, style }) => {
       activeOpacity={0.6}
       accessibilityLabel="Go back to home"
       accessibilityRole="button"
-      // @ts-ignore - React Native Web specific props
       onMouseEnter={() => setIsHovered(true)}
-      // @ts-ignore
       onMouseLeave={() => setIsHovered(false)}
     >
       <BackIcon />
@@ -1350,9 +1255,6 @@ const BackButton: React.FC<BackButtonProps> = ({ onPress, style }) => {
   );
 };
 
-// Same subtle dot texture used on Home/Reference/Saved Diagrams — this was
-// the one main screen missing it, which made it read flatter than its own
-// siblings despite being the screen users spend the most time on.
 const DotGrid: React.FC = () => {
   const { width: screenWidth, height: screenHeight } = useWindowDimensions();
   const DOT_SPACING = 32;
@@ -1397,8 +1299,6 @@ const CheckIcon: React.FC<IconProps> = ({ color }) => (
   </Svg>
 );
 
-// "What It Is" marker — a plain info glyph, since that section is a
-// definition.
 const InfoIcon: React.FC<IconProps> = ({ color }) => (
   <Svg width={10} height={10} viewBox="0 0 24 24" fill="none">
     <Circle cx="12" cy="7.5" r="1.6" fill={color} />
@@ -1406,8 +1306,6 @@ const InfoIcon: React.FC<IconProps> = ({ color }) => (
   </Svg>
 );
 
-// "When to Use It" marker — a clock, since that section is about timing/
-// context rather than a static fact.
 const ClockIcon: React.FC<IconProps> = ({ color }) => (
   <Svg width={10} height={10} viewBox="0 0 24 24" fill="none">
     <Circle cx="12" cy="12" r="9" stroke={color} strokeWidth={2} />
@@ -1415,9 +1313,6 @@ const ClockIcon: React.FC<IconProps> = ({ color }) => (
   </Svg>
 );
 
-// ProsConsCard's own marker — a plus and a minus side by side, standing in
-// for "advantages / disadvantages" more directly than a literal balance-
-// scale glyph would render at this size (16px marker, 10px icon).
 const PlusMinusIcon: React.FC<IconProps> = ({ color }) => (
   <Svg width={12} height={12} viewBox="0 0 24 24" fill="none">
     <Path d="M6 4V13M1.5 8.5H10.5" stroke={color} strokeWidth={2.4} strokeLinecap="round" />
@@ -1437,24 +1332,12 @@ const LinkIcon: React.FC<IconProps> = ({ color }) => (
   </Svg>
 );
 
-// ─── Diagram Placeholder Component ──────────────────────────────────────────
-
 interface DiagramPlaceholderProps {
   color: string;
   label: string;
   title: string;
 }
 
-// Dashed border + tint keep this reading as "placeholder, not final artwork" — but the
-// glyph inside is the same per-type icon used on the Home grid, so it's a placeholder
-// specific to this diagram rather than the generic "image failed to load" convention.
-//
-// `label` (content.imageAlt) used to render as visible caption text under the
-// icon, right below the page's own title — which already says the same
-// thing. Now it's just an accessibility label on the box itself, same as
-// the real <Image>'s accessibilityLabel prop once a diagram gets a real
-// picture, so screen readers still get the description without sighted
-// users seeing it echoed twice.
 const DiagramPlaceholder: React.FC<DiagramPlaceholderProps> = ({ color, label, title }) => {
   const Icon = DIAGRAM_ICON_MAP[title] ?? GenericDiagramGlyph;
   return (
@@ -1462,7 +1345,6 @@ const DiagramPlaceholder: React.FC<DiagramPlaceholderProps> = ({ color, label, t
       <View
         style={[placeholderStyles.imageBox, { backgroundColor: `${color}15`, borderColor: `${color}30` }]}
         accessibilityLabel={label}
-        // @ts-ignore - accessibilityRole="img" renders as role="img" on web (react-native-web)
         accessibilityRole="image"
       >
         <Icon color={color} />
@@ -1477,12 +1359,6 @@ const placeholderStyles = StyleSheet.create({
     flexShrink: 0,
   },
   imageBox: {
-    // Same fix as heroImage below: a flat maxHeight fighting aspectRatio
-    // left this stretching to the full hero width (up to ~1230px on
-    // desktop) while staying pinned to a ~180px height, so the glyph and
-    // caption inside read as small and lost in a wide, mostly empty band.
-    // Capping the width instead lets height follow the aspect ratio
-    // properly at any viewport size.
     width: '100%',
     maxWidth: 640,
     aspectRatio: 16 / 9,
@@ -1502,8 +1378,6 @@ const placeholderStyles = StyleSheet.create({
     opacity: 0.8,
   },
 });
-
-// ─── Video Player Component ──────────────────────────────────────────────────
 
 interface VideoPlayerProps {
   videoId: string;
@@ -1577,8 +1451,6 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videoId, color }) => {
   );
 };
 
-// Placeholder video ID shared by every entry in DIAGRAM_CONTENT until real tutorial
-// videos are recorded — routes here instead of embedding a real (if unrelated) video.
 const VideoOffIcon: React.FC<IconProps> = ({ color }) => (
   <Svg width={28} height={28} viewBox="0 0 24 24" fill="none">
     <Path
@@ -1644,11 +1516,6 @@ const videoStyles = StyleSheet.create({
   },
 });
 
-// ─── Shared Card Shell ────────────────────────────────────────────────────────
-// One quiet container recipe reused underneath every content block below, so
-// the *content type* (section / step / key point) is what visually differs —
-// not three copies of the same "white card + shadow" box.
-
 const cardShell = {
   backgroundColor: '#ffffff',
   borderRadius: 12,
@@ -1663,16 +1530,6 @@ const cardShell = {
   elevation: 1,
 } as const;
 
-// ─── Section Card Component ──────────────────────────────────────────────────
-// Marker is a small square "node" rather than a full-height colored bar —
-// a nod to the diagram nodes this app is actually about, used with restraint.
-// "What It Is" and "When to Use It" used to render that exact same node for
-// both, despite being two different kinds of content (a definition vs. a
-// timing/context cue) — this lookup gives each its own tiny glyph instead.
-// Keyed by the exact heading text (all diagram types currently share
-// DEFAULT_SECTIONS' two headings), with a plain dot as the fallback for any
-// heading this map doesn't recognize, so a future/custom section heading
-// still renders correctly instead of breaking.
 const SECTION_ICON_BY_HEADING: Record<string, React.FC<IconProps>> = {
   'What It Is': InfoIcon,
   'When to Use It': ClockIcon,
@@ -1736,15 +1593,6 @@ const sectionStyles = StyleSheet.create({
   },
 });
 
-// ─── Pros & Cons Component ───────────────────────────────────────────────────
-// Deliberately breaks from every other section's per-diagram-type accent
-// color: "advantage" and "disadvantage" are universal, instantly-readable
-// concepts (green = good, red = caution) regardless of which diagram type
-// this is, so tinting both lists the same theme color would blur exactly the
-// distinction this section exists to draw. The thin two-tone bar under the
-// title is a small "weighing both sides" motif — it's the one visual thread
-// tying the two otherwise-independent columns together, the same job the
-// StepsList connector line does for sequential steps.
 const PROS_COLOR = '#15803d';
 const PROS_TINT = '#f0fdf4';
 const PROS_BORDER = '#bbf7d0';
@@ -1792,9 +1640,6 @@ const ProsConsCard: React.FC<ProsConsCardProps> = ({ advantages, disadvantages, 
       <View style={[prosConsStyles.balanceHalf, { backgroundColor: PROS_COLOR }]} />
       <View style={[prosConsStyles.balanceHalf, { backgroundColor: CONS_COLOR }]} />
     </View>
-    {/* flexWrap, not a fixed isDesktop prop: reflows to stacked columns based
-        on this card's own rendered width (it sits inside a narrower sidebar
-        column even on desktop), rather than the full window width. */}
     <View style={prosConsStyles.columns}>
       <ProsConsColumn
         label="Advantages"
@@ -1876,10 +1721,6 @@ const prosConsStyles = StyleSheet.create({
   },
 });
 
-// ─── Steps List Component ────────────────────────────────────────────────────
-// Same node motif as SectionCard, but chained with a connecting line — since
-// steps are genuinely sequential, the line is information, not decoration.
-
 interface StepsListProps {
   steps: string[];
   color: string;
@@ -1915,13 +1756,6 @@ const stepsStyles = StyleSheet.create({
     textTransform: 'uppercase',
     marginBottom: 18,
   },
-  // alignItems: 'stretch' (the default — no override needed) is what makes
-  // the connector line actually reach the next node: without it,
-  // stepMarkerCol only grows to its own natural content height (the 24px
-  // node plus the connector's 18px minHeight) instead of stretching to
-  // match stepText's full height, so the connector's flex: 1 has nothing
-  // left to grow into and stops short, leaving a visible gap before the
-  // next number instead of one continuous line.
   stepRow: {
     flexDirection: 'row',
     gap: 14,
@@ -1957,11 +1791,6 @@ const stepsStyles = StyleSheet.create({
     paddingBottom: 18,
   },
 });
-
-// ─── Key Points Component ────────────────────────────────────────────────────
-// Deliberately the odd one out: no node/sequence marker, because these points
-// aren't ordered. A plain hairline check keeps it visually distinct from the
-// sequential blocks above instead of repeating their motif by default.
 
 interface KeyPointsProps {
   points: string[];
@@ -2017,10 +1846,6 @@ const keyPointsStyles = StyleSheet.create({
     lineHeight: 24,
   },
 });
-
-// ─── References Component ───────────────────────────────────────────────────
-// Rows are pressable rather than plain text since these are meant to be
-// followed, not just read — tapping opens the link in the device browser.
 
 interface ReferencesProps {
   links: ReferenceLink[];
@@ -2087,12 +1912,6 @@ const referencesStyles = StyleSheet.create({
   },
 });
 
-// ─── Shapes Used Component (UML diagrams only) ──────────────────────────────
-// A gallery-and-detail pattern rather than an accordion per shape: badges
-// stagger in on mount, a tap bounces that badge and crossfades the shared
-// detail pane below rather than pushing the grid around — keeps the tap
-// target small while the payoff (reading what the shape means) stays legible.
-
 interface ShapesUsedProps {
   shapes: ShapeUsed[];
   color: string;
@@ -2118,7 +1937,6 @@ const ShapesUsed: React.FC<ShapesUsedProps> = ({ shapes, color, lightColor }) =>
         })
       )
     ).start();
-    // Runs once on mount only — badgeAnims is a stable ref array.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -2335,8 +2153,6 @@ const shapesUsedStyles = StyleSheet.create({
   },
 });
 
-// ─── Learning Feedback Form Component (both UML and SDLC diagrams) ──────────
-
 interface FeedbackFormProps {
   color: string;
   diagramType: 'UML' | 'SDLC';
@@ -2344,27 +2160,28 @@ interface FeedbackFormProps {
   diagramTitle: string;
 }
 
-// Matches the backend's MAX_MESSAGE_LENGTH (feedbackController.js) — enforced
-// here too via TextInput's maxLength so the counter and the actual cap the
-// server will accept never disagree.
-const MAX_FEEDBACK_LENGTH = 2000;
-// Counter turns warning-colored once there's this little room left, so it
-// reads as "you're about to hit the limit" rather than only announcing it
-// after the fact.
+const MAX_FEEDBACK_LENGTH = 600;
 const FEEDBACK_LENGTH_WARNING_THRESHOLD = 200;
 
 const LearningFeedbackForm: React.FC<FeedbackFormProps> = ({ color, diagramType, diagramId, diagramTitle }) => {
+  const { addNote } = useNotes();
   const [feedback, setFeedback] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
-  // Persistent inline confirmation (separate from the Alert popup) so the
-  // "yes, this actually went through" reassurance is still visible after the
-  // user dismisses the alert and keeps scrolling — not just a one-off popup.
   const [justSubmitted, setJustSubmitted] = useState(false);
   const [isHovered, setIsHovered] = useState(false);
+  const successTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (successTimeoutRef.current) {
+        clearTimeout(successTimeoutRef.current);
+      }
+    };
+  }, []);
 
   const handleChangeText = (text: string) => {
     setFeedback(text);
-    if (justSubmitted) setJustSubmitted(false); // writing new feedback retires the old confirmation
+    if (justSubmitted) setJustSubmitted(false);
   };
 
   const handleSubmit = async () => {
@@ -2381,11 +2198,6 @@ const LearningFeedbackForm: React.FC<FeedbackFormProps> = ({ color, diagramType,
 
     setIsSubmitting(true);
     try {
-      // No `|| 'https://...'` fallback here on purpose: API_BASE_URL is '' on
-      // a Vercel web deployment (same-origin, proxied through vercel.json —
-      // see that file's own comment), and '' is falsy, so a fallback here
-      // would silently send this request straight back to the cross-site
-      // URL the proxy exists to avoid.
       const API_URL = API_BASE_URL;
       const response = await authService.authFetch(`${API_URL}/api/feedback`, {
         method: 'POST',
@@ -2406,7 +2218,7 @@ const LearningFeedbackForm: React.FC<FeedbackFormProps> = ({ color, diagramType,
           result?.message || 'Something went wrong on our end. Please try again.',
           [{ text: 'OK' }]
         );
-        return; // keep what they wrote — don't make them retype it
+        return;
       }
 
       Alert.alert(
@@ -2414,8 +2226,23 @@ const LearningFeedbackForm: React.FC<FeedbackFormProps> = ({ color, diagramType,
         'Your feedback has been submitted successfully.',
         [{ text: 'OK' }]
       );
+
+      addNote({
+        text: feedback.trim(),
+        diagramId,
+        diagramTitle,
+        diagramType,
+      });
+
       setFeedback('');
       setJustSubmitted(true);
+
+      if (successTimeoutRef.current) {
+        clearTimeout(successTimeoutRef.current);
+      }
+      successTimeoutRef.current = setTimeout(() => {
+        setJustSubmitted(false);
+      }, 2500);
     } catch (error: any) {
       Alert.alert(
         'Network Error',
@@ -2466,9 +2293,7 @@ const LearningFeedbackForm: React.FC<FeedbackFormProps> = ({ color, diagramType,
         onPress={handleSubmit}
         activeOpacity={0.8}
         disabled={isSubmitting}
-        // @ts-ignore - React Native Web specific props
         onMouseEnter={() => setIsHovered(true)}
-        // @ts-ignore
         onMouseLeave={() => setIsHovered(false)}
       >
         <Text style={feedbackStyles.submitButtonText}>{isSubmitting ? 'Submitting…' : 'Submit'}</Text>
@@ -2478,7 +2303,7 @@ const LearningFeedbackForm: React.FC<FeedbackFormProps> = ({ color, diagramType,
           <View style={[feedbackStyles.successIcon, { borderColor: color, backgroundColor: `${color}15` }]}>
             <CheckIcon color={color} />
           </View>
-          <Text style={[feedbackStyles.successText, { color }]}>Feedback submitted — thank you!</Text>
+          <Text style={[feedbackStyles.successText, { color }]}>Notes submitted!</Text>
         </View>
       )}
     </View>
@@ -2504,9 +2329,6 @@ const feedbackStyles = StyleSheet.create({
     backgroundColor: '#f8faff',
     minHeight: 120,
   },
-  // Pulled up against the input (negative margin fights the container's
-  // gap:16) so it reads as "belongs to the field above it", not as its own
-  // separate row — the same tight relationship a native char-counter has.
   charCount: {
     marginTop: -8,
     alignSelf: 'flex-end',
@@ -2526,9 +2348,6 @@ const feedbackStyles = StyleSheet.create({
       web: { transitionProperty: 'opacity, box-shadow', transitionDuration: '150ms' },
     }),
   },
-  // Same opacity-dim language as ReferenceCard's/SavedDiagramCard's pressed
-  // state — works with any of the per-diagram-type colors without needing a
-  // hand-tuned shade per color.
   submitButtonHovered: {
     opacity: 0.92,
     ...Platform.select({
@@ -2564,24 +2383,17 @@ const feedbackStyles = StyleSheet.create({
   },
 });
 
-// ─── Helper Hook: useDiagramParams ───────────────────────────────────────────
-
 const useDiagramParams = () => {
   const params = useLocalSearchParams();
   const rawId = params.id;
   return Array.isArray(rawId) ? rawId[0] : rawId;
 };
 
-// ─── Main Screen Component ───────────────────────────────────────────────────
-
 const DiagramDetail: React.FC = () => {
   const id = useDiagramParams();
   const router = useRouter();
   const { width } = useWindowDimensions();
   const scrollY = useRef(new Animated.Value(0)).current;
-  // Animated.ScrollView's own type doesn't expose scrollTo cleanly through
-  // useRef's generic — any is the pragmatic choice here, same as this
-  // codebase already does for other wrapped-library refs.
   const scrollViewRef = useRef<any>(null);
 
   const isDesktop = width >= BREAKPOINTS.desktop;
@@ -2590,35 +2402,12 @@ const DiagramDetail: React.FC = () => {
   const diagramId = parseInt(id ?? '1', 10);
   const content = DIAGRAM_CONTENT[diagramId];
 
-  // This screen persists across diagram navigation instead of unmounting
-  // (see the matching comment on ShapesUsed's own key={content.id} fix for
-  // its internal state) — the same is true of the ScrollView itself: it's
-  // the same DOM/native node the whole time, so its scroll offset carries
-  // over untouched. Without this, opening a new diagram while scrolled
-  // partway down the previous one landed you at that same Y position on
-  // the new diagram — sometimes already inside its Shapes Used section
-  // instead of at the top.
   useEffect(() => {
     scrollViewRef.current?.scrollTo({ y: 0, animated: false });
   }, [diagramId]);
   const colors = content ? TYPE_CONFIG[content.type] : TYPE_CONFIG.UML;
   const hasRealVideo = content ? content.videoId !== PLACEHOLDER_VIDEO_ID : false;
 
-  // Real reference images (the SDLC model screenshots) each have their own
-  // aspect ratio, and most don't come anywhere close to 16:9. Forcing that
-  // fixed ratio on the container while resizeMode="contain" fit the actual
-  // image inside it left tall, hard white letterboxed bars above and below
-  // on narrow screens, since the box's own white background showed through
-  // the empty space. Sizing the box to the image's real aspect ratio instead
-  // means there's no empty space to letterbox — the box's shape always
-  // matches the image's shape exactly.
-  //
-  // A local require() of an image resolves to { uri, width, height } on
-  // Metro's web output (confirmed by inspecting content.placeholderImage
-  // directly — Image.resolveAssetSource itself isn't available on
-  // react-native-web, and its onLoad event doesn't reliably carry natural
-  // dimensions here either), so the real width/height are just read
-  // straight off the resolved source, no load event needed.
   const heroImageAspectRatio = (() => {
     const source = content?.placeholderImage;
     if (source && typeof source === 'object' && !Array.isArray(source) && source.width && source.height) {
@@ -2632,19 +2421,12 @@ const DiagramDetail: React.FC = () => {
     outputRange: [0, 1],
     extrapolate: 'clamp',
   });
-  // Paired with the opacity fade so the header settles into place rather
-  // than just materializing — a small slide-down reads as more deliberate
-  // than opacity alone.
   const headerTranslateY = scrollY.interpolate({
     inputRange: [0, 80],
     outputRange: [-8, 0],
     extrapolate: 'clamp',
   });
 
-  // The floating header fades in via opacity, but opacity alone doesn't stop
-  // touches in React Native — while invisible (scrollY < 80) it still sits on
-  // top of the hero back button and swallows taps. Track visibility in state
-  // so we can set pointerEvents="none" until it's actually shown.
   const [isHeaderVisible, setIsHeaderVisible] = useState(false);
 
   useEffect(() => {
@@ -2657,15 +2439,6 @@ const DiagramDetail: React.FC = () => {
     return () => scrollY.removeListener(listenerId);
   }, [scrollY]);
 
-  // Always navigate back to the home screen.
-  //
-  // navigate, not replace: replace still mounts a brand-new instance of the
-  // persistently-anchored (tabs) group on top of the existing one instead of
-  // resurfacing the existing Home screen already sitting there — repeatedly
-  // browsing reference diagrams from Home (open one, back, open another...)
-  // stacked one more duplicate (extra Navbar, extra everything) on every
-  // round trip. navigate reuses the existing route instead — see
-  // savedDiagrams.tsx's handleBackPress for the full explanation.
   const handleGoHome = () => {
     router.navigate('/(tabs)/home');
   };
@@ -2686,10 +2459,6 @@ const DiagramDetail: React.FC = () => {
     );
   }
 
-  // Desktop: sticky sidebar with just the video (NO diagram preview). Key Points and
-  // the feedback form live in the main column below, in the same order as mobile —
-  // see renderDesktopContent — since "Key Points to Remember" reads as a recap of
-  // what was just read, not a preview to show before the sections.
   const renderDesktopSidebar = () => {
     if (!isDesktop) return null;
 
@@ -2707,9 +2476,6 @@ const DiagramDetail: React.FC = () => {
     );
   };
 
-  // Desktop: main content column — same order as mobile (Sections, Shapes
-  // Used, Steps, Key Points, Feedback, References) so the two layouts tell
-  // the same story, not just the same words.
   const renderDesktopContent = () => {
     if (!isDesktop) return null;
 
@@ -2735,13 +2501,6 @@ const DiagramDetail: React.FC = () => {
         {content.shapesUsed && content.shapesUsed.length > 0 && (
           <View nativeID="tour-detail-shapes-used">
             <ShapesUsed
-              // This screen persists across diagram navigation (see comment
-              // near startNewDiagram) rather than unmounting, but ShapesUsed
-              // caches its per-shape Animated.Value arrays in a useRef that
-              // only ever sizes itself once. Keying on the diagram id forces a
-              // real remount whenever the diagram (and its shape count/order)
-              // changes, instead of reusing stale arrays sized for a different
-              // diagram's shape list and indexing past their end.
               key={content.id}
               shapes={content.shapesUsed}
               color={colors.primary}
@@ -2772,7 +2531,6 @@ const DiagramDetail: React.FC = () => {
     );
   };
 
-  // Mobile/Tablet: single column layout
   const renderMobileContent = () => {
     if (isDesktop) return null;
 
@@ -2798,13 +2556,6 @@ const DiagramDetail: React.FC = () => {
         {content.shapesUsed && content.shapesUsed.length > 0 && (
           <View nativeID="tour-detail-shapes-used">
             <ShapesUsed
-              // This screen persists across diagram navigation (see comment
-              // near startNewDiagram) rather than unmounting, but ShapesUsed
-              // caches its per-shape Animated.Value arrays in a useRef that
-              // only ever sizes itself once. Keying on the diagram id forces a
-              // real remount whenever the diagram (and its shape count/order)
-              // changes, instead of reusing stale arrays sized for a different
-              // diagram's shape list and indexing past their end.
               key={content.id}
               shapes={content.shapesUsed}
               color={colors.primary}
@@ -2866,15 +2617,10 @@ const DiagramDetail: React.FC = () => {
         scrollEventThrottle={16}
         contentContainerStyle={[
           styles.scrollContent,
-          // Extra clearance on mobile so the last card isn't hidden behind
-          // the floating docked bottom navbar (Navbar.tsx's bottomNavCard,
-          // ~80px tall including padding and shadow) — same pattern as
-          // home.tsx and reference.tsx already use.
           { paddingBottom: isDesktop ? 48 : 120 },
           isDesktop && styles.scrollContentDesktop,
         ]}
       >
-        {/* Hero Section with Title, Tagline, Diagram, and Video */}
         <View nativeID="tour-detail-hero" style={[styles.hero, { backgroundColor: colors.light }]}>
           <BackButton onPress={handleGoHome} style={styles.heroBackBtnPosition} />
 
@@ -2890,16 +2636,10 @@ const DiagramDetail: React.FC = () => {
               <Text style={styles.heroTagline}>{content.tagline}</Text>
             </View>
             
-            {/* Diagram preview — only once in hero.
-                Images temporarily disabled — always falls back to
-                DiagramPlaceholder regardless of content.placeholderImage
-                for now. That data/the requires are untouched, so this is a
-                one-line revert (restore the ternary below) when re-enabled. */}
             <View nativeID="tour-detail-image">
               <DiagramPlaceholder color={colors.primary} label={content.imageAlt} title={content.title} />
             </View>
 
-            {/* Video directly below diagram on mobile/tablet only */}
             {!isDesktop && (
               <View nativeID="tour-detail-video" style={styles.videoWrap}>
                 <Text style={[styles.sectionLabel, { color: colors.primary }]}>Video Tutorial</Text>
@@ -2913,7 +2653,6 @@ const DiagramDetail: React.FC = () => {
           </View>
         </View>
 
-        {/* Body Section */}
         <View style={[
           styles.body,
           isDesktop ? styles.bodyDesktop : styles.bodyMobile,
@@ -2929,8 +2668,6 @@ const DiagramDetail: React.FC = () => {
 };
 
 export default DiagramDetail;
-
-// ─── Styles ───────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
   root: {
@@ -2963,8 +2700,6 @@ const styles = StyleSheet.create({
       web: { backdropFilter: 'blur(12px)' },
     }),
   },
-  // Shared visual recipe for both back buttons (BackButton component) — one
-  // definition instead of two identical copies that could silently drift.
   backButtonBase: {
     width: 36,
     height: 36,
@@ -2990,8 +2725,6 @@ const styles = StyleSheet.create({
       },
     }),
   },
-  // Same border-tint + lifted shadow language as ReferenceCard's/
-  // SavedDiagramCard's hover state, so hovering feels like the same system.
   backButtonHovered: {
     borderColor: '#c7d2fe',
     ...Platform.select({

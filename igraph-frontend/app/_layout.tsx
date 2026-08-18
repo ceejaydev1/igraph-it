@@ -8,6 +8,7 @@ import { Platform, View, StyleSheet, Animated } from 'react-native';
 import InstallBanner from '@/components/InstallBanner';
 import * as authService from '../services/authService';
 import CreativeSplashScreen from './(auth)/splash';
+import { NotesProvider } from '../contexts/NotesContext';
 
 export const unstable_settings = {
   anchor: '(tabs)',
@@ -78,16 +79,6 @@ export default function RootLayout() {
     setLoadingProgress(1);
   };
 
-  // Check auth AND pre-load user data during splash.
-  //
-  // No token-presence pre-check — web's session lives in an httpOnly cookie
-  // this code can never read, so verifyToken() is called unconditionally
-  // (it applies its own per-platform fast-path internally). verifyToken()
-  // already caches the user on success via setCachedUser(), so the separate
-  // raw fetch('/api/auth/me') this used to do here was a fully redundant
-  // second round trip to the exact same endpoint — removed rather than
-  // patched (it also had no credentials/CSRF handling, which would have
-  // broken it under the cookie model anyway).
   useEffect(() => {
     const checkAuth = async () => {
       try {
@@ -133,7 +124,6 @@ export default function RootLayout() {
       const targetDuration = calculateLoadingSpeed();
       startProgressAnimation(targetDuration);
 
-      // Wait for auth check AND minimum display time
       const minDisplayTime = new Promise((resolve) =>
         setTimeout(resolve, targetDuration)
       );
@@ -154,7 +144,6 @@ export default function RootLayout() {
         minDisplayTime
       ]);
 
-      // Mark splash as shown
       if (Platform.OS === 'web' && typeof sessionStorage !== 'undefined') {
         sessionStorage.setItem('splashShown', 'true');
       } else if (Platform.OS !== 'web') {
@@ -167,8 +156,7 @@ export default function RootLayout() {
       }
 
       completeProgress();
-      
-      // Fade out and navigate instantly
+
       setTimeout(() => {
         Animated.timing(fadeAnim, {
           toValue: 0,
@@ -185,7 +173,6 @@ export default function RootLayout() {
     }
   }, [authChecked, targetRoute]);
 
-  // PWA Setup
   useEffect(() => {
     if (Platform.OS === 'web' && typeof window !== 'undefined') {
       const cleanupAndRegisterSW = async () => {
@@ -214,7 +201,6 @@ export default function RootLayout() {
     }
   }, []);
 
-  // PWA Install Banner
   useEffect(() => {
     if (Platform.OS === 'web') {
       const mobile = isMobileDevice();
@@ -268,22 +254,6 @@ export default function RootLayout() {
     }
   }, []);
 
-  // Persist whatever authenticated screen the user is on, so closing the
-  // tab/browser and reopening it (without an explicit sign-out) resumes
-  // there instead of always landing back on Home — app/index.tsx reads this
-  // on launch. Only (tabs) routes are worth remembering: (auth) screens
-  // (sign-in, splash, etc.) and the root index/modal aren't real
-  // destinations to resume into.
-  //
-  // usePathname() resolves route GROUPS out of the path (e.g. the Create
-  // screen reads as "/create", never "/(tabs)/create") — group folders are
-  // organizational only, same reason components/Navbar.tsx has to strip them
-  // before comparing against its own route table. useSegments(), unlike
-  // usePathname(), does include the group name as its own first entry, so
-  // it's what actually tells us which group we're in; pathname still supplies
-  // the real (resolved, not templated) rest of the path. Without this, the
-  // old `pathname?.startsWith('/(tabs)')` check could never be true and
-  // silently never saved anything.
   const pathname = usePathname();
   const segments = useSegments();
   useEffect(() => {
@@ -292,49 +262,42 @@ export default function RootLayout() {
     authService.saveLastRoute(routeWithGroup);
   }, [pathname, segments]);
 
-  // The app (Stack) stays mounted underneath at all times so the splash
-  // fades directly into the already-rendered destination screen instead of
-  // fading into an empty root background (which caused a black flash).
   return (
     <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-      <View style={styles.flex}>
-        {Platform.OS === 'web' && isMobile && (
-          <InstallBanner
-            visible={showBanner}
-            onDismiss={() => setShowBanner(false)}
-          />
-        )}
-
-        <Stack screenOptions={{ headerShown: false }}>
-          <Stack.Screen name="index" />
-          <Stack.Screen name="(auth)" />
-          <Stack.Screen name="(tabs)" />
-          <Stack.Screen
-            name="modal"
-            options={{ presentation: 'modal', title: 'Modal', headerShown: true }}
-          />
-        </Stack>
-
-        <StatusBar style="auto" />
-
-        {/* app/print.tsx opens in its own tab purely to call window.print()
-            as soon as its diagram image loads — the branded splash overlay
-            (which stays up for a second or two while checkAuth() runs) was
-            still covering the page at that point, so the OS print dialog's
-            preview showed the splash instead of the diagram. That tab has
-            nothing to do with auth/onboarding, so it never needs the splash. */}
-        {showSplash && pathname !== '/print' && (
-          <Animated.View
-            style={[styles.splashOverlay, { opacity: fadeAnim }]}
-            pointerEvents="auto"
-          >
-            <CreativeSplashScreen
-              onFinish={() => {}}
-              progress={loadingProgress}
+      <NotesProvider>
+        <View style={styles.flex}>
+          {Platform.OS === 'web' && isMobile && (
+            <InstallBanner
+              visible={showBanner}
+              onDismiss={() => setShowBanner(false)}
             />
-          </Animated.View>
-        )}
-      </View>
+          )}
+
+          <Stack screenOptions={{ headerShown: false }}>
+            <Stack.Screen name="index" />
+            <Stack.Screen name="(auth)" />
+            <Stack.Screen name="(tabs)" />
+            <Stack.Screen
+              name="modal"
+              options={{ presentation: 'modal', title: 'Modal', headerShown: true }}
+            />
+          </Stack>
+
+          <StatusBar style="auto" />
+
+          {showSplash && pathname !== '/print' && (
+            <Animated.View
+              style={[styles.splashOverlay, { opacity: fadeAnim }]}
+              pointerEvents="auto"
+            >
+              <CreativeSplashScreen
+                onFinish={() => {}}
+                progress={loadingProgress}
+              />
+            </Animated.View>
+          )}
+        </View>
+      </NotesProvider>
     </ThemeProvider>
   );
 }

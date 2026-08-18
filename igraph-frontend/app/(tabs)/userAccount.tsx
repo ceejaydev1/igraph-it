@@ -28,6 +28,7 @@ import { initializeApp, getApps, FirebaseApp } from 'firebase/app';
 import { getAuth, signOut as firebaseSignOut, GoogleAuthProvider, signInWithPopup, Auth } from 'firebase/auth';
 import * as authService from '../../services/authService';
 import { useSave } from '../../contexts/SaveContext';
+import { useNotes } from '../../contexts/NotesContext';
 import { useOnboardingTour } from '../../hooks/useOnboardingTour';
 import { usePullToRefreshWeb } from '../../hooks/usePullToRefreshWeb';
 import { ACCOUNT_TOUR_ID, getAccountTourSteps } from '../../utils/tours';
@@ -71,11 +72,6 @@ const COLORS = {
   warning: '#f59e0b',
   warningLight: '#fef3c7',
   danger: '#ef4444',
-  // danger (#ef4444) is ~3.8:1 against white — under WCAG AA's 4.5:1 floor
-  // for text this size/weight. Fine as a button fill (paired with white
-  // text) or an icon on dangerLight's pale circle, but too washed out for
-  // red text/icons read directly against a white card. dangerText (Tailwind
-  // red-600, ~4.8:1) is for exactly that pairing — see signOutText below.
   dangerText: '#dc2626',
   dangerLight: '#fef2f2',
   gray50: '#f8fafc',
@@ -107,9 +103,6 @@ const TYPOGRAPHY = {
 const SPACING = { xs: 4, sm: 8, md: 12, lg: 16, xl: 20, xxl: 24, xxxl: 32 };
 const RADIUS = { sm: 6, md: 10, lg: 14, xl: 18, xxl: 24, full: 999 };
 
-// Extra clearance for content sitting under a bottom tab bar on mobile
-// (this screen lives under a (tabs) route group). Covers typical tab
-// bar height so the last card in a ScrollView isn't hidden behind it.
 const TAB_BAR_ALLOWANCE = 90;
 
 const SHADOWS = {
@@ -136,9 +129,6 @@ const SHADOWS = {
   },
 };
 
-// Shared with the setTimeout calls that open a modal right after collapsing
-// the Profile accordion — they wait out this same duration so the modal
-// never pops in before the collapse animation has actually settled.
 const PROFILE_COLLAPSE_DURATION = 220;
 
 const EASE_LAYOUT = LayoutAnimation.create(
@@ -158,10 +148,6 @@ const getAvatarColor = (email: string) => {
   return AVATAR_COLORS[Math.abs(hash) % AVATAR_COLORS.length];
 };
 
-// Darkens a hex color by `amount` (0-1) toward black — used to build the
-// profile banner's gradient end-point from the user's own avatar color
-// instead of a second, unrelated fixed color, so the banner reads as "this
-// person's" rather than a generic app-wide blue block.
 const darkenHex = (hex: string, amount: number) => {
   const num = parseInt(hex.replace('#', ''), 16);
   const r = Math.max(0, Math.round(((num >> 16) & 0xff) * (1 - amount)));
@@ -181,12 +167,6 @@ const getInitialsFromName = (name: string, fallbackEmail?: string) => {
     .toUpperCase()
     .slice(0, 2);
 };
-
-// DOT GRID PATTERN (single SVG instead of ~200 mapped Views)
-// Takes no props, so React.memo means it only re-renders when its own
-// useWindowDimensions() hook actually changes (a real resize/rotation) —
-// without this it was rebuilding ~2000 Circle elements on every unrelated
-// UserAccount re-render (toast show/hide, accordion toggle, pull-to-refresh).
 
 const DotGrid = React.memo(() => {
   const { width: screenWidth, height: screenHeight } = useWindowDimensions();
@@ -213,10 +193,6 @@ const DotGrid = React.memo(() => {
   );
 });
 
-// Small "node + connector" motif for the profile banner — the same visual
-// language the app already uses for its diagrams (and its signin/signup
-// illustrations), scaled down into a quiet corner watermark rather than a
-// generic decorative gradient/blob unrelated to what this app actually is.
 const ProfileBannerAccent = React.memo(() => (
   <Svg
     width={140}
@@ -233,8 +209,6 @@ const ProfileBannerAccent = React.memo(() => (
   </Svg>
 ));
 
-// ICONS
-
 const LockIcon = ({ color = '#000000' }: { color?: string }) => (
   <Svg width={24} height={24} viewBox="0 0 24 24" fill="none">
     <Rect x="3" y="11" width="18" height="11" rx="2" stroke={color} strokeWidth={2} />
@@ -246,6 +220,13 @@ const DiagramIcon = ({ color = '#000000' }: { color?: string }) => (
   <Svg width={24} height={24} viewBox="0 0 24 24" fill="none">
     <Rect x="3" y="3" width="18" height="18" rx="2" stroke={color} strokeWidth={2} />
     <Path d="M8 8h8M8 12h6M8 16h4" stroke={color} strokeWidth={2} strokeLinecap="round" />
+  </Svg>
+);
+
+const NoteIcon = ({ color = '#000000' }: { color?: string }) => (
+  <Svg width={24} height={24} viewBox="0 0 24 24" fill="none">
+    <Rect x="4" y="3" width="16" height="18" rx="2" stroke={color} strokeWidth={2} />
+    <Path d="M8 7h8M8 11h6M8 15h4" stroke={color} strokeWidth={2} strokeLinecap="round" />
   </Svg>
 );
 
@@ -336,11 +317,6 @@ const EditIcon = ({ color = '#4c6fff' }: { color?: string }) => (
   </Svg>
 );
 
-// ANIMATED CHEVRON
-// Collapsed = down-pointing "v" (signals "expands in place"), expanded = up-pointing "^".
-// Deliberately never rests at the right-pointing ">" used by ChevronRight on the
-// navigate-away rows, so an accordion row can't be mistaken for a navigation row.
-
 const AnimatedChevron = ({ expanded, color }: { expanded: boolean; color: string }) => {
   const spinValue = useRef(new Animated.Value(expanded ? 1 : 0)).current;
 
@@ -365,8 +341,6 @@ const AnimatedChevron = ({ expanded, color }: { expanded: boolean; color: string
     </Animated.View>
   );
 };
-
-// SKELETON LOADER
 
 const SkeletonLoader = () => {
   const opacity = useRef(new Animated.Value(0.35)).current;
@@ -459,8 +433,6 @@ const SkeletonLoader = () => {
     </View>
   );
 };
-
-// EDIT PROFILE MODAL
 
 const EditProfileModal = ({
   visible,
@@ -630,10 +602,6 @@ const EditProfileModal = ({
   );
 };
 
-// PASSWORD RULES — shared by ChangePasswordModal and SetPasswordModal so
-// the live checklist/strength meter and the actual validation never drift
-// apart from each other.
-
 type PasswordFieldError = 'current' | 'new' | 'confirm' | null;
 
 const PASSWORD_RULES: { key: string; label: string; test: (pwd: string) => boolean }[] = [
@@ -695,8 +663,6 @@ const PasswordChecklist = ({ password, isMobile }: { password: string; isMobile:
   </View>
 );
 
-// PASSWORD CHANGE MODAL
-
 const ChangePasswordModal = ({
   visible,
   onClose,
@@ -751,10 +717,6 @@ const ChangePasswordModal = ({
       const result = await authService.changePassword(currentPassword, newPassword);
 
       if (result.success) {
-        // The backend now only invalidates every *other* session on a
-        // password change, keeping this one signed in (see changePassword
-        // in authController.js) — so there's nothing to flush/log out/
-        // redirect for anymore; the user just stays right where they are.
         handleClose();
         onSuccess();
       } else {
@@ -951,13 +913,6 @@ const ChangePasswordModal = ({
   );
 };
 
-// SET PASSWORD MODAL
-// For a Google-only account adding a password for the first time, so it
-// can also sign in with email/password afterward. There's no existing
-// password to confirm identity with, so this re-verifies Google first (a
-// fresh popup, checked server-side against the signed-in uid) before
-// letting the user choose one.
-
 const SetPasswordModal = ({
   visible,
   onClose,
@@ -987,17 +942,8 @@ const SetPasswordModal = ({
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  // Popup instead of inline text for this one specific error — picking the
-  // wrong account in the Google picker is easy to miss as a small red line
-  // under a button that's already gone from the screen; a popup makes sure
-  // it's actually seen.
   const [wrongAccountEmail, setWrongAccountEmail] = useState<string | null>(null);
 
-  // This modal's own component instance never unmounts between opens (only
-  // its `visible` prop toggles the native Modal) — this is what lands the
-  // user straight on the password step on a reopen when a verification from
-  // earlier in this visit is still cached (verifiedToken lives in the
-  // parent for exactly that reason; see its own comment there).
   useEffect(() => {
     if (visible) {
       setStep(verifiedToken ? 'password' : 'verify');
@@ -1016,10 +962,6 @@ const SetPasswordModal = ({
     onClose();
   };
 
-  // Distinct from handleClose — this steps back within the same modal
-  // session instead of abandoning it, so a verification the user already
-  // completed moments ago isn't thrown away just for glancing back at the
-  // verify screen (e.g. to redo it with a different Google account).
   const handleBack = () => {
     if (loading) return;
     setStep('verify');
@@ -1040,11 +982,6 @@ const SetPasswordModal = ({
       provider.addScope('profile');
       provider.setCustomParameters({ prompt: 'login' });
       const result = await signInWithPopup(firebaseAuth, provider);
-      // The backend also enforces this (decodedToken.uid must match the
-      // signed-in user), but that check only fires later, after the user
-      // has already typed and submitted a new password — surfacing it here
-      // instead means picking the wrong account in the Google picker fails
-      // immediately, with a clear reason, not several steps later.
       const pickedEmail = result.user.email?.toLowerCase();
       if (pickedEmail && currentEmail && pickedEmail !== currentEmail.toLowerCase()) {
         setWrongAccountEmail(result.user.email || pickedEmail);
@@ -1084,7 +1021,7 @@ const SetPasswordModal = ({
     try {
       const result = await authService.setPassword(verifiedToken, newPassword);
       if (result.success) {
-        onVerified(null); // password is set now — nothing left to reuse this for
+        onVerified(null);
         handleClose();
         onSuccess();
       } else {
@@ -1134,11 +1071,6 @@ const SetPasswordModal = ({
           {step === 'verify' ? (
             <View style={styles.setPasswordVerifyStep}>
               {verifiedToken ? (
-                // Landed back here via the password step's Back button, not
-                // a fresh open — the Google verification from moments ago is
-                // still valid, so this offers to reuse it instead of forcing
-                // it to be redone. "Use a different account" is here for the
-                // one real reason to come back: picking the wrong account.
                 <>
                   <View style={styles.setPasswordVerifiedRow}>
                     <View style={styles.setPasswordVerifiedCheck}>
@@ -1317,8 +1249,6 @@ const SetPasswordModal = ({
   );
 };
 
-// SIGN OUT CONFIRMATION MODAL
-
 const SignOutModal = ({
   visible,
   onClose,
@@ -1379,8 +1309,6 @@ const SignOutModal = ({
   );
 };
 
-// TOAST COMPONENT
-
 const Toast = ({
   visible,
   message,
@@ -1431,13 +1359,12 @@ const Toast = ({
   );
 };
 
-// MAIN USER ACCOUNT COMPONENT
-
 export default function UserAccount() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { width: windowWidth } = useWindowDimensions();
   const { onFlushDraft } = useSave();
+  const { notes } = useNotes();
 
   const isDesktop = windowWidth >= 1024;
   const isMobile = windowWidth < 768;
@@ -1449,10 +1376,6 @@ export default function UserAccount() {
     authProvider: 'email' as 'email' | 'google' | null,
     hasPassword: true,
   });
-  // Lazily seeded from the in-memory cache so switching to another tab and
-  // back (a remount, since this screen doesn't otherwise persist the list)
-  // shows the last-known count immediately instead of flashing "0 saved
-  // diagrams" while loadSavedDiagrams()'s fetch is still in flight.
   const [savedDiagrams, setSavedDiagrams] = useState<any[]>(() => authService.getCachedDiagrams() ?? []);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -1462,12 +1385,6 @@ export default function UserAccount() {
   const [showEditProfileModal, setShowEditProfileModal] = useState(false);
   const [showPasswordModal, setShowPasswordModal] = useState(false);
   const [showSetPasswordModal, setShowSetPasswordModal] = useState(false);
-  // Lives here, not inside SetPasswordModal, specifically so it survives
-  // the modal being closed and reopened — SetPasswordModal itself never
-  // unmounts (its `visible` prop just toggles the native Modal), but its
-  // own local state doesn't matter if a close handler resets it anyway.
-  // Verifying via Google is what should only need doing once per visit to
-  // this screen, not once per time the modal happens to be open.
   const [googleVerifiedToken, setGoogleVerifiedToken] = useState<string | null>(null);
   const [showSignOutModal, setShowSignOutModal] = useState(false);
   const [signOutLoading, setSignOutLoading] = useState(false);
@@ -1481,12 +1398,6 @@ export default function UserAccount() {
     setToast((prev) => ({ ...prev, visible: false }));
   }, []);
 
-  // Every screen in this tab layout uses freezeOnBlur (see app/(tabs)/_layout.tsx),
-  // so navigating away just freezes this screen rather than unmounting it —
-  // a plain mount-only useEffect never re-fires when coming back to this tab,
-  // which is exactly how the saved-diagrams count (and profile data) went
-  // stale after saving/deleting a diagram somewhere else and returning here.
-  // useFocusEffect re-runs every time this screen becomes focused again.
   useFocusEffect(
     useCallback(() => {
       loadUserData();
@@ -1500,11 +1411,7 @@ export default function UserAccount() {
     setRefreshing(false);
   }, []);
 
-  // <RefreshControl> is a no-op on web (see the hook's own comment) — this
-  // drives the same onRefresh via a hand-rolled swipe-down gesture there.
   const pullToRefreshWeb = usePullToRefreshWeb(onRefresh);
-
-  // LOAD USER DATA
 
   const loadUserData = async () => {
     let usedCache = false;
@@ -1515,11 +1422,6 @@ export default function UserAccount() {
         return;
       }
 
-      // Show whatever's already cached (from this session's navbar load, or
-      // a prior visit) immediately instead of holding the whole page behind
-      // a live network round trip every single time — verifyToken() below
-      // still runs to confirm/refresh it, just without keeping the skeleton
-      // up for a request that, on a cold backend, can take tens of seconds.
       const cached = await authService.getCachedUser();
       if (cached) {
         usedCache = true;
@@ -1533,9 +1435,6 @@ export default function UserAccount() {
         setLoading(false);
       }
 
-      // Goes through the shared axios instance so an expired access token
-      // (15 min TTL) triggers an automatic refresh-and-retry instead of
-      // silently failing and leaving fullName/email blank (-> "User" fallback).
       const result = await authService.verifyToken();
 
       if (result.success && result.data?.user) {
@@ -1548,11 +1447,6 @@ export default function UserAccount() {
           hasPassword: hasPassword !== false,
         });
       } else {
-        // Nothing auto-clears the cache/tokens here, ever — only the user
-        // explicitly clicking Sign Out does that. So hasActiveSession() (a
-        // cache check) staying true after a failed live verifyToken() is the
-        // normal, expected case: a network blip or dead session alike just
-        // falls back to the cached user below rather than booting anyone out.
         const stillSignedIn = await authService.hasActiveSession();
         if (!stillSignedIn) {
           router.replace('/(auth)/signin');
@@ -1572,9 +1466,6 @@ export default function UserAccount() {
     }
   };
 
-  // A transient failure (server unreachable, etc.) shouldn't blank out a
-  // name/email the user already saw moments ago and replace it with the
-  // generic "User" placeholder — fall back to whatever's cached instead.
   const useCachedUserAsFallback = async () => {
     const cached = await authService.getCachedUser();
     if (cached) {
@@ -1602,8 +1493,6 @@ export default function UserAccount() {
     }
   };
 
-  // UPDATE PROFILE (name only)
-
   const handleUpdateProfile = async (data: { fullName: string }) => {
     const signedIn = await authService.hasActiveSession();
     if (!signedIn) {
@@ -1612,9 +1501,6 @@ export default function UserAccount() {
       throw new Error('No access token');
     }
 
-    // authService.updateProfile() goes through the shared axios instance
-    // (auto-refreshes an expired access token) and already updates the
-    // cached/localStorage user on success.
     const result = await authService.updateProfile({ fullName: data.fullName });
 
     if (result.success && result.data?.user) {
@@ -1638,17 +1524,9 @@ export default function UserAccount() {
   const handleSignOutConfirm = async () => {
     setSignOutLoading(true);
     try {
-      // Signing out replaces the whole (tabs) route group, unmounting the
-      // create screen (and any in-progress diagram edits) rather than just
-      // backgrounding it — flush its draft to local storage first so that
-      // isn't a race. See onFlushDraft in SaveContext.tsx.
       await onFlushDraft?.();
       await authService.logout();
       if (firebaseAuth) {
-        // Best-effort: clears this tab's cached Firebase credential. Can't
-        // reach Google's own accounts.google.com session — only the person
-        // signing out of Google there (or an environment-level session wipe
-        // on shared machines) actually does that.
         await firebaseSignOut(firebaseAuth).catch(() => {});
       }
       setUserData({ fullName: '', email: '', username: '', authProvider: null, hasPassword: true });
@@ -1669,8 +1547,6 @@ export default function UserAccount() {
     LayoutAnimation.configureNext(EASE_LAYOUT);
     setIsProfileExpanded((prev) => !prev);
   };
-
-  // AVATAR HELPERS
 
   const getDisplayName = useCallback(() => {
     if (userData.fullName && userData.fullName.trim()) return userData.fullName;
@@ -1705,8 +1581,6 @@ export default function UserAccount() {
               maxWidth: isDesktop ? 800 : '100%',
               alignSelf: isDesktop ? 'center' : 'stretch',
               width: '100%',
-              // Clears the bottom tab bar + home indicator on mobile so the
-              // Sign Out card (last item) isn't hidden behind them.
               paddingBottom: insets.bottom + (isMobile ? TAB_BAR_ALLOWANCE : SPACING.xxxl),
             },
           ]}
@@ -1813,6 +1687,7 @@ export default function UserAccount() {
                     </View>
                     <ChevronRight color={COLORS.gray400} />
                   </Pressable>
+
                 </View>
               )}
             </View>
@@ -1820,14 +1695,6 @@ export default function UserAccount() {
             <Pressable
               nativeID="tour-account-saved"
               style={({ pressed }) => [styles.actionCard, pressed && styles.actionCardPressed]}
-              // navigate, not push: both this and the matching back button
-              // in savedDiagrams.tsx used push/replace, which mounted a
-              // brand-new instance of the persistently-anchored (tabs) group
-              // on top of the existing one instead of resurfacing it — a
-              // few round trips through Account -> Saved Diagrams -> back
-              // stacked up that many duplicate Navbars. navigate reuses the
-              // existing route instead (same fix already applied to
-              // Create's own nav entry — see Navbar's handleNavigation).
               onPress={() => router.navigate('/(tabs)/savedDiagrams')}
               accessibilityRole="button"
               accessibilityLabel={`Saved diagrams, ${savedDiagrams.length} saved`}
@@ -1841,10 +1708,22 @@ export default function UserAccount() {
             </Pressable>
 
             <Pressable
+              style={({ pressed }) => [styles.actionCard, pressed && styles.actionCardPressed]}
+              onPress={() => router.navigate('/(tabs)/savedNotes')}
+              accessibilityRole="button"
+              accessibilityLabel={`Saved notes, ${notes.length} saved`}
+            >
+              <NoteIcon color={COLORS.gray700} />
+              <View style={styles.actionContent}>
+                <Text style={[styles.actionTitle, { fontSize: isMobile ? 15 : 16 }]}>Saved Notes</Text>
+                <Text style={[styles.actionDescription, { fontSize: isMobile ? 11 : 12 }]}>{notes.length} saved</Text>
+              </View>
+              <ChevronRight />
+            </Pressable>
+
+            <Pressable
               nativeID="tour-account-privacy"
               style={({ pressed }) => [styles.actionCard, pressed && styles.actionCardPressed]}
-              // navigate, not push — see the Saved Diagrams entry above for
-              // why (same duplicate-(tabs)-instance risk on repeated visits).
               onPress={() => router.navigate('/(tabs)/privacy')}
               accessibilityRole="button"
               accessibilityLabel="Privacy, terms and policies"
@@ -1860,8 +1739,6 @@ export default function UserAccount() {
             <Pressable
               nativeID="tour-account-about"
               style={({ pressed }) => [styles.actionCard, pressed && styles.actionCardPressed]}
-              // navigate, not push — see the Saved Diagrams entry above for
-              // why (same duplicate-(tabs)-instance risk on repeated visits).
               onPress={() => router.navigate('/(tabs)/aboutUs')}
               accessibilityRole="button"
               accessibilityLabel="About us, team and system info"
@@ -1926,8 +1803,6 @@ export default function UserAccount() {
   );
 }
 
-// STYLES
-
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: COLORS.gray50 },
 
@@ -1938,14 +1813,9 @@ const styles = StyleSheet.create({
   skeletonContainer: { flex: 1, backgroundColor: COLORS.gray50 },
 
   profileCard: { borderRadius: RADIUS.xxl, overflow: 'hidden', ...SHADOWS.md },
-  // backgroundColor removed — the LinearGradient wrapping this style now
-  // provides it, built from the user's own avatar color (see avatarColor)
-  // instead of a fixed app-wide blue, so the banner reads as personal.
   profileBanner: { minHeight: 120 },
   profileBannerAccent: { position: 'absolute', right: 0, bottom: 0 },
   profileInfo: { flexDirection: 'row', alignItems: 'center', padding: SPACING.xxl, gap: SPACING.lg },
-  // A soft halo behind the avatar's own white ring — reads as a subtle glow
-  // instead of the avatar sitting flat against the gradient.
   avatarRing: {
     width: 92,
     height: 92,
@@ -1971,14 +1841,6 @@ const styles = StyleSheet.create({
     ...SHADOWS.sm,
   },
   actionCardPressed: { backgroundColor: COLORS.gray50, transform: [{ scale: 0.98 }] },
-  // Extra marginTop on top of actionsGrid's own `gap` — a destructive/exit
-  // action shouldn't sit in the same visual rhythm as the neutral
-  // navigation rows above it (Profile/Saved Diagrams/Privacy/About Us),
-  // even though color already marks it as different. Matches how iOS/
-  // Android system settings isolate Sign Out into its own group. No border
-  // here (dangerLight against a white card was ~1.02:1 — imperceptible);
-  // the red icon/text/chevron already carry the "this one's different"
-  // signal on their own.
   signOutCard: { marginTop: SPACING.lg },
   actionContent: { flex: 1, marginLeft: SPACING.md },
   actionTitle: { ...TYPOGRAPHY.bodyBold, color: COLORS.gray900 },
@@ -1997,9 +1859,6 @@ const styles = StyleSheet.create({
   editProfileModalContainer: { backgroundColor: COLORS.white, borderRadius: RADIUS.xxl, overflow: 'hidden', ...SHADOWS.lg },
   editProfileField: { paddingHorizontal: SPACING.xl, marginBottom: SPACING.lg },
   editProfileLabel: { ...TYPOGRAPHY.captionBold, color: COLORS.gray700, marginBottom: SPACING.sm },
-  // Icon + input row, matching passwordInputContainer's pattern in the
-  // Change Password modal — every field across both modals now leads with
-  // an icon instead of Full Name being the one bare exception.
   editProfileNameRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -2059,9 +1918,6 @@ const styles = StyleSheet.create({
   modalTitle: { ...TYPOGRAPHY.h3, color: COLORS.gray900 },
   modalClose: { padding: SPACING.xs, borderRadius: RADIUS.full },
   modalError: { ...TYPOGRAPHY.small, color: COLORS.danger, marginTop: SPACING.sm, paddingHorizontal: SPACING.xl },
-  // Colored shadow matching the fill (not a generic black one) + a
-  // slightly darker border — same "lifted" treatment signin/signup's
-  // primary button already uses, brought here for consistency.
   modalButton: {
     backgroundColor: COLORS.primary,
     margin: SPACING.xl,
