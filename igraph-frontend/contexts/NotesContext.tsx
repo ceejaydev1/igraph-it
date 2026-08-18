@@ -23,6 +23,28 @@ const NotesContext = createContext<NotesContextType | undefined>(undefined);
 
 const STORAGE_KEY = '@igraph_saved_notes';
 
+// Guarantee every note in state has a unique, stable string id. Duplicate or
+// blank ids are what make removeNote(id) (a filter by id) delete more than one
+// note at a time, so any dupes are deduped and missing ids are filled in.
+const ensureUniqueIds = (rawNotes: any[]): LearningNote[] => {
+  const seen = new Set<string>();
+  const result: LearningNote[] = [];
+  for (const raw of rawNotes) {
+    const base =
+      typeof raw.id === 'string' && raw.id
+        ? raw.id
+        : `note-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+    let id = base;
+    let counter = 1;
+    while (seen.has(id)) {
+      id = `${base}-${counter++}`;
+    }
+    seen.add(id);
+    result.push({ ...raw, id });
+  }
+  return result;
+};
+
 // Safely convert Firestore Timestamp / ISO string / Date to display string
 const toDisplayTimestamp = (rawDate: any): string => {
   if (!rawDate) return new Date().toLocaleString();
@@ -55,10 +77,12 @@ export const NotesProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       const data = await result.json();
       if (data.success && Array.isArray(data.data)) {
         // Format timestamps safely
-        const formattedNotes = data.data.map((note: any) => ({
-          ...note,
-          timestamp: toDisplayTimestamp(note.createdAt || note.timestamp),
-        }));
+        const formattedNotes = ensureUniqueIds(
+          data.data.map((note: any) => ({
+            ...note,
+            timestamp: toDisplayTimestamp(note.createdAt || note.timestamp),
+          }))
+        );
         setNotes(formattedNotes);
         await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(formattedNotes));
       }
@@ -71,7 +95,7 @@ export const NotesProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       try {
         const storedNotes = await AsyncStorage.getItem(STORAGE_KEY);
         if (storedNotes) {
-          setNotes(JSON.parse(storedNotes));
+          setNotes(ensureUniqueIds(JSON.parse(storedNotes)));
         }
 
         // If signed in, fetch from backend to sync cross-device
