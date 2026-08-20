@@ -1828,7 +1828,7 @@ export function getShapeStyle(styleKey: string): CellStateStyle {
     },
     'igraph.fishboneNote': {
       shape: 'igraph.fishboneNote',
-      fillColor: '#fef9c3',
+      fillColor: '#ffffff',
       strokeColor: BLACK,
       strokeWidth: 2,
     },
@@ -1866,7 +1866,7 @@ export function getShapeStyle(styleKey: string): CellStateStyle {
     },
     'igraph.umlNote': {
       shape: 'igraph.umlNote',
-      fillColor: '#fef9c3',
+      fillColor: '#ffffff',
       strokeColor: BLACK,
       strokeWidth: 2,
     },
@@ -1880,7 +1880,7 @@ export function getShapeStyle(styleKey: string): CellStateStyle {
 },
     'igraph.noteStandalone': {
       shape: 'igraph.noteStandalone',
-      fillColor: '#fef9c3',
+      fillColor: '#ffffff',
       strokeColor: BLACK,
       strokeWidth: 2,
     },
@@ -1956,7 +1956,7 @@ export function getShapeStyle(styleKey: string): CellStateStyle {
     },
     'igraph.dfdNote': {
       shape: 'igraph.dfdNote',
-      fillColor: '#fef9c3',
+      fillColor: '#ffffff',
       strokeColor: BLACK,
       strokeWidth: 2,
     },
@@ -1964,20 +1964,20 @@ export function getShapeStyle(styleKey: string): CellStateStyle {
     // FDD Shapes
     'igraph.fdd.function': {
       shape: 'igraph.fdd.function',
-      fillColor: '#DCEAF7',
-      strokeColor: '#4A78A8',
+      fillColor: '#ffffff',
+      strokeColor: BLACK,
       strokeWidth: 2,
     },
     'igraph.fdd.input': {
       shape: 'igraph.fdd.input',
-      fillColor: '#DCEFD2',
-      strokeColor: '#5A9E4B',
+      fillColor: '#ffffff',
+      strokeColor: BLACK,
       strokeWidth: 2,
     },
     'igraph.fdd.output': {
       shape: 'igraph.fdd.output',
-      fillColor: '#FBE8B8',
-      strokeColor: '#F39C12',
+      fillColor: '#ffffff',
+      strokeColor: BLACK,
       strokeWidth: 2,
     },
     'igraph.fdd.control': {
@@ -2006,14 +2006,14 @@ export function getShapeStyle(styleKey: string): CellStateStyle {
     },
     'igraph.fdd.note': {
       shape: 'igraph.fdd.note',
-      fillColor: '#FFF4CC',
-      strokeColor: '#B7950B',
+      fillColor: '#ffffff',
+      strokeColor: BLACK,
       strokeWidth: 2,
     },
     'igraph.fdd.externalEntity': {
       shape: 'igraph.fdd.externalEntity',
-      fillColor: '#F4F4F4',
-      strokeColor: '#8E8E8E',
+      fillColor: '#ffffff',
+      strokeColor: BLACK,
       strokeWidth: 2,
     },
 
@@ -3229,22 +3229,19 @@ const WebCanvas = forwardRef<DiagramCanvasHandle, DiagramCanvasProps>(({ onReady
       'igraph.fdd.function': {
         ...base,
         shape: 'igraph.fdd.function',
-        fillColor: '#DCEAF7',
-        strokeColor: '#4A78A8',
+        strokeColor: BLACK,
         strokeWidth: 2,
       },
       'igraph.fdd.input': {
         ...base,
         shape: 'igraph.fdd.input',
-        fillColor: '#DCEFD2',
-        strokeColor: '#5A9E4B',
+        strokeColor: BLACK,
         strokeWidth: 2,
       },
       'igraph.fdd.output': {
         ...base,
         shape: 'igraph.fdd.output',
-        fillColor: '#FBE8B8',
-        strokeColor: '#F39C12',
+        strokeColor: BLACK,
         strokeWidth: 2,
       },
       'igraph.fdd.control': {
@@ -3275,15 +3272,13 @@ const WebCanvas = forwardRef<DiagramCanvasHandle, DiagramCanvasProps>(({ onReady
       'igraph.fdd.note': {
         ...base,
         shape: 'igraph.fdd.note',
-        fillColor: '#FFF4CC',
-        strokeColor: '#B7950B',
+        strokeColor: BLACK,
         strokeWidth: 2,
       },
       'igraph.fdd.externalEntity': {
         ...base,
         shape: 'igraph.fdd.externalEntity',
-        fillColor: '#F4F4F4',
-        strokeColor: '#8E8E8E',
+        strokeColor: BLACK,
         strokeWidth: 2,
       },
       'igraph.dfdProcess': {
@@ -3338,7 +3333,6 @@ const WebCanvas = forwardRef<DiagramCanvasHandle, DiagramCanvasProps>(({ onReady
       'igraph.dfdNote': {
         ...base,
         shape: 'igraph.dfdNote',
-        fillColor: '#fef9c3',
         strokeColor: BLACK,
         strokeWidth: 2,
       },
@@ -3449,7 +3443,6 @@ const WebCanvas = forwardRef<DiagramCanvasHandle, DiagramCanvasProps>(({ onReady
       'igraph.fishboneNote': {
         ...base,
         shape: 'igraph.fishboneNote',
-        fillColor: '#fef9c3',
         strokeColor: BLACK,
         strokeWidth: 2,
       },
@@ -3642,8 +3635,8 @@ const WebCanvas = forwardRef<DiagramCanvasHandle, DiagramCanvasProps>(({ onReady
       'igraph.triangle': { ...base, shape: 'igraph.triangle' },
       'igraph.parallelogram': { ...base, shape: 'igraph.parallelogram' },
       'igraph.cylinder': { ...base, shape: 'igraph.cylinder' },
-      'igraph.note': { ...base, shape: 'igraph.note', fillColor: '#fef9c3' },
-      'igraph.cloud': { ...base, shape: 'igraph.cloud', fillColor: '#e0f2fe' },
+      'igraph.note': { ...base, shape: 'igraph.note' },
+      'igraph.cloud': { ...base, shape: 'igraph.cloud' },
       'igraph.doubleRectangle': { ...base, shape: 'igraph.doubleRectangle' },
       'igraph.doubleRhombus': { ...base, shape: 'igraph.doubleRhombus' },
       'igraph.multiOval': { ...base, shape: 'igraph.multiOval' },
@@ -3718,7 +3711,7 @@ const WebCanvas = forwardRef<DiagramCanvasHandle, DiagramCanvasProps>(({ onReady
       'igraph.umlSystemBoundary': { ...base, shape: 'igraph.umlSystemBoundary' },
       'igraph.umlAssociation': { ...base, shape: 'igraph.umlAssociation' },
       'igraph.umlGeneralization': { ...base, shape: 'igraph.umlGeneralization' },
-      'igraph.umlNote': { ...base, shape: 'igraph.umlNote', fillColor: '#fef9c3' },
+      'igraph.umlNote': { ...base, shape: 'igraph.umlNote' },
       'igraph.umlNoteConnector': { ...base, shape: 'igraph.umlNoteConnector' },
       'igraph.umlIncludeLabel': { ...base, shape: 'igraph.umlIncludeLabel' },
       'igraph.umlExtendLabel': { ...base, shape: 'igraph.umlExtendLabel' },
@@ -5681,7 +5674,13 @@ const WebCanvas = forwardRef<DiagramCanvasHandle, DiagramCanvasProps>(({ onReady
       // only repositioning/resizing an existing one, or dragging a
       // connector, becomes a smooth 1:1 follow instead of a stepped snap.
       graph.isGridEnabledEvent = () => false;
-      graph.setConnectable(true);
+      // Drag-to-connect (holding a shape and dragging out a new connector) is
+      // disabled on purpose: every diagram already has explicit connectors in
+      // the shape panel (tap-to-connect), and accidental drags kept spawning
+      // stray default maxGraph edges. setConnectable just toggles the
+      // ConnectionHandler plugin; tap-to-connect's graph.insertEdge and
+      // EdgeHandler's endpoint reconnection are unaffected.
+      graph.setConnectable(false);
       // maxGraph's default hit-tolerance for picking a cell under the
       // pointer is 4px (Graph.tolerance, see getEventTolerance/intersects) —
       // fine for a filled vertex, which has real area to land on, but an

@@ -676,8 +676,8 @@ class FDD_InputShapeCanvas extends Shape {
     if (this.strokeWidth <= 0) c.setStrokeColor('none');
     c.roundrect(x + 1, y + 1, w - 2, h - 2, r, r);
     c.fillAndStroke();
-    c.setFillColor('#5A9E4B');
-    c.setStrokeColor('#5A9E4B');
+    c.setFillColor('#1a1f36');
+    c.setStrokeColor('#1a1f36');
     c.begin();
     c.moveTo(x + w - 6, cy);
     c.lineTo(x + w - 14, cy - 5);
@@ -703,8 +703,8 @@ class FDD_OutputShapeCanvas extends Shape {
     if (this.strokeWidth <= 0) c.setStrokeColor('none');
     c.roundrect(x + 1, y + 1, w - 2, h - 2, r, r);
     c.fillAndStroke();
-    c.setFillColor('#F39C12');
-    c.setStrokeColor('#F39C12');
+    c.setFillColor('#1a1f36');
+    c.setStrokeColor('#1a1f36');
     c.begin();
     c.moveTo(x + 6, cy);
     c.lineTo(x + 14, cy - 5);

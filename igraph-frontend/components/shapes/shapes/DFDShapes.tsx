@@ -158,7 +158,7 @@ export const DFDNoteShape: React.FC<ShapeProps> = ({
   width,
   height,
   color = '#1a1f36',
-  fillColor = '#fef9c3',
+  fillColor = '#ffffff',
   strokeWidth = 2,
 }) => {
   const fold = Math.min(width, height) * 0.2;

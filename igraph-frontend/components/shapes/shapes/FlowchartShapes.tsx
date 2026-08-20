@@ -76,7 +76,7 @@ export const NoteShape: React.FC<ShapeProps> = ({
   width,
   height,
   color = '#1a1f36',
-  fillColor = '#fef9c3',
+  fillColor = '#ffffff',
   strokeWidth = 2,
 }) => {
   const cx = width / 2;
@@ -110,7 +110,7 @@ export const CloudShape: React.FC<ShapeProps> = ({
   width,
   height,
   color = '#1a1f36',
-  fillColor = '#e0f2fe',
+  fillColor = '#ffffff',
   strokeWidth = 2,
 }) => {
   const cx = width / 2;
