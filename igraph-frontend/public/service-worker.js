@@ -111,15 +111,38 @@ self.addEventListener('fetch', (event) => {
     const url = new URL(event.request.url);
     const path = url.pathname + url.search;
 
-    // Offline-capable routes that can be served from cache
+// Offline-capable routes that can be served from cache
     const offlineRoutes = [
       '/(tabs)/home',
-      '/(tabs)/reference',
+      '/(tabs)/reference',  
       '/(tabs)/diagram'
     ];
 
-    if (offlineRoutes.some(route => path.startsWith(route))) {
-      const routeMatch = offlineRoutes.find(route => path.startsWith(route));
+    // Check for exact root match first
+    const isRoot = path === '/' || path === '';
+
+    if (isRoot) {
+      event.respondWith(
+        caches.match('/index.html').then((cachedResponse) => {
+          if (cachedResponse) {
+            console.log('[SW] Offline - serving cached root index.html');
+            return cachedResponse;
+          }
+          return fetch(event.request).then((response) => {
+            if (response && response.status === 200) {
+              caches.open(CACHE_NAME).then((cache) => {
+                cache.put(event.request, response.clone());
+              });
+            }
+            return response;
+          }).catch(() => caches.match('/index.html'));
+        })
+      );
+      return;
+    }
+
+    if (offlineRoutes.some(route => path === route)) {
+      const routeMatch = offlineRoutes.find(route => path === route);
       if (routeMatch) {
         event.respondWith(
           caches.match(routeMatch + '/index.html').then((cachedResponse) => {
@@ -127,6 +150,7 @@ self.addEventListener('fetch', (event) => {
               console.log(`[SW] Offline - serving cached ${routeMatch}`);
               return cachedResponse;
             }
+            return caches.match('/index.html');
           }).catch(() => {
             console.log('[SW] Offline - no cache, falling back to index.html');
             return caches.match('/index.html');
