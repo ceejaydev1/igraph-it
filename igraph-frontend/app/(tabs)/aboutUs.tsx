@@ -12,6 +12,11 @@ import {
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Svg, Path, Circle } from 'react-native-svg';
+import joeMarc from '../assets/team/Joe Marc.png';
+import jhocel from '../assets/team/Jhocel.png';
+import jhanineFaith from '../assets/team/Jhanine Faith.png';
+import francis from '../assets/team/Francis.png';
+import ceejay from '../assets/team/Ceejay.png';
 
 // COLORS
 
@@ -119,7 +124,7 @@ const MemberCard = ({
   name: string;
   role: string;
   index: number;
-  imageUrl?: string;
+  imageUrl?: string | any;
 }) => {
   const getAccentColor = () => {
     const colors = [
@@ -134,20 +139,39 @@ const MemberCard = ({
 
   const accentColor = getAccentColor();
 
+  // Determine how to render the image - local asset or URI string
+  const renderImage = () => {
+    if (!imageUrl) {
+      return (
+        <View style={styles.memberAvatarPlaceholder}>
+          <PersonSilhouetteIcon />
+        </View>
+      );
+    }
+    // If it's a string (URI), use uri prop
+    if (typeof imageUrl === 'string') {
+      return (
+        <Image
+          source={{ uri: imageUrl }}
+          style={styles.memberImage}
+          resizeMode="cover"
+        />
+      );
+    }
+    // Otherwise, treat as local require source object
+    return (
+      <Image
+        source={imageUrl}
+        style={styles.memberImage}
+        resizeMode="cover"
+      />
+    );
+  };
+
   return (
     <View style={styles.memberCard}>
       <View style={[styles.memberAvatar, { borderColor: accentColor }]}>
-        {imageUrl ? (
-          <Image
-            source={{ uri: imageUrl }}
-            style={styles.memberImage}
-            resizeMode="cover"
-          />
-        ) : (
-          <View style={styles.memberAvatarPlaceholder}>
-            <PersonSilhouetteIcon />
-          </View>
-        )}
+        {renderImage()}
       </View>
       <Text style={styles.memberName}>{name}</Text>
       <Text style={styles.memberRole}>{role}</Text>
@@ -180,11 +204,31 @@ const AboutContent = () => (
 
 const TeamContent = () => {
   const members = [
-    { name: 'Ceejay Estabillo', role: 'Programmer' },
-    { name: 'Jhocel Nicole Caintic', role: 'Project Manager' },
-    { name: 'Jhanine Faith Samatra', role: 'UI/UX Designer' },
-    { name: 'Joe Marc Samson', role: 'Database Designer' },
-    { name: 'Francis Marquina', role: 'QA Tester' },
+    { 
+      name: 'Ceejay Estabillo', 
+      role: 'Programmer', 
+      image: ceejay 
+    },
+    { 
+      name: 'Jhocel Nicole Caintic', 
+      role: 'Project Manager', 
+      image: jhocel 
+    },
+    { 
+      name: 'Jhanine Faith Samatra', 
+      role: 'UI/UX Designer', 
+      image: jhanineFaith 
+    },
+    { 
+      name: 'Joe Marc Samson', 
+      role: 'Database Designer', 
+      image: joeMarc 
+    },
+    { 
+      name: 'Francis Marquina', 
+      role: 'QA Tester', 
+      image: francis 
+    },
   ];
 
   return (
@@ -196,6 +240,7 @@ const TeamContent = () => {
             name={member.name}
             role={member.role}
             index={index}
+            imageUrl={member.image}
           />
         ))}
       </View>
@@ -207,6 +252,7 @@ const TeamContent = () => {
             name={member.name}
             role={member.role}
             index={index + 3}
+            imageUrl={member.image}
           />
         ))}
       </View>
