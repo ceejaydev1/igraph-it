@@ -8,7 +8,10 @@ const STATIC_CACHE_URLS = [
   '/manifest.json',
   '/favicon.ico',
   '/icon-192.png',
-  '/icon-512.png'
+  '/icon-512.png',
+  '/(tabs)/home',
+  '/(tabs)/reference',
+  '/(tabs)/diagram'
 ];
 
 // ============================================
@@ -103,8 +106,36 @@ self.addEventListener('fetch', (event) => {
   
   // PRODUCTION MODE - Smart caching strategy
   
-  // NEVER intercept navigation requests (HTML pages)
+  // Intercept navigation requests for specific offline-capable routes
   if (event.request.mode === 'navigate') {
+    const url = new URL(event.request.url);
+    const path = url.pathname + url.search;
+
+    // Offline-capable routes that can be served from cache
+    const offlineRoutes = [
+      '/(tabs)/home',
+      '/(tabs)/reference',
+      '/(tabs)/diagram'
+    ];
+
+    if (offlineRoutes.some(route => path.startsWith(route))) {
+      const routeMatch = offlineRoutes.find(route => path.startsWith(route));
+      if (routeMatch) {
+        event.respondWith(
+          caches.match(routeMatch + '/index.html').then((cachedResponse) => {
+            if (cachedResponse) {
+              console.log(`[SW] Offline - serving cached ${routeMatch}`);
+              return cachedResponse;
+            }
+          }).catch(() => {
+            console.log('[SW] Offline - no cache, falling back to index.html');
+            return caches.match('/index.html');
+          })
+        );
+      }
+    }
+
+    // For all other navigation requests, fall back to index.html
     event.respondWith(
       fetch(event.request).catch(() => {
         console.log('[SW] Offline - serving cached index.html');
