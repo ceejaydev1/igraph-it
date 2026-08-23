@@ -15,14 +15,16 @@ import {
   Easing,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useIsFocused } from '@react-navigation/native';
 import { Svg, Path, Circle } from 'react-native-svg';
 import { WebView } from 'react-native-webview';
+import { VideoView, useVideoPlayer } from 'expo-video';
+import { Asset } from 'expo-asset';
 import { DIAGRAM_ICON_MAP, GenericDiagramGlyph } from '../../../constants/diagramTypeIcons';
 import { ShapeIcon } from '../../../components/shapes/ShapeIcon';
 import * as authService from '../../../services/authService';
 import API_BASE_URL from '../../../constants/api';
 import { useNotes } from '../../../contexts/NotesContext';
-
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -68,6 +70,30 @@ interface TypeConfig {
   accent: string;
 }
 
+// ─── CLOUDINARY VIDEO URLS ───────────────────────────────────────────────────
+
+const VIDEO_IDS = {
+  AGILE: 'https://res.cloudinary.com/qehbqnx0/video/upload/v1787457198/Agile_vid.mp4',
+  BIG_BANG: 'https://res.cloudinary.com/qehbqnx0/video/upload/v1787457105/Bigbang_vid.mp4',
+  CLASS_DIAGRAM: 'https://res.cloudinary.com/qehbqnx0/video/upload/v1787457245/Class_vid.mp4',
+  DATA_FLOW: 'https://res.cloudinary.com/qehbqnx0/video/upload/v1787457294/DFD_vid.mp4',
+  FDD: 'https://res.cloudinary.com/qehbqnx0/video/upload/v1787457196/FDD_vid.mp4',
+  FISHBONE: 'https://res.cloudinary.com/qehbqnx0/video/upload/v1787457170/Fishbone_vid.mp4',
+  USE_CASE: 'https://res.cloudinary.com/qehbqnx0/video/upload/v1787457296/Use_Case_vid.mp4',
+  V_MODEL: 'https://res.cloudinary.com/qehbqnx0/video/upload/v1787460024/vmodel-tutorial.mp4',
+  WATERFALL: 'https://res.cloudinary.com/qehbqnx0/video/upload/v1787457251/Waterfall_vid.mp4',
+  ACTIVITY: 'https://res.cloudinary.com/qehbqnx0/video/upload/v1787457152/Activity_vid.mp4',
+  ERD: 'https://res.cloudinary.com/qehbqnx0/video/upload/v1787457269/ERD_vid.mp4',
+  FLOWCHART: 'https://res.cloudinary.com/qehbqnx0/video/upload/v1787457133/Flowchart.mp4',
+  ITERATIVE: 'https://res.cloudinary.com/qehbqnx0/video/upload/v1787456807/Iterative.mp4',
+  MODIFIED_WATERFALL: 'https://res.cloudinary.com/qehbqnx0/video/upload/v1787457234/Modified_Waterfall.mp4',
+  PROTOTYPE: 'https://res.cloudinary.com/qehbqnx0/video/upload/v1787457096/Prototype_Model.mp4',
+  SCHEMATIC: 'https://res.cloudinary.com/qehbqnx0/video/upload/v1787456804/Schematic.mp4',
+  SEQUENCE: 'https://res.cloudinary.com/qehbqnx0/video/upload/v1787457216/Sequence_vid.mp4',
+  RAD: 'https://res.cloudinary.com/qehbqnx0/video/upload/v1787457194/RAD_vid.mp4',
+  SPIRAL: 'https://res.cloudinary.com/qehbqnx0/video/upload/v1787457105/Spiral_vid.mp4',
+} as const;
+
 // ─── Content Data ─────────────────────────────────────────────────────────────
 
 const SHAPES_BY_TITLE: Record<string, ShapeUsed[]> = {
@@ -112,12 +138,12 @@ const SHAPES_BY_TITLE: Record<string, ShapeUsed[]> = {
   ],
   'Entity Relationship Diagram': [
     { name: 'Entity', description: 'A rectangle representing a table or object type, like Customer or Order.', svgComponent: 'ERDEntityShape' },
-    { name: 'Weak Entity', description: 'An entity that can’t be uniquely identified without the entity it depends on.', svgComponent: 'ERDWeakEntityShape' },
+    { name: 'Weak Entity', description: "An entity that can't be uniquely identified without the entity it depends on.", svgComponent: 'ERDWeakEntityShape' },
     { name: 'Relationship', description: 'A diamond describing how two entities interact, like "places" or "contains".', svgComponent: 'ERDRelationshipShape' },
     { name: 'Identifying Rel.', description: 'A double diamond linking a weak entity to the stronger entity it depends on.', svgComponent: 'ERDIdentifyingRelShape' },
     { name: 'Attribute', description: 'An oval naming a single property that belongs to an entity.', svgComponent: 'ERDAttributeShape' },
     { name: 'Multivalued Attr', description: 'A double oval marking an attribute that can hold more than one value at once.', svgComponent: 'ERDMultivaluedAttrShape' },
-    { name: 'Derived Attr', description: 'A dashed oval marking an attribute that’s calculated from other attributes rather than stored directly.', svgComponent: 'ERDDerivedAttrShape' },
+    { name: 'Derived Attr', description: "A dashed oval marking an attribute that's calculated from other attributes rather than stored directly.", svgComponent: 'ERDDerivedAttrShape' },
     { name: 'Cardinality 1:1', description: 'Marks a relationship where each record on one side matches exactly one record on the other.', svgComponent: 'ERDCardinality11Shape' },
     { name: 'Cardinality 1:N', description: 'Marks a relationship where one record on one side can match many records on the other.', svgComponent: 'ERDCardinality1NShape' },
     { name: 'Cardinality N:1', description: 'Marks a relationship where many records on one side match a single record on the other.', svgComponent: 'ERDCardinalityN1Shape' },
@@ -131,7 +157,7 @@ const SHAPES_BY_TITLE: Record<string, ShapeUsed[]> = {
     { name: 'Main Cause (Top)', description: 'A diagonal branch above the spine representing one major cause category.', svgComponent: 'FishboneCauseTopShape' },
     { name: 'Main Cause (Bottom)', description: 'A diagonal branch below the spine representing one major cause category.', svgComponent: 'FishboneCauseBottomShape' },
     { name: 'Cause Arrow', description: 'An arrow linking a cause label to the bone it belongs to.', svgComponent: 'FishboneArrowShape' },
-    { name: 'Possible Cause', description: 'A dashed arrow linking a cause that’s suspected but not yet confirmed.', svgComponent: 'FishboneDashedArrowShape' },
+    { name: 'Possible Cause', description: "A dashed arrow linking a cause that's suspected but not yet confirmed.", svgComponent: 'FishboneDashedArrowShape' },
     { name: 'Category Box', description: 'A small box labeling a cause category, like "People" or "Process".', svgComponent: 'FishboneCategoryShape' },
     { name: 'Cause Bubble', description: 'An oval calling out a specific cause or reason.', svgComponent: 'FishboneBubbleShape' },
     { name: 'Note', description: 'A box for attaching a comment or clarification to the diagram.', svgComponent: 'FishboneNoteShape' },
@@ -139,7 +165,7 @@ const SHAPES_BY_TITLE: Record<string, ShapeUsed[]> = {
   'Schematic Diagram': [
     { name: 'DC Voltage Source', description: 'Represents a battery supplying a constant voltage to the circuit.', svgComponent: 'SchematicBatteryShape' },
     { name: 'AC Voltage Source', description: 'Represents a source supplying alternating current to the circuit.', svgComponent: 'SchematicACShape' },
-    { name: 'Ground', description: 'Marks the circuit’s reference, zero-voltage point.', svgComponent: 'SchematicGroundShape' },
+    { name: 'Ground', description: "Marks the circuit's reference, zero-voltage point.", svgComponent: 'SchematicGroundShape' },
     { name: 'Resistor', description: 'Represents a component that resists and limits the flow of current.', svgComponent: 'SchematicResistorShape' },
     { name: 'Variable Resistor', description: 'Represents a resistor whose resistance can be adjusted.', svgComponent: 'SchematicVariableResistorShape' },
     { name: 'Capacitor', description: 'Represents a component that stores electrical charge.', svgComponent: 'SchematicCapacitorShape' },
@@ -174,7 +200,7 @@ const SHAPES_BY_TITLE: Record<string, ShapeUsed[]> = {
     { name: 'Join', description: 'A bar where multiple parallel paths synchronize back into a single flow.', svgComponent: 'UMLJoinShape' },
     { name: 'Control Flow', description: 'An arrow showing the order activities execute in.', svgComponent: 'UMLControlFlowShape' },
     { name: 'Object Flow', description: 'A dashed arrow showing an object passing from one activity to another.', svgComponent: 'UMLObjectFlowShape' },
-    { name: 'Swimlane', description: 'A frame dividing the diagram into columns by who’s responsible for each activity.', svgComponent: 'UMLSwimlaneShape' },
+    { name: 'Swimlane', description: "A frame dividing the diagram into columns by who's responsible for each activity.", svgComponent: 'UMLSwimlaneShape' },
     { name: 'Activity Final', description: 'A ringed circle marking where the entire activity flow ends.', svgComponent: 'UMLActivityFinalShape' },
     { name: 'Flow Final', description: 'A circle marking where one branch of the flow ends, without ending the whole activity.', svgComponent: 'UMLFlowFinalShape' },
     { name: 'Note', description: 'A box for attaching a comment or clarification to the diagram.', svgComponent: 'UMLNoteShape' },
@@ -215,14 +241,14 @@ const SHAPES_BY_TITLE: Record<string, ShapeUsed[]> = {
   ],
 };
 
-const PLACEHOLDER_VIDEO_ID = 'dQw4w9WgXcQ';
+const PLACEHOLDER_VIDEO_ID = 'placeholder';
 
 const MODIFIED_WATERFALL_CONTENT: DiagramContent = {
   id: 12,
   title: 'Modified Waterfall Model',
   type: 'SDLC',
   tagline: "A Waterfall variant that lets adjacent phases overlap so problems surface before final testing, not after.",
-  videoId: PLACEHOLDER_VIDEO_ID,
+  videoId: VIDEO_IDS.MODIFIED_WATERFALL,
   imageAlt: 'Modified Waterfall Model diagram',
   placeholderImage: require('../../../assets/diagram library/Modified Waterfall.png'),
   sections: [
@@ -274,8 +300,9 @@ const SEQUENCE_DIAGRAM_CONTENT: DiagramContent = {
   title: 'Sequence Diagram',
   type: 'UML',
   tagline: 'Shows the order messages pass between objects over time, read top to bottom.',
-  videoId: PLACEHOLDER_VIDEO_ID,
+  videoId: VIDEO_IDS.SEQUENCE,
   imageAlt: 'Sequence Diagram example',
+  placeholderImage: require('../../../assets/uml/Sequence.png'),
   sections: [
     {
       heading: 'What It Is',
@@ -326,8 +353,9 @@ const CLASS_DIAGRAM_CONTENT: DiagramContent = {
   title: 'Class Diagram',
   type: 'UML',
   tagline: "Maps a system's classes, attributes, and relationships into one static structural view.",
-  videoId: PLACEHOLDER_VIDEO_ID,
+  videoId: VIDEO_IDS.CLASS_DIAGRAM,
   imageAlt: 'Class Diagram example',
+  placeholderImage: require('../../../assets/uml/Class Diagram.png'),
   sections: [
     {
       heading: 'What It Is',
@@ -378,9 +406,9 @@ const WATERFALL_CONTENT: DiagramContent = {
   title: 'Waterfall Model',
   type: 'SDLC',
   tagline: 'The classic, linear approach to the SDLC. Each phase must fully finish before the next one begins.',
-  videoId: PLACEHOLDER_VIDEO_ID,
+  videoId: VIDEO_IDS.WATERFALL,
   imageAlt: 'Waterfall Model diagram',
-  placeholderImage: require('../../../assets/diagram library/sdlc_waterfall_model.jpg'),
+  placeholderImage: require('../../../assets/diagram library/Waterfall.png'),
   sections: [
     {
       heading: 'What It Is',
@@ -429,9 +457,9 @@ const PROTOTYPE_CONTENT: DiagramContent = {
   title: 'Prototype Model',
   type: 'SDLC',
   tagline: 'Builds a working mock up first, then refines it with user feedback until the real system takes shape.',
-  videoId: PLACEHOLDER_VIDEO_ID,
+  videoId: VIDEO_IDS.PROTOTYPE,
   imageAlt: 'Prototype Model diagram',
-  placeholderImage: require('../../../assets/diagram library/PROTOTYPE.jpg'),
+  placeholderImage: require('../../../assets/diagram library/Prototype.jpg'),
   sections: [
     {
       heading: 'What It Is',
@@ -479,9 +507,9 @@ const AGILE_CONTENT: DiagramContent = {
   title: 'Agile Model',
   type: 'SDLC',
   tagline: 'A flexible, iterative approach built around adapting to changing requirements through continuous collaboration.',
-  videoId: PLACEHOLDER_VIDEO_ID,
+  videoId: VIDEO_IDS.AGILE,
   imageAlt: 'Agile Model diagram',
-  placeholderImage: require('../../../assets/diagram library/image.png'),
+  placeholderImage: require('../../../assets/diagram library/Agile.png'),
   sections: [
     {
       heading: 'What It Is',
@@ -529,9 +557,9 @@ const RAD_CONTENT: DiagramContent = {
   title: 'Rapid Application Development',
   type: 'SDLC',
   tagline: 'Trades heavy planning done in advance for fast, iterative prototyping built through close user involvement.',
-  videoId: PLACEHOLDER_VIDEO_ID,
+  videoId: VIDEO_IDS.RAD,
   imageAlt: 'RAD Model diagram',
-  placeholderImage: require('../../../assets/diagram library/RAD.png'),
+  placeholderImage: require('../../../assets/diagram library/RAD.jpg'),
   sections: [
     {
       heading: 'What It Is',
@@ -579,7 +607,7 @@ const SPIRAL_CONTENT: DiagramContent = {
   title: 'Spiral Model',
   type: 'SDLC',
   tagline: 'Combines Prototyping and Waterfall into repeating loops driven by risk, best suited to large, complex projects.',
-  videoId: PLACEHOLDER_VIDEO_ID,
+  videoId: VIDEO_IDS.SPIRAL,
   imageAlt: 'Spiral Model diagram',
   placeholderImage: require('../../../assets/diagram library/spiral-model.jpg'),
   sections: [
@@ -630,7 +658,7 @@ const BIG_BANG_CONTENT: DiagramContent = {
   title: 'Big Bang Model',
   type: 'SDLC',
   tagline: 'Starts coding with little to no planning and lets the requirements take shape as the work happens.',
-  videoId: PLACEHOLDER_VIDEO_ID,
+  videoId: VIDEO_IDS.BIG_BANG,
   imageAlt: 'Big Bang Model diagram',
   placeholderImage: require('../../../assets/diagram library/bigbang2.png'),
   sections: [
@@ -678,9 +706,9 @@ const ITERATIVE_CONTENT: DiagramContent = {
   title: 'Iterative Model',
   type: 'SDLC',
   tagline: 'Builds the system in repeated cycles, starting with a small working version and expanding it each pass.',
-  videoId: PLACEHOLDER_VIDEO_ID,
+  videoId: VIDEO_IDS.ITERATIVE,
   imageAlt: 'Iterative Model diagram',
-  placeholderImage: require('../../../assets/diagram library/sdlc_iterative_model.jpg'),
+  placeholderImage: require('../../../assets/diagram library/Iterative.png'),
   sections: [
     {
       heading: 'What It Is',
@@ -728,9 +756,9 @@ const V_MODEL_CONTENT: DiagramContent = {
   title: 'V Model',
   type: 'SDLC',
   tagline: 'Pairs every development phase with a matching testing phase, shaped like the letter V.',
-  videoId: PLACEHOLDER_VIDEO_ID,
+  videoId: VIDEO_IDS.V_MODEL,
   imageAlt: 'V Model diagram',
-  placeholderImage: require('../../../assets/diagram library/sdlc_v_model.jpg'),
+  placeholderImage: require('../../../assets/diagram library/V-Model.png'),
   sections: [
     {
       heading: 'What It Is',
@@ -778,8 +806,9 @@ const FDD_CONTENT: DiagramContent = {
   title: 'Functional Decomposition Diagram',
   type: 'UML',
   tagline: 'Breaks a system down into a hierarchy of functions and sub functions, showing what the system does at every level.',
-  videoId: PLACEHOLDER_VIDEO_ID,
+  videoId: VIDEO_IDS.FDD,
   imageAlt: 'Functional Decomposition Diagram example',
+  placeholderImage: require('../../../assets/uml/FDD.png'),
   sections: [
     {
       heading: 'What It Is',
@@ -828,8 +857,9 @@ const FLOWCHART_CONTENT: DiagramContent = {
   title: 'Flowchart',
   type: 'UML',
   tagline: 'Maps a process step by step using standardized shapes, following the order the steps actually happen in.',
-  videoId: PLACEHOLDER_VIDEO_ID,
+  videoId: VIDEO_IDS.FLOWCHART,
   imageAlt: 'Flowchart example',
+  placeholderImage: require('../../../assets/uml/Flowchart.png'),
   sections: [
     {
       heading: 'What It Is',
@@ -879,8 +909,9 @@ const DFD_CONTENT: DiagramContent = {
   title: 'Data Flow Diagram',
   type: 'UML',
   tagline: 'Traces how data moves through a system, between processes, external entities, and data stores.',
-  videoId: PLACEHOLDER_VIDEO_ID,
+  videoId: VIDEO_IDS.DATA_FLOW,
   imageAlt: 'Data Flow Diagram example',
+  placeholderImage: require('../../../assets/uml/DFD.png'),
   sections: [
     {
       heading: 'What It Is',
@@ -929,8 +960,9 @@ const ERD_CONTENT: DiagramContent = {
   title: 'Entity Relationship Diagram',
   type: 'UML',
   tagline: 'Maps the entities in a system and the relationships between them, most often to design a database.',
-  videoId: PLACEHOLDER_VIDEO_ID,
+  videoId: VIDEO_IDS.ERD,
   imageAlt: 'Entity Relationship Diagram example',
+  placeholderImage: require('../../../assets/uml/ERD.png'),
   sections: [
     {
       heading: 'What It Is',
@@ -979,8 +1011,9 @@ const FISHBONE_CONTENT: DiagramContent = {
   title: 'Fishbone Diagram',
   type: 'UML',
   tagline: 'Traces a problem back to its possible root causes, organized into major categories along a central spine.',
-  videoId: PLACEHOLDER_VIDEO_ID,
+  videoId: VIDEO_IDS.FISHBONE,
   imageAlt: 'Fishbone Diagram example',
+  placeholderImage: require('../../../assets/uml/Fishbone.png'),
   sections: [
     {
       heading: 'What It Is',
@@ -1029,8 +1062,9 @@ const SCHEMATIC_CONTENT: DiagramContent = {
   title: 'Schematic Diagram',
   type: 'UML',
   tagline: 'Represents an electrical circuit using standardized component symbols and the wires connecting them.',
-  videoId: PLACEHOLDER_VIDEO_ID,
+  videoId: VIDEO_IDS.SCHEMATIC,
   imageAlt: 'Schematic Diagram example',
+  placeholderImage: require('../../../assets/uml/Schematic.png'),
   sections: [
     {
       heading: 'What It Is',
@@ -1079,8 +1113,9 @@ const USE_CASE_CONTENT: DiagramContent = {
   title: 'Use Case Diagram',
   type: 'UML',
   tagline: 'Shows the goals different actors accomplish with a system, without describing how those goals are carried out.',
-  videoId: PLACEHOLDER_VIDEO_ID,
+  videoId: VIDEO_IDS.USE_CASE,
   imageAlt: 'Use Case Diagram example',
+  placeholderImage: require('../../../assets/uml/Use Case.png'),
   sections: [
     {
       heading: 'What It Is',
@@ -1129,8 +1164,9 @@ const ACTIVITY_CONTENT: DiagramContent = {
   title: 'Activity Diagram',
   type: 'UML',
   tagline: 'Models the flow of actions in a process, including decisions, parallel paths, and where the flow ends.',
-  videoId: PLACEHOLDER_VIDEO_ID,
+  videoId: VIDEO_IDS.ACTIVITY,
   imageAlt: 'Activity Diagram example',
+  placeholderImage: require('../../../assets/uml/Activity Diagram.png'),
   sections: [
     {
       heading: 'What It Is',
@@ -1247,8 +1283,6 @@ const BackButton: React.FC<BackButtonProps> = ({ onPress, style }) => {
       activeOpacity={0.6}
       accessibilityLabel="Go back to home"
       accessibilityRole="button"
-      onMouseEnter={() => setIsHovered(true)}
-      onMouseLeave={() => setIsHovered(false)}
     >
       <BackIcon />
     </TouchableOpacity>
@@ -1336,19 +1370,60 @@ interface DiagramPlaceholderProps {
   color: string;
   label: string;
   title: string;
+  placeholderImage?: ImageSourcePropType;
 }
 
-const DiagramPlaceholder: React.FC<DiagramPlaceholderProps> = ({ color, label, title }) => {
+// ─── FIX: images were being cropped ("not full") on every diagram except
+// "Big Bang Model", because resizeMode was hardcoded to "cover" for
+// everything else. "cover" fills the fixed-height box and crops whatever
+// doesn't fit, which is why a portrait image like Fishbone got cropped down
+// to a thin, stretched vertical sliver. Switching every image to
+// resizeMode="contain" (with a white background to fill any letterboxing)
+// makes every diagram image display in full, regardless of its aspect ratio.
+const DiagramPlaceholder: React.FC<DiagramPlaceholderProps> = ({
+  color,
+  label,
+  title,
+  placeholderImage,
+}) => {
   const Icon = DIAGRAM_ICON_MAP[title] ?? GenericDiagramGlyph;
+  const { width } = useWindowDimensions();
+  const isMobile = width < BREAKPOINTS.tablet;
+
   return (
     <View style={placeholderStyles.container}>
-      <View
-        style={[placeholderStyles.imageBox, { backgroundColor: `${color}15`, borderColor: `${color}30` }]}
-        accessibilityLabel={label}
-        accessibilityRole="image"
-      >
-        <Icon color={color} />
-      </View>
+      {placeholderImage ? (
+        <Image
+          source={placeholderImage}
+          style={[
+            placeholderStyles.imageBox,
+            placeholderStyles.imageWithShadow,
+            {
+              height: isMobile ? 200 : 400,
+              backgroundColor: '#ffffff',
+            },
+          ]}
+          resizeMode="contain"
+          accessibilityLabel={label}
+        />
+      ) : (
+        <View
+          style={[
+            placeholderStyles.imageBox,
+            placeholderStyles.iconBox,
+            placeholderStyles.imageWithShadow,
+            { 
+              height: isMobile ? 200 : 400,
+              backgroundColor: `${color}15`, 
+              borderColor: `${color}30` 
+            },
+          ]}
+          accessibilityLabel={label}
+          accessibilityRole="image"
+        >
+          <Icon color={color} />
+        </View>
+      )}
     </View>
   );
 };
@@ -1361,15 +1436,27 @@ const placeholderStyles = StyleSheet.create({
   imageBox: {
     width: '100%',
     maxWidth: 640,
-    aspectRatio: 16 / 9,
     alignSelf: 'center',
     borderRadius: 8,
-    borderWidth: 1.5,
-    borderStyle: 'dashed',
     justifyContent: 'center',
     alignItems: 'center',
     gap: 6,
-    padding: 8,
+  },
+  imageWithShadow: {
+    shadowColor: '#0f172a',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.06,
+    shadowRadius: 16,
+    elevation: 3,
+    ...Platform.select({
+      web: {
+        boxShadow: '0 4px 16px rgba(15, 23, 42, 0.08)',
+      },
+    }),
+  },
+  iconBox: {
+    borderWidth: 1.5,
+    borderStyle: 'dashed',
   },
   text: {
     fontSize: 10,
@@ -1386,10 +1473,22 @@ interface VideoPlayerProps {
 
 const VideoPlayer: React.FC<VideoPlayerProps> = ({ videoId, color }) => {
   const [isPlaying, setIsPlaying] = useState(false);
-
+  const isFocused = useIsFocused();
+  const webVideoRef = useRef<HTMLVideoElement | null>(null);
   const handlePlay = () => setIsPlaying(true);
+  const videoUrl = videoId;
 
-  const embedUrl = `https://www.youtube.com/embed/${videoId}?autoplay=1`;
+  // Diagram detail stays mounted in the background when navigating back to
+  // Home (tab navigators keep inactive screens alive), so without this the
+  // tutorial video/audio would keep playing after "going back". Stop it as
+  // soon as this screen loses focus.
+  useEffect(() => {
+    if (isFocused) return;
+    setIsPlaying(false);
+    if (Platform.OS === 'web' && webVideoRef.current) {
+      webVideoRef.current.pause();
+    }
+  }, [isFocused]);
 
   if (Platform.OS === 'web') {
     return (
@@ -1409,15 +1508,17 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videoId, color }) => {
           </TouchableOpacity>
         ) : (
           <View style={videoStyles.iframeContainer}>
-            <iframe
-              width="100%"
-              height="100%"
-              src={embedUrl}
-              title="Tutorial Video"
-              frameBorder="0"
-              allow="autoplay; encrypted-media"
-              allowFullScreen
-              style={{ borderRadius: 12 }}
+            <video
+              ref={webVideoRef}
+              controls
+              autoPlay
+              style={{ 
+                width: '100%', 
+                height: '100%', 
+                borderRadius: 12,
+                backgroundColor: '#000',
+              }}
+              src={videoUrl}
             />
           </View>
         )}
@@ -1425,12 +1526,41 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videoId, color }) => {
     );
   }
 
+  return <MobileVideoPlayer videoUrl={videoUrl} color={color} isPlaying={isPlaying} setIsPlaying={setIsPlaying} />;
+};
+
+const MobileVideoPlayer: React.FC<{
+  videoUrl: string;
+  color: string;
+  isPlaying: boolean;
+  setIsPlaying: (value: boolean) => void;
+}> = ({ videoUrl, color, isPlaying, setIsPlaying }) => {
+  const player = useVideoPlayer(videoUrl, (player) => {
+    player.loop = false;
+  });
+
+  useEffect(() => {
+    return () => {
+      player.pause();
+      player.replace(null);
+    };
+  }, [player]);
+
+  useEffect(() => {
+    if (!isPlaying) {
+      player.pause();
+    }
+  }, [isPlaying, player]);
+
   return (
     <View style={videoStyles.container}>
       {!isPlaying ? (
         <TouchableOpacity
           style={[videoStyles.thumbnail, { backgroundColor: `${color}15` }]}
-          onPress={handlePlay}
+          onPress={() => {
+            setIsPlaying(true);
+            player.play();
+          }}
           activeOpacity={0.9}
           accessibilityLabel="Play tutorial video"
           accessibilityRole="button"
@@ -1441,10 +1571,13 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videoId, color }) => {
           <Text style={[videoStyles.thumbnailText, { color }]}>Watch Tutorial</Text>
         </TouchableOpacity>
       ) : (
-        <WebView
-          style={videoStyles.webview}
-          javaScriptEnabled
-          source={{ uri: embedUrl }}
+        <VideoView
+          player={player}
+          style={{ width: '100%', height: '100%' }}
+          allowsFullscreen
+          allowsPictureInPicture
+          nativeControls
+          contentFit="contain"
         />
       )}
     </View>
@@ -1634,7 +1767,7 @@ const ProsConsCard: React.FC<ProsConsCardProps> = ({ advantages, disadvantages, 
       <View style={[sectionStyles.node, { borderColor: color }]}>
         <PlusMinusIcon color={color} />
       </View>
-      <Text style={[sectionStyles.heading, { color }]}>Advantages &amp; Disadvantages</Text>
+      <Text style={[sectionStyles.heading, { color }]}>Advantages & Disadvantages</Text>
     </View>
     <View style={prosConsStyles.balanceBar}>
       <View style={[prosConsStyles.balanceHalf, { backgroundColor: PROS_COLOR }]} />
@@ -2214,7 +2347,7 @@ const LearningFeedbackForm: React.FC<FeedbackFormProps> = ({ color, diagramType,
 
       if (!response.ok || !result?.success) {
         Alert.alert(
-          'Couldn’t Submit Feedback',
+          "Couldn't Submit Feedback",
           result?.message || 'Something went wrong on our end. Please try again.',
           [{ text: 'OK' }]
         );
@@ -2293,8 +2426,6 @@ const LearningFeedbackForm: React.FC<FeedbackFormProps> = ({ color, diagramType,
         onPress={handleSubmit}
         activeOpacity={0.8}
         disabled={isSubmitting}
-        onMouseEnter={() => setIsHovered(true)}
-        onMouseLeave={() => setIsHovered(false)}
       >
         <Text style={feedbackStyles.submitButtonText}>{isSubmitting ? 'Submitting…' : 'Submit'}</Text>
       </TouchableOpacity>
@@ -2407,14 +2538,6 @@ const DiagramDetail: React.FC = () => {
   }, [diagramId]);
   const colors = content ? TYPE_CONFIG[content.type] : TYPE_CONFIG.UML;
   const hasRealVideo = content ? content.videoId !== PLACEHOLDER_VIDEO_ID : false;
-
-  const heroImageAspectRatio = (() => {
-    const source = content?.placeholderImage;
-    if (source && typeof source === 'object' && !Array.isArray(source) && source.width && source.height) {
-      return source.width / source.height;
-    }
-    return 16 / 9;
-  })();
 
   const headerOpacity = scrollY.interpolate({
     inputRange: [0, 80],
@@ -2635,9 +2758,14 @@ const DiagramDetail: React.FC = () => {
               </Text>
               <Text style={styles.heroTagline}>{content.tagline}</Text>
             </View>
-            
+
             <View nativeID="tour-detail-image">
-              <DiagramPlaceholder color={colors.primary} label={content.imageAlt} title={content.title} />
+              <DiagramPlaceholder
+                color={colors.primary}
+                label={content.imageAlt}
+                title={content.title}
+                placeholderImage={content.placeholderImage}
+              />
             </View>
 
             {!isDesktop && (
@@ -2747,7 +2875,7 @@ const styles = StyleSheet.create({
     alignSelf: 'flex-start',
   },
   heroContent: {
-    gap: 24,
+    gap: 16,
   },
   titleStack: {
     gap: 8,

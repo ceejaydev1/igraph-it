@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useMemo, ReactNode } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as authService from '../services/authService';
 import API_BASE_URL from '../constants/api';
@@ -26,9 +26,6 @@ const NotesContext = createContext<NotesContextType | undefined>(undefined);
 
 const STORAGE_KEY = '@igraph_saved_notes';
 
-// Guarantee every note in state has a unique, stable string id. Duplicate or
-// blank ids are what make removeNote(id) (a filter by id) delete more than one
-// note at a time, so any dupes are deduped and missing ids are filled in.
 const ensureUniqueIds = (rawNotes: any[]): LearningNote[] => {
   const seen = new Set<string>();
   const result: LearningNote[] = [];
@@ -48,21 +45,39 @@ const ensureUniqueIds = (rawNotes: any[]): LearningNote[] => {
   return result;
 };
 
-// Safely convert Firestore Timestamp / ISO string / Date to display string
+const resolveRawDate = (note: any): any =>
+  note?.createdAt ??
+  note?.created_at ??
+  note?.dateCreated ??
+  note?.date_created ??
+  note?.savedAt ??
+  note?.saved_at ??
+  note?.timestamp ??
+  note?.updatedAt ??
+  note?.updated_at ??
+  null;
+
 const toDisplayTimestamp = (rawDate: any): string => {
   if (!rawDate) return new Date().toLocaleString();
+
+  if (typeof rawDate === 'object' && typeof rawDate.toDate === 'function') {
+    return rawDate.toDate().toLocaleString();
+  }
+  if (typeof rawDate === 'object' && typeof rawDate.seconds === 'number') {
+    return new Date(rawDate.seconds * 1000).toLocaleString();
+  }
+
   if (typeof rawDate === 'string') {
     const parsed = new Date(rawDate);
     return isNaN(parsed.getTime()) ? new Date().toLocaleString() : parsed.toLocaleString();
   }
+
   if (typeof rawDate === 'number') {
-    const parsed = new Date(rawDate);
+    const ms = rawDate < 10_000_000_000 ? rawDate * 1000 : rawDate;
+    const parsed = new Date(ms);
     return isNaN(parsed.getTime()) ? new Date().toLocaleString() : parsed.toLocaleString();
   }
-  if (typeof rawDate.toDate === 'function') {
-    // Firestore Timestamp
-    return rawDate.toDate().toLocaleString();
-  }
+
   const parsed = new Date(rawDate);
   return isNaN(parsed.getTime()) ? new Date().toLocaleString() : parsed.toLocaleString();
 };
@@ -70,29 +85,28 @@ const toDisplayTimestamp = (rawDate: any): string => {
 export const NotesProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [notes, setNotes] = useState<LearningNote[]>([]);
 
-  // Fetch notes from the backend and replace local state when signed in.
-  // No-op (keeps local notes) when there's no active session.
-  const fetchServerNotes = async () => {
+  // FIX: stable reference via useCallback([]) — this is what stops the
+  // infinite refetch loop that was making the timestamp look "live".
+  const fetchServerNotes = useCallback(async () => {
     const signedIn = await authService.hasActiveSession();
     if (!signedIn) return;
     const result = await authService.authFetch(`${API_BASE_URL}/api/notes`);
     if (result.ok) {
       const data = await result.json();
       if (data.success && Array.isArray(data.data)) {
-        // Format timestamps safely
+        // console.log('raw note from server:', data.data[0]);
         const formattedNotes = ensureUniqueIds(
           data.data.map((note: any) => ({
             ...note,
-            timestamp: toDisplayTimestamp(note.createdAt || note.timestamp),
+            timestamp: toDisplayTimestamp(resolveRawDate(note)),
           }))
         );
         setNotes(formattedNotes);
         await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(formattedNotes));
       }
     }
-  };
+  }, []);
 
-  // Load local notes first, then fetch from server if authenticated
   useEffect(() => {
     const loadNotes = async () => {
       try {
@@ -100,8 +114,6 @@ export const NotesProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         if (storedNotes) {
           setNotes(ensureUniqueIds(JSON.parse(storedNotes)));
         }
-
-        // If signed in, fetch from backend to sync cross-device
         await fetchServerNotes();
       } catch (error) {
         console.warn('Failed to load notes:', error);
@@ -109,17 +121,15 @@ export const NotesProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     };
 
     loadNotes();
-  }, []);
+  }, [fetchServerNotes]);
 
-  // Persist to local storage whenever notes change
   useEffect(() => {
     AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(notes)).catch((e) =>
       console.warn('Failed to save notes locally:', e)
     );
   }, [notes]);
 
-  const addNote = async (note: Omit<LearningNote, 'id' | 'timestamp'>) => {
-    // Optimistic local update
+  const addNote = useCallback(async (note: Omit<LearningNote, 'id' | 'timestamp'>) => {
     const newNote: LearningNote = {
       ...note,
       id: `local-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
@@ -127,7 +137,6 @@ export const NotesProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     };
     setNotes((prev) => [newNote, ...prev]);
 
-    // If authenticated, sync to backend
     const signedIn = await authService.hasActiveSession();
     if (signedIn) {
       try {
@@ -138,13 +147,12 @@ export const NotesProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         });
         const data = await response.json();
         if (data.success && data.data) {
-          // Replace the temporary local note with the server one
           setNotes((prev) =>
             prev.map((n) => {
               if (n.id === newNote.id) {
                 return {
                   ...data.data,
-                  timestamp: toDisplayTimestamp(data.data.createdAt || data.data.timestamp),
+                  timestamp: toDisplayTimestamp(resolveRawDate(data.data)),
                 };
               }
               return n;
@@ -153,17 +161,15 @@ export const NotesProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         }
       } catch (error) {
         console.warn('Failed to sync note to server:', error);
-        // Keep local note; it will be replaced on next sync
       }
     }
-  };
+  }, []);
 
-  const removeNoteLocal = (id: string) => {
+  const removeNoteLocal = useCallback((id: string) => {
     setNotes((prev) => prev.filter((note) => note.id !== id));
-  };
+  }, []);
 
-  const deleteNoteServer = async (id: string) => {
-    // Local-only notes have nothing to delete on the backend.
+  const deleteNoteServer = useCallback(async (id: string) => {
     if (id.startsWith('local-')) return;
     const signedIn = await authService.hasActiveSession();
     if (!signedIn) return;
@@ -174,44 +180,44 @@ export const NotesProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     } catch (error) {
       console.warn('Failed to delete note on server:', error);
     }
-  };
+  }, []);
 
-  const removeNote = async (id: string) => {
+  const removeNote = useCallback(async (id: string) => {
     removeNoteLocal(id);
     await deleteNoteServer(id);
-  };
+  }, [removeNoteLocal, deleteNoteServer]);
 
-  const restoreNote = (note: LearningNote) => {
+  const restoreNote = useCallback((note: LearningNote) => {
     setNotes((prev) => {
-      // Avoid duplicating a note a server refetch already brought back.
       if (prev.some((n) => n.id === note.id)) return prev;
       return [note, ...prev];
     });
-  };
+  }, []);
 
-  const refreshNotes = async () => {
+  const refreshNotes = useCallback(async () => {
     try {
       await fetchServerNotes();
     } catch (error) {
       console.warn('Failed to refresh notes:', error);
     }
-  };
+  }, [fetchServerNotes]);
 
-  return (
-    <NotesContext.Provider
-      value={{
-        notes,
-        addNote,
-        removeNote,
-        removeNoteLocal,
-        deleteNoteServer,
-        restoreNote,
-        refreshNotes,
-      }}
-    >
-      {children}
-    </NotesContext.Provider>
+  // FIX: memoized context value — the last piece needed so consumers only
+  // re-render when something they actually use has changed.
+  const value = useMemo(
+    () => ({
+      notes,
+      addNote,
+      removeNote,
+      removeNoteLocal,
+      deleteNoteServer,
+      restoreNote,
+      refreshNotes,
+    }),
+    [notes, addNote, removeNote, removeNoteLocal, deleteNoteServer, restoreNote, refreshNotes]
   );
+
+  return <NotesContext.Provider value={value}>{children}</NotesContext.Provider>;
 };
 
 export const useNotes = (): NotesContextType => {

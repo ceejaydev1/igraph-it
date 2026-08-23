@@ -12,11 +12,6 @@ import {
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Svg, Path, Circle } from 'react-native-svg';
-import joeMarc from '../assets/team/Joe Marc.png';
-import jhocel from '../assets/team/Jhocel.png';
-import jhanineFaith from '../assets/team/Jhanine Faith.png';
-import francis from '../assets/team/Francis.png';
-import ceejay from '../assets/team/Ceejay.png';
 
 // COLORS
 
@@ -55,15 +50,8 @@ const RADIUS = {
   full: 999,
 };
 
-// Readable-width cap for the content pane on wide screens — same value used
-// in privacy.tsx so both screens feel consistent.
 const CONTENT_MAX_WIDTH = 720;
 
-// The bottom navbar (Navbar.tsx's bottomNavCard) is a docked, absolutely-
-// positioned overlay, not part of normal document flow — this screen's own
-// ScrollView has no idea it's there and needs to reserve this much space
-// itself or the last row of content ends up underneath it. Same value/
-// pattern as userAccount.tsx's TAB_BAR_ALLOWANCE.
 const TAB_BAR_ALLOWANCE = 90;
 
 // ICONS
@@ -80,9 +68,6 @@ const BackIcon = () => (
   </Svg>
 );
 
-// A small chain of connected nodes — the same visual language the app uses
-// for its own diagrams — as a quiet visual anchor above the origin-story
-// text, instead of it opening straight into a wall of plain paragraphs.
 const AboutAccent = () => (
   <Svg width={72} height={24} viewBox="0 0 72 24" style={styles.aboutAccent}>
     <Path d="M8 12 H64" stroke={COLORS.primary} strokeWidth={1.5} opacity={0.35} />
@@ -92,9 +77,6 @@ const AboutAccent = () => (
   </Svg>
 );
 
-// A flowchart decision-diamond divider between the two paragraphs — draws
-// on the same SDLC/UML shape vocabulary this app is actually about, instead
-// of a generic tinted-box-with-colored-border "AI blockquote" treatment.
 const AboutDivider = () => (
   <Svg width={56} height={16} viewBox="0 0 56 16" style={styles.aboutDivider}>
     <Path d="M2 8 H21" stroke={COLORS.border} strokeWidth={1.2} strokeDasharray="3 3" />
@@ -103,9 +85,6 @@ const AboutDivider = () => (
   </Svg>
 );
 
-// Generic "no profile photo" placeholder — same head-and-shoulders
-// silhouette-on-flat-gray look Facebook (and most social apps) fall back to
-// when an account has no photo, rather than this app inventing its own.
 const PersonSilhouetteIcon = () => (
   <Svg width={40} height={40} viewBox="0 0 24 24" fill="none">
     <Circle cx={12} cy={8.5} r={4} fill="#bec3c9" />
@@ -119,12 +98,12 @@ const MemberCard = ({
   name,
   role,
   index,
-  imageUrl,
+  imageSource,
 }: {
   name: string;
   role: string;
   index: number;
-  imageUrl?: string | any;
+  imageSource?: any;
 }) => {
   const getAccentColor = () => {
     const colors = [
@@ -139,29 +118,17 @@ const MemberCard = ({
 
   const accentColor = getAccentColor();
 
-  // Determine how to render the image - local asset or URI string
   const renderImage = () => {
-    if (!imageUrl) {
+    if (!imageSource) {
       return (
         <View style={styles.memberAvatarPlaceholder}>
           <PersonSilhouetteIcon />
         </View>
       );
     }
-    // If it's a string (URI), use uri prop
-    if (typeof imageUrl === 'string') {
-      return (
-        <Image
-          source={{ uri: imageUrl }}
-          style={styles.memberImage}
-          resizeMode="cover"
-        />
-      );
-    }
-    // Otherwise, treat as local require source object
     return (
       <Image
-        source={imageUrl}
+        source={imageSource}
         style={styles.memberImage}
         resizeMode="cover"
       />
@@ -207,27 +174,27 @@ const TeamContent = () => {
     { 
       name: 'Ceejay Estabillo', 
       role: 'Programmer', 
-      image: ceejay 
+      imageSource: require('../../assets/team/Ceejay.png')
     },
     { 
       name: 'Jhocel Nicole Caintic', 
       role: 'Project Manager', 
-      image: jhocel 
+      imageSource: require('../../assets/team/Jhocel.png')
     },
     { 
       name: 'Jhanine Faith Samatra', 
       role: 'UI/UX Designer', 
-      image: jhanineFaith 
+      imageSource: require('../../assets/team/Jhanine Faith.png')
     },
     { 
       name: 'Joe Marc Samson', 
       role: 'Database Designer', 
-      image: joeMarc 
+      imageSource: require('../../assets/team/Joe Marc.png')
     },
     { 
       name: 'Francis Marquina', 
       role: 'QA Tester', 
-      image: francis 
+      imageSource: require('../../assets/team/Francis.png')
     },
   ];
 
@@ -240,7 +207,7 @@ const TeamContent = () => {
             name={member.name}
             role={member.role}
             index={index}
-            imageUrl={member.image}
+            imageSource={member.imageSource}
           />
         ))}
       </View>
@@ -252,7 +219,7 @@ const TeamContent = () => {
             name={member.name}
             role={member.role}
             index={index + 3}
-            imageUrl={member.image}
+            imageSource={member.imageSource}
           />
         ))}
       </View>
@@ -289,16 +256,6 @@ export default function AboutUs() {
     scrollViewRef.current?.scrollTo({ y: 0, animated: true });
   };
 
-  // Always back to Account, regardless of actual navigation history — this
-  // screen is only ever reached from there (see userAccount.tsx's "About
-  // Us" action), but router.back() follows whatever the real previous
-  // route was, which isn't always Account (e.g. arriving via the tab bar),
-  // and would land back on Home instead.
-  //
-  // navigate, not replace: replace still mounts a brand-new instance of the
-  // persistently-anchored (tabs) group on top of the existing one instead of
-  // resurfacing the existing Account screen already sitting there — see
-  // savedDiagrams.tsx's handleBackPress for the full explanation (same fix).
   const handleBackPress = () => {
     router.navigate('/(tabs)/userAccount');
   };
@@ -318,7 +275,7 @@ export default function AboutUs() {
         <View style={styles.headerSpacer} />
       </View>
 
-      {/* Tab Bar - flat, full-width (same style as Privacy) */}
+      {/* Tab Bar */}
       <View style={styles.tabBar}>
         <TouchableOpacity
           style={[styles.tab, activeTab === 'about' && styles.activeTab]}
@@ -338,7 +295,7 @@ export default function AboutUs() {
         </TouchableOpacity>
       </View>
 
-      {/* Content — capped + centered on wide screens, same pattern as privacy.tsx */}
+      {/* Content */}
       <ScrollView
         ref={scrollViewRef}
         style={styles.scrollView}
@@ -355,10 +312,7 @@ export default function AboutUs() {
         </View>
       </ScrollView>
 
-      {/* Scroll to Top Button — outer wrapper centers its child, inner box
-          carries the maxWidth and right-aligns the button within it. Same
-          fix as privacy.tsx: avoids fighting absolute left/right insets
-          against a maxWidth. */}
+      {/* Scroll to Top Button */}
       {showScrollTop && (
         <View pointerEvents="box-none" style={styles.scrollTopOuter}>
           <View
@@ -451,7 +405,6 @@ const styles = StyleSheet.create({
     flex: 1,
   },
 
-  // Scroll Content
   scrollContentOuter: {
     flexGrow: 1,
     alignItems: 'center',
@@ -481,9 +434,6 @@ const styles = StyleSheet.create({
     alignSelf: 'center',
     marginBottom: SPACING.xxl,
   },
-  // The reflective "why we built this" paragraph reads differently from the
-  // factual lead above it — italic and a touch muted, set off by the
-  // decision-diamond divider above rather than a boxed/bordered treatment.
   aboutTextSecondary: {
     fontSize: 16,
     color: COLORS.textSecondary,
@@ -554,7 +504,6 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
 
-  // Scroll to Top Button
   scrollTopOuter: {
     position: 'absolute',
     bottom: 0,
