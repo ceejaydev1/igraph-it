@@ -4490,7 +4490,11 @@ const WebCanvas = forwardRef<DiagramCanvasHandle, DiagramCanvasProps>(({ onReady
       entryY: 0.5 - dir.dy * 0.5,
       entryPerimeter: false,
     };
-    graph.insertEdge(null, null, '', sourceCell, newCell, edgeStyle);
+    const edge = graph.insertEdge(null, null, '', sourceCell, newCell, edgeStyle);
+    
+    // ⭐ FIX: Tag the edge as a connector so it doesn't get directional arrows
+    // Using 'connector' which should be in CONNECTOR_SHAPE_IDS
+    tagShapeRole(edge, 'connector');
 
     graph.clearSelection();
     setTimeout(() => {
@@ -4545,7 +4549,9 @@ const WebCanvas = forwardRef<DiagramCanvasHandle, DiagramCanvasProps>(({ onReady
       // arrows — for a thin line, up/down/left/right branching doesn't read
       // the same way it does for a box, and the two UIs would otherwise
       // visually collide right on top of each other.
-      const isConnector = isConnectorCell(cell);
+      const isConnector =
+  (typeof cell.isEdge === 'function' && cell.isEdge()) ||
+  isConnectorCell(cell);
 
       const view = graph.getView();
       const scale = view.getScale();
@@ -4865,7 +4871,12 @@ const WebCanvas = forwardRef<DiagramCanvasHandle, DiagramCanvasProps>(({ onReady
       // Connector/line shapes don't get "add adjacent shape" arrows at all
       // (see the matching check in createArrowButtons) — no hover preview
       // for a UI that isn't there once selected.
-      if (isConnectorCell(cell)) return;
+      if (
+  (typeof cell.isEdge === 'function' && cell.isEdge()) ||
+  isConnectorCell(cell)
+) {
+  return;
+}
 
       const view = graph.getView();
 
@@ -6966,9 +6977,13 @@ const WebCanvas = forwardRef<DiagramCanvasHandle, DiagramCanvasProps>(({ onReady
       )}
 
       {shapePicker && (() => {
-        const pickerShapes = getShapesForDiagram(umlType).length
+        const allShapes = getShapesForDiagram(umlType).length
           ? getShapesForDiagram(umlType)
           : DIAGRAM_SHAPES['Standard'];
+        // Filter out connector/line shapes from the picker
+        const pickerShapes = allShapes.filter(
+          (shape) => !CONNECTOR_SHAPE_IDS.has(shape.id)
+        );
         // 34px is the smallest these shape components render crisply at —
         // ShapesPanel's own icons are 40-48px; going much below ~34 (as a
         // first pass here did, at 22px) makes thin curved strokes (ellipse,

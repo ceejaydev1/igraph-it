@@ -153,7 +153,7 @@ const AboutContent = () => (
     <AboutAccent />
     <Text style={styles.aboutText}>
       iGraph IT began as a school project built by a small team who wanted to get better at
-      drawing SDLC and UML diagrams. It lets you build flowcharts, use case diagrams, class
+      creating UML and learning SDLC . It lets you build flowcharts, use case diagrams, class
       diagrams, and more in one place, without switching between separate tools to finish a
       single diagram.
     </Text>
