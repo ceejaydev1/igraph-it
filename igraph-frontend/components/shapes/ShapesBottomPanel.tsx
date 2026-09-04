@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import {
   View,
   Text,
@@ -11,17 +11,23 @@ import {
   Dimensions,
   TextInput,
 } from 'react-native';
-import { DIAGRAM_TABS, DIAGRAM_SHAPES, ShapeDefinition } from '@/constants/shapes';
+import {
+  DIAGRAM_TABS,
+  DIAGRAM_SHAPES,
+  ShapeDefinition,
+} from '@/constants/shapes';
 import { ShapePreview } from './ShapeIcon';
-import { Svg, Path, Circle, Rect} from 'react-native-svg';
+import { Svg, Path, Circle, Rect } from 'react-native-svg';
 
 const { height: SCREEN_HEIGHT, width: SCREEN_WIDTH } = Dimensions.get('window');
 
 // Same fix as PropertiesPanel: without this, dragging one of this sheet's
 // ScrollViews past its own edge chains the leftover gesture into bouncing
-// the whole page behind it. overscroll-behavior isn't an RN style prop, but
-// react-native-web passes unrecognized CSS properties straight through.
-const WEB_SCROLL_CONTAIN = Platform.OS === 'web' ? { overscrollBehavior: 'contain' as const } : undefined;
+// the whole page behind it.
+const WEB_SCROLL_CONTAIN =
+  Platform.OS === 'web'
+    ? { overscrollBehavior: 'contain' as const }
+    : undefined;
 
 // ─── Icons ────────────────────────────────────────────────────────────────────
 
@@ -39,47 +45,88 @@ const SearchIcon = ({ color = '#94a3b8' }: { color?: string }) => (
 
 const ClearIcon = () => (
   <Svg width={16} height={16} viewBox="0 0 24 24" fill="none">
-    <Circle cx="12" cy="12" r="10" stroke="#94a3b8" strokeWidth={1.5} />
-    <Path d="M15 9L9 15M9 9L15 15" stroke="#94a3b8" strokeWidth={1.8} strokeLinecap="round" />
+    <Circle
+      cx="12"
+      cy="12"
+      r="10"
+      stroke="#94a3b8"
+      strokeWidth={1.5}
+    />
+    <Path
+      d="M15 9L9 15M9 9L15 15"
+      stroke="#94a3b8"
+      strokeWidth={1.8}
+      strokeLinecap="round"
+    />
   </Svg>
 );
 
 const HandleIcon = () => (
   <Svg width={36} height={4} viewBox="0 0 36 4">
-    <Rect x="0" y="0" width="36" height="4" rx="2" fill="#d1d5db" />
+    <Rect
+      x="0"
+      y="0"
+      width="36"
+      height="4"
+      rx="2"
+      fill="#d1d5db"
+    />
   </Svg>
 );
 
 const CloseIcon = ({ color = '#4a5568' }: { color?: string }) => (
   <Svg width={20} height={20} viewBox="0 0 24 24" fill="none">
-    <Path d="M18 6L6 18M6 6L18 18" stroke={color} strokeWidth={2} strokeLinecap="round" />
+    <Path
+      d="M18 6L6 18M6 6L18 18"
+      stroke={color}
+      strokeWidth={2}
+      strokeLinecap="round"
+    />
   </Svg>
 );
+
+// ─── Text Shape ───────────────────────────────────────────────────────────────
+//
+// TextShape already exists in your shape component registry.
+// This definition is only used as a fallback so the bottom panel can show
+// Text even when constants/shapes.ts does not yet contain it.
+//
+// If Text already exists in DIAGRAM_SHAPES.Standard, this fallback is NOT
+// added, preventing duplicates.
+
+const TEXT_SHAPE: ShapeDefinition = {
+  id: 'text',
+  label: 'Text',
+  description: 'Add editable text to the canvas',
+  svgComponent: 'TextShape',
+} as ShapeDefinition;
+
+// ─── Props ────────────────────────────────────────────────────────────────────
 
 interface ShapesBottomPanelProps {
   visible: boolean;
   onClose: () => void;
-  onSelectShape: (shapeId: string, shapeData?: ShapeDefinition) => void;
+  onSelectShape: (
+    shapeId: string,
+    shapeData?: ShapeDefinition
+  ) => void;
   isGraphReady: boolean;
   toolbarHeight: number;
 }
 
-// ─── Content-fit sizing ─────────────────────────────────────────────────────
-// Previously EXPANDED_HEIGHT was `SCREEN_HEIGHT * 0.38`, a fixed percentage of
-// the screen. That's much taller than the actual content (one row of shape
-// tiles), so the leftover space showed up as a big empty gap between the
-// shape row and the pagination dots. These constants sum to the height the
-// panel's content actually needs, so the sheet hugs its content instead.
+// ─── Content-fit sizing ───────────────────────────────────────────────────────
+
 const TILE_HEIGHT = 52;
-const HANDLE_HEIGHT = 16; // drag handle + its padding
-const HEADER_ROW_HEIGHT = 28; // "Shapes" title row
-const SEARCH_ROW_HEIGHT = 52; // search input row + bottom padding (bumped up with larger search bar)
-const TABS_ROW_HEIGHT = 42; // scrollable tab chips + border (bumped up with larger tabs)
-const SHAPES_ROW_HEIGHT = TILE_HEIGHT + 8; // one row of shape tiles
-const DOTS_ROW_HEIGHT = 18; // pagination dots row (reserved even if hidden, to avoid jank)
+const HANDLE_HEIGHT = 16;
+const HEADER_ROW_HEIGHT = 28;
+const SEARCH_ROW_HEIGHT = 52;
+const TABS_ROW_HEIGHT = 42;
+const SHAPES_ROW_HEIGHT = TILE_HEIGHT + 8;
+const DOTS_ROW_HEIGHT = 18;
 const BOTTOM_SAFE_PADDING = Platform.OS === 'ios' ? 20 : 10;
 
 const COLLAPSED_HEIGHT = 56;
+
 const EXPANDED_HEIGHT =
   HANDLE_HEIGHT +
   HEADER_ROW_HEIGHT +
@@ -88,6 +135,8 @@ const EXPANDED_HEIGHT =
   SHAPES_ROW_HEIGHT +
   DOTS_ROW_HEIGHT +
   BOTTOM_SAFE_PADDING;
+
+// ─── Component ────────────────────────────────────────────────────────────────
 
 export default function ShapesBottomPanel({
   visible,
@@ -105,52 +154,26 @@ export default function ShapesBottomPanel({
   const scrollViewRef = useRef<ScrollView>(null);
   const slideAnim = useRef(new Animated.Value(0)).current;
   const currentHeightRef = useRef(0);
+
   const [containerWidth, setContainerWidth] = useState(0);
+
+  // ─── Animation listener ────────────────────────────────────────────────────
 
   useEffect(() => {
     const id = slideAnim.addListener(({ value }) => {
       currentHeightRef.current = value;
     });
-    return () => slideAnim.removeListener(id);
-  }, []);
 
-  const panResponder = useRef(
-    PanResponder.create({
-      onStartShouldSetPanResponder: () => true,
-      onMoveShouldSetPanResponder: () => true,
-      onPanResponderGrant: () => {},
-      onPanResponderMove: (_, gestureState) => {
-        const currentHeight = expanded ? EXPANDED_HEIGHT : COLLAPSED_HEIGHT;
-        const newHeight = currentHeight - gestureState.dy;
-        if (newHeight >= COLLAPSED_HEIGHT && newHeight <= EXPANDED_HEIGHT) {
-          slideAnim.setValue(newHeight);
-        }
-      },
-      onPanResponderRelease: () => {
-        const midPoint = (EXPANDED_HEIGHT + COLLAPSED_HEIGHT) / 2;
-        if (currentHeightRef.current > midPoint) {
-          expandPanel();
-        } else {
-          collapsePanel();
-        }
-      },
-    })
-  ).current;
+    return () => {
+      slideAnim.removeListener(id);
+    };
+  }, [slideAnim]);
 
-  useEffect(() => {
-    if (visible) {
-      slideAnim.setValue(COLLAPSED_HEIGHT);
-      setTimeout(expandPanel, 50);
-    } else {
-      slideAnim.setValue(0);
-      setLastTapped(null);
-      setSearchQuery('');
-      setActivePage(0);
-    }
-  }, [visible]);
+  // ─── Expand / Collapse ─────────────────────────────────────────────────────
 
   const expandPanel = () => {
     setExpanded(true);
+
     Animated.spring(slideAnim, {
       toValue: EXPANDED_HEIGHT,
       useNativeDriver: false,
@@ -161,6 +184,7 @@ export default function ShapesBottomPanel({
 
   const collapsePanel = () => {
     setExpanded(false);
+
     Animated.spring(slideAnim, {
       toValue: COLLAPSED_HEIGHT,
       useNativeDriver: false,
@@ -169,52 +193,159 @@ export default function ShapesBottomPanel({
     }).start();
   };
 
-  const togglePanel = () => (expanded ? collapsePanel() : expandPanel());
-
-  const handleShapeTap = (shape: ShapeDefinition) => {
-    if (!isGraphReady) return;
-    setLastTapped(shape.id);
-    setTimeout(() => {
-      onSelectShape(shape.id, shape);
-      onClose();
-    }, 150);
+  const togglePanel = () => {
+    if (expanded) {
+      collapsePanel();
+    } else {
+      expandPanel();
+    }
   };
 
-  // Purely local UI state — which tab is active here has no bearing on the
-  // diagram's own declared type. That's now detected automatically from the
-  // shapes actually on the canvas (see detectDiagramTypeFromContent in
-  // create.tsx), not from which tab the shapes panel happens to be showing —
-  // switching here to peek at another tab's shapes, or drag in just one or
-  // two of them, no longer has any side effect on validation.
+  // ─── Panel visibility ──────────────────────────────────────────────────────
+
+  useEffect(() => {
+    if (visible) {
+      slideAnim.setValue(COLLAPSED_HEIGHT);
+
+      const timeout = setTimeout(() => {
+        expandPanel();
+      }, 50);
+
+      return () => clearTimeout(timeout);
+    }
+
+    slideAnim.setValue(0);
+    setLastTapped(null);
+    setSearchQuery('');
+    setActivePage(0);
+  }, [visible]);
+
+  // ─── Pan responder ─────────────────────────────────────────────────────────
+
+  const panResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+
+      onMoveShouldSetPanResponder: () => true,
+
+      onPanResponderGrant: () => {},
+
+      onPanResponderMove: (_, gestureState) => {
+        const currentHeight = expanded
+          ? EXPANDED_HEIGHT
+          : COLLAPSED_HEIGHT;
+
+        const newHeight = currentHeight - gestureState.dy;
+
+        if (
+          newHeight >= COLLAPSED_HEIGHT &&
+          newHeight <= EXPANDED_HEIGHT
+        ) {
+          slideAnim.setValue(newHeight);
+        }
+      },
+
+      onPanResponderRelease: () => {
+        const midPoint =
+          (EXPANDED_HEIGHT + COLLAPSED_HEIGHT) / 2;
+
+        if (currentHeightRef.current > midPoint) {
+          expandPanel();
+        } else {
+          collapsePanel();
+        }
+      },
+    })
+  ).current;
+
+  // ─── Text shape integration ────────────────────────────────────────────────
+  //
+  // Standard shapes come from constants/shapes.ts.
+  //
+  // If Text already exists there, use the existing definition.
+  // Otherwise, append our fallback Text definition.
+
+  const getShapesForTab = (tab: string): ShapeDefinition[] => {
+    const originalShapes = DIAGRAM_SHAPES[tab] || [];
+
+    if (tab !== 'Standard') {
+      return originalShapes;
+    }
+
+    const hasTextShape = originalShapes.some(
+      (shape) =>
+        shape.id?.toLowerCase() === 'text' ||
+        shape.svgComponent === 'TextShape'
+    );
+
+    if (hasTextShape) {
+      return originalShapes;
+    }
+
+    return [...originalShapes, TEXT_SHAPE];
+  };
+
+  // ─── Tab change ────────────────────────────────────────────────────────────
+
   const handleTabChange = (tab: string) => {
     setActiveTab(tab);
     setSearchQuery('');
     setActivePage(0);
+    setLastTapped(null);
+
     if (scrollViewRef.current) {
-      scrollViewRef.current.scrollTo({ x: 0, animated: false });
+      scrollViewRef.current.scrollTo({
+        x: 0,
+        animated: false,
+      });
     }
   };
 
-  const getFilteredShapes = () => {
-    const shapes = DIAGRAM_SHAPES[activeTab] || [];
-    if (!searchQuery.trim()) return shapes;
+  // ─── Search / filtering ────────────────────────────────────────────────────
+
+  const filteredShapes = useMemo(() => {
+    const shapes = getShapesForTab(activeTab);
+
     const query = searchQuery.toLowerCase().trim();
+
+    if (!query) {
+      return shapes;
+    }
+
     return shapes.filter(
       (shape) =>
         shape.label.toLowerCase().includes(query) ||
         shape.id.toLowerCase().includes(query) ||
         shape.description?.toLowerCase().includes(query)
     );
+  }, [activeTab, searchQuery]);
+
+  // ─── Shape selection ───────────────────────────────────────────────────────
+
+  const handleShapeTap = (shape: ShapeDefinition) => {
+    if (!isGraphReady) {
+      return;
+    }
+
+    setLastTapped(shape.id);
+
+    setTimeout(() => {
+      onSelectShape(shape.id, shape);
+      onClose();
+    }, 150);
   };
 
-  const filteredShapes = getFilteredShapes();
+  // ─── Responsive sizing ─────────────────────────────────────────────────────
 
-  // ─── Responsive sizing ──────────────────────────────────────────────────────
   const isSmallScreen = SCREEN_WIDTH < 380;
   const isMediumScreen = SCREEN_WIDTH < 768;
 
-  // Make shapes fill the tile - use most of the tile space
-  const iconSize = isSmallScreen ? 52 : isMediumScreen ? 58 : 62;
+  const iconSize = isSmallScreen
+    ? 52
+    : isMediumScreen
+      ? 58
+      : 62;
+
   const iconHeight = iconSize * 0.6;
 
   const NUM_ROWS = 1;
@@ -222,30 +353,81 @@ export default function ShapesBottomPanel({
   const tileHeight = TILE_HEIGHT;
 
   const getTileWidth = () => {
-    const availableWidth = (containerWidth || SCREEN_WIDTH) - 16;
-    const baseSize = isSmallScreen ? 70 : isMediumScreen ? 80 : 88;
-    const itemsPerRow = Math.max(1, Math.floor((availableWidth + tileGap) / (baseSize + tileGap)));
-    return Math.floor((availableWidth - (itemsPerRow - 1) * tileGap) / itemsPerRow);
+    const availableWidth =
+      (containerWidth || SCREEN_WIDTH) - 16;
+
+    const baseSize = isSmallScreen
+      ? 70
+      : isMediumScreen
+        ? 80
+        : 88;
+
+    const itemsPerRow = Math.max(
+      1,
+      Math.floor(
+        (availableWidth + tileGap) /
+          (baseSize + tileGap)
+      )
+    );
+
+    return Math.floor(
+      (availableWidth -
+        (itemsPerRow - 1) * tileGap) /
+        itemsPerRow
+    );
   };
 
   const tileWidth = getTileWidth();
-  const itemsPerRow = Math.max(1, Math.floor(((containerWidth || SCREEN_WIDTH) - 16 + tileGap) / (tileWidth + tileGap)));
+
+  const itemsPerRow = Math.max(
+    1,
+    Math.floor(
+      ((containerWidth || SCREEN_WIDTH) - 16 + tileGap) /
+        (tileWidth + tileGap)
+    )
+  );
+
   const itemsPerPage = itemsPerRow * NUM_ROWS;
-  const totalPages = Math.ceil(filteredShapes.length / itemsPerPage);
+
+  const totalPages = Math.max(
+    1,
+    Math.ceil(filteredShapes.length / itemsPerPage)
+  );
+
+  // ─── Pagination ────────────────────────────────────────────────────────────
 
   const getPageShapes = (pageIndex: number) => {
     const start = pageIndex * itemsPerPage;
-    const end = Math.min(start + itemsPerPage, filteredShapes.length);
+    const end = Math.min(
+      start + itemsPerPage,
+      filteredShapes.length
+    );
+
     return filteredShapes.slice(start, end);
   };
 
   const handleScroll = (event: any) => {
-    const offsetX = event.nativeEvent.contentOffset.x;
-    const page = Math.round(offsetX / containerWidth);
-    if (page !== activePage && page < totalPages) {
+    if (!containerWidth) {
+      return;
+    }
+
+    const offsetX =
+      event.nativeEvent.contentOffset.x;
+
+    const page = Math.round(
+      offsetX / containerWidth
+    );
+
+    if (
+      page !== activePage &&
+      page >= 0 &&
+      page < totalPages
+    ) {
       setActivePage(page);
     }
   };
+
+  // ─── Render ────────────────────────────────────────────────────────────────
 
   return (
     <Animated.View
@@ -254,6 +436,7 @@ export default function ShapesBottomPanel({
         {
           height: slideAnim,
           bottom: toolbarHeight,
+
           transform: [
             {
               translateY: slideAnim.interpolate({
@@ -262,6 +445,7 @@ export default function ShapesBottomPanel({
               }),
             },
           ],
+
           opacity: slideAnim.interpolate({
             inputRange: [0, 50],
             outputRange: [0, 1],
@@ -270,6 +454,8 @@ export default function ShapesBottomPanel({
       ]}
       pointerEvents={visible ? 'auto' : 'none'}
     >
+      {/* ─── Handle ───────────────────────────────────────────────────────── */}
+
       <View {...panResponder.panHandlers}>
         <TouchableOpacity
           style={styles.handleContainer}
@@ -280,20 +466,33 @@ export default function ShapesBottomPanel({
         </TouchableOpacity>
       </View>
 
+      {/* ─── Header ───────────────────────────────────────────────────────── */}
+
       <View style={styles.panelHeader}>
-        <Text style={styles.panelTitle}>Shapes</Text>
+        <Text style={styles.panelTitle}>
+          Shapes
+        </Text>
+
         <TouchableOpacity
           onPress={onClose}
           style={styles.panelCloseBtn}
-          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          hitSlop={{
+            top: 8,
+            bottom: 8,
+            left: 8,
+            right: 8,
+          }}
         >
           <CloseIcon color="#4a5568" />
         </TouchableOpacity>
       </View>
 
+      {/* ─── Search ───────────────────────────────────────────────────────── */}
+
       <View style={styles.searchContainer}>
         <View style={styles.searchInputWrapper}>
           <SearchIcon color="#94a3b8" />
+
           <TextInput
             style={styles.searchInput}
             placeholder="Search shapes..."
@@ -302,19 +501,28 @@ export default function ShapesBottomPanel({
             onChangeText={(text) => {
               setSearchQuery(text);
               setActivePage(0);
+
               if (scrollViewRef.current) {
-                scrollViewRef.current.scrollTo({ x: 0, animated: false });
+                scrollViewRef.current.scrollTo({
+                  x: 0,
+                  animated: false,
+                });
               }
             }}
             clearButtonMode="while-editing"
           />
+
           {searchQuery.length > 0 && (
             <TouchableOpacity
               onPress={() => {
                 setSearchQuery('');
                 setActivePage(0);
+
                 if (scrollViewRef.current) {
-                  scrollViewRef.current.scrollTo({ x: 0, animated: false });
+                  scrollViewRef.current.scrollTo({
+                    x: 0,
+                    animated: false,
+                  });
                 }
               }}
               style={styles.clearBtn}
@@ -323,12 +531,16 @@ export default function ShapesBottomPanel({
             </TouchableOpacity>
           )}
         </View>
+
         {searchQuery.length > 0 && (
           <Text style={styles.searchResults}>
-            {filteredShapes.length} result{filteredShapes.length !== 1 ? 's' : ''}
+            {filteredShapes.length} result
+            {filteredShapes.length !== 1 ? 's' : ''}
           </Text>
         )}
       </View>
+
+      {/* ─── Diagram Type Tabs ─────────────────────────────────────────────── */}
 
       <View style={styles.tabsContainer}>
         <ScrollView
@@ -340,21 +552,38 @@ export default function ShapesBottomPanel({
           {DIAGRAM_TABS.map((tab) => (
             <TouchableOpacity
               key={tab}
-              style={[styles.tab, activeTab === tab && styles.tabActive]}
+              style={[
+                styles.tab,
+                activeTab === tab && styles.tabActive,
+              ]}
               onPress={() => handleTabChange(tab)}
             >
               <Text
-                style={[styles.tabText, activeTab === tab && styles.tabTextActive]}
+                style={[
+                  styles.tabText,
+                  activeTab === tab &&
+                    styles.tabTextActive,
+                ]}
                 numberOfLines={1}
               >
-                {tab.replace(' Diagram', '').replace(' Entity', '').length > 15
-                  ? tab.replace(' Diagram', '').replace(' Entity', '').substring(0, 12) + '…'
-                  : tab.replace(' Diagram', '').replace(' Entity', '')}
+                {tab
+                  .replace(' Diagram', '')
+                  .replace(' Entity', '')
+                  .length > 15
+                  ? tab
+                      .replace(' Diagram', '')
+                      .replace(' Entity', '')
+                      .substring(0, 12) + '…'
+                  : tab
+                      .replace(' Diagram', '')
+                      .replace(' Entity', '')}
               </Text>
             </TouchableOpacity>
           ))}
         </ScrollView>
       </View>
+
+      {/* ─── Shapes ───────────────────────────────────────────────────────── */}
 
       {filteredShapes.length > 0 ? (
         <>
@@ -363,21 +592,33 @@ export default function ShapesBottomPanel({
             horizontal
             pagingEnabled
             showsHorizontalScrollIndicator={false}
-            style={[styles.shapesScroll, WEB_SCROLL_CONTAIN]}
+            style={[
+              styles.shapesScroll,
+              WEB_SCROLL_CONTAIN,
+            ]}
             contentContainerStyle={[
               styles.shapesContent,
-              { height: tileHeight + 2 },
+              {
+                height: tileHeight + 2,
+              },
             ]}
             onLayout={(e) => {
-              const width = e.nativeEvent.layout.width;
-              setContainerWidth(width);
+              const width =
+                e.nativeEvent.layout.width;
+
+              if (width > 0) {
+                setContainerWidth(width);
+              }
             }}
             onScroll={handleScroll}
             scrollEventThrottle={16}
             decelerationRate="fast"
           >
-            {Array.from({ length: totalPages }).map((_, pageIndex) => {
-              const pageShapes = getPageShapes(pageIndex);
+            {Array.from({
+              length: totalPages,
+            }).map((_, pageIndex) => {
+              const pageShapes =
+                getPageShapes(pageIndex);
 
               return (
                 <View
@@ -385,27 +626,52 @@ export default function ShapesBottomPanel({
                   style={[
                     styles.pageContainer,
                     {
-                      width: containerWidth || SCREEN_WIDTH,
+                      width:
+                        containerWidth ||
+                        SCREEN_WIDTH,
                       paddingHorizontal: 6,
-                    }
+                    },
                   ]}
                 >
-                  <View style={[styles.shapesGrid, { height: tileHeight }]}>
+                  <View
+                    style={[
+                      styles.shapesGrid,
+                      {
+                        height: tileHeight,
+                      },
+                    ]}
+                  >
                     {pageShapes.map((shape) => {
-                      const isTapped = lastTapped === shape.id;
+                      const isTapped =
+                        lastTapped === shape.id;
+
+                      const isTextShape =
+                        shape.svgComponent ===
+                        'TextShape';
+
                       return (
                         <TouchableOpacity
                           key={shape.id}
                           style={[
                             styles.shapeTile,
-                            !isGraphReady && styles.shapeTileDisabled,
-                            isTapped && styles.shapeTileTapped,
+
+                            !isGraphReady &&
+                              styles.shapeTileDisabled,
+
+                            isTapped &&
+                              styles.shapeTileTapped,
+
+                            isTextShape &&
+                              styles.textShapeTile,
+
                             {
                               width: tileWidth,
                               height: tileHeight,
                             },
                           ]}
-                          onPress={() => handleShapeTap(shape)}
+                          onPress={() =>
+                            handleShapeTap(shape)
+                          }
                           disabled={!isGraphReady}
                           activeOpacity={0.7}
                         >
@@ -419,6 +685,16 @@ export default function ShapesBottomPanel({
                             fillColor="#ffffff"
                             strokeWidth={2}
                           />
+
+                          {/* Small label specifically for Text */}
+                          {isTextShape && (
+                            <Text
+                              style={styles.textShapeLabel}
+                              numberOfLines={1}
+                            >
+                              Text
+                            </Text>
+                          )}
                         </TouchableOpacity>
                       );
                     })}
@@ -428,14 +704,19 @@ export default function ShapesBottomPanel({
             })}
           </ScrollView>
 
+          {/* ─── Pagination Dots ─────────────────────────────────────────── */}
+
           {totalPages > 1 && (
             <View style={styles.dotsContainer}>
-              {Array.from({ length: totalPages }).map((_, i) => (
+              {Array.from({
+                length: totalPages,
+              }).map((_, i) => (
                 <View
                   key={i}
                   style={[
                     styles.dot,
-                    i === activePage && styles.dotActive,
+                    i === activePage &&
+                      styles.dotActive,
                   ]}
                 />
               ))}
@@ -444,17 +725,28 @@ export default function ShapesBottomPanel({
         </>
       ) : (
         <View style={styles.noResults}>
-          <Text style={styles.noResultsText}>No shapes found</Text>
-          <Text style={styles.noResultsSubtext}>Try a different search term</Text>
+          <Text style={styles.noResultsText}>
+            No shapes found
+          </Text>
+
+          <Text style={styles.noResultsSubtext}>
+            Try a different search term
+          </Text>
         </View>
       )}
 
+      {/* ─── Loading state ───────────────────────────────────────────────── */}
+
       {!isGraphReady && (
-        <Text style={styles.notReadyHint}>Canvas is loading…</Text>
+        <Text style={styles.notReadyHint}>
+          Canvas is loading…
+        </Text>
       )}
     </Animated.View>
   );
 }
+
+// ─── Styles ───────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
   panelContainer: {
@@ -466,26 +758,35 @@ const styles = StyleSheet.create({
     borderTopRightRadius: 20,
     zIndex: 5,
     overflow: 'hidden',
+
     ...Platform.select({
       ios: {
         shadowColor: '#000',
-        shadowOffset: { width: 0, height: -4 },
+        shadowOffset: {
+          width: 0,
+          height: -4,
+        },
         shadowOpacity: 0.1,
         shadowRadius: 20,
       },
+
       android: {
         elevation: 10,
       },
+
       web: {
-        boxShadow: '0 -4px 20px rgba(0,0,0,0.1)',
+        boxShadow:
+          '0 -4px 20px rgba(0,0,0,0.1)',
       },
     }),
   },
+
   handleContainer: {
     alignItems: 'center',
     paddingTop: 8,
     paddingBottom: 4,
   },
+
   panelHeader: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -493,18 +794,24 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingBottom: 4,
   },
+
   panelTitle: {
     fontSize: 16,
     fontWeight: '700',
     color: '#1a1f36',
   },
+
   panelCloseBtn: {
     padding: 4,
   },
+
+  // ─── Search ───────────────────────────────────────────────────────────────
+
   searchContainer: {
     paddingHorizontal: 12,
     paddingBottom: 8,
   },
+
   searchInputWrapper: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -513,32 +820,45 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     height: 42,
   },
+
   searchInput: {
     flex: 1,
     fontSize: 15,
     color: '#1a1f36',
     paddingVertical: 4,
     paddingHorizontal: 8,
-    ...Platform.select({ web: { outlineStyle: 'none' as any } }),
+
+    ...Platform.select({
+      web: {
+        outlineStyle: 'none' as any,
+      },
+    }),
   },
+
   clearBtn: {
     padding: 4,
   },
+
   searchResults: {
     fontSize: 11,
     color: '#94a3b8',
     marginTop: 2,
     paddingHorizontal: 4,
   },
+
+  // ─── Tabs ────────────────────────────────────────────────────────────────
+
   tabsContainer: {
     paddingHorizontal: 12,
     paddingBottom: 8,
     borderBottomWidth: 1,
     borderBottomColor: '#f1f5f9',
   },
+
   tabsScrollContent: {
     paddingHorizontal: 0,
   },
+
   tab: {
     paddingHorizontal: 14,
     paddingVertical: 8,
@@ -546,32 +866,33 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     backgroundColor: '#f1f5f9',
   },
+
   tabActive: {
     backgroundColor: '#4c6fff',
   },
+
   tabText: {
     fontSize: 13,
     color: '#64748b',
     fontWeight: '600',
   },
+
   tabTextActive: {
     color: '#ffffff',
   },
-  // FIX: was `flex: 1`, which stretched this ScrollView to fill all the
-  // leftover vertical space in the (previously oversized) panel — that
-  // stretched space is exactly the empty gap seen above the pagination dots.
-  // Now it's a fixed height matching its actual content (one tile row).
+
+  // ─── Shapes ──────────────────────────────────────────────────────────────
+
   shapesScroll: {
     height: TILE_HEIGHT + 8,
   },
+
   shapesContent: {
     paddingBottom: 0,
   },
-  // FIX: was `flex: 1`, same issue as shapesScroll — this let each page
-  // stretch to fill the oversized ScrollView, pushing the shapes to the top
-  // and leaving blank space below them. Removed so the page just wraps its
-  // content height.
+
   pageContainer: {},
+
   shapesGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -580,20 +901,41 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-start',
     alignItems: 'center',
   },
+
   shapeTile: {
     borderRadius: 6,
     backgroundColor: 'transparent',
     alignItems: 'center',
     justifyContent: 'center',
-    padding: 0, // NO padding!
+    padding: 0,
   },
+
   shapeTileTapped: {
     backgroundColor: '#eef2ff',
     borderRadius: 6,
   },
+
   shapeTileDisabled: {
     opacity: 0.4,
   },
+
+  // Text gets a normal tile treatment.
+  // This style is intentionally subtle so it matches the rest
+  // of the existing shape panel.
+  textShapeTile: {
+    position: 'relative',
+  },
+
+  textShapeLabel: {
+    position: 'absolute',
+    bottom: 2,
+    fontSize: 8,
+    fontWeight: '600',
+    color: '#64748b',
+  },
+
+  // ─── Pagination ─────────────────────────────────────────────────────────
+
   dotsContainer: {
     flexDirection: 'row',
     justifyContent: 'center',
@@ -602,31 +944,41 @@ const styles = StyleSheet.create({
     paddingBottom: 4,
     gap: 4,
   },
+
   dot: {
     width: 5,
     height: 5,
     borderRadius: 3,
     backgroundColor: '#d1d5db',
   },
+
   dotActive: {
     backgroundColor: '#4c6fff',
     width: 5,
     height: 5,
   },
+
+  // ─── Empty state ─────────────────────────────────────────────────────────
+
   noResults: {
     padding: 20,
     alignItems: 'center',
   },
+
   noResultsText: {
     fontSize: 14,
     color: '#64748b',
     fontWeight: '500',
   },
+
   noResultsSubtext: {
     fontSize: 12,
     color: '#94a3b8',
     marginTop: 4,
   },
+
+  // ─── Loading ─────────────────────────────────────────────────────────────
+
   notReadyHint: {
     textAlign: 'center',
     fontSize: 12,

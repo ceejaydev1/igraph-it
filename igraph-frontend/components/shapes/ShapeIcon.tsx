@@ -1,5 +1,6 @@
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
+
 import {
   RectShape,
   RoundedRectShape,
@@ -22,6 +23,7 @@ import {
   TextShape,
   DashedRectShape,
   PredefinedShape,
+
   // FDD Shapes
   FDD_FunctionShape,
   FDD_InputShape,
@@ -32,6 +34,7 @@ import {
   FDD_BoundaryShape,
   FDD_NoteShape,
   FDD_ExternalEntityShape,
+
   // Flowchart Shapes
   PentagonShape,
   MergeJunctionShape,
@@ -40,6 +43,7 @@ import {
   HexagonShape,
   DisplayShape,
   AnnotationShape,
+
   // DFD Shapes
   DFDProcessShape,
   DFDDataFlowShape,
@@ -51,6 +55,7 @@ import {
   DFDNoteShape,
   DFDOnPageShape,
   DFDOffPageShape,
+
   // ERD Shapes
   ERDEntityShape,
   ERDWeakEntityShape,
@@ -64,6 +69,7 @@ import {
   ERDCardinalityN1Shape,
   ERDCardinalityMNShape,
   ERDConnectorShape,
+
   // Fishbone Shapes
   FishboneSpineShape,
   FishboneHeadShape,
@@ -78,6 +84,7 @@ import {
   FishboneCategoryShape,
   FishboneBubbleShape,
   FishboneNoteShape,
+
   // Schematic Shapes
   SchematicBatteryShape,
   SchematicACShape,
@@ -93,6 +100,7 @@ import {
   SchematicFuseShape,
   SchematicConnectionShape,
   SchematicNoConnectionShape,
+
   // Use Case Shapes
   UMLActorShape,
   UMLUseCaseShape,
@@ -105,6 +113,7 @@ import {
   UMLNoteConnectorShape,
   UMLIncludeLabelShape,
   UMLExtendLabelShape,
+
   // Activity Shapes
   UMLInitialNodeShape,
   UMLActivityShape,
@@ -117,6 +126,7 @@ import {
   UMLActivityFinalShape,
   UMLFlowFinalShape,
   UMLConstraintShape,
+
   // Sequence Shapes
   UMLLifelineShape,
   UMLActivationShape,
@@ -129,6 +139,7 @@ import {
   UMLLoopShape,
   UMLParShape,
   UMLBreakShape,
+
   // Class Shapes
   UMLClassShape,
   UMLDirectedAssociationShape,
@@ -155,163 +166,196 @@ export interface ShapeIconProps {
 
 const DEFAULT_SIZE = 48;
 
-// ✅ Component map - each shape name maps to its component
+/**
+ * Maps the shape name from constants/shapes.ts
+ * to the actual React Native shape component.
+ */
 const componentMap: Record<string, React.ComponentType<any>> = {
-  // ─── Standard Shapes ────────────────────────────────────────────────────
-  'RectShape': RectShape,
-  'RoundedRectShape': RoundedRectShape,
-  'CircleShape': CircleShape,
-  'EllipseShape': EllipseShape,
-  'DiamondShape': DiamondShape,
-  'TriangleShape': TriangleShape,
-  'ParallelogramShape': ParallelogramShape,
-  'CylinderShape': CylinderShape,
-  'DocumentShape': DocumentShape,
-  'FolderShape': FolderShape,
-  'CloudShape': CloudShape,
-  'NoteStandaloneShape': NoteStandaloneShape,
-  'ActorShape': ActorShape,
-  'ConnectorArrowShape': ConnectorArrowShape,
-  
-  // ─── Basic Shapes (legacy) ─────────────────────────────────────────────
-  'DoubleRectShape': DoubleRectShape,
-  'DoubleRhombusShape': DoubleRhombusShape,
-  'MultiOvalShape': MultiOvalShape,
-  'LineShape': LineShape,
-  'TextShape': TextShape,
-  'DashedRectShape': DashedRectShape,
-  'PredefinedShape': PredefinedShape,
-  'RhombusShape': DiamondShape,
-  
-  // ─── FDD Shapes ────────────────────────────────────────────────────────
-  'FDD_FunctionShape': FDD_FunctionShape,
-  'FDD_InputShape': FDD_InputShape,
-  'FDD_OutputShape': FDD_OutputShape,
-  'FDD_ControlShape': FDD_ControlShape,
-  'FDD_MechanismShape': FDD_MechanismShape,
-  'FDD_InterfaceShape': FDD_InterfaceShape,
-  'FDD_BoundaryShape': FDD_BoundaryShape,
-  'FDD_NoteShape': FDD_NoteShape,
-  'FDD_ExternalEntityShape': FDD_ExternalEntityShape,
-  
-  // ─── Flowchart Shapes ──────────────────────────────────────────────────
-  'PentagonShape': PentagonShape,
-  'MergeJunctionShape': MergeJunctionShape,
-  'TrapezoidShape': TrapezoidShape,
-  'DShape': DShape,
-  'HexagonShape': HexagonShape,
-  'DisplayShape': DisplayShape,
-  'AnnotationShape': AnnotationShape,
-  
-  // ─── DFD Shapes ────────────────────────────────────────────────────────
-  'DFDProcessShape': DFDProcessShape,
-  'DFDDataFlowShape': DFDDataFlowShape,
-  'DFDDataStoreShape': DFDDataStoreShape,
-  'DFDDataStoreGSShape': DFDDataStoreGSShape,
-  'DFDExternalEntityShape': DFDExternalEntityShape,
-  'DFDBidirectionalShape': DFDBidirectionalShape,
-  'DFDBoundaryShape': DFDBoundaryShape,
-  'DFDNoteShape': DFDNoteShape,
-  'DFDOnPageShape': DFDOnPageShape,
-  'DFDOffPageShape': DFDOffPageShape,
-  
-  // ─── ERD Shapes ────────────────────────────────────────────────────────
-  'ERDEntityShape': ERDEntityShape,
-  'ERDWeakEntityShape': ERDWeakEntityShape,
-  'ERDRelationshipShape': ERDRelationshipShape,
-  'ERDIdentifyingRelShape': ERDIdentifyingRelShape,
-  'ERDAttributeShape': ERDAttributeShape,
-  'ERDMultivaluedAttrShape': ERDMultivaluedAttrShape,
-  'ERDDerivedAttrShape': ERDDerivedAttrShape,
-  'ERDCardinality11Shape': ERDCardinality11Shape,
-  'ERDCardinality1NShape': ERDCardinality1NShape,
-  'ERDCardinalityN1Shape': ERDCardinalityN1Shape,
-  'ERDCardinalityMNShape': ERDCardinalityMNShape,
-  'ERDConnectorShape': ERDConnectorShape,
-  
-  // ─── Fishbone Shapes ──────────────────────────────────────────────────
-  'FishboneSpineShape': FishboneSpineShape,
-  'FishboneHeadShape': FishboneHeadShape,
-  'FishboneProblemShape': FishboneProblemShape,
-  'FishboneCauseTopShape': FishboneCauseTopShape,
-  'FishboneCauseBottomShape': FishboneCauseBottomShape,
-  'FishboneSubCauseTopShape': FishboneSubCauseTopShape,
-  'FishboneSubCauseBottomShape': FishboneSubCauseBottomShape,
-  'FishboneTertiaryShape': FishboneTertiaryShape,
-  'FishboneArrowShape': FishboneArrowShape,
-  'FishboneDashedArrowShape': FishboneDashedArrowShape,
-  'FishboneCategoryShape': FishboneCategoryShape,
-  'FishboneBubbleShape': FishboneBubbleShape,
-  'FishboneNoteShape': FishboneNoteShape,
-  
-  // ─── Schematic Shapes ──────────────────────────────────────────────────
-  'SchematicBatteryShape': SchematicBatteryShape,
-  'SchematicACShape': SchematicACShape,
-  'SchematicGroundShape': SchematicGroundShape,
-  'SchematicResistorShape': SchematicResistorShape,
-  'SchematicVariableResistorShape': SchematicVariableResistorShape,
-  'SchematicCapacitorShape': SchematicCapacitorShape,
-  'SchematicInductorShape': SchematicInductorShape,
-  'SchematicDiodeShape': SchematicDiodeShape,
-  'SchematicLEDShape': SchematicLEDShape,
-  'SchematicNPNShape': SchematicNPNShape,
-  'SchematicSwitchShape': SchematicSwitchShape,
-  'SchematicFuseShape': SchematicFuseShape,
-  'SchematicConnectionShape': SchematicConnectionShape,
-  'SchematicNoConnectionShape': SchematicNoConnectionShape,
-  
-  // ─── Use Case Shapes ──────────────────────────────────────────────────
-  'UMLActorShape': UMLActorShape,
-  'UMLUseCaseShape': UMLUseCaseShape,
-  'UMLSystemBoundaryShape': UMLSystemBoundaryShape,
-  'UMLAssociationShape': UMLAssociationShape,
-  'UMLIncludeShape': UMLIncludeShape,
-  'UMLExtendShape': UMLExtendShape,
-  'UMLGeneralizationShape': UMLGeneralizationShape,
-  'UMLNoteShape': UMLNoteShape,
-  'UMLNoteConnectorShape': UMLNoteConnectorShape,
-  'UMLIncludeLabelShape': UMLIncludeLabelShape,
-  'UMLExtendLabelShape': UMLExtendLabelShape,
-  
-  // ─── Activity Shapes ──────────────────────────────────────────────────
-  'UMLInitialNodeShape': UMLInitialNodeShape,
-  'UMLActivityShape': UMLActivityShape,
-  'UMLDecisionShape': UMLDecisionShape,
-  'UMLForkShape': UMLForkShape,
-  'UMLJoinShape': UMLJoinShape,
-  'UMLControlFlowShape': UMLControlFlowShape,
-  'UMLObjectFlowShape': UMLObjectFlowShape,
-  'UMLSwimlaneShape': UMLSwimlaneShape,
-  'UMLActivityFinalShape': UMLActivityFinalShape,
-  'UMLFlowFinalShape': UMLFlowFinalShape,
-  'UMLConstraintShape': UMLConstraintShape,
-  
-  // ─── Sequence Shapes ──────────────────────────────────────────────────
-  'UMLLifelineShape': UMLLifelineShape,
-  'UMLActivationShape': UMLActivationShape,
-  'UMLDestroyShape': UMLDestroyShape,
-  'UMLSyncMsgShape': UMLSyncMsgShape,
-  'UMLAsyncMsgShape': UMLAsyncMsgShape,
-  'UMLReturnMsgShape': UMLReturnMsgShape,
-  'UMLAltShape': UMLAltShape,
-  'UMLOptShape': UMLOptShape,
-  'UMLLoopShape': UMLLoopShape,
-  'UMLParShape': UMLParShape,
-  'UMLBreakShape': UMLBreakShape,
-  
-  // ─── Class Shapes ──────────────────────────────────────────────────────
-  'UMLClassShape': UMLClassShape,
-  'UMLDirectedAssociationShape': UMLDirectedAssociationShape,
-  'UMLAggregationShape': UMLAggregationShape,
-  'UMLCompositionShape': UMLCompositionShape,
-  'UMLDependencyShape': UMLDependencyShape,
-  'UMLRealizationShape': UMLRealizationShape,
-  'UMLMultiplicity1Shape': UMLMultiplicity1Shape,
-  'UMLMultiplicity01Shape': UMLMultiplicity01Shape,
-  'UMLMultiplicityManyShape': UMLMultiplicityManyShape,
-  'UMLMultiplicity1ManyShape': UMLMultiplicity1ManyShape,
-  'UMLMultiplicityRangeShape': UMLMultiplicityRangeShape,
-  'UMLMultiplicityNShape': UMLMultiplicityNShape,
+  // ─────────────────────────────────────────────────────────────
+  // STANDARD SHAPES
+  // ─────────────────────────────────────────────────────────────
+  RectShape: RectShape,
+  RoundedRectShape: RoundedRectShape,
+  CircleShape: CircleShape,
+  EllipseShape: EllipseShape,
+  DiamondShape: DiamondShape,
+  TriangleShape: TriangleShape,
+  ParallelogramShape: ParallelogramShape,
+  CylinderShape: CylinderShape,
+  DocumentShape: DocumentShape,
+  FolderShape: FolderShape,
+  CloudShape: CloudShape,
+  NoteStandaloneShape: NoteStandaloneShape,
+  ActorShape: ActorShape,
+  ConnectorArrowShape: ConnectorArrowShape,
+
+  // ─────────────────────────────────────────────────────────────
+  // BASIC / LEGACY SHAPES
+  // ─────────────────────────────────────────────────────────────
+  DoubleRectShape: DoubleRectShape,
+  DoubleRhombusShape: DoubleRhombusShape,
+  MultiOvalShape: MultiOvalShape,
+  LineShape: LineShape,
+
+  // IMPORTANT:
+  // This allows the Standard > Text item to render TextShape.
+  TextShape: TextShape,
+
+  DashedRectShape: DashedRectShape,
+  PredefinedShape: PredefinedShape,
+
+  // Alias
+  RhombusShape: DiamondShape,
+
+  // ─────────────────────────────────────────────────────────────
+  // FDD SHAPES
+  // ─────────────────────────────────────────────────────────────
+  FDD_FunctionShape: FDD_FunctionShape,
+  FDD_InputShape: FDD_InputShape,
+  FDD_OutputShape: FDD_OutputShape,
+  FDD_ControlShape: FDD_ControlShape,
+  FDD_MechanismShape: FDD_MechanismShape,
+  FDD_InterfaceShape: FDD_InterfaceShape,
+  FDD_BoundaryShape: FDD_BoundaryShape,
+  FDD_NoteShape: FDD_NoteShape,
+  FDD_ExternalEntityShape: FDD_ExternalEntityShape,
+
+  // ─────────────────────────────────────────────────────────────
+  // FLOWCHART SHAPES
+  // ─────────────────────────────────────────────────────────────
+  PentagonShape: PentagonShape,
+  MergeJunctionShape: MergeJunctionShape,
+  TrapezoidShape: TrapezoidShape,
+  DShape: DShape,
+  HexagonShape: HexagonShape,
+  DisplayShape: DisplayShape,
+  AnnotationShape: AnnotationShape,
+
+  // ─────────────────────────────────────────────────────────────
+  // DFD SHAPES
+  // ─────────────────────────────────────────────────────────────
+  DFDProcessShape: DFDProcessShape,
+  DFDDataFlowShape: DFDDataFlowShape,
+  DFDDataStoreShape: DFDDataStoreShape,
+  DFDDataStoreGSShape: DFDDataStoreGSShape,
+  DFDExternalEntityShape: DFDExternalEntityShape,
+  DFDBidirectionalShape: DFDBidirectionalShape,
+  DFDBoundaryShape: DFDBoundaryShape,
+  DFDNoteShape: DFDNoteShape,
+  DFDOnPageShape: DFDOnPageShape,
+  DFDOffPageShape: DFDOffPageShape,
+
+  // ─────────────────────────────────────────────────────────────
+  // ERD SHAPES
+  // ─────────────────────────────────────────────────────────────
+  ERDEntityShape: ERDEntityShape,
+  ERDWeakEntityShape: ERDWeakEntityShape,
+  ERDRelationshipShape: ERDRelationshipShape,
+  ERDIdentifyingRelShape: ERDIdentifyingRelShape,
+  ERDAttributeShape: ERDAttributeShape,
+  ERDMultivaluedAttrShape: ERDMultivaluedAttrShape,
+  ERDDerivedAttrShape: ERDDerivedAttrShape,
+  ERDCardinality11Shape: ERDCardinality11Shape,
+  ERDCardinality1NShape: ERDCardinality1NShape,
+  ERDCardinalityN1Shape: ERDCardinalityN1Shape,
+  ERDCardinalityMNShape: ERDCardinalityMNShape,
+  ERDConnectorShape: ERDConnectorShape,
+
+  // ─────────────────────────────────────────────────────────────
+  // FISHBONE SHAPES
+  // ─────────────────────────────────────────────────────────────
+  FishboneSpineShape: FishboneSpineShape,
+  FishboneHeadShape: FishboneHeadShape,
+  FishboneProblemShape: FishboneProblemShape,
+  FishboneCauseTopShape: FishboneCauseTopShape,
+  FishboneCauseBottomShape: FishboneCauseBottomShape,
+  FishboneSubCauseTopShape: FishboneSubCauseTopShape,
+  FishboneSubCauseBottomShape: FishboneSubCauseBottomShape,
+  FishboneTertiaryShape: FishboneTertiaryShape,
+  FishboneArrowShape: FishboneArrowShape,
+  FishboneDashedArrowShape: FishboneDashedArrowShape,
+  FishboneCategoryShape: FishboneCategoryShape,
+  FishboneBubbleShape: FishboneBubbleShape,
+  FishboneNoteShape: FishboneNoteShape,
+
+  // ─────────────────────────────────────────────────────────────
+  // SCHEMATIC SHAPES
+  // ─────────────────────────────────────────────────────────────
+  SchematicBatteryShape: SchematicBatteryShape,
+  SchematicACShape: SchematicACShape,
+  SchematicGroundShape: SchematicGroundShape,
+  SchematicResistorShape: SchematicResistorShape,
+  SchematicVariableResistorShape: SchematicVariableResistorShape,
+  SchematicCapacitorShape: SchematicCapacitorShape,
+  SchematicInductorShape: SchematicInductorShape,
+  SchematicDiodeShape: SchematicDiodeShape,
+  SchematicLEDShape: SchematicLEDShape,
+  SchematicNPNShape: SchematicNPNShape,
+  SchematicSwitchShape: SchematicSwitchShape,
+  SchematicFuseShape: SchematicFuseShape,
+  SchematicConnectionShape: SchematicConnectionShape,
+  SchematicNoConnectionShape: SchematicNoConnectionShape,
+
+  // ─────────────────────────────────────────────────────────────
+  // USE CASE SHAPES
+  // ─────────────────────────────────────────────────────────────
+  UMLActorShape: UMLActorShape,
+  UMLUseCaseShape: UMLUseCaseShape,
+  UMLSystemBoundaryShape: UMLSystemBoundaryShape,
+  UMLAssociationShape: UMLAssociationShape,
+  UMLIncludeShape: UMLIncludeShape,
+  UMLExtendShape: UMLExtendShape,
+  UMLGeneralizationShape: UMLGeneralizationShape,
+  UMLNoteShape: UMLNoteShape,
+  UMLNoteConnectorShape: UMLNoteConnectorShape,
+  UMLIncludeLabelShape: UMLIncludeLabelShape,
+  UMLExtendLabelShape: UMLExtendLabelShape,
+
+  // ─────────────────────────────────────────────────────────────
+  // ACTIVITY SHAPES
+  // ─────────────────────────────────────────────────────────────
+  UMLInitialNodeShape: UMLInitialNodeShape,
+  UMLActivityShape: UMLActivityShape,
+  UMLDecisionShape: UMLDecisionShape,
+  UMLForkShape: UMLForkShape,
+  UMLJoinShape: UMLJoinShape,
+  UMLControlFlowShape: UMLControlFlowShape,
+  UMLObjectFlowShape: UMLObjectFlowShape,
+  UMLSwimlaneShape: UMLSwimlaneShape,
+  UMLActivityFinalShape: UMLActivityFinalShape,
+  UMLFlowFinalShape: UMLFlowFinalShape,
+  UMLConstraintShape: UMLConstraintShape,
+
+  // ─────────────────────────────────────────────────────────────
+  // SEQUENCE SHAPES
+  // ─────────────────────────────────────────────────────────────
+  UMLLifelineShape: UMLLifelineShape,
+  UMLActivationShape: UMLActivationShape,
+  UMLDestroyShape: UMLDestroyShape,
+  UMLSyncMsgShape: UMLSyncMsgShape,
+  UMLAsyncMsgShape: UMLAsyncMsgShape,
+  UMLReturnMsgShape: UMLReturnMsgShape,
+  UMLAltShape: UMLAltShape,
+  UMLOptShape: UMLOptShape,
+  UMLLoopShape: UMLLoopShape,
+  UMLParShape: UMLParShape,
+  UMLBreakShape: UMLBreakShape,
+
+  // ─────────────────────────────────────────────────────────────
+  // CLASS SHAPES
+  // ─────────────────────────────────────────────────────────────
+  UMLClassShape: UMLClassShape,
+  UMLDirectedAssociationShape: UMLDirectedAssociationShape,
+  UMLAggregationShape: UMLAggregationShape,
+  UMLCompositionShape: UMLCompositionShape,
+  UMLDependencyShape: UMLDependencyShape,
+  UMLRealizationShape: UMLRealizationShape,
+  UMLMultiplicity1Shape: UMLMultiplicity1Shape,
+  UMLMultiplicity01Shape: UMLMultiplicity01Shape,
+  UMLMultiplicityManyShape: UMLMultiplicityManyShape,
+  UMLMultiplicity1ManyShape: UMLMultiplicity1ManyShape,
+  UMLMultiplicityRangeShape: UMLMultiplicityRangeShape,
+  UMLMultiplicityNShape: UMLMultiplicityNShape,
 };
 
 export const ShapeIcon: React.FC<ShapeIconProps> = ({
@@ -324,19 +368,45 @@ export const ShapeIcon: React.FC<ShapeIconProps> = ({
 }) => {
   const ShapeComponent = componentMap[name];
 
+  // Unknown shape protection
   if (!ShapeComponent) {
-    console.warn(`⚠️ Shape not found: ${name}`);
+    console.warn(`⚠️ ShapeIcon: Shape not found: ${name}`);
+
     return (
-      <View style={[styles.fallback, { width, height }]}>
-        <Text style={[styles.fallbackText, { color }]}>
-          {name.substring(0, 6)}
+      <View
+        style={[
+          styles.fallback,
+          {
+            width,
+            height,
+          },
+        ]}
+      >
+        <Text
+          style={[
+            styles.fallbackText,
+            {
+              color,
+            },
+          ]}
+          numberOfLines={1}
+        >
+          {name ? name.substring(0, 6) : '?'}
         </Text>
       </View>
     );
   }
 
   return (
-    <View style={{ width, height }}>
+    <View
+      style={[
+        styles.iconContainer,
+        {
+          width,
+          height,
+        },
+      ]}
+    >
       <ShapeComponent
         width={width}
         height={height}
@@ -370,7 +440,12 @@ export const ShapePreview: React.FC<{
   showLabel = true,
 }) => {
   return (
-    <View style={[styles.previewContainer, selected && styles.previewSelected]}>
+    <View
+      style={[
+        styles.previewContainer,
+        selected && styles.previewSelected,
+      ]}
+    >
       <ShapeIcon
         name={name}
         width={width}
@@ -379,9 +454,13 @@ export const ShapePreview: React.FC<{
         fillColor={fillColor}
         strokeWidth={strokeWidth}
       />
+
       {showLabel && label && (
-        <Text 
-          style={[styles.previewLabel, selected && styles.previewLabelSelected]}
+        <Text
+          style={[
+            styles.previewLabel,
+            selected && styles.previewLabelSelected,
+          ]}
           numberOfLines={1}
         >
           {label}
@@ -392,6 +471,12 @@ export const ShapePreview: React.FC<{
 };
 
 const styles = StyleSheet.create({
+  iconContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'visible',
+  },
+
   previewContainer: {
     alignItems: 'center',
     justifyContent: 'center',
@@ -402,10 +487,12 @@ const styles = StyleSheet.create({
     backgroundColor: 'transparent',
     width: '100%',
   },
+
   previewSelected: {
     borderColor: '#4c6fff',
     backgroundColor: '#eef2ff',
   },
+
   previewLabel: {
     fontSize: 8,
     color: '#64748b',
@@ -415,10 +502,12 @@ const styles = StyleSheet.create({
     lineHeight: 10,
     maxWidth: '100%',
   },
+
   previewLabelSelected: {
     color: '#4c6fff',
     fontWeight: '600',
   },
+
   fallback: {
     backgroundColor: '#f1f5f9',
     borderRadius: 4,
@@ -429,6 +518,7 @@ const styles = StyleSheet.create({
     borderStyle: 'dashed',
     padding: 4,
   },
+
   fallbackText: {
     fontSize: 8,
     fontWeight: '500',

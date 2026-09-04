@@ -660,7 +660,7 @@ export default function SignUp() {
   }, [errors.agreed]);
 
   const openPrivacyPage = useCallback(() => {
-    router.push('/(auth)/privacy1');
+    router.push('/(auth)/terms');
   }, [router]);
 
   const showErrorPopup = (

@@ -101,6 +101,12 @@ const TYPOGRAPHY = {
 };
 
 const SPACING = { xs: 4, sm: 8, md: 12, lg: 16, xl: 20, xxl: 24, xxxl: 32 };
+
+// React Native Web renders TextInput/TouchableOpacity as real DOM nodes, so
+// with no custom focus style the browser falls back to its own default
+// focus ring — a solid black outline on inputs, a black box on buttons.
+// This kills that default so our own (blue) focus styles are what shows.
+const WEB_NO_OUTLINE: any = Platform.OS === 'web' ? { outlineStyle: 'none', outlineWidth: 0 } : {};
 const RADIUS = { sm: 6, md: 10, lg: 14, xl: 18, xxl: 24, full: 999 };
 
 const TAB_BAR_ALLOWANCE = 90;
@@ -126,6 +132,13 @@ const SHADOWS = {
     shadowOpacity: 0.08,
     shadowRadius: 12,
     elevation: 5,
+  },
+  modal: {
+    shadowColor: '#0f172a',
+    shadowOffset: { width: 0, height: 12 },
+    shadowOpacity: 0.12,
+    shadowRadius: 28,
+    elevation: 8,
   },
 };
 
@@ -505,13 +518,8 @@ const EditProfileModal = ({
           <Pressable style={[styles.editProfileModalContainer, { width: modalWidth, maxHeight: maxModalHeight }]}>
             <View style={styles.modalHeaderRow}>
               <View style={styles.modalHeaderIconTitle}>
-                <View style={styles.modalIconCircleSmall}>
-                  <ProfileIcon color={COLORS.primary} />
-                </View>
-                <View style={styles.modalHeaderTextCol}>
-                  <Text style={[styles.modalTitle, { fontSize: isDesktop ? 20 : 19 }]}>Edit Profile</Text>
-                  <Text style={styles.modalSubtitle}>Update your name below</Text>
-                </View>
+                <Text style={[styles.modalTitle, { fontSize: isDesktop ? 19 : 18 }]}>Edit profile</Text>
+                <Text style={styles.modalSubtitle}>Update the name shown on your account</Text>
               </View>
               <TouchableOpacity
                 onPress={handleClose}
@@ -526,8 +534,8 @@ const EditProfileModal = ({
             </View>
 
             <ScrollView showsVerticalScrollIndicator={false} bounces={false}>
-              <View style={[styles.editProfileField, { marginTop: SPACING.lg }]}>
-                <Text style={styles.editProfileLabel}>Full Name</Text>
+              <View style={[styles.editProfileField, { marginTop: SPACING.sm }]}>
+                <Text style={styles.editProfileLabel}>Full name</Text>
                 <View
                   style={[
                     styles.editProfileNameRow,
@@ -536,7 +544,6 @@ const EditProfileModal = ({
                     loading && styles.disabledInput,
                   ]}
                 >
-                  <ProfileIcon color={COLORS.gray400} />
                   <TextInput
                     style={[styles.editProfileNameInput, { fontSize: isMobile ? 15 : 16 }]}
                     value={fullName}
@@ -556,9 +563,8 @@ const EditProfileModal = ({
               </View>
 
               <View style={styles.editProfileField}>
-                <Text style={styles.editProfileLabel}>Email Address</Text>
+                <Text style={styles.editProfileLabel}>Email address</Text>
                 <View style={styles.editProfileEmailRow}>
-                  <LockIcon color={COLORS.gray400} />
                   <Text style={styles.editProfileEmail} numberOfLines={1}>
                     {userData.email}
                   </Text>
@@ -641,27 +647,17 @@ const PasswordStrengthMeter = ({ password }: { password: string }) => {
   );
 };
 
-const PasswordChecklist = ({ password, isMobile }: { password: string; isMobile: boolean }) => (
-  <View style={styles.passwordChecklist}>
-    {PASSWORD_RULES.map((rule) => {
-      const met = rule.test(password);
-      return (
-        <View key={rule.key} style={styles.checklistRow}>
-          <View style={[styles.checklistDot, met && styles.checklistDotMet]}>
-            {met && (
-              <Svg width={8} height={8} viewBox="0 0 10 10">
-                <Path d="M2 5l2.5 2.5L8 3" stroke="#ffffff" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" fill="none" />
-              </Svg>
-            )}
-          </View>
-          <Text style={[styles.checklistText, met && styles.checklistTextMet, { fontSize: isMobile ? 11 : 12 }]}>
-            {rule.label}
-          </Text>
-        </View>
-      );
-    })}
-  </View>
-);
+// Shows only what's still missing, as a single compact line — the always-on
+// five-row checklist read as a gamified progress bar rather than a form hint.
+const PasswordChecklist = ({ password, isMobile }: { password: string; isMobile: boolean }) => {
+  const unmet = PASSWORD_RULES.filter((rule) => !rule.test(password));
+  if (unmet.length === 0) return null;
+  return (
+    <Text style={[styles.checklistText, { fontSize: isMobile ? 11 : 12, marginTop: SPACING.sm }]}>
+      Still needs: {unmet.map((r) => r.label.replace(/^(At least |One )/, '')).join(', ')}
+    </Text>
+  );
+};
 
 const ChangePasswordModal = ({
   visible,
@@ -754,13 +750,8 @@ const ChangePasswordModal = ({
         <Pressable style={[styles.modalContainer, { width: modalWidth, maxHeight: maxModalHeight }]}>
           <View style={styles.modalHeaderRow}>
             <View style={styles.modalHeaderIconTitle}>
-              <View style={styles.modalIconCircleSmall}>
-                <LockIcon color={COLORS.primary} />
-              </View>
-              <View style={styles.modalHeaderTextCol}>
-                <Text style={[styles.modalTitle, { fontSize: isDesktop ? 20 : 18 }]}>Change Password</Text>
-                <Text style={styles.modalSubtitle}>Use 8+ characters you don't use elsewhere</Text>
-              </View>
+              <Text style={[styles.modalTitle, { fontSize: isDesktop ? 19 : 18 }]}>Change password</Text>
+              <Text style={styles.modalSubtitle}>Use 8+ characters you don't use elsewhere</Text>
             </View>
             <TouchableOpacity
               onPress={handleClose}
@@ -776,9 +767,8 @@ const ChangePasswordModal = ({
 
           <ScrollView showsVerticalScrollIndicator={false} bounces={false}>
           <View style={styles.passwordInputWrapper}>
-            <Text style={[styles.inputLabel, { fontSize: isMobile ? 12 : 14 }]}>Current Password</Text>
+            <Text style={[styles.inputLabel, { fontSize: isMobile ? 12 : 13 }]}>Current password</Text>
             <View style={[styles.passwordInputContainer, errorField === 'current' && styles.inputError, loading && styles.disabledInput]}>
-              <LockIcon color={COLORS.gray400} />
               <TextInput
                 style={[styles.passwordInput, { fontSize: isMobile ? 15 : 16 }]}
                 placeholder="Enter your current password"
@@ -806,9 +796,8 @@ const ChangePasswordModal = ({
           </View>
 
           <View style={styles.passwordInputWrapper}>
-            <Text style={[styles.inputLabel, { fontSize: isMobile ? 12 : 14 }]}>New Password</Text>
+            <Text style={[styles.inputLabel, { fontSize: isMobile ? 12 : 13 }]}>New password</Text>
             <View style={[styles.passwordInputContainer, errorField === 'new' && styles.inputError, loading && styles.disabledInput]}>
-              <LockIcon color={COLORS.gray400} />
               <TextInput
                 style={[styles.passwordInput, { fontSize: isMobile ? 15 : 16 }]}
                 placeholder="Enter new password"
@@ -839,7 +828,7 @@ const ChangePasswordModal = ({
           </View>
 
           <View style={styles.passwordInputWrapper}>
-            <Text style={[styles.inputLabel, { fontSize: isMobile ? 12 : 14 }]}>Confirm New Password</Text>
+            <Text style={[styles.inputLabel, { fontSize: isMobile ? 12 : 13 }]}>Confirm new password</Text>
             <View
               style={[
                 styles.passwordInputContainer,
@@ -847,7 +836,6 @@ const ChangePasswordModal = ({
                 loading && styles.disabledInput,
               ]}
             >
-              <LockIcon color={COLORS.gray400} />
               <TextInput
                 style={[styles.passwordInput, { fontSize: isMobile ? 15 : 16 }]}
                 placeholder="Confirm new password"
@@ -876,7 +864,7 @@ const ChangePasswordModal = ({
               <Text style={[styles.passwordMismatchText, { fontSize: isMobile ? 11 : 12 }]}>Passwords do not match</Text>
             )}
             {confirmPassword && newPassword === confirmPassword && newPassword.length > 0 && (
-              <Text style={[styles.matchSuccess, { fontSize: isMobile ? 11 : 12 }]}>✓ Passwords match</Text>
+              <Text style={[styles.matchSuccess, { fontSize: isMobile ? 11 : 12 }]}>Passwords match</Text>
             )}
           </View>
 
@@ -971,6 +959,7 @@ const SetPasswordModal = ({
   const handleVerifyGoogle = async () => {
     if (verifying) return;
     setError('');
+    setWrongAccountEmail(null);
     if (!firebaseAuth) {
       setError('Google verification is unavailable on this platform.');
       return;
@@ -1045,15 +1034,10 @@ const SetPasswordModal = ({
         <Pressable style={[styles.modalContainer, { width: modalWidth, maxHeight: maxModalHeight }]}>
           <View style={styles.modalHeaderRow}>
             <View style={styles.modalHeaderIconTitle}>
-              <View style={styles.modalIconCircleSmall}>
-                <LockIcon color={COLORS.primary} />
-              </View>
-              <View style={styles.modalHeaderTextCol}>
-                <Text style={[styles.modalTitle, { fontSize: isDesktop ? 20 : 18 }]}>Set a Password</Text>
-                <Text style={styles.modalSubtitle}>
-                  {step === 'verify' ? "Confirm it's you, then choose a password" : 'Choose a password for your account'}
-                </Text>
-              </View>
+              <Text style={[styles.modalTitle, { fontSize: isDesktop ? 19 : 18 }]}>Set a password</Text>
+              <Text style={styles.modalSubtitle}>
+                {step === 'verify' ? "Confirm it's you, then choose a password" : 'Choose a password for your account'}
+              </Text>
             </View>
             <TouchableOpacity
               onPress={handleClose}
@@ -1070,19 +1054,27 @@ const SetPasswordModal = ({
           <ScrollView showsVerticalScrollIndicator={false} bounces={false}>
           {step === 'verify' ? (
             <View style={styles.setPasswordVerifyStep}>
+              {wrongAccountEmail ? (
+                <View style={styles.wrongAccountBanner}>
+                  <AlertCircleIcon color={COLORS.dangerText} size={16} />
+                  <Text style={styles.wrongAccountBannerText}>
+                    That was {wrongAccountEmail}, but you're signed in as {currentEmail}. Pick that Google account instead.
+                  </Text>
+                </View>
+              ) : null}
               {verifiedToken ? (
                 <>
                   <View style={styles.setPasswordVerifiedRow}>
                     <View style={styles.setPasswordVerifiedCheck}>
                       <CheckCircleIcon />
                     </View>
-                    <Text style={styles.setPasswordVerifyText}>
+                    <Text style={[styles.setPasswordVerifyText, { marginBottom: 0 }]}>
                       Google account confirmed as {currentEmail}.
                     </Text>
                   </View>
-                  {error ? <Text style={[styles.modalError, { fontSize: isMobile ? 12 : 14, marginTop: 0 }]}>{error}</Text> : null}
+                  {error ? <Text style={[styles.modalError, { fontSize: isMobile ? 12 : 14, marginTop: 0, marginHorizontal: 0 }]}>{error}</Text> : null}
                   <TouchableOpacity
-                    style={styles.modalPrimaryButton}
+                    style={[styles.modalPrimaryButton, { marginTop: SPACING.md }]}
                     onPress={() => setStep('password')}
                     accessibilityRole="button"
                     accessibilityLabel="Continue"
@@ -1105,7 +1097,7 @@ const SetPasswordModal = ({
                   <Text style={styles.setPasswordVerifyText}>
                     You signed in with Google. To also sign in with your email and a password, confirm your Google account first.
                   </Text>
-                  {error ? <Text style={[styles.modalError, { fontSize: isMobile ? 12 : 14, marginTop: 0 }]}>{error}</Text> : null}
+                  {error ? <Text style={[styles.modalError, { fontSize: isMobile ? 12 : 14, marginTop: 0, marginHorizontal: 0 }]}>{error}</Text> : null}
                   <TouchableOpacity
                     style={[styles.googleVerifyButton, verifying && styles.modalButtonDisabled]}
                     onPress={handleVerifyGoogle}
@@ -1126,9 +1118,8 @@ const SetPasswordModal = ({
           ) : (
             <>
               <View style={styles.passwordInputWrapper}>
-                <Text style={[styles.inputLabel, { fontSize: isMobile ? 12 : 14 }]}>New Password</Text>
+                <Text style={[styles.inputLabel, { fontSize: isMobile ? 12 : 13 }]}>New password</Text>
                 <View style={[styles.passwordInputContainer, loading && styles.disabledInput]}>
-                  <LockIcon color={COLORS.gray400} />
                   <TextInput
                     style={[styles.passwordInput, { fontSize: isMobile ? 15 : 16 }]}
                     placeholder="Enter a password"
@@ -1154,9 +1145,8 @@ const SetPasswordModal = ({
               </View>
 
               <View style={styles.passwordInputWrapper}>
-                <Text style={[styles.inputLabel, { fontSize: isMobile ? 12 : 14 }]}>Confirm Password</Text>
+                <Text style={[styles.inputLabel, { fontSize: isMobile ? 12 : 13 }]}>Confirm password</Text>
                 <View style={[styles.passwordInputContainer, (confirmPassword && newPassword !== confirmPassword) && styles.inputError, loading && styles.disabledInput]}>
-                  <LockIcon color={COLORS.gray400} />
                   <TextInput
                     style={[styles.passwordInput, { fontSize: isMobile ? 15 : 16 }]}
                     placeholder="Re-enter the password"
@@ -1181,7 +1171,7 @@ const SetPasswordModal = ({
                   <Text style={[styles.passwordMismatchText, { fontSize: isMobile ? 11 : 12 }]}>Passwords do not match</Text>
                 )}
                 {confirmPassword && newPassword === confirmPassword && newPassword.length > 0 && (
-                  <Text style={[styles.matchSuccess, { fontSize: isMobile ? 11 : 12 }]}>✓ Passwords match</Text>
+                  <Text style={[styles.matchSuccess, { fontSize: isMobile ? 11 : 12 }]}>Passwords match</Text>
                 )}
               </View>
 
@@ -1217,32 +1207,6 @@ const SetPasswordModal = ({
           )}
         </Pressable>
         </KeyboardAvoidingView>
-      </Pressable>
-    </Modal>
-
-    <Modal animationType="fade" transparent visible={!!wrongAccountEmail} onRequestClose={() => setWrongAccountEmail(null)}>
-      <Pressable style={styles.modalOverlay} onPress={() => setWrongAccountEmail(null)}>
-        <Pressable style={[styles.signOutModalContainer, { width: isDesktop ? 400 : isMobile ? windowWidth - 32 : 380 }]}>
-          <View style={styles.signOutIconWrapper}>
-            <View style={[styles.signOutIconCircle, { width: isDesktop ? 72 : 64, height: isDesktop ? 72 : 64, backgroundColor: COLORS.dangerLight }]}>
-              <AlertCircleIcon color={COLORS.danger} size={28} />
-            </View>
-          </View>
-
-          <Text style={[styles.signOutModalTitle, { fontSize: isDesktop ? 20 : 18 }]}>Wrong Google Account</Text>
-          <Text style={[styles.signOutModalMessage, { fontSize: isMobile ? 14 : 16 }]}>
-            That's {wrongAccountEmail}, but you're signed in as {currentEmail}. Please pick your {currentEmail} Google account instead.
-          </Text>
-
-          <TouchableOpacity
-            style={[styles.modalPrimaryButton, { width: '100%', marginTop: SPACING.lg }]}
-            onPress={() => setWrongAccountEmail(null)}
-            accessibilityRole="button"
-            accessibilityLabel="OK"
-          >
-            <Text style={[styles.modalButtonText, { fontSize: isMobile ? 15 : 16 }]}>OK</Text>
-          </TouchableOpacity>
-        </Pressable>
       </Pressable>
     </Modal>
     </>
@@ -1856,56 +1820,69 @@ const styles = StyleSheet.create({
   profileOptionLeft: { flexDirection: 'row', alignItems: 'center', gap: SPACING.md },
   profileOptionText: { ...TYPOGRAPHY.body, color: COLORS.gray800 },
 
-  editProfileModalContainer: { backgroundColor: COLORS.white, borderRadius: RADIUS.xxl, overflow: 'hidden', ...SHADOWS.lg },
+  editProfileModalContainer: {
+    backgroundColor: COLORS.white,
+    borderRadius: RADIUS.xl,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: 'rgba(15,23,42,0.06)',
+    ...SHADOWS.modal,
+  },
   editProfileField: { paddingHorizontal: SPACING.xl, marginBottom: SPACING.lg },
-  editProfileLabel: { ...TYPOGRAPHY.captionBold, color: COLORS.gray700, marginBottom: SPACING.sm },
+  editProfileLabel: { ...TYPOGRAPHY.captionBold, color: COLORS.gray700, marginBottom: SPACING.sm, fontWeight: '600' },
   editProfileNameRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    borderWidth: 1.5,
+    borderWidth: 1,
     borderColor: COLORS.gray200,
     borderRadius: RADIUS.md,
     paddingHorizontal: SPACING.md,
-    backgroundColor: COLORS.gray50,
+    backgroundColor: COLORS.white,
   },
   editProfileNameInput: {
     flex: 1,
-    paddingVertical: SPACING.md,
-    marginLeft: SPACING.sm,
+    paddingVertical: 12,
     ...TYPOGRAPHY.body,
     color: COLORS.gray900,
+    ...WEB_NO_OUTLINE,
   },
   editProfileInputFocused: {
     borderColor: COLORS.primary,
-    backgroundColor: COLORS.white,
+    borderWidth: 1.5,
   },
   editProfileFieldError: { ...TYPOGRAPHY.small, color: COLORS.danger, marginTop: SPACING.sm },
   editProfileFieldHint: { ...TYPOGRAPHY.small, color: COLORS.gray400, marginTop: SPACING.sm },
   editProfileEmailRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: SPACING.sm,
     paddingHorizontal: SPACING.md,
-    paddingVertical: SPACING.md,
+    paddingVertical: 12,
     backgroundColor: COLORS.gray50,
     borderRadius: RADIUS.md,
-    borderWidth: 1.5,
+    borderWidth: 1,
     borderColor: COLORS.gray100,
   },
   editProfileEmail: { ...TYPOGRAPHY.body, color: COLORS.gray500, flex: 1 },
   editProfileFooter: { flexDirection: 'row', gap: SPACING.md, borderTopWidth: 1, borderTopColor: COLORS.gray100 },
-  editProfileButton: { flex: 1, paddingVertical: SPACING.md, borderRadius: RADIUS.lg, alignItems: 'center', justifyContent: 'center', minHeight: 48 },
-  editProfileCancelButton: { backgroundColor: COLORS.gray100 },
+  editProfileButton: { flex: 1, paddingVertical: 13, borderRadius: RADIUS.md, alignItems: 'center', justifyContent: 'center', minHeight: 46 },
+  editProfileCancelButton: { backgroundColor: 'transparent' },
   editProfileSaveButton: { backgroundColor: COLORS.primary },
-  editProfileCancelText: { ...TYPOGRAPHY.bodyBold, color: COLORS.gray700 },
+  editProfileCancelText: { ...TYPOGRAPHY.bodyBold, color: COLORS.gray600, fontWeight: '600' },
   editProfileSaveText: { ...TYPOGRAPHY.bodyBold, color: COLORS.white },
-  modalButtonDisabled: { opacity: 0.55 },
+  modalButtonDisabled: { opacity: 0.45 },
   disabledTouchable: { opacity: 0.4 },
   disabledInput: { backgroundColor: COLORS.gray50, opacity: 0.7 },
 
-  modalOverlay: { flex: 1, backgroundColor: COLORS.overlay, justifyContent: 'center', alignItems: 'center', padding: SPACING.xl },
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(15,23,42,0.45)', justifyContent: 'center', alignItems: 'center', padding: SPACING.xl },
   modalWrapper: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  modalContainer: { backgroundColor: COLORS.white, borderRadius: RADIUS.xxl, overflow: 'hidden', ...SHADOWS.lg },
+  modalContainer: {
+    backgroundColor: COLORS.white,
+    borderRadius: RADIUS.xl,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: 'rgba(15,23,42,0.06)',
+    ...SHADOWS.modal,
+  },
   modalHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -1915,9 +1892,18 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: COLORS.gray100,
   },
-  modalTitle: { ...TYPOGRAPHY.h3, color: COLORS.gray900 },
-  modalClose: { padding: SPACING.xs, borderRadius: RADIUS.full },
-  modalError: { ...TYPOGRAPHY.small, color: COLORS.danger, marginTop: SPACING.sm, paddingHorizontal: SPACING.xl },
+  modalTitle: { ...TYPOGRAPHY.h3, color: COLORS.gray900, fontWeight: '600' },
+  modalClose: { padding: 6, borderRadius: RADIUS.full, ...WEB_NO_OUTLINE },
+  modalError: {
+    ...TYPOGRAPHY.small,
+    color: COLORS.dangerText,
+    marginTop: SPACING.sm,
+    marginHorizontal: SPACING.xl,
+    backgroundColor: COLORS.dangerLight,
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.sm,
+    borderRadius: RADIUS.sm,
+  },
   modalButton: {
     backgroundColor: COLORS.primary,
     margin: SPACING.xl,
@@ -1954,40 +1940,41 @@ const styles = StyleSheet.create({
   signOutModalConfirmText: { ...TYPOGRAPHY.bodyBold, color: COLORS.white },
 
   passwordInputWrapper: { paddingHorizontal: SPACING.xl, paddingTop: SPACING.lg },
-  inputLabel: { ...TYPOGRAPHY.captionBold, color: COLORS.gray700, marginBottom: SPACING.sm },
+  inputLabel: { ...TYPOGRAPHY.captionBold, color: COLORS.gray700, marginBottom: SPACING.sm, fontWeight: '600' },
   passwordInputContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    borderWidth: 1.5,
+    borderWidth: 1,
     borderColor: COLORS.gray200,
     borderRadius: RADIUS.md,
     backgroundColor: COLORS.white,
     paddingHorizontal: SPACING.md,
   },
-  inputError: { borderColor: COLORS.danger },
-  passwordInput: { flex: 1, paddingVertical: SPACING.md, marginLeft: SPACING.sm, ...TYPOGRAPHY.body, color: COLORS.gray900 },
-  passwordEyeBtn: { padding: SPACING.sm },
-  strengthMeterWrap: { marginTop: SPACING.md, flexDirection: 'row', alignItems: 'center', gap: SPACING.sm },
-  strengthSegmentRow: { flex: 1, flexDirection: 'row', gap: 4 },
-  strengthSegment: { flex: 1, height: 4, borderRadius: RADIUS.full, backgroundColor: COLORS.gray200 },
+  passwordInputFocused: { borderColor: COLORS.primary, borderWidth: 1.5 },
+  inputError: { borderColor: COLORS.dangerText },
+  passwordInput: { flex: 1, paddingVertical: 12, ...TYPOGRAPHY.body, color: COLORS.gray900, ...WEB_NO_OUTLINE },
+  passwordEyeBtn: { padding: SPACING.sm, marginRight: -SPACING.sm, borderRadius: RADIUS.sm, ...WEB_NO_OUTLINE },
+
+  // Compact strength row: label + inline unmet-requirement hint, replacing the
+  // segmented meter + always-on checklist (too much decoration for a form).
+  strengthMeterWrap: { marginTop: SPACING.sm, flexDirection: 'row', alignItems: 'center' },
+  strengthSegmentRow: { flex: 1, flexDirection: 'row', gap: 3, marginRight: SPACING.sm },
+  strengthSegment: { flex: 1, height: 3, borderRadius: RADIUS.full, backgroundColor: COLORS.gray200 },
   strengthMeterText: { ...TYPOGRAPHY.small, fontWeight: '600' },
-  passwordChecklist: { marginTop: SPACING.md, gap: 6 },
-  checklistRow: { flexDirection: 'row', alignItems: 'center' },
+  passwordChecklist: { marginTop: SPACING.sm },
+  checklistRow: { flexDirection: 'row', alignItems: 'flex-start', marginBottom: 3 },
   checklistDot: {
-    width: 16,
-    height: 16,
+    width: 4,
+    height: 4,
     borderRadius: RADIUS.full,
-    backgroundColor: COLORS.gray100,
-    borderWidth: 1,
-    borderColor: COLORS.gray200,
+    backgroundColor: COLORS.gray400,
     marginRight: SPACING.sm,
-    alignItems: 'center',
-    justifyContent: 'center',
+    marginTop: 7,
   },
-  checklistDotMet: { backgroundColor: COLORS.success, borderColor: COLORS.success },
+  checklistDotMet: { backgroundColor: COLORS.success },
   checklistText: { ...TYPOGRAPHY.small, color: COLORS.gray500 },
-  checklistTextMet: { color: COLORS.gray700, textDecorationLine: 'line-through' },
-  passwordMismatchText: { ...TYPOGRAPHY.small, color: COLORS.danger, marginTop: SPACING.sm },
+  checklistTextMet: { color: COLORS.gray400, textDecorationLine: 'line-through' },
+  passwordMismatchText: { ...TYPOGRAPHY.small, color: COLORS.dangerText, marginTop: SPACING.sm },
   matchSuccess: { color: COLORS.success, marginTop: SPACING.sm, fontSize: 12, fontWeight: '500' },
 
   modalHeaderRow: {
@@ -1995,11 +1982,10 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'flex-start',
     paddingHorizontal: SPACING.xl,
-    paddingVertical: SPACING.lg,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.gray100,
+    paddingTop: SPACING.xl,
+    paddingBottom: SPACING.lg,
   },
-  modalHeaderIconTitle: { flexDirection: 'row', alignItems: 'center', flex: 1, gap: SPACING.md },
+  modalHeaderIconTitle: { flex: 1, paddingRight: SPACING.lg },
   modalIconCircleSmall: {
     width: 40,
     height: 40,
@@ -2009,31 +1995,48 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   modalHeaderTextCol: { flex: 1 },
-  modalSubtitle: { ...TYPOGRAPHY.small, color: COLORS.gray500, marginTop: 2 },
-  modalFooterRow: { flexDirection: 'row', gap: SPACING.md, paddingHorizontal: SPACING.xl, paddingVertical: SPACING.xl },
+  modalSubtitle: { ...TYPOGRAPHY.small, color: COLORS.gray500, marginTop: 4, lineHeight: 17 },
+  modalFooterRow: {
+    flexDirection: 'row',
+    gap: SPACING.md,
+    paddingHorizontal: SPACING.xl,
+    paddingVertical: SPACING.lg,
+    borderTopWidth: 1,
+    borderTopColor: COLORS.gray100,
+  },
   modalPrimaryButton: {
     flex: 1,
     backgroundColor: COLORS.primary,
-    paddingVertical: SPACING.md,
-    borderRadius: RADIUS.lg,
+    paddingVertical: 13,
+    borderRadius: RADIUS.md,
     alignItems: 'center',
     justifyContent: 'center',
+    minHeight: 46,
   },
   modalSecondaryButton: {
     flex: 1,
-    backgroundColor: COLORS.gray100,
-    paddingVertical: SPACING.md,
-    borderRadius: RADIUS.lg,
+    backgroundColor: 'transparent',
+    paddingVertical: 13,
+    borderRadius: RADIUS.md,
     alignItems: 'center',
     justifyContent: 'center',
+    minHeight: 46,
   },
-  modalSecondaryButtonText: { ...TYPOGRAPHY.bodyBold, color: COLORS.gray700 },
-  setPasswordVerifyStep: { paddingHorizontal: SPACING.xl, paddingVertical: SPACING.xl },
-  setPasswordVerifyText: { ...TYPOGRAPHY.body, color: COLORS.gray600, lineHeight: 21, marginBottom: SPACING.lg, flex: 1 },
-  setPasswordVerifiedRow: { flexDirection: 'row', alignItems: 'flex-start', gap: SPACING.sm },
+  modalSecondaryButtonText: { ...TYPOGRAPHY.bodyBold, color: COLORS.gray600, fontWeight: '600' },
+  setPasswordVerifyStep: { paddingHorizontal: SPACING.xl, paddingTop: SPACING.sm, paddingBottom: SPACING.xl },
+  setPasswordVerifyText: { ...TYPOGRAPHY.body, fontSize: 14, color: COLORS.gray600, lineHeight: 20, marginBottom: SPACING.lg, flex: 1 },
+  setPasswordVerifiedRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: SPACING.sm,
+    backgroundColor: COLORS.successLight,
+    borderRadius: RADIUS.md,
+    padding: SPACING.md,
+    marginBottom: SPACING.lg,
+  },
   setPasswordVerifiedCheck: {
-    width: 22,
-    height: 22,
+    width: 20,
+    height: 20,
     borderRadius: RADIUS.full,
     backgroundColor: COLORS.success,
     justifyContent: 'center',
@@ -2042,22 +2045,34 @@ const styles = StyleSheet.create({
   },
   setPasswordSwitchAccountText: {
     ...TYPOGRAPHY.small,
-    color: COLORS.primary,
+    color: COLORS.gray500,
     textAlign: 'center',
     marginTop: SPACING.md,
+    textDecorationLine: 'underline',
   },
   googleVerifyButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: SPACING.sm,
-    borderWidth: 1.5,
+    borderWidth: 1,
     borderColor: COLORS.gray200,
-    borderRadius: RADIUS.lg,
-    paddingVertical: SPACING.md,
+    borderRadius: RADIUS.md,
+    paddingVertical: 13,
     backgroundColor: COLORS.white,
   },
-  googleVerifyButtonText: { ...TYPOGRAPHY.bodyBold, color: COLORS.gray700 },
+  googleVerifyButtonText: { ...TYPOGRAPHY.bodyBold, color: COLORS.gray700, fontWeight: '600' },
+  wrongAccountBanner: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: SPACING.sm,
+    backgroundColor: COLORS.dangerLight,
+    borderRadius: RADIUS.md,
+    padding: SPACING.md,
+    marginHorizontal: SPACING.xl,
+    marginBottom: SPACING.lg,
+  },
+  wrongAccountBannerText: { ...TYPOGRAPHY.small, color: COLORS.dangerText, flex: 1, lineHeight: 17 },
 
   toastContainer: { position: 'absolute', top: Platform.OS === 'ios' ? 60 : 50, left: SPACING.xl, right: SPACING.xl, zIndex: 1000, alignItems: 'center' },
   toastContent: {

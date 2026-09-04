@@ -446,11 +446,6 @@ export default function ForgotPassword() {
       if (!result.success) {
         console.log('❌ Forgot password failed:', result.message, result.code);
         
-        if (result.code === 'EMAIL_NOT_FOUND') {
-          setError('No account found with this email address.');
-          setLoading(false);
-          return;
-        }
         
         if (result.code === 'GOOGLE_ACCOUNT') {
           // ⭐ Inline error instead of popup

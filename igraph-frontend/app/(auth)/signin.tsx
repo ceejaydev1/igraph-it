@@ -674,7 +674,7 @@ export default function SignIn() {
 
   //HANDLERS
   const openPrivacyPage = useCallback(() => {
-    router.push('/(auth)/privacy1');
+    router.push('/(auth)/terms');
   }, [router]);
 
   const showErrorPopup = (title: string, message: string, onAction?: () => void, actionButtonText?: string, actionIcon?: React.ReactNode) => {

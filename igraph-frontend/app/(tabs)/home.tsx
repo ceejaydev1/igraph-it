@@ -402,7 +402,6 @@ const useResponsiveLayout = () => {
 export default function Home() {
   const [searchQuery, setSearchQuery] = useState('');
   const [activeTab, setActiveTab] = useState<TabType>('All');
-  const [showContent, setShowContent] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const inputRef = useRef<TextInput>(null);
   const router = useRouter();
@@ -411,15 +410,7 @@ export default function Home() {
   const layout = useResponsiveLayout();
 
   const homeTourSteps = useMemo(() => getHomeTourSteps({ router }), [router]);
-  useOnboardingTour(HOME_TOUR_ID, homeTourSteps, showContent);
-
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      setShowContent(true);
-    }, 400);
-    
-    return () => clearTimeout(timer);
-  }, []);
+  useOnboardingTour(HOME_TOUR_ID, homeTourSteps, true);
 
   const tabCounts = useMemo(() => {
     const counts: Record<TabType, number> = { All: 0, UML: 0, SDLC: 0 };
@@ -510,10 +501,6 @@ export default function Home() {
       </Text>
     </View>
   ), []);
-
-  if (!showContent) {
-    return <HomeGridSkeleton />;
-  }
 
   return (
     <View style={styles.container}>

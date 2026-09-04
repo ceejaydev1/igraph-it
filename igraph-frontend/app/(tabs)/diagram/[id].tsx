@@ -4,6 +4,7 @@ import {
   Text,
   StyleSheet,
   TouchableOpacity,
+  TouchableWithoutFeedback,
   Platform,
   useWindowDimensions,
   Animated,
@@ -13,6 +14,7 @@ import {
   Image,
   Linking,
   Easing,
+  ActivityIndicator,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useIsFocused } from '@react-navigation/native';
@@ -93,6 +95,12 @@ const VIDEO_IDS = {
   RAD: 'https://res.cloudinary.com/qehbqnx0/video/upload/v1787457194/RAD_vid.mp4',
   SPIRAL: 'https://res.cloudinary.com/qehbqnx0/video/upload/v1787457105/Spiral_vid.mp4',
 } as const;
+
+// Turns a Cloudinary video URL into a JPG snapshot of its first frame, so
+// the player has a real preview of the video's actual content to show
+// instead of a plain black box while it loads.
+const getVideoThumbnail = (videoUrl: string): string =>
+  videoUrl.replace('/upload/', '/upload/so_0/').replace(/\.mp4($|\?)/, '.jpg$1');
 
 // ─── Content Data ─────────────────────────────────────────────────────────────
 
@@ -1366,6 +1374,252 @@ const LinkIcon: React.FC<IconProps> = ({ color }) => (
   </Svg>
 );
 
+// ─── YouTube-style double-tap seek (rewind / fast-forward) ─────────────────
+
+const SKIP_SECONDS = 10; // matches YouTube's own double-tap skip amount
+const DOUBLE_TAP_DELAY = 300; // ms — max gap between taps to count as a pair
+const STREAK_RESET_DELAY = 650; // ms of inactivity before the tap streak resets
+
+const REPLAY_ARC_PATH =
+  'M12 5V1L7 6l5 5V7c3.31 0 6 2.69 6 6s-2.69 6-6 6-6-2.69-6-6H4c0 4.42 3.58 8 8 8s8-3.58 8-8-3.58-8-8-8z';
+
+// The soft white circle that blooms outward from the center of the tapped
+// half of the video, confirming a double-tap landed — same visual cue
+// YouTube uses. Re-triggered on every extra tap in a streak.
+const SeekRipple: React.FC<{ trigger: number }> = ({ trigger }) => {
+  const scale = useRef(new Animated.Value(0.4)).current;
+  const opacity = useRef(new Animated.Value(0.5)).current;
+
+  useEffect(() => {
+    scale.setValue(0.4);
+    opacity.setValue(0.5);
+    Animated.parallel([
+      Animated.timing(scale, {
+        toValue: 1,
+        duration: 420,
+        easing: Easing.out(Easing.cubic),
+        useNativeDriver: true,
+      }),
+      Animated.timing(opacity, {
+        toValue: 0,
+        duration: 420,
+        easing: Easing.out(Easing.cubic),
+        useNativeDriver: true,
+      }),
+    ]).start();
+  }, [trigger]);
+
+  return (
+    <View style={seekGestureStyles.rippleLayer} pointerEvents="none">
+      <Animated.View
+        style={[seekGestureStyles.rippleCircle, { opacity, transform: [{ scale }] }]}
+      />
+    </View>
+  );
+};
+
+// The icon + "N seconds" label shown over the ripple. Nudges slightly away
+// from center on each tap, then the whole group fades after a short hold.
+const SeekFlash: React.FC<{ side: 'left' | 'right'; seconds: number; trigger: number }> = ({
+  side,
+  seconds,
+  trigger,
+}) => {
+  const opacity = useRef(new Animated.Value(1)).current;
+  const nudge = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    opacity.setValue(1);
+    nudge.setValue(0);
+    Animated.sequence([
+      Animated.timing(nudge, {
+        toValue: 1,
+        duration: 160,
+        easing: Easing.out(Easing.quad),
+        useNativeDriver: true,
+      }),
+      Animated.timing(nudge, {
+        toValue: 0,
+        duration: 160,
+        easing: Easing.in(Easing.quad),
+        useNativeDriver: true,
+      }),
+    ]).start();
+
+    const fadeTimer = setTimeout(() => {
+      Animated.timing(opacity, {
+        toValue: 0,
+        duration: 220,
+        easing: Easing.out(Easing.cubic),
+        useNativeDriver: true,
+      }).start();
+    }, 500);
+
+    return () => clearTimeout(fadeTimer);
+  }, [trigger]);
+
+  const translateX = nudge.interpolate({
+    inputRange: [0, 1],
+    outputRange: side === 'left' ? [0, -8] : [0, 8],
+  });
+
+  return (
+    <Animated.View style={[seekGestureStyles.flash, { opacity }]} pointerEvents="none">
+      <Animated.View style={{ transform: [{ translateX }] }}>
+        <Svg
+          width={30}
+          height={30}
+          viewBox="0 0 24 24"
+          style={side === 'right' ? seekGestureStyles.iconMirror : undefined}
+        >
+          <Path d={REPLAY_ARC_PATH} fill="#ffffff" />
+        </Svg>
+      </Animated.View>
+      <Text style={seekGestureStyles.flashLabel}>{seconds} seconds</Text>
+    </Animated.View>
+  );
+};
+
+interface SeekZoneProps {
+  side: 'left' | 'right';
+  onSeek: (deltaSeconds: number) => void;
+}
+
+/**
+ * One half of the video. A lone tap does nothing — so it never fights with
+ * the player's own single-tap behavior — but a second tap landing within
+ * DOUBLE_TAP_DELAY confirms a double-tap and seeks immediately. Extra taps
+ * in quick succession keep accumulating (tap-tap-tap = 30s), exactly like
+ * YouTube, and the streak resets after a short pause.
+ */
+const SeekZone: React.FC<SeekZoneProps> = ({ side, onSeek }) => {
+  const [streak, setStreak] = useState(0);
+  const [trigger, setTrigger] = useState(0);
+  const lastTapAtRef = useRef(0);
+  const streakRef = useRef(0);
+  const resetTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (resetTimerRef.current) clearTimeout(resetTimerRef.current);
+    };
+  }, []);
+
+  const armReset = () => {
+    if (resetTimerRef.current) clearTimeout(resetTimerRef.current);
+    resetTimerRef.current = setTimeout(() => {
+      streakRef.current = 0;
+      setStreak(0);
+    }, STREAK_RESET_DELAY);
+  };
+
+  const handlePress = () => {
+    const now = Date.now();
+    const withinChain = now - lastTapAtRef.current <= DOUBLE_TAP_DELAY;
+    lastTapAtRef.current = now;
+    armReset();
+
+    if (!withinChain) {
+      // First tap of a possible pair — stay quiet until a follow-up tap
+      // actually confirms a double-tap. A single stray tap seeks nothing.
+      return;
+    }
+
+    streakRef.current += 1;
+    setStreak(streakRef.current);
+    setTrigger((t) => t + 1);
+    onSeek(side === 'left' ? -SKIP_SECONDS : SKIP_SECONDS);
+  };
+
+  return (
+    <TouchableWithoutFeedback
+      onPress={handlePress}
+      accessibilityLabel={side === 'left' ? `Double tap to rewind ${SKIP_SECONDS} seconds` : `Double tap to fast-forward ${SKIP_SECONDS} seconds`}
+    >
+      <View style={seekGestureStyles.zone}>
+        {streak > 0 && (
+          <>
+            <SeekRipple trigger={trigger} />
+            <SeekFlash side={side} seconds={streak * SKIP_SECONDS} trigger={trigger} />
+          </>
+        )}
+      </View>
+    </TouchableWithoutFeedback>
+  );
+};
+
+interface SeekGestureOverlayProps {
+  onSeek: (deltaSeconds: number) => void;
+}
+
+/**
+ * Full YouTube-style seek overlay: the left 40% of the video rewinds on
+ * double-tap, the right 40% fast-forwards, and the middle strip is a dead
+ * zone (pointerEvents none) so it never intercepts taps meant for the
+ * player underneath. The bottom 46px stays excluded so the native/web
+ * scrub bar remains reachable, same as before.
+ */
+const SeekGestureOverlay: React.FC<SeekGestureOverlayProps> = ({ onSeek }) => (
+  <View style={seekGestureStyles.overlay} pointerEvents="box-none">
+    <SeekZone side="left" onSeek={onSeek} />
+    <View style={seekGestureStyles.deadZone} pointerEvents="none" />
+    <SeekZone side="right" onSeek={onSeek} />
+  </View>
+);
+
+const seekGestureStyles = StyleSheet.create({
+  overlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 46, // leaves the native/web scrub bar reachable
+    flexDirection: 'row',
+    zIndex: 5,
+  },
+  zone: {
+    width: '40%',
+    height: '100%',
+    justifyContent: 'center',
+    alignItems: 'center',
+    overflow: 'hidden',
+  },
+  deadZone: {
+    flex: 1,
+  },
+  rippleLayer: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  rippleCircle: {
+    width: 220,
+    height: 220,
+    borderRadius: 110,
+    backgroundColor: 'rgba(255,255,255,0.18)',
+  },
+  flash: {
+    alignItems: 'center',
+    gap: 6,
+  },
+  iconMirror: {
+    transform: [{ scaleX: -1 }],
+  },
+  flashLabel: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#ffffff',
+    letterSpacing: 0.2,
+    textShadowColor: 'rgba(0,0,0,0.4)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 3,
+  },
+});
+
 interface DiagramPlaceholderProps {
   color: string;
   label: string;
@@ -1473,10 +1727,20 @@ interface VideoPlayerProps {
 
 const VideoPlayer: React.FC<VideoPlayerProps> = ({ videoId, color }) => {
   const [isPlaying, setIsPlaying] = useState(false);
+  // Tracks the gap between "user tapped play" and "video actually has a
+  // visible frame" — the raw <video> element is solid black until then,
+  // which looked identical to a broken/unresponsive tap with no feedback.
+  const [isBuffering, setIsBuffering] = useState(false);
   const isFocused = useIsFocused();
   const webVideoRef = useRef<HTMLVideoElement | null>(null);
-  const handlePlay = () => setIsPlaying(true);
+  const handlePlay = () => {
+    setIsPlaying(true);
+    setIsBuffering(true);
+  };
   const videoUrl = videoId;
+  // A real snapshot of the video's first frame, pulled from Cloudinary
+  // directly, rather than a solid black box while it loads.
+  const posterUri = getVideoThumbnail(videoUrl);
 
   // Diagram detail stays mounted in the background when navigating back to
   // Home (tab navigators keep inactive screens alive), so without this the
@@ -1490,21 +1754,37 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videoId, color }) => {
     }
   }, [isFocused]);
 
+  // Seeks the underlying <video> element by `delta` seconds (negative to
+  // rewind), clamped to [0, duration] so a skip near either end can't throw
+  // currentTime out of range.
+  const seekWebVideo = (delta: number) => {
+    const el = webVideoRef.current;
+    if (!el) return;
+    const duration = Number.isFinite(el.duration) && el.duration > 0 ? el.duration : Infinity;
+    el.currentTime = Math.min(Math.max(el.currentTime + delta, 0), duration);
+  };
+
   if (Platform.OS === 'web') {
     return (
       <View style={videoStyles.container}>
         {!isPlaying ? (
           <TouchableOpacity
-            style={[videoStyles.thumbnail, { backgroundColor: `${color}15` }]}
+            style={videoStyles.thumbnail}
             onPress={handlePlay}
             activeOpacity={0.9}
             accessibilityLabel="Play tutorial video"
             accessibilityRole="button"
           >
+            <Image
+              source={{ uri: posterUri }}
+              style={videoStyles.thumbnailImage}
+              resizeMode="cover"
+            />
+            <View style={videoStyles.thumbnailOverlay} />
             <View style={[videoStyles.playButton, { backgroundColor: color }]}>
               <PlayIcon />
             </View>
-            <Text style={[videoStyles.thumbnailText, { color }]}>Watch Tutorial</Text>
+            <Text style={videoStyles.thumbnailText}>Watch Tutorial</Text>
           </TouchableOpacity>
         ) : (
           <View style={videoStyles.iframeContainer}>
@@ -1512,6 +1792,8 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videoId, color }) => {
               ref={webVideoRef}
               controls
               autoPlay
+              preload="auto"
+              poster={posterUri}
               style={{ 
                 width: '100%', 
                 height: '100%', 
@@ -1519,7 +1801,15 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videoId, color }) => {
                 backgroundColor: '#000',
               }}
               src={videoUrl}
+              onPlaying={() => setIsBuffering(false)}
+              onWaiting={() => setIsBuffering(true)}
             />
+            {isBuffering && (
+              <View style={videoStyles.bufferingOverlay} pointerEvents="none">
+                <ActivityIndicator size="large" color="#ffffff" />
+              </View>
+            )}
+            <SeekGestureOverlay onSeek={seekWebVideo} />
           </View>
         )}
       </View>
@@ -1552,6 +1842,14 @@ const MobileVideoPlayer: React.FC<{
     }
   }, [isPlaying, player]);
 
+  // Seeks the expo-video player by `delta` seconds (negative to rewind),
+  // clamped to [0, duration] to avoid seeking past either end of the clip.
+  const seekMobileVideo = (delta: number) => {
+    const duration = player.duration ?? 0;
+    const nextTime = Math.min(Math.max(player.currentTime + delta, 0), duration || Infinity);
+    player.currentTime = nextTime;
+  };
+
   return (
     <View style={videoStyles.container}>
       {!isPlaying ? (
@@ -1571,14 +1869,17 @@ const MobileVideoPlayer: React.FC<{
           <Text style={[videoStyles.thumbnailText, { color }]}>Watch Tutorial</Text>
         </TouchableOpacity>
       ) : (
-        <VideoView
-          player={player}
-          style={{ width: '100%', height: '100%' }}
-          allowsFullscreen
-          allowsPictureInPicture
-          nativeControls
-          contentFit="contain"
-        />
+        <>
+          <VideoView
+            player={player}
+            style={{ width: '100%', height: '100%' }}
+            allowsFullscreen
+            allowsPictureInPicture
+            nativeControls
+            contentFit="contain"
+          />
+          <SeekGestureOverlay onSeek={seekMobileVideo} />
+        </>
       )}
     </View>
   );
@@ -1611,6 +1912,16 @@ const videoStyles = StyleSheet.create({
     overflow: 'hidden',
     backgroundColor: '#1a1f36',
   },
+  bufferingOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0,0,0,0.25)',
+  },
   comingSoon: {
     borderWidth: 1.5,
     borderStyle: 'dashed',
@@ -1623,6 +1934,15 @@ const videoStyles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     gap: 12,
+    position: 'relative',
+    overflow: 'hidden',
+  },
+  thumbnailImage: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  thumbnailOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(15, 23, 42, 0.45)',
   },
   playButton: {
     width: 56,
@@ -1640,6 +1960,7 @@ const videoStyles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '600',
     letterSpacing: 0.3,
+    color: '#ffffff',
   },
   iframeContainer: {
     flex: 1,

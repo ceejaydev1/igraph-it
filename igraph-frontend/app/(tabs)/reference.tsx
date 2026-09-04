@@ -1341,11 +1341,7 @@ export default function LearningReference() {
     const query = search.trim().toLowerCase();
     return REFERENCE_DATA.filter((item) => {
       const matchesCategory = activeCategory === 'All' || item.category === activeCategory;
-      // Matches the definition too, not just the term name — someone
-      // searching a concept they half-remember ("iterative", "sprint")
-      // shouldn't have to already know the exact term title to find it.
-      const matchesSearch =
-        item.term.toLowerCase().includes(query) || item.definition.toLowerCase().includes(query);
+      const matchesSearch = item.term.toLowerCase().includes(query);
       return matchesCategory && matchesSearch;
     });
   }, [search, activeCategory]);

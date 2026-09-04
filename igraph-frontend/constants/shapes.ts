@@ -45,6 +45,7 @@ export const DIAGRAM_SHAPES: Record<string, ShapeDefinition[]> = {
     { id: 'note', svgComponent: 'NoteStandaloneShape', label: 'Note', description: 'Sticky note shape', width: 100, height: 70, category: 'UML' },
     { id: 'actor', svgComponent: 'ActorShape', label: 'Actor', description: 'UML actor / user', width: 60, height: 80, category: 'UML' },
     { id: 'connector-arrow', svgComponent: 'ConnectorArrowShape', label: 'Connector', description: 'Line with arrow', width: 80, height: 40, category: 'UML' },
+    { id: 'text', svgComponent: 'TextShape', label: 'Text', description: 'Plain text element', width: 120, height: 40, category: 'UML', defaultLabel: 'Text' },
   ],
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -463,6 +464,7 @@ export const IGRAPH_ID_STYLE_MAP: Record<string, string> = {
   'note': 'igraph.noteStandalone',
   'actor': 'igraph.actor',
   'connector-arrow': 'igraph.connectorArrow',
+  'text': 'igraph.text',
 
   // ─── Flowchart ──────────────────────────────────────────────────────────
   // 'terminator' must stay 'igraph.ellipse' — matching its EllipseShape

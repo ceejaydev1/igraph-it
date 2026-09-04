@@ -2077,7 +2077,7 @@ class SchematicNoConnectionShapeCanvas extends Shape {
 // one, read directly off those same coordinates (not guessed/symmetric),
 // so wiring logic in DiagramCanvas.tsx can snap a wire to the actual lead
 // tip instead of anywhere on the shape's bounding box. Keyed by shapeId
-// (the same string getShapeRole/tagShapeRole use everywhere else), not by
+// (the same string getShapeRole/tagShapeRole uses everywhere else), not by
 // the igraph.* style/shape name.
 //
 // Most parts' two leads run flush to the shape's own edges (x: 0 / x: 1).
@@ -3151,20 +3151,24 @@ class LineShapeCanvas extends Shape {
   }
 }
 
+// ─── Text Shape ────────────────────────────────────────────────────────────
+// Paints no visible text itself — maxGraph already renders every cell's
+// real label as a separate overlay automatically (that's how every other
+// shape here shows its label without touching text in paintBackground).
+// This class used to also draw text manually, reading this.value — but
+// base Shape has no such property, so that always silently fell back to
+// the literal string 'Text', permanently stacked on top of the real
+// (correct) label maxGraph was already drawing underneath, producing
+// garbled overlapping text the moment the real label differed from
+// 'Text'. Only an invisible hit-area is painted now, so the shape stays
+// clickable (and so editable/deletable) across its whole box, not just
+// on the label glyphs.
 class TextShapeCanvas extends Shape {
   paintBackground(c: AbstractCanvas2D, x: number, y: number, w: number, h: number) {
-    c.setStrokeColor(this.stroke);
-    c.setStrokeWidth(this.strokeWidth);
-    // maxGraph's SVG renderer floors any actually-drawn stroke to 1px
-    // (SvgCanvas2D.minStrokeWidth), so strokeWidth=0 alone still paints a
-    // hairline. Dropping the stroke color to 'none' instead skips the
-    // stroke draw entirely, which is the only way to make width 0 truly
-    // invisible.
-    if (this.strokeWidth <= 0) c.setStrokeColor('none');
-    c.setDashed(true);
-    c.rect(x + 2, y + 2, w - 4, h - 4);
-    c.stroke();
-    c.setDashed(false);
+    c.setFillColor('none');
+    c.setStrokeColor('none');
+    c.rect(x, y, w, h);
+    c.fillAndStroke();
   }
 }
 
@@ -5685,6 +5689,7 @@ export const IGRAPH_ID_STYLE_MAP: Record<string, string> = {
   'noteStandalone': 'igraph.noteStandalone',
   'actor': 'igraph.actor',
   'connector-arrow': 'igraph.connectorArrow',
+  'text': 'igraph.text',
 
   // ─── Flowchart ──────────────────────────────────────────────────────────
   'terminator': 'igraph.ellipse',

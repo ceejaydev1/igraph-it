@@ -2334,12 +2334,39 @@ function resizeClassCompartmentToFitText(graph: Graph, cell: any, liveValue?: st
       model.setGeometry(sib, sGeo);
     });
 
-    const newContainerGeo = containerGeo.clone();
+       const newContainerGeo = containerGeo.clone();
     newContainerGeo.height += delta;
     model.setGeometry(container, newContainerGeo);
   });
 }
 
+const TEXT_LABEL_LINE_HEIGHT = 17;
+const TEXT_LABEL_V_PADDING = 10;
+
+function isTextLabelCell(cell: any): boolean {
+  const style = typeof cell?.getStyle === 'function' ? cell.getStyle() : undefined;
+  // 'text' = maxGraph's native shape (double-click empty canvas).
+  // 'igraph.text' = the custom stencil used by the sidebar's dragged Text shape.
+  // Treated the same so both get Enter-adds-newline, auto-grow, and the 4 handles.
+  return style?.shape === 'text' || style?.shape === 'igraph.text';
+}
+
+function resizeTextLabelToFitText(graph: Graph, cell: any, liveValue?: string) {
+  const geo = cell.getGeometry();
+  if (!geo) return;
+  const value = liveValue ?? (cell.getValue() as string) ?? '';
+  const lineCount = Math.max(1, value.split('\n').length);
+  const desired = lineCount * TEXT_LABEL_LINE_HEIGHT + TEXT_LABEL_V_PADDING;
+  if (Math.abs(desired - geo.height) < 1) return;
+  graph.batchUpdate(() => {
+    const model = graph.getDataModel();
+    const newGeo = geo.clone();
+    newGeo.height = desired;
+    model.setGeometry(cell, newGeo);
+  });
+}
+
+// Runs when the user drag-resizes a class container's own handles.
 // Runs when the user drag-resizes a class container's own handles.
 // Compartments are `resizable: false` (no handles of their own), so
 // without this they'd silently stay their old width/proportions and
@@ -3119,6 +3146,24 @@ const WebCanvas = forwardRef<DiagramCanvasHandle, DiagramCanvasProps>(({ onReady
     if (!cancel && graph && cell) {
       graph.getDataModel().setValue(cell, textarea.value);
     }
+
+    // Same "discard if you never actually typed anything" rule as the
+    // desktop CellEditorHandler.stopEditing patch in initGraph — a text
+    // label (shape:'text', created by double-tapping empty canvas) that's
+    // dismissed without ever getting text shouldn't leave an invisible,
+    // un-tappable cell behind. Reads the cell's value *after* the setValue
+    // above, so this covers both a cancelled edit (value never changed from
+    // whatever it was) and a committed-but-still-empty one.
+    if (graph && cell) {
+      const style = typeof cell.getStyle === 'function' ? cell.getStyle() : undefined;
+      if (style?.shape === 'text') {
+        const value = typeof cell.getValue === 'function' ? cell.getValue() : undefined;
+        if (!value || !String(value).trim()) {
+          graph.removeCells([cell], false);
+        }
+      }
+    }
+
     graphDivRef.current?.focus();
   }, []);
 
@@ -3181,6 +3226,13 @@ const WebCanvas = forwardRef<DiagramCanvasHandle, DiagramCanvasProps>(({ onReady
 
     mobileEditingCellRef.current = cell;
     textarea.value = typeof value === 'string' ? value : '';
+    // "Type something" hint for a still-empty text label (shape:'text' —
+    // see the empty-canvas branch of the DOUBLE_CLICK listener), same as
+    // desktop's editor. This overlay really is a native <textarea>
+    // (unlike desktop's contenteditable CellEditorHandler element), so the
+    // browser's own placeholder attribute is enough — no CSS trick needed,
+    // and it already only shows while textarea.value is empty.
+    textarea.placeholder = style.shape === 'text' ? 'Type something' : '';
     textarea.style.left = `${boxX}px`;
     textarea.style.top = `${boxY}px`;
     textarea.style.width = `${boxW}px`;
@@ -4553,6 +4605,14 @@ const WebCanvas = forwardRef<DiagramCanvasHandle, DiagramCanvasProps>(({ onReady
   (typeof cell.isEdge === 'function' && cell.isEdge()) ||
   isConnectorCell(cell);
 
+      // A plain text label (shape:'text' — see the empty-canvas branch of
+      // the DOUBLE_CLICK listener) skips these too, same reasoning as
+      // isConnector just above: "grow a new shape out of this" doesn't read
+      // as a meaningful action on a floating text annotation, and Lucidchart's
+      // own text tool shows nothing around a selected text box but its plain
+      // resize handles.
+      const isTextLabel = isTextLabelCell(cell);
+
       const view = graph.getView();
       const scale = view.getScale();
 
@@ -4581,7 +4641,7 @@ const WebCanvas = forwardRef<DiagramCanvasHandle, DiagramCanvasProps>(({ onReady
         { dx: 1, dy: 0, label: 'right' },
       ];
 
-      if (!isConnector) {
+      if (!isConnector && !isTextLabel) {
         directions.forEach((dir) => {
           const div = document.createElement('div');
           const offset = rotateVector(dir.dx * (w / 2 + spacing), dir.dy * (h / 2 + spacing), rotation);
@@ -5381,6 +5441,33 @@ const WebCanvas = forwardRef<DiagramCanvasHandle, DiagramCanvasProps>(({ onReady
           stroke-width: 2px;
           animation: igraph-snap-pulse 260ms ease-out forwards;
         }
+        /* Placeholder hint text for an empty text label (shape:'text',
+           created by double-clicking empty canvas) while it's being
+           edited — see the CellEditorHandler.startEditing patch below and
+           openMobileEditor's placeholder attribute. HTML labels
+           (graph.setHtmlLabels(true)) edit through a contenteditable
+           element, not a real <textarea>, so a native "placeholder"
+           attribute alone wouldn't render — :empty:before is the
+           contenteditable equivalent, and it disappears on its own the
+           moment a real character lands (the element genuinely stops
+           being empty), no manual show/hide needed. Scoped to the
+           .igraph-text-placeholder marker class so it only ever applies to
+           the one cell that class gets added to, never to any other
+           shape's label editor.
+        */
+        .igraph-text-placeholder:empty:before {
+          content: attr(data-placeholder);
+          color: #94a3b8;
+          pointer-events: none;
+        }
+        /* Same placeholder gray for the mobile label editor's real
+           <textarea> (see openMobileEditor) — its placeholder attribute
+           already only shows while empty, this just matches the color to
+           desktop's :empty:before rule above. */
+        textarea::placeholder {
+          color: #94a3b8;
+          opacity: 1;
+        }
       `;
       document.head.appendChild(styleElement);
       console.log('🔵 Force blue CSS injected with black edges');
@@ -5411,7 +5498,57 @@ const WebCanvas = forwardRef<DiagramCanvasHandle, DiagramCanvasProps>(({ onReady
       };
 
       graph.createVertexHandler = (state: CellState) => {
-        return new UniversalVertexHandler(state);
+        const handler = new UniversalVertexHandler(state) as any;
+
+        // Plain text labels (shape:'text' — see the empty-canvas branch of
+        // the DOUBLE_CLICK listener below) keep the Universal handler's
+        // rotate icon (rotating a text annotation is still useful — e.g. a
+        // diagonal "DRAFT" stamp) but lose its 8 resize squares: a text box
+        // is meant to size itself to its own text, not be dragged wider/
+        // taller by hand, and the squares just clutter a plain label.
+        // Checked on the cell's own persisted style (not the in-memory
+        // shapeId tag from tagShapeRole) so it's still correct after a
+        // reload, since a fresh page load never refills that tag.
+        //
+        // Hiding each resize sizer's DOM node after every redraw (instead
+        // of deleting the sizers, or trying to stop them being created in
+        // the first place) keeps the handler's own hit-testing/redraw
+        // bookkeeping intact — sizers still exist as far as
+        // UniversalVertexHandler/VertexHandler are concerned, they're just
+        // invisible and unclickable. `rotationShape` is left untouched so
+        // it stays visible and interactive. This relies on VertexHandler's
+        // internal `sizers`/`rotationShape` field names, which is the same
+        // kind of duck-typed reach into maxGraph internals as the
+        // CellEditorHandler patches above (isStopEditingEvent/resize) — if
+        // a maxGraph upgrade ever renames these, this silently stops hiding
+        // the squares rather than throwing (every access is optional-
+        // chained), so it degrades to "vanilla Universal handler" rather
+        // than crashing.
+        if (isTextLabelCell(state.cell)) {
+          // Sizer order is [nw, n, ne, w, e, sw, s, se] — keep only the 4
+          // diagonal corner squares, hide the 4 straight N/S/E/W handles.
+          const SIDE_SIZER_INDICES = [1, 3, 4, 6];
+          const hideResizeSizers = () => {
+            SIDE_SIZER_INDICES.forEach((idx) => {
+              const sizer = handler.sizers?.[idx];
+              if (sizer && sizer.node) {
+                sizer.node.style.display = 'none';
+                sizer.node.style.pointerEvents = 'none';
+              }
+            });
+          };
+          const originalRedrawHandles = handler.redrawHandles?.bind(handler);
+          if (originalRedrawHandles) {
+            handler.redrawHandles = (...args: unknown[]) => {
+              const result = originalRedrawHandles(...args);
+              hideResizeSizers();
+              return result;
+            };
+          }
+          hideResizeSizers();
+        }
+
+        return handler;
       };
       console.log('✅ Universal Vertex Handler bound to graph');
 
@@ -5777,7 +5914,7 @@ const WebCanvas = forwardRef<DiagramCanvasHandle, DiagramCanvasProps>(({ onReady
           const editingCell = cellEditorHandler.getEditingCell?.();
           if (
             editingCell &&
-            (isUmlClassCompartmentCell(editingCell) || isUmlLifelineCell(editingCell)) &&
+            (isUmlClassCompartmentCell(editingCell) || isUmlLifelineCell(editingCell) || isTextLabelCell(editingCell)) &&
             evt.keyCode === 13 &&
             !evt.ctrlKey &&
             !evt.shiftKey
@@ -5785,6 +5922,33 @@ const WebCanvas = forwardRef<DiagramCanvasHandle, DiagramCanvasProps>(({ onReady
             return false;
           }
           return defaultIsStopEditingEvent(evt);
+        };
+
+        // Placeholder hint for a brand-new, still-empty text label
+        // (shape:'text' — see the empty-canvas branch of the DOUBLE_CLICK
+        // listener) — "Type something" shows the moment editing starts,
+        // the same affordance most diagram tools give an empty text box,
+        // and disappears the instant a real character is typed (see the
+        // .igraph-text-placeholder:empty:before rule injected above — pure
+        // CSS, no manual show/hide). Only ever applied to a text label with
+        // nothing typed yet; every other cell's editor is untouched.
+        const defaultStartEditing = cellEditorHandler.startEditing.bind(cellEditorHandler);
+        cellEditorHandler.startEditing = (cell: any, ...rest: unknown[]) => {
+          const result = defaultStartEditing(cell, ...rest);
+          const value = typeof cell?.getValue === 'function' ? cell.getValue() : undefined;
+          const el = cellEditorHandler.textarea as HTMLElement | undefined;
+          if (el) {
+            if (isTextLabelCell(cell) && (!value || !String(value).trim())) {
+              el.classList.add('igraph-text-placeholder');
+              el.setAttribute('data-placeholder', 'Type something');
+              el.setAttribute('placeholder', 'Type something');
+            } else {
+              el.classList.remove('igraph-text-placeholder');
+              el.removeAttribute('data-placeholder');
+              el.removeAttribute('placeholder');
+            }
+          }
+          return result;
         };
 
         // CellEditorHandler already calls resize() on every keystroke on its
@@ -5807,10 +5971,36 @@ const WebCanvas = forwardRef<DiagramCanvasHandle, DiagramCanvasProps>(({ onReady
                 resizeClassCompartmentToFitText(graph, editingCell, liveValue);
               } else if (isUmlLifelineCell(editingCell)) {
                 resizeLifelineHeaderToFitText(graph, editingCell, liveValue);
+              } else if (isTextLabelCell(editingCell)) {
+                resizeTextLabelToFitText(graph, editingCell, liveValue);
               }
             }
           }
           return defaultResize(...args);
+        };
+
+        // A text label (shape:'text') that never got any text typed into
+        // it — created by double-clicking empty canvas, then dismissed by
+        // clicking elsewhere (or Escape) without typing — shouldn't leave
+        // an invisible, empty cell sitting on the canvas forever. Checked
+        // after stopEditing has already run (default called first) so this
+        // reads the cell's actual final value: whatever startEditingAtCell
+        // committed on a normal stop, or whatever it already was
+        // (unchanged) on a cancelled one — either way, "still empty after
+        // editing ended" is exactly "never added any text." Scoped to
+        // shape:'text' only — a normal shape's own label is never touched.
+        const defaultStopEditing = cellEditorHandler.stopEditing.bind(cellEditorHandler);
+        cellEditorHandler.stopEditing = (...args: unknown[]) => {
+          const editingCell = cellEditorHandler.getEditingCell?.();
+          const isTextLabel = !!editingCell && isTextLabelCell(editingCell);
+          const result = defaultStopEditing(...args);
+          if (isTextLabel && editingCell) {
+            const value = typeof editingCell.getValue === 'function' ? editingCell.getValue() : undefined;
+            if (!value || !String(value).trim()) {
+              graph.removeCells([editingCell], false);
+            }
+          }
+          return result;
         };
       }
 
@@ -5823,6 +6013,9 @@ const WebCanvas = forwardRef<DiagramCanvasHandle, DiagramCanvasProps>(({ onReady
         }
         if (cell && isUmlLifelineCell(cell)) {
           resizeLifelineHeaderToFitText(graph, cell);
+        }
+        if (cell && isTextLabelCell(cell)) {
+          resizeTextLabelToFitText(graph, cell);
         }
       });
 
@@ -6128,58 +6321,159 @@ const WebCanvas = forwardRef<DiagramCanvasHandle, DiagramCanvasProps>(({ onReady
       // label — which has no visible box/text style, so it looks like the
       // click just did nothing. Redirect to whichever compartment the point
       // actually falls in, on both platforms, before deciding what to edit.
-      graph.addListener(InternalEvent.DOUBLE_CLICK, (_sender: any, evt: any) => {
-        const cell = evt.getProperty('cell');
-        if (!cell) return;
+graph.addListener(InternalEvent.DOUBLE_CLICK, (_sender: any, evt: any) => {
+  const cell = evt.getProperty('cell');
 
-        let targetCell = cell;
-        let axis: 'x' | 'y' | null = null;
-        let isCompartment: ((c: any) => boolean) | null = null;
-        if (isUmlClassContainerCell(cell)) {
-          axis = 'y';
-          isCompartment = isUmlClassCompartmentCell;
-        } else if (isDfdDataStoreContainerCell(cell)) {
-          axis = 'x';
-          isCompartment = isDfdDataStoreCompartmentCell;
-        }
+  const rawEvent = evt.getProperty('event') as
+    | MouseEvent
+    | TouchEvent
+    | undefined;
 
-        const rawEvent = evt.getProperty('event') as MouseEvent | TouchEvent | undefined;
-        const point = rawEvent && 'changedTouches' in rawEvent && rawEvent.changedTouches.length
-          ? rawEvent.changedTouches[0]
-          : (rawEvent as MouseEvent | undefined);
+  const point =
+    rawEvent &&
+    'changedTouches' in rawEvent &&
+    rawEvent.changedTouches.length
+      ? rawEvent.changedTouches[0]
+      : (rawEvent as MouseEvent | undefined);
 
-        if (axis && isCompartment) {
-          const containerEl = graphDivRef.current;
-          if (!point || !containerEl) return;
-          const { x, y } = clientToGraphCoords(graph, point.clientX, point.clientY, containerEl);
-          const found = findCompartmentAtPoint(graph, cell, x, y, axis, isCompartment);
-          if (!found) return;
-          targetCell = found;
-        }
+  // ─────────────────────────────────────────────────────────────
+  // EMPTY CANVAS — double-click/tap with nothing under the cursor drops a
+  // free-floating text label at that point instead of doing nothing, same
+  // "click and start typing" affordance most diagram tools give for plain
+  // annotations. shape:'text' renders just the string with no border/fill
+  // so it reads as a label rather than a boxed shape. It's inserted as a
+  // completely ordinary vertex — no editable/deletable/movable overrides
+  // anywhere on it or its style — so it immediately opens for editing via
+  // the exact same startEditingAtCell/openMobileEditor path used below for
+  // any other shape, and afterward is selectable/movable/deletable like
+  // any other cell (graph.setCellsDeletable(true), set globally elsewhere
+  // in initGraph, already covers it).
+  if (!cell) {
+    const containerEl = graphDivRef.current;
+    if (!point || !containerEl) return;
 
-        // Mobile: skip maxGraph's own CellEditorHandler entirely in favor of
-        // our own overlay (openMobileEditor) — its resize/focus wiring
-        // fights the on-screen keyboard opening (which resizes the
-        // viewport), which is what made the keyboard flash and vanish
-        // immediately after double-tapping a shape. Lucidchart and draw.io
-        // sidestep the same class of bug the same way: a custom positioned
-        // input focused synchronously in the touch handler, instead of the
-        // graph library's built-in editor.
-        if (isMobile) {
-          evt.consume();
-          openMobileEditor(targetCell);
-          return;
-        }
+    evt.consume();
 
-        // Desktop only needs to actually intervene for the compartment
-        // redirect above — everything else falls through to maxGraph's own
-        // default dblClick handling (event left unconsumed), which calls
-        // startEditingAtCell(cell) itself.
-        if (targetCell !== cell) {
-          evt.consume();
-          graph.startEditingAtCell(targetCell, rawEvent instanceof MouseEvent ? rawEvent : undefined);
-        }
-      });
+    const { x, y } = clientToGraphCoords(
+      graph,
+      point.clientX,
+      point.clientY,
+      containerEl,
+    );
+
+    const w = 120;
+    const h = 30;
+    const textStyle: CellStateStyle = {
+      shape: 'text',
+      // Explicit 'none' (not just omitted) so a text label never picks up
+      // a fill/border from a stylesheet default — always fully transparent,
+      // just the characters themselves, like Lucidchart's text tool.
+      fillColor: 'none',
+      strokeColor: 'none',
+      align: 'center' as AlignValue,
+      verticalAlign: 'middle' as VAlignValue,
+      whiteSpace: 'wrap' as WhiteSpaceValue,
+      fontColor: BLACK,
+      fontSize: 12,
+    };
+
+    let textCell: Cell | undefined;
+    graph.batchUpdate(() => {
+      textCell = graph.insertVertex(
+        null,
+        null,
+        '',
+        Math.round((x - w / 2) / GRID_SIZE) * GRID_SIZE,
+        Math.round((y - h / 2) / GRID_SIZE) * GRID_SIZE,
+        w,
+        h,
+        textStyle,
+      );
+    });
+
+    if (!textCell) return;
+
+    graph.setSelectionCell(textCell);
+
+    if (isMobile) {
+      openMobileEditor(textCell);
+    } else {
+      graph.startEditingAtCell(
+        textCell,
+        rawEvent instanceof MouseEvent ? rawEvent : undefined,
+      );
+    }
+    return;
+  }
+
+  let targetCell = cell;
+
+  // ─────────────────────────────────────────────────────────────
+  // UML CLASS / DFD DATA STORE COMPARTMENTS
+  // ─────────────────────────────────────────────────────────────
+
+  let axis: 'x' | 'y' | null = null;
+  let isCompartment: ((c: any) => boolean) | null = null;
+
+  if (isUmlClassContainerCell(cell)) {
+    axis = 'y';
+    isCompartment = isUmlClassCompartmentCell;
+  } else if (isDfdDataStoreContainerCell(cell)) {
+    axis = 'x';
+    isCompartment = isDfdDataStoreCompartmentCell;
+  }
+
+  if (axis && isCompartment) {
+    const containerEl = graphDivRef.current;
+
+    if (!point || !containerEl) return;
+
+    const { x, y } = clientToGraphCoords(
+      graph,
+      point.clientX,
+      point.clientY,
+      containerEl,
+    );
+
+    const found = findCompartmentAtPoint(
+      graph,
+      cell,
+      x,
+      y,
+      axis,
+      isCompartment,
+    );
+
+    if (!found) return;
+
+    targetCell = found;
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  // MOBILE
+  // ─────────────────────────────────────────────────────────────
+
+  if (isMobile) {
+    evt.consume();
+    openMobileEditor(targetCell);
+    return;
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  // DESKTOP
+  // ─────────────────────────────────────────────────────────────
+
+  evt.consume();
+
+  // IMPORTANT:
+  // Explicitly tell maxGraph to edit the cell.
+  graph.startEditingAtCell(
+    targetCell,
+    rawEvent instanceof MouseEvent
+      ? rawEvent
+      : undefined,
+  );
+});
 
       graph.getSelectionModel().addListener(InternalEvent.CHANGE, () => {
         handleSelectionChange();

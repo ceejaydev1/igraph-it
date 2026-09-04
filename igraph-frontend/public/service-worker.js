@@ -169,19 +169,12 @@ self.addEventListener('fetch', (event) => {
     return;
   }
   
-  // NEVER intercept API calls or external requests
-  const isExternalRequest = (
-    url.pathname.startsWith('/api/') ||
-    url.hostname.includes('googleapis.com') ||
-    url.hostname.includes('firebaseapp.com') ||
-    url.hostname.includes('identitytoolkit.googleapis.com') ||
-    url.hostname.includes('securetoken.googleapis.com') ||
-    url.hostname.includes('brevo.com') ||
-    url.hostname !== self.location.hostname
-  );
-  
-  if (isExternalRequest) {
-    event.respondWith(fetch(event.request));
+  // NEVER intercept API calls or external requests.
+  // Let the browser handle them directly.
+  const isApiRequest = url.pathname.startsWith('/api/');
+  const isExternalRequest = url.hostname !== self.location.hostname;
+
+  if (isApiRequest || isExternalRequest) {
     return;
   }
   

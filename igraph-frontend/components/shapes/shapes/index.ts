@@ -1,4 +1,5 @@
 // ─── Basic Shapes ──────────────────────────────────────────────────────────
+
 export {
   RectShape,
   RoundedRectShape,
@@ -32,6 +33,7 @@ export {
 } from './BasicShapes';
 
 // ─── FDD Shapes ────────────────────────────────────────────────────────────
+
 export {
   FDD_FunctionShape,
   FDD_InputShape,
@@ -45,6 +47,7 @@ export {
 } from './FDDShapes';
 
 // ─── DFD Shapes ────────────────────────────────────────────────────────────
+
 export {
   DFDProcessShape,
   DFDDataFlowShape,
@@ -59,6 +62,7 @@ export {
 } from './DFDShapes';
 
 // ─── ERD Shapes ────────────────────────────────────────────────────────────
+
 export {
   ERDEntityShape,
   ERDWeakEntityShape,
@@ -75,6 +79,7 @@ export {
 } from './ERDShapes';
 
 // ─── Fishbone Shapes ───────────────────────────────────────────────────────
+
 export {
   FishboneSpineShape,
   FishboneHeadShape,
@@ -92,6 +97,7 @@ export {
 } from './FishboneShapes';
 
 // ─── Schematic Shapes ──────────────────────────────────────────────────────
+
 export {
   SchematicBatteryShape,
   SchematicACShape,
@@ -109,7 +115,8 @@ export {
   SchematicNoConnectionShape,
 } from './SchematicShapes';
 
-// ─── Use Case Shapes ──────────────────────────────────────────────────────
+// ─── Use Case Shapes ────────────────────────────────────────────────────────
+
 export {
   UMLActorShape,
   UMLUseCaseShape,
@@ -124,7 +131,8 @@ export {
   UMLExtendLabelShape,
 } from './UseCaseShapes';
 
-// ─── Activity Shapes ──────────────────────────────────────────────────────
+// ─── Activity Shapes ───────────────────────────────────────────────────────
+
 export {
   UMLInitialNodeShape,
   UMLActivityShape,
@@ -139,7 +147,8 @@ export {
   UMLConstraintShape,
 } from './ActivityShapes';
 
-// ─── Sequence Shapes ──────────────────────────────────────────────────────
+// ─── Sequence Shapes ───────────────────────────────────────────────────────
+
 export {
   UMLLifelineShape,
   UMLActivationShape,
@@ -155,6 +164,7 @@ export {
 } from './SequenceShapes';
 
 // ─── Class Shapes ──────────────────────────────────────────────────────────
+
 export {
   UMLClassShape,
   UMLDirectedAssociationShape,
