@@ -8,8 +8,18 @@
 // protection SameSite would otherwise provide — see middleware/csrfMiddleware.js
 // for the compensating control. In local dev (same-site localhost:5000 <->
 // localhost:8081) SameSite=Lax works and doesn't require HTTPS.
-
-const isCrossSite = process.env.NODE_ENV === 'production';
+//
+// This is decided by COOKIE_CROSS_SITE, not NODE_ENV. Cross-domain deployment
+// is a fact about topology, not app mode — inferring it from NODE_ENV means
+// any deploy target that doesn't set NODE_ENV=production exactly right
+// (a Render env misconfig, a staging deploy, etc.) silently falls back to
+// SameSite=Lax cookies that the browser drops on every cross-site request,
+// which looks like "every API call returns 401" with no error explaining why.
+// Default to true since that's the actual deployed shape; local dev opts out
+// explicitly via COOKIE_CROSS_SITE=false in its .env.
+const isCrossSite = process.env.COOKIE_CROSS_SITE
+  ? process.env.COOKIE_CROSS_SITE === 'true'
+  : true;
 
 const baseAttributes = {
   httpOnly: true,

@@ -14,7 +14,14 @@ const CSRF_COOKIE_NAME = 'csrf_token';
 const CSRF_HEADER_NAME = 'x-csrf-token';
 const CSRF_MAX_AGE_MS = 24 * 60 * 60 * 1000;
 
-const isCrossSite = process.env.NODE_ENV === 'production';
+// Must match utils/cookieOptions.js's isCrossSite exactly — both cookies are
+// set in the same request/response cycle and need the same SameSite/Secure
+// attributes, or one gets accepted by the browser while the other is
+// silently dropped. Driven by COOKIE_CROSS_SITE, not NODE_ENV — see the
+// comment in cookieOptions.js for why.
+const isCrossSite = process.env.COOKIE_CROSS_SITE
+  ? process.env.COOKIE_CROSS_SITE === 'true'
+  : true;
 
 const issueCsrfToken = (req, res) => {
   const token = crypto.randomBytes(32).toString('hex');
