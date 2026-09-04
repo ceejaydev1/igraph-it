@@ -719,7 +719,7 @@ export default function SavedDiagrams() {
   // this screen and the account screen's "N saved" both otherwise start
   // empty and fetch on mount/focus, flashing "0 saved diagrams" on remount.
   const [savedDiagrams, setSavedDiagrams] = useState<any[]>(() => authService.getCachedDiagrams() ?? []);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(() => (authService.getCachedDiagrams()?.length ?? 0) === 0);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
