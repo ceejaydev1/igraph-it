@@ -5,6 +5,12 @@ const simpleCache = require('../utils/simpleCache');
 
 const COLLECTION = 'diagrams';
 
+const EMPTY_XML_VALUES = new Set([
+  '<mxGraphModel/>',
+  '<root/>',
+  '<mxGraphModel><root><mxCell id="0"/><mxCell id="1" parent="0"/></mxGraphModel>',
+]);
+
 // Each collaborator's client only ever knows about the pages it has loaded
 // into its own `pages` state — a client that joined before another
 // collaborator added a new page, or hasn't switched to it yet, has no way
@@ -44,7 +50,7 @@ const saveDiagram = async (req, res) => {
       });
     }
 
-    if (xml.trim().length === 0 || xml === '<mxGraphModel/>' || xml === '<root/>') {
+    if (xml.trim().length === 0 || EMPTY_XML_VALUES.has(xml.trim())) {
       return res.status(400).json({
         success: false,
         message: 'Diagram content is empty. Please add shapes to your diagram.',
