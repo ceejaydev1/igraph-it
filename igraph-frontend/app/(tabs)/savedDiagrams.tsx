@@ -826,7 +826,22 @@ export default function SavedDiagrams() {
       );
 
       if (response.status === 401) {
-        console.error('🔴 Authentication failed after refresh/retry.');
+        // authFetch() already tried a silent refresh-and-retry internally
+        // (see that function's own comment) — a 401 that survives that
+        // means the session is genuinely dead (the refresh token itself is
+        // expired or invalid), not a transient blip. hasActiveSession()
+        // above can't catch this case ahead of time: on web it only checks
+        // the cached user object in storage, which persists independently
+        // of whether the cookie-backed session is actually still alive, so
+        // it reports "signed in" right up until a real request proves
+        // otherwise. Surfacing that as a generic in-page error instead of
+        // redirecting left the user stuck on a dead screen reading
+        // "Unable to load diagrams (HTTP 401)" instead of just being sent
+        // back to sign in, which is what a dead session should always do.
+        console.error('🔴 Authentication failed after refresh/retry — session is dead, redirecting to signin.');
+        await authService.clearTokens();
+        router.replace('/(auth)/signin');
+        return;
       }
 
       throw new Error(
