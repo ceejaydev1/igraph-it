@@ -733,10 +733,11 @@ const forgotPassword = async (req, res) => {
 
     if (!user) {
       console.log(`🔴 Password reset attempted for non-existent email: ${email}`);
-      return res.status(404).json({
-        success: false,
-        message: 'No account found with this email address.',
-        code: 'EMAIL_NOT_FOUND'
+      // Return the same generic success response as a real account, so the
+      // response can't be used to check which emails are registered.
+      return res.status(200).json({
+        success: true,
+        message: 'If an account exists with this email, a password reset code has been sent.'
       });
     }
 
