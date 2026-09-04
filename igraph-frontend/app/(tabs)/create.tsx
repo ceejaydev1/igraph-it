@@ -2550,7 +2550,6 @@ export default function CreateScreen() {
       
       if (isEmptyXml) {
         console.log('❌ Empty diagram content - no shapes added yet');
-        notify('Nothing to save', 'Add at least one shape to the canvas before saving.');
         return;
       }
 
