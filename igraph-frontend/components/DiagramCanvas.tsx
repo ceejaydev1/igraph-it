@@ -2715,25 +2715,11 @@ function realignForkJoinStubs(graph: Graph, bar: any) {
 // panel boundary).
 function fitCenterAvoidingLeftPanel(graph: Graph, leftObstruction: number, margin = 40): boolean {
   try {
-    // maxGraph registers every other built-in plugin's pluginId as its exact
-    // class name ('CellEditorHandler', 'PanningHandler', etc.) — FitPlugin is
-    // the one exception, registered as the short string 'fit' instead of
-    // 'FitPlugin' (confirmed directly in @maxgraph/core's own source). Lookups
-    // using the class-name string here always silently returned null, so this
-    // whole function's "smart" branch never actually ran — it fell straight
-    // through to the plain fitCenter() no-op path below on every call.
     const fitPlugin = graph.getPlugin('fit') as FitPlugin | null;
     const container = graph.container;
     if (!container || container.clientWidth <= 0 || container.clientHeight <= 0) return false;
-    // No plugin, nothing to size the max scale from — retry rather than
-    // guess (a missing plugin one frame after mount can still resolve).
     if (!fitPlugin) return false;
 
-    // leftObstruction === 0 (panel closed, or view-only with no rail) isn't
-    // special-cased to plain fitCenter() — that library call has no scale
-    // cap of its own (see the comment below), and the math here already
-    // degrades to an ordinary full-width center when there's nothing to
-    // avoid, so there's no need for two code paths.
     const view = graph.getView();
     const visibleWidth = container.clientWidth - leftObstruction - 2 * margin;
     const clientHeight = container.clientHeight - 2 * margin;
@@ -2744,41 +2730,35 @@ function fitCenterAvoidingLeftPanel(graph: Graph, leftObstruction: number, margi
     const width = bounds.width / originalScale;
     const height = bounds.height / originalScale;
 
-    // Capped at 1 (100%) on top of fitPlugin.maxFitScale (which defaults to
-    // 8, i.e. 800% — sized for shrinking an oversized diagram down to fit,
-    // not for a small one). Without the cap, a diagram with little content
-    // relative to the container — the common case right after adding just a
-    // shape or two — reads "fit the available space" literally and zooms
-    // in aggressively (confirmed live: a single shape opened at 800%).
-    // Real draw.io's own "Fit Page" only ever shrinks an oversized page,
-    // never inflates a small one past its actual size.
+    // Still scale down an oversized diagram to fit — this part is fine,
+    // since a diagram too big to fit needs scaling regardless of exactly
+    // which frame we measure the container on. Never scale UP past 100%.
     let newScale = Math.min(1, fitPlugin.maxFitScale ?? Infinity, visibleWidth / width, clientHeight / height);
     if (!Number.isFinite(newScale) || newScale <= 0) newScale = originalScale;
+    newScale = Number(newScale.toFixed(2));
 
-    // Same shape as fitCenter()'s own translateX/Y, but the horizontal margin
-    // is split around the VISIBLE strip (leftObstruction..containerWidth), not
-    // the full container — the diagram lands centered between the panel's
-    // right edge and the container's right edge, not centered as if the panel
-    // weren't there.
+    // ANCHOR the content's top-left corner at a fixed point (past the left
+    // panel, `margin` px in from the top) instead of CENTERING it within
+    // container.clientWidth/clientHeight. Centering made the final position
+    // depend on the container's exact measured size at the moment this ran
+    // — which could differ frame-to-frame (especially right after a hard
+    // refresh, where layout hasn't necessarily settled yet), so the same
+    // diagram could open in a visibly different spot on every reload.
+    // Anchoring only depends on leftObstruction/margin (both fixed
+    // constants) and the diagram's own saved bounds — never the container's
+    // size — so the same diagram always opens in the same place.
     const translateX = Math.floor(
-      view.translate.x +
-        (leftObstruction + (container.clientWidth - leftObstruction - width * newScale) / 2) / newScale -
-        (bounds.x ?? 0) / originalScale
+      (leftObstruction + margin) / newScale - (bounds.x ?? 0) / originalScale
     );
     const translateY = Math.floor(
-      view.translate.y + (container.clientHeight - height * newScale) / (2 * newScale) - (bounds.y ?? 0) / originalScale
+      margin / newScale - (bounds.y ?? 0) / originalScale
     );
 
-    newScale = Number(newScale.toFixed(2));
     view.scaleAndTranslate(newScale, translateX, translateY);
     return true;
   } catch (e) {
-    // Never let a centering bug leave the diagram invisible — falling back
-    // to the model import already done above (whatever position/scale it
-    // happened to land at) is strictly better than throwing here and
-    // aborting mid-load.
     console.warn('fitCenterAvoidingLeftPanel threw, leaving default view:', e);
-    return true; // don't retry — a genuine error won't resolve itself on a later frame
+    return true;
   }
 }
 

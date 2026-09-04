@@ -614,6 +614,13 @@ export default function CreateScreen() {
   const [renamePageId, setRenamePageId] = useState<string | null>(null);
   const [renamePageName, setRenamePageName] = useState('');
 
+  const pagesRef = useRef<Page[]>(pages);
+  const activePageIdRef = useRef<string>(activePageId);
+  const activeUmlTypeRef = useRef<string>(activeUmlType);
+  useEffect(() => { pagesRef.current = pages; }, [pages]);
+  useEffect(() => { activePageIdRef.current = activePageId; }, [activePageId]);
+  useEffect(() => { activeUmlTypeRef.current = activeUmlType; }, [activeUmlType]);
+
   // ─── Page XML cache ─────────────────────────────────────────────────────────
   const pageXmlCache = useRef<Map<string, string>>(new Map());
 
@@ -766,10 +773,7 @@ export default function CreateScreen() {
   // which only re-subscribes when activeDiagramId/isGraphReady change — a
   // plain closure over activePageId would go stale the moment the user
   // switched pages without also rejoining the room.
-  const activePageIdRef = useRef(activePageId);
-  useEffect(() => {
-    activePageIdRef.current = activePageId;
-  }, [activePageId]);
+
 
   // Patches don't self-heal a missed message the way full-page snapshots
   // used to (any later full snapshot from anyone would silently repair a
@@ -1226,9 +1230,9 @@ export default function CreateScreen() {
     try {
       const content = {
         name: diagramNameRef.current,
-        pages: pages.map(p => ({ id: p.id, name: p.name, xml: pageXmlCache.current.get(p.id) || '' })),
-        activePageId,
-        type: activeUmlType,
+        pages: pagesRef.current.map(p => ({ id: p.id, name: p.name, xml: pageXmlCache.current.get(p.id) || '' })),
+        activePageId: activePageIdRef.current,
+        type: activeUmlTypeRef.current,
       };
       await AsyncStorage.setItem(draftKey(uid, id), JSON.stringify(content));
       await AsyncStorage.setItem(activePointerKey(uid), JSON.stringify({ diagramId: id }));
