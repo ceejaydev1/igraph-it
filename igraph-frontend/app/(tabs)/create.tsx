@@ -1311,15 +1311,28 @@ export default function CreateScreen() {
       const xmlToRestore = pageXmlCache.current.get(activePageId) || diagramXmlRef.current || '';
       console.log('🔍 remount restore — cacheHas:', pageXmlCache.current.has(activePageId),
         'xmlLen:', xmlToRestore.length, 'graphReady:', !!(diagramCanvasRef.current));
-      isHydratingRef.current = true;
-      diagramCanvasRef.current?.loadXml(xmlToRestore);
-      isHydratingRef.current = false;
-      // loadXml() imports the model but doesn't reliably repaint on its own.
-      diagramCanvasRef.current?.refresh();
-      hasHydratedRef.current = true;
-      loadedDiagramIdRef.current = diagramId || currentDiagramIdRef.current || null;
-      loadedOpenedAtRef.current = openedAt || null;
-      return;
+
+      // Guard: only trust this shortcut when there's real content to restore.
+      // An empty cache entry (e.g. `pages` got reset to a fresh blank page —
+      // which is what actually happens across sign-out/sign-in here, despite
+      // this screen supposedly unmounting then) means there's nothing to
+      // restore. Without this check, hasHydratedRef gets latched true on a
+      // blank canvas, permanently skipping the real hydrate() below — which
+      // is exactly what left Create empty after signing back in.
+      if (xmlToRestore) {
+        isHydratingRef.current = true;
+        diagramCanvasRef.current?.loadXml(xmlToRestore);
+        isHydratingRef.current = false;
+        diagramCanvasRef.current?.refresh();
+        hasHydratedRef.current = true;
+        loadedDiagramIdRef.current = diagramId || currentDiagramIdRef.current || null;
+        loadedOpenedAtRef.current = openedAt || null;
+        return;
+      }
+
+      // Nothing real cached — don't let the stale "already hydrated" flag
+      // block the real fetch/local-draft hydrate logic below.
+      hasHydratedRef.current = false;
     }
 
     const hydrate = async () => {
@@ -1416,6 +1429,7 @@ export default function CreateScreen() {
 
       if (!diagramId && !hasHydratedRef.current) {
         let uid: string | null = null;
+        let restoredLocally = false;
         try {
           uid = await authService.getCurrentUserId();
           if (uid) {
@@ -1428,16 +1442,45 @@ export default function CreateScreen() {
               setHasPendingAccessRequest(false);
               setCurrentDiagramId(pointer.diagramId || null);
               loadedDiagramIdRef.current = pointer.diagramId || null;
+              restoredLocally = true;
             }
           }
         } catch (e) {
           console.warn('Could not restore local draft:', e);
-        } finally {
-          // Only latch when we actually had a uid. If auth wasn't ready yet
-          // (uid null right after sign-in), leave the gate open so the retry
-          // below can run once the id resolves.
-          if (!cancelled && uid) hasHydratedRef.current = true;
         }
+
+        // No local draft on this device (fresh browser/session, or it was
+        // cleared) — fall back to the user's most recently saved diagram
+        // from the backend instead of leaving the canvas blank.
+        // getSavedDiagrams already returns diagrams sorted newest-first.
+        if (!restoredLocally && uid && !cancelled) {
+          try {
+            const API_URL = API_BASE_URL;
+            const response = await authService.authFetch(`${API_URL}/api/diagrams/user`);
+            const result = await response.json();
+            if (!cancelled && result.success && Array.isArray(result.data) && result.data.length > 0) {
+              const mostRecent = result.data[0];
+              const detailResponse = await authService.authFetch(`${API_URL}/api/diagrams/${mostRecent.id}`);
+              const detailResult = await detailResponse.json();
+              if (!cancelled && detailResult.success && detailResult.data) {
+                const loaded = applyLoadedContent(detailResult.data);
+                setMyAccessLevel(detailResult.data.accessLevel || 'owner');
+                setHasPendingAccessRequest(!!detailResult.data.hasPendingAccessRequest);
+                setCurrentDiagramId(mostRecent.id);
+                loadedDiagramIdRef.current = mostRecent.id;
+                await AsyncStorage.setItem(draftKey(uid, mostRecent.id), JSON.stringify(loaded));
+                await AsyncStorage.setItem(activePointerKey(uid), JSON.stringify({ diagramId: mostRecent.id }));
+              }
+            }
+          } catch (e) {
+            console.warn('Could not fall back to most recent saved diagram:', e);
+          }
+        }
+
+        // Only latch when we actually had a uid. If auth wasn't ready yet
+        // (uid null right after sign-in), leave the gate open so the retry
+        // below can run once the id resolves.
+        if (!cancelled && uid) hasHydratedRef.current = true;
       }
     };
 
@@ -2503,6 +2546,7 @@ export default function CreateScreen() {
       
       if (isEmptyXml) {
         console.log('❌ Empty diagram content - no shapes added yet');
+        notify('Nothing to save', 'Add at least one shape to the canvas before saving.');
         return;
       }
 
