@@ -778,76 +778,126 @@ export default function SavedDiagrams() {
     setToast({ message, type });
   };
 
-  const loadSavedDiagrams = async () => {
-    try {
-      setError(null);
-      const signedIn = await authService.hasActiveSession();
+ const loadSavedDiagrams = async () => {
+  try {
+    setError(null);
 
-      if (!signedIn) {
-        console.log('🔴 No active session, redirecting to signin');
-        router.replace('/(auth)/signin');
-        return;
-      }
+    const signedIn = await authService.hasActiveSession();
 
-      // No `|| 'https://...'` fallback here on purpose: API_BASE_URL is '' on
-      // a Vercel web deployment (same-origin, proxied through vercel.json —
-      // see that file's own comment), and '' is falsy, so a fallback here
-      // would silently send this request straight back to the cross-site
-      // URL the proxy exists to avoid.
-      const API_URL = API_BASE_URL;
-      console.log(`📋 Fetching saved diagrams from: ${API_URL}/api/diagrams/user`);
-
-      const response = await authService.authFetch(`${API_URL}/api/diagrams/user`, {
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      });
-
-      console.log(`📥 Response status: ${response.status}`);
-
-      // A still-401 after authFetch's own 401->refresh->retry means this one
-      // request couldn't get a fresh token right now — it does NOT mean the
-      // session should be torn down. Only the user explicitly clicking Sign
-      // Out ever does that; this just surfaces as a load failure (with the
-      // cached list, if any, left in place) so the next pull-to-refresh or
-      // screen revisit can simply try again.
-      if (response.status === 401) {
-        console.log('🔴 Diagram list request still 401 after retry — showing load error, not signing out');
-        if (!authService.getCachedDiagrams()) {
-          setSavedDiagrams([]);
-        }
-        setError('Could not load your diagrams right now. Please try again.');
-        return;
-      }
-
-      const result = await response.json();
-      console.log(`📥 Response data:`, result);
-
-      if (result.success && result.data) {
-        console.log(`✅ Found ${result.data.length} saved diagrams`);
-        authService.setCachedDiagrams(result.data);
-        setSavedDiagrams(result.data);
-      } else {
-        console.warn(`⚠️ No diagrams found or API error:`, result.message);
-        // Don't blank out an already-shown (cached) list over a transient
-        // API error — only clear it if there was never anything to show.
-        if (!authService.getCachedDiagrams()) {
-          setSavedDiagrams([]);
-        }
-        if (result.message) {
-          setError(result.message);
-        }
-      }
-    } catch (error: any) {
-      console.error('❌ Failed to load diagrams:', error);
-      setError(error.message || 'Failed to load saved diagrams');
-      if (!authService.getCachedDiagrams()) {
-        setSavedDiagrams([]);
-      }
-    } finally {
-      setLoading(false);
+    if (!signedIn) {
+      console.log('🔴 No active session, redirecting to signin');
+      router.replace('/(auth)/signin');
+      return;
     }
-  };
+
+    const API_URL = API_BASE_URL;
+    const url = `${API_URL}/api/diagrams/user`;
+
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    console.log('📋 Loading saved diagrams');
+    console.log('🌐 URL:', url);
+    console.log('🌐 API_BASE_URL:', API_BASE_URL);
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+
+    const response = await authService.authFetch(url, {
+      method: 'GET',
+      headers: {
+        Accept: 'application/json',
+        'Content-Type': 'application/json',
+      },
+    });
+
+    console.log('📥 Status:', response.status);
+    console.log('📥 OK:', response.ok);
+    console.log(
+      '📥 Content-Type:',
+      response.headers.get('content-type')
+    );
+
+    // Read the body as text FIRST.
+    // This lets us see exactly what the server/proxy returned.
+    const rawResponse = await response.text();
+
+    console.log('📥 Raw response:', rawResponse);
+
+    if (!response.ok) {
+      console.error(
+        `❌ GET /api/diagrams/user failed with HTTP ${response.status}`
+      );
+
+      if (response.status === 401) {
+        console.error('🔴 Authentication failed after refresh/retry.');
+      }
+
+      throw new Error(
+        `Unable to load diagrams (HTTP ${response.status})`
+      );
+    }
+
+    if (!rawResponse || !rawResponse.trim()) {
+      console.error('❌ Server returned an empty response body.');
+      throw new Error('Server returned an empty response.');
+    }
+
+    let result;
+
+    try {
+      result = JSON.parse(rawResponse);
+    } catch (parseError) {
+      console.error('❌ Response is not valid JSON:', parseError);
+      console.error('❌ Actual response:', rawResponse);
+
+      throw new Error('Server returned an invalid response.');
+    }
+
+    console.log('📦 Parsed response:', result);
+
+    if (result.success === true && Array.isArray(result.data)) {
+      console.log(
+        `✅ Successfully loaded ${result.data.length} saved diagrams`
+      );
+
+      authService.setCachedDiagrams(result.data);
+      setSavedDiagrams(result.data);
+      setError(null);
+
+      return;
+    }
+
+    console.warn('⚠️ API returned an unsuccessful response:', result);
+
+    if (Array.isArray(result.data)) {
+      authService.setCachedDiagrams(result.data);
+      setSavedDiagrams(result.data);
+    }
+
+    throw new Error(
+      result.message || 'Could not load your diagrams right now.'
+    );
+  } catch (error: any) {
+    console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    console.error('❌ FAILED TO LOAD SAVED DIAGRAMS');
+    console.error('❌ Error:', error);
+    console.error('❌ Message:', error?.message);
+    console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+
+    // Keep an already-loaded/cached list visible.
+    const cached = authService.getCachedDiagrams();
+
+    if (cached && Array.isArray(cached)) {
+      setSavedDiagrams(cached);
+    } else {
+      setSavedDiagrams([]);
+    }
+
+    setError(
+      error?.message ||
+        'Could not load your diagrams right now. Please try again.'
+    );
+  } finally {
+    setLoading(false);
+  }
+};
 
   // ─── ✅ DELETE DIAGRAM (custom modal instead of Alert.alert) ──────────────
 
