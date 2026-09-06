@@ -125,6 +125,11 @@ function attachCollabSocket(httpServer, corsOriginFn) {
 
       socket.data.userId = decoded.uid;
       socket.data.userName = user.full_name || 'Someone';
+      // Carried alongside userId so presence/cellSelect broadcasts can send
+      // email too — needed so the live edit-highlight color can match
+      // getAvatarColor(email), the same email-based hash userAccount.tsx
+      // and ShareModal.tsx already use, instead of only ever having uid.
+      socket.data.userEmail = user.email || '';
       next();
     } catch (err) {
       next(new Error('unauthorized'));
@@ -152,7 +157,7 @@ function attachCollabSocket(httpServer, corsOriginFn) {
       for (const socketId of room) {
         const s = io.sockets.sockets.get(socketId);
         if (s) {
-          viewers.push({ userId: s.data.userId, userName: s.data.userName, permission: s.data.permission });
+          viewers.push({ userId: s.data.userId, userName: s.data.userName, userEmail: s.data.userEmail, permission: s.data.permission });
         }
       }
     }
@@ -268,6 +273,7 @@ function attachCollabSocket(httpServer, corsOriginFn) {
       socket.to(roomName(diagramId)).emit('cell-select', {
         cellId,
         fromUserId: socket.data.userId,
+        fromUserEmail: socket.data.userEmail,
       });
     });
 
@@ -311,7 +317,7 @@ const notifyPermissionChange = (diagramId, userId, permission) => {
     const viewers = [];
     for (const socketId of room) {
       const s = ioInstance.sockets.sockets.get(socketId);
-      if (s) viewers.push({ userId: s.data.userId, userName: s.data.userName, permission: s.data.permission });
+      if (s) viewers.push({ userId: s.data.userId, userName: s.data.userName, userEmail: s.data.userEmail, permission: s.data.permission });
     }
     ioInstance.to(roomName(diagramId)).emit('presence', viewers);
   }
