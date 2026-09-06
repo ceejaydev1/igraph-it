@@ -2,6 +2,7 @@ const { db } = require('../config/firebase');
 const { v4: uuidv4 } = require('uuid');
 const { getAccessLevel, canView, canEdit, canRename } = require('../utils/diagramAccess');
 const simpleCache = require('../utils/simpleCache');
+const userModel = require('../models/userModel');
 
 const COLLECTION = 'diagrams';
 
@@ -426,10 +427,49 @@ const deleteDiagram = async (req, res) => {
   }
 };
 
+// Cross-device active-diagram pointer (see userModel.setActiveDiagram's own
+// comment). Deliberately not gated by canView/canEdit on the diagramId
+// itself — this only records "the user was last looking at this id", it
+// doesn't grant access; getDiagram's own access check is still what decides
+// whether a later fetch of that id actually succeeds.
+const setActiveDiagram = async (req, res) => {
+  try {
+    const userId = req.user.uid;
+    const { diagramId } = req.body;
+    await userModel.setActiveDiagram(userId, diagramId || null);
+    res.status(200).json({ success: true });
+  } catch (error) {
+    console.error('❌ Set active diagram error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to update active diagram.',
+    });
+  }
+};
+
+const getActiveDiagram = async (req, res) => {
+  try {
+    const userId = req.user.uid;
+    const lastActiveDiagramId = await userModel.getActiveDiagram(userId);
+    res.status(200).json({
+      success: true,
+      data: { lastActiveDiagramId },
+    });
+  } catch (error) {
+    console.error('❌ Get active diagram error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch active diagram.',
+    });
+  }
+};
+
 module.exports = {
   saveDiagram,
   getSavedDiagrams,
   getDiagram,
   renameDiagram,
   deleteDiagram,
+  setActiveDiagram,
+  getActiveDiagram,
 };

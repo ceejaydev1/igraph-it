@@ -50,11 +50,27 @@ const updatePasswordHash = async (userId, newPasswordHash) => {
   await updateUser(userId, { password_hash: newPasswordHash });
 };
 
+// Cross-device "what was I last working on" pointer — separate from the
+// frontend's own AsyncStorage/localStorage pointer, which never leaves the
+// browser it was written on. Storing this on the user doc instead means any
+// device signing into the same account can ask "what should /create resume"
+// and get a real answer, not just a device-local guess.
+const setActiveDiagram = async (userId, diagramId) => {
+  await updateUser(userId, { last_active_diagram_id: diagramId || null });
+};
+
+const getActiveDiagram = async (userId) => {
+  const user = await getUserById(userId);
+  return user?.last_active_diagram_id || null;
+};
+
 module.exports = {
   createUser,
   getUserById,
   getUserByEmail,
   updateUser,
   markUserVerified,
-  updatePasswordHash
+  updatePasswordHash,
+  setActiveDiagram,
+  getActiveDiagram
 };

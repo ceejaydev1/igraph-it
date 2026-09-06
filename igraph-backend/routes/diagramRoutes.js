@@ -9,6 +9,8 @@ const {
   getDiagram,
   renameDiagram,
   deleteDiagram,
+  setActiveDiagram,
+  getActiveDiagram,
 } = require('../controllers/diagramController');
 const {
   getShareSettings,
@@ -63,6 +65,12 @@ const saveLimiter = rateLimit({
 router.post('/save', saveLimiter, saveDiagram);
 
 router.get('/user', getSavedDiagrams);
+
+// Two path segments ('/user/active-diagram'), so this never collides with
+// the single-segment '/:id' routes below regardless of registration order —
+// still placed up here with '/user' for readability, not because it has to be.
+router.patch('/user/active-diagram', setActiveDiagram);
+router.get('/user/active-diagram', getActiveDiagram);
 
 // Keyed by token rather than diagram id, so this has to be registered ahead
 // of the generic '/:id' routes below to avoid Express matching "share-links"
