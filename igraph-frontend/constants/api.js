@@ -1,33 +1,22 @@
 const getAbsoluteApiUrl = () => {
-  // Check environment variable first
+  // Explicit environment variable always wins — set this in your .env when
+  // you genuinely want to point at a local backend for same-machine testing.
   if (process.env.EXPO_PUBLIC_API_URL) {
     return process.env.EXPO_PUBLIC_API_URL;
   }
 
-  // Check if running in production
-  if (process.env.NODE_ENV === 'production') {
-    return 'https://igraph-backend.onrender.com';
-  }
-
-  // Development - try to detect the best URL
-  if (typeof window !== 'undefined') {
-    // Check if we're on a mobile device (Expo Go)
-    const isMobile = /android|iphone|ipad|ipod|blackberry|windows phone/i.test(
-      navigator.userAgent
-    );
-
-    if (isMobile) {
-      // On mobile, we need the network IP
-      // Try to get it from environment or use localhost
-      return process.env.EXPO_PUBLIC_API_URL || 'http://192.168.1.100:5000';
-    }
-
-    // On desktop web
-    return 'http://localhost:5000';
-  }
-
-  // Fallback
-  return 'http://localhost:5000';
+  // No override supplied — default to the real deployed backend instead of
+  // localhost. Testing cross-device collaboration (two different physical
+  // machines/browsers) requires a URL every device can actually reach;
+  // "localhost" resolves to each device's own machine, not your dev
+  // machine, which is what silently broke the WebSocket connection (and
+  // therefore all live collaboration) on any device other than the one
+  // actually running the backend. REST calls kept working because
+  // API_BASE_URL (the separate, relative export below) doesn't share this
+  // fallback in production. If you need genuine same-machine local dev
+  // against a locally-running backend, set EXPO_PUBLIC_API_URL explicitly
+  // instead of relying on this fallback.
+  return 'https://igraph-backend.onrender.com';
 };
 
 // Always the backend's own real origin, regardless of platform/deployment —
