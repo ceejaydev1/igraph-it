@@ -1458,13 +1458,21 @@ export default function CreateScreen() {
         // from the backend instead of leaving the canvas blank.
         // getSavedDiagrams already returns diagrams sorted newest-first.
         if (!restoredLocally && uid && !cancelled) {
+          console.log('🌐 FALLBACK: no local draft found, fetching most recent diagram from server for uid:', uid);
           try {
             const API_URL = API_BASE_URL;
             const response = await authService.authFetch(`${API_URL}/api/diagrams/user`);
+            console.log('🌐 FALLBACK: /api/diagrams/user status:', response.status);
             const result = await response.json();
+            console.log('🌐 FALLBACK: /api/diagrams/user result:', {
+              success: result.success,
+              count: Array.isArray(result.data) ? result.data.length : 'N/A',
+            });
             if (!cancelled && result.success && Array.isArray(result.data) && result.data.length > 0) {
               const mostRecent = result.data[0];
+              console.log('🌐 FALLBACK: most recent diagram id:', mostRecent.id, 'name:', mostRecent.name);
               const detailResponse = await authService.authFetch(`${API_URL}/api/diagrams/${mostRecent.id}`);
+              console.log('🌐 FALLBACK: diagram detail status:', detailResponse.status);
               const detailResult = await detailResponse.json();
               if (!cancelled && detailResult.success && detailResult.data) {
                 const loaded = applyLoadedContent(detailResult.data);
@@ -1474,10 +1482,15 @@ export default function CreateScreen() {
                 loadedDiagramIdRef.current = mostRecent.id;
                 await AsyncStorage.setItem(draftKey(uid, mostRecent.id), JSON.stringify(loaded));
                 await AsyncStorage.setItem(activePointerKey(uid), JSON.stringify({ diagramId: mostRecent.id }));
+                console.log('✅ FALLBACK SUCCESS: loaded diagram', mostRecent.id, 'into canvas and cached locally');
+              } else {
+                console.warn('❌ FALLBACK FAILED: diagram detail fetch returned no usable data', detailResult);
               }
+            } else if (!cancelled) {
+              console.log('ℹ️ FALLBACK: no saved diagrams exist for this account, or request unsuccessful');
             }
           } catch (e) {
-            console.warn('Could not fall back to most recent saved diagram:', e);
+            console.error('❌ FALLBACK ERROR: could not fall back to most recent saved diagram:', e);
           }
         }
 
