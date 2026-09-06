@@ -5372,10 +5372,7 @@ const WebCanvas = forwardRef<DiagramCanvasHandle, DiagramCanvasProps>(({ onReady
       const styleElement = document.createElement('style');
       styleElement.id = 'igraph-force-blue';
       styleElement.textContent = `
-        .mxCellHighlight {
-          stroke: ${BLUE} !important;
-          fill: rgba(76, 111, 255, 0.08) !important;
-        }
+
         .mxRubberband {
           position: absolute !important;
           overflow: hidden !important;

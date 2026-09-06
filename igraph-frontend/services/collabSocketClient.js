@@ -82,8 +82,13 @@ const getSocket = () => {
   // Which shape (if any — null means deselected/left) another collaborator
   // currently has selected, so their live cursor can be shown as a colored
   // highlight around it. See collabSocket.js's cell-select relay.
-  socket.on('cell-select', ({ cellId, fromUserId }) => {
-    if (cellSelectHandler) cellSelectHandler(cellId, fromUserId);
+  // fromUserEmail rides alongside fromUserId so the highlight can be colored
+  // by getAvatarColor(email) — the same email-based color every avatar in
+  // the app already uses (ShareModal, the account page) — instead of a
+  // color keyed on the uid, which would render as a different, mismatched
+  // color for the same person.
+  socket.on('cell-select', ({ cellId, fromUserId, fromUserEmail }) => {
+    if (cellSelectHandler) cellSelectHandler(cellId, fromUserId, fromUserEmail);
   });
 
   // Pushed by the server the moment the owner changes this user's access

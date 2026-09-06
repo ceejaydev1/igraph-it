@@ -52,13 +52,21 @@ const BackIcon = () => (
   </Svg>
 );
 
-// Matches the same email-hashed color + white-initials look used everywhere
+// Matches the same userId-hashed color + white-initials look used everywhere
 // else a person's avatar shows (Navbar.tsx, userAccount.tsx) — those two
 // still duplicate it between themselves, but this copy is exported so the
 // Create Diagram screen's presence indicator/live-selection highlight
 // (app/(tabs)/create.tsx) computes the exact same color per userId as this
 // file's own Avatar does, instead of a 4th independent copy drifting out of
 // sync with it.
+//
+// Hashed on userId (not email) everywhere in this file — create.tsx's live
+// collaboration socket layer only ever has userId to work with (no email is
+// threaded through collabSocket.js's presence/cell-select payloads), so
+// hashing on userId here too is what keeps a person's avatar color and
+// their live edit-highlight color the same, instead of the two colors
+// potentially diverging because one hashed an email string and the other
+// hashed a uid string for the same person.
 const AVATAR_COLORS = ['#4c6fff', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#14b8a6', '#f97316', '#6366f1', '#84cc16'];
 
 export const getAvatarColor = (email: string): string => {
@@ -73,9 +81,11 @@ export const getAvatarColor = (email: string): string => {
 // Exported so the Create Diagram toolbar (app/(tabs)/create.tsx) can reuse
 // the exact same avatar look for its real-time "who's here" presence
 // indicator instead of a second, subtly-different implementation. `email`
-// is only ever used here to hash out a stable color, never displayed — the
-// presence list has no email, so that caller passes each viewer's userId
-// instead, which serves the same "stable per-person, no config needed" role.
+// is only ever used here to hash out a stable color, never displayed —
+// every caller in this file now passes each person's userId (not their
+// email) so the hash matches create.tsx's live-collaboration highlight
+// color exactly; the prop is still named `email` for now, but nothing
+// about its value is actually an email address anymore.
 export const Avatar = ({ name, email, size = 32 }: { name: string; email: string; size?: number }) => {
   const initials = (name || '?')
     .split(' ')
@@ -357,7 +367,7 @@ export default function ShareModal({ visible, onClose, diagramId, diagramName }:
                   <Text style={styles.sectionLabel}>Access requests</Text>
                   {settings.accessRequests.map((r) => (
                     <View key={r.userId} style={styles.requestRow}>
-                      <Avatar name={r.fullName} email={r.email} size={28} />
+                      <Avatar name={r.fullName} email={r.userId} size={28} />
                       <View style={styles.manageRowInfo}>
                         <Text style={styles.manageRowName} numberOfLines={1}>{r.fullName}</Text>
                         {!!r.message && (
@@ -394,9 +404,9 @@ export default function ShareModal({ visible, onClose, diagramId, diagramName }:
                   )}
                 </View>
                 <View style={styles.avatarRow}>
-                  <Avatar name={settings.owner.fullName} email={settings.owner.email} />
+                  <Avatar name={settings.owner.fullName} email={settings.owner.userId} />
                   {settings.collaborators.map((c) => (
-                    <Avatar key={c.userId} name={c.fullName} email={c.email} />
+                    <Avatar key={c.userId} name={c.fullName} email={c.userId} />
                   ))}
                 </View>
               </View>
@@ -459,7 +469,7 @@ export default function ShareModal({ visible, onClose, diagramId, diagramName }:
               </View>
 
               <View style={styles.manageRow}>
-                <Avatar name={settings.owner.fullName} email={settings.owner.email} size={28} />
+                <Avatar name={settings.owner.fullName} email={settings.owner.userId} size={28} />
                 <View style={styles.manageRowInfo}>
                   <Text style={styles.manageRowName} numberOfLines={1}>
                     {settings.owner.fullName}
@@ -474,7 +484,7 @@ export default function ShareModal({ visible, onClose, diagramId, diagramName }:
                   key={c.userId}
                   style={[styles.manageRow, { zIndex: settings.collaborators.length - index }]}
                 >
-                  <Avatar name={c.fullName} email={c.email} size={28} />
+                  <Avatar name={c.fullName} email={c.userId} size={28} />
                   <View style={styles.manageRowInfo}>
                     <Text style={styles.manageRowName} numberOfLines={1}>
                       {c.fullName}

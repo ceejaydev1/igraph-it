@@ -267,7 +267,7 @@ const PresenceStack = ({
   viewers,
   size = 28,
 }: {
-  viewers: { userId: string; userName: string; permission: string }[];
+  viewers: { userId: string; userName: string; userEmail?: string; permission: string }[];
   size?: number;
 }) => {
   const shown = viewers.slice(0, PRESENCE_STACK_MAX);
@@ -291,7 +291,7 @@ const PresenceStack = ({
             i > 0 && { marginLeft: overlap },
           ]}
         >
-          <Avatar name={v.userName} email={v.userId} size={size} />
+          <Avatar name={v.userName} email={v.userEmail || v.userId} size={size} />
         </View>
       ))}
       {overflow > 0 && (
@@ -316,7 +316,7 @@ const PresenceStack = ({
 const PresenceToastBanner = ({
   toast,
 }: {
-  toast: { people: { userId: string; userName: string; permission: string }[]; action: 'joined' | 'left' };
+  toast: { people: { userId: string; userName: string; userEmail?: string; permission: string }[]; action: 'joined' | 'left' };
 }) => {
   const { people, action } = toast;
   const shown = people.slice(0, 3);
@@ -343,7 +343,7 @@ const PresenceToastBanner = ({
               i > 0 && { marginLeft: -8 },
             ]}
           >
-            <Avatar name={p.userName} email={p.userId} size={20} />
+            <Avatar name={p.userName} email={p.userEmail || p.userId} size={20} />
           </View>
         ))}
       </View>
@@ -658,14 +658,14 @@ export default function CreateScreen() {
   }, []);
   // Who else currently has this diagram open — driven by the collab-socket
   // 'presence' event (see the join effect further down).
-  const [collabViewers, setCollabViewers] = useState<{ userId: string; userName: string; permission: string }[]>([]);
+  const [collabViewers, setCollabViewers] = useState<{ userId: string; userName: string; userEmail?: string; permission: string }[]>([]);
   // Mirrors collabViewers for handleSaveDiagram/attemptBackgroundSync, which
   // are useCallback-memoized on other deps and would otherwise close over a
   // stale (usually empty, pre-join) collabViewers from their first render.
   // Read by the 404-retry guard below: silently forking onto a brand-new
   // diagram id is fine for a solo stale-local-id case, but actively harmful
   // while other people are live-collaborating in the same room (see there).
-  const collabViewersRef = useRef<{ userId: string; userName: string; permission: string }[]>([]);
+  const collabViewersRef = useRef<{ userId: string; userName: string; userEmail?: string; permission: string }[]>([]);
   useEffect(() => {
     collabViewersRef.current = collabViewers;
   }, [collabViewers]);
@@ -884,7 +884,7 @@ export default function CreateScreen() {
     // "joining" — hasSeenInitialPresence skips announcing that one so
     // opening a diagram doesn't immediately claim everyone already there
     // just joined.
-    const knownViewers = new Map<string, { userName: string; permission: string }>();
+    const knownViewers = new Map<string, { userName: string; userEmail?: string; permission: string }>();
     let hasSeenInitialPresence = false;
 
     const showPresenceToast = (
@@ -933,7 +933,7 @@ export default function CreateScreen() {
           if (result.driftDetected) resyncFromServer();
         }
       },
-      onPresence: (viewers: { userId: string; userName: string; permission: string }[]) => {
+      onPresence: (viewers: { userId: string; userName: string; userEmail?: string; permission: string }[]) => {
         if (cancelled) return;
         // Excludes this same user's own socket — the presence roster is
         // meant to answer "who ELSE is here right now", the same way no
@@ -963,7 +963,7 @@ export default function CreateScreen() {
         }
 
         knownViewers.clear();
-        others.forEach((v) => knownViewers.set(v.userId, { userName: v.userName, permission: v.permission }));
+        others.forEach((v) => knownViewers.set(v.userId, { userName: v.userName, userEmail: v.userEmail, permission: v.permission }));
         setCollabViewers(others);
       },
       // Pushed the instant the owner changes this account's access level (or
@@ -975,11 +975,13 @@ export default function CreateScreen() {
       },
       // Live "who's pointing at what" — a remote collaborator's own
       // selection, relayed by the server (see collabSocket.js's cell-select
-      // handler). Colored by that same person's userId-hashed color, so it
-      // visually matches their avatar in the toolbar/toast.
-      onCellSelect: (cellId: string | null, fromUserId: string) => {
+      // handler). Colored by that same person's EMAIL-hashed color (not
+      // userId) so it visually matches their avatar everywhere else in the
+      // app (ShareModal, the account page) — the socket layer now carries
+      // fromUserEmail alongside fromUserId specifically for this.
+      onCellSelect: (cellId: string | null, fromUserId: string, fromUserEmail?: string) => {
         if (cancelled || !fromUserId || fromUserId === myUserId) return;
-        diagramCanvasRef.current?.setRemoteSelection(fromUserId, cellId, getAvatarColor(fromUserId));
+        diagramCanvasRef.current?.setRemoteSelection(fromUserId, cellId, getAvatarColor(fromUserEmail || fromUserId));
       },
       // Fired on every socket reconnect after the first (see
       // collabSocketClient's hasConnectedOnce gating) — patches don't
