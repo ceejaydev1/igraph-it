@@ -50,7 +50,10 @@ export const API_BASE_URL_ABSOLUTE = getAbsoluteApiUrl();
 // this only kicks in once actually running on the real *.vercel.app host —
 // everywhere else (localhost, native) keeps using the real absolute URL,
 // same as before.
-const API_BASE_URL = getAbsoluteApiUrl();
+const API_BASE_URL =
+  typeof window !== 'undefined' && process.env.NODE_ENV === 'production'
+    ? ''
+    : getAbsoluteApiUrl();
 
 // Log configuration
 console.log('🔗 API Configuration:');
