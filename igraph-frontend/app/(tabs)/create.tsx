@@ -1436,7 +1436,7 @@ export default function CreateScreen() {
         return;
       }
 
-      if (!diagramId && !hasHydratedRef.current) {
+      if (!diagramId && !shareToken && !hasHydratedRef.current) {
         let uid: string | null = null;
         let restoredLocally = false;
         try {
