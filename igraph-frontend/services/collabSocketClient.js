@@ -14,7 +14,12 @@ import { Platform } from 'react-native';
 // not an oversight; proxying WebSockets through Vercel reliably would be a
 // separate, larger piece of work.
 import { API_BASE_URL_ABSOLUTE } from '../constants/api';
-import { getAccessToken } from './authService';
+// Default export `api` is the same axios instance used by
+// diagramShareService.js etc. — it goes through Vercel's same-origin /api/*
+// proxy, which is why it can carry the httpOnly access_token cookie when a
+// raw WebSocket to the backend's own domain can't (see the import comment
+// below).
+import api, { getAccessToken } from './authService';
 
 let socket = null;
 let joinedDiagramId = null;
@@ -43,7 +48,24 @@ const getSocket = () => {
     // native (15-minute access tokens, long-lived socket) would eventually
     // start failing the handshake after the first refresh.
     auth: (cb) => {
-      if (Platform.OS === 'web') return cb({});
+      if (Platform.OS === 'web') {
+        // The httpOnly access_token cookie never reaches this socket (it's
+        // scoped to the frontend's own domain, and this connects straight
+        // to the backend's domain instead — see the API_BASE_URL_ABSOLUTE
+        // import comment above). So on web, ask the REST backend — which
+        // *does* get the cookie, via Vercel's same-origin proxy — for a
+        // short-lived one-time ticket, and hand that to the handshake
+        // instead. Runs on every (re)connect attempt so a long-lived
+        // session always hands over a fresh, unexpired ticket rather than
+        // one cached from the first connect.
+        api.get('/auth/socket-ticket')
+          .then((response) => cb({ ticket: response.data.ticket }))
+          .catch((err) => {
+            console.error('🔴 Could not fetch socket ticket:', err.message);
+            cb({});
+          });
+        return;
+      }
       getAccessToken().then((token) => cb({ token }));
     },
     transports: ['websocket', 'polling'],
