@@ -152,16 +152,27 @@ function attachCollabSocket(httpServer, corsOriginFn) {
 
   const broadcastPresence = (diagramId) => {
     const room = io.sockets.adapter.rooms.get(roomName(diagramId));
-    const viewers = [];
+    // Deduped by userId, not one entry per socket — the same account open
+    // in two tabs (or a reconnect that hasn't cleaned up its old socket
+    // yet) otherwise showed up as two overlapping "who's here" avatars for
+    // one real person, even though only one socket's edits actually count
+    // toward this room (see roomUserIds' own by-userId Set, used for the
+    // collaborator cap, which never had this bug).
+    const viewersByUserId = new Map();
     if (room) {
       for (const socketId of room) {
         const s = io.sockets.sockets.get(socketId);
-        if (s) {
-          viewers.push({ userId: s.data.userId, userName: s.data.userName, userEmail: s.data.userEmail, permission: s.data.permission });
+        if (s && s.data.userId && !viewersByUserId.has(s.data.userId)) {
+          viewersByUserId.set(s.data.userId, {
+            userId: s.data.userId,
+            userName: s.data.userName,
+            userEmail: s.data.userEmail,
+            permission: s.data.permission,
+          });
         }
       }
     }
-    io.to(roomName(diagramId)).emit('presence', viewers);
+    io.to(roomName(diagramId)).emit('presence', Array.from(viewersByUserId.values()));
   };
 
   io.on('connection', (socket) => {
@@ -314,12 +325,19 @@ const notifyPermissionChange = (diagramId, userId, permission) => {
   // otherwise stay stale until someone else's join/leave happens to
   // re-broadcast it.
   if (changed) {
-    const viewers = [];
+    const viewersByUserId = new Map();
     for (const socketId of room) {
       const s = ioInstance.sockets.sockets.get(socketId);
-      if (s) viewers.push({ userId: s.data.userId, userName: s.data.userName, userEmail: s.data.userEmail, permission: s.data.permission });
+      if (s && s.data.userId && !viewersByUserId.has(s.data.userId)) {
+        viewersByUserId.set(s.data.userId, {
+          userId: s.data.userId,
+          userName: s.data.userName,
+          userEmail: s.data.userEmail,
+          permission: s.data.permission,
+        });
+      }
     }
-    ioInstance.to(roomName(diagramId)).emit('presence', viewers);
+    ioInstance.to(roomName(diagramId)).emit('presence', Array.from(viewersByUserId.values()));
   }
 };
 
