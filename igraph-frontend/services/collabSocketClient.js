@@ -59,7 +59,7 @@ const getSocket = () => {
         // session always hands over a fresh, unexpired ticket rather than
         // one cached from the first connect.
         api.get('/auth/socket-ticket')
-          .then((response) => cb({ ticket: response.data.ticket }))
+          .then((response) => cb({ ticket: response.data.data.ticket }))
           .catch((err) => {
             console.error('🔴 Could not fetch socket ticket:', err.message);
             cb({});
