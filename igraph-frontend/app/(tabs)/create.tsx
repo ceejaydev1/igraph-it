@@ -650,6 +650,11 @@ export default function CreateScreen() {
   const setCurrentDiagramId = useCallback((id: string | null) => {
     currentDiagramIdRef.current = id;
     setActiveDiagramId(id);
+    // Cross-device pointer — best-effort, never blocks the UI. The local
+    // AsyncStorage pointer (activePointerKey below) still handles same-
+    // device restores; this is what lets a *different* device find its way
+    // back to the same diagram (see the hydrate() fallback further down).
+    authService.setActiveDiagramPointer(id);
   }, []);
   // Who else currently has this diagram open — driven by the collab-socket
   // 'presence' event (see the join effect further down).
@@ -1454,43 +1459,39 @@ export default function CreateScreen() {
         }
 
         // No local draft on this device (fresh browser/session, or it was
-        // cleared) — fall back to the user's most recently saved diagram
-        // from the backend instead of leaving the canvas blank.
-        // getSavedDiagrams already returns diagrams sorted newest-first.
+        // cleared) — ask the server which diagram this account was actually
+        // last active on (see setCurrentDiagramId's setActiveDiagramPointer
+        // call), instead of guessing via "most recently saved" — a guess
+        // that breaks the moment a newer, unrelated diagram exists that the
+        // user never meant to resume.
         if (!restoredLocally && uid && !cancelled) {
-          console.log('🌐 FALLBACK: no local draft found, fetching most recent diagram from server for uid:', uid);
+          console.log('🌐 POINTER: no local draft found, checking server-side active-diagram pointer for uid:', uid);
           try {
-            const API_URL = API_BASE_URL;
-            const response = await authService.authFetch(`${API_URL}/api/diagrams/user`);
-            console.log('🌐 FALLBACK: /api/diagrams/user status:', response.status);
-            const result = await response.json();
-            console.log('🌐 FALLBACK: /api/diagrams/user result:', {
-              success: result.success,
-              count: Array.isArray(result.data) ? result.data.length : 'N/A',
-            });
-            if (!cancelled && result.success && Array.isArray(result.data) && result.data.length > 0) {
-              const mostRecent = result.data[0];
-              console.log('🌐 FALLBACK: most recent diagram id:', mostRecent.id, 'name:', mostRecent.name);
-              const detailResponse = await authService.authFetch(`${API_URL}/api/diagrams/${mostRecent.id}`);
-              console.log('🌐 FALLBACK: diagram detail status:', detailResponse.status);
+            const pointerResult = await authService.getActiveDiagramPointer();
+            const pointerDiagramId = pointerResult?.success ? pointerResult.data?.lastActiveDiagramId : null;
+
+            if (!cancelled && pointerDiagramId) {
+              console.log('🌐 POINTER: found active diagram id:', pointerDiagramId);
+              const API_URL = API_BASE_URL;
+              const detailResponse = await authService.authFetch(`${API_URL}/api/diagrams/${pointerDiagramId}`);
               const detailResult = await detailResponse.json();
               if (!cancelled && detailResult.success && detailResult.data) {
                 const loaded = applyLoadedContent(detailResult.data);
                 setMyAccessLevel(detailResult.data.accessLevel || 'owner');
                 setHasPendingAccessRequest(!!detailResult.data.hasPendingAccessRequest);
-                setCurrentDiagramId(mostRecent.id);
-                loadedDiagramIdRef.current = mostRecent.id;
-                await AsyncStorage.setItem(draftKey(uid, mostRecent.id), JSON.stringify(loaded));
-                await AsyncStorage.setItem(activePointerKey(uid), JSON.stringify({ diagramId: mostRecent.id }));
-                console.log('✅ FALLBACK SUCCESS: loaded diagram', mostRecent.id, 'into canvas and cached locally');
+                setCurrentDiagramId(pointerDiagramId);
+                loadedDiagramIdRef.current = pointerDiagramId;
+                await AsyncStorage.setItem(draftKey(uid, pointerDiagramId), JSON.stringify(loaded));
+                await AsyncStorage.setItem(activePointerKey(uid), JSON.stringify({ diagramId: pointerDiagramId }));
+                console.log('✅ POINTER SUCCESS: loaded diagram', pointerDiagramId, 'into canvas and cached locally');
               } else {
-                console.warn('❌ FALLBACK FAILED: diagram detail fetch returned no usable data', detailResult);
+                console.warn('❌ POINTER FAILED: diagram detail fetch returned no usable data', detailResult);
               }
             } else if (!cancelled) {
-              console.log('ℹ️ FALLBACK: no saved diagrams exist for this account, or request unsuccessful');
+              console.log('ℹ️ POINTER: no active-diagram pointer set for this account yet');
             }
           } catch (e) {
-            console.error('❌ FALLBACK ERROR: could not fall back to most recent saved diagram:', e);
+            console.error('❌ POINTER ERROR: could not resolve active-diagram pointer:', e);
           }
         }
 

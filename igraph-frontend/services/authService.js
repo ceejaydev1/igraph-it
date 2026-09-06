@@ -996,6 +996,29 @@ export const updateProfile = async (data) => {
   }
 };
 
+// Cross-device "what was I last working on" pointer — lives on the user's
+// account server-side, unlike activePointerKey in create.tsx which is
+// AsyncStorage/localStorage and never leaves the device it was written on.
+export const setActiveDiagramPointer = async (diagramId) => {
+  try {
+    const response = await api.patch('/diagrams/user/active-diagram', { diagramId });
+    return response.data;
+  } catch (error) {
+    console.warn('Could not sync active diagram pointer:', error.message);
+    return { success: false };
+  }
+};
+
+export const getActiveDiagramPointer = async () => {
+  try {
+    const response = await api.get('/diagrams/user/active-diagram');
+    return response.data;
+  } catch (error) {
+    console.warn('Could not fetch active diagram pointer:', error.message);
+    return { success: false };
+  }
+};
+
 export const getUserDiagrams = async () => {
   try {
     const response = await api.get('/diagrams/user');
