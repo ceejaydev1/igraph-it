@@ -235,6 +235,13 @@ router.post('/refresh-token', authController.refreshToken);
 router.post('/logout',        protect, authController.logout);
 router.get('/me',             protect, authController.getCurrentUser);
 
+// Issues a short-lived ticket used only to authenticate the WebSocket
+// handshake in collabSocketClient.js — see getSocketTicket's own comment in
+// authController.js for why this needs to be a normal REST route (behind
+// `protect`, same as /me) rather than something the socket layer checks
+// directly.
+router.get('/socket-ticket', protect, authController.getSocketTicket);
+
 // Account Management
 router.put('/update-profile',   protect, authController.updateProfile);
 router.post('/change-password', protect, ...changePasswordLimiters, authController.changePassword);

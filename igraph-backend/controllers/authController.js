@@ -5,7 +5,7 @@ const { db, auth } = require('../config/firebase');
 const userModel = require('../models/userModel');
 const otpModel = require('../models/otpModel');
 const { generateOTP, getOTPExpiry } = require('../utils/generateOTP');
-const { generateAccessToken, generateRefreshToken, verifyRefreshToken } = require('../utils/generateJWT');
+const { generateAccessToken, generateRefreshToken, verifyRefreshToken, generateSocketTicket } = require('../utils/generateJWT');
 const { getAccessCookieOptions, getRefreshCookieOptions, getClearCookieOptions } = require('../utils/cookieOptions');
 const { sendVerificationEmail, sendPasswordResetEmail } = require('../services/emailService');
 
@@ -1067,6 +1067,28 @@ const logout = async (req, res) => {
   }
 };
 
+// SOCKET TICKET
+// Issues a short-lived ticket for authenticating the WebSocket handshake
+// (see services/collabSocket.js and services/collabSocketClient.js). Sits
+// behind `protect` like any other authenticated route below, which is what
+// makes this work reliably on web: it's a normal REST call through Vercel's
+// same-origin proxy, so the httpOnly access_token cookie actually arrives
+// here — unlike the raw WebSocket connection itself, which goes straight to
+// this server's own domain and never sees that cookie.
+
+const getSocketTicket = async (req, res) => {
+  try {
+    const ticket = generateSocketTicket(req.user.uid);
+    res.status(200).json({ success: true, data: { ticket } });
+  } catch (error) {
+    console.error('Socket ticket error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Could not generate socket ticket.'
+    });
+  }
+};
+
 // GET CURRENT USER
 
 const getCurrentUser = async (req, res) => {
@@ -1359,4 +1381,5 @@ module.exports = {
   updateProfile,
   changePassword,
   setPassword,
+  getSocketTicket,
 };

@@ -22,7 +22,7 @@
 // than the general shape of the risk.
 
 const { Server } = require('socket.io');
-const { verifyAccessToken } = require('../utils/generateJWT');
+const { verifyAccessToken, verifySocketTicket } = require('../utils/generateJWT');
 const { getUserById } = require('../models/userModel');
 const { getAccessLevel, canView, canEdit } = require('../utils/diagramAccess');
 const { db } = require('../config/firebase');
@@ -97,14 +97,28 @@ function attachCollabSocket(httpServer, corsOriginFn) {
   // or the httpOnly access_token cookie the browser attaches automatically.
   io.use(async (socket, next) => {
     try {
+      // Web sends a short-lived `ticket` (fetched over the already-working
+      // same-origin REST proxy — see /api/auth/socket-ticket) instead of a
+      // token, because the httpOnly access_token cookie is scoped to the
+      // frontend's Vercel domain and never reaches this server: the socket
+      // connects straight to the backend's own domain, a different origin
+      // entirely, so the cookie simply isn't sent on that request. Native
+      // still sends `token` directly (no cookie jar there to begin with),
+      // and `cookieToken` stays as a fallback for any same-origin deployment
+      // where the cookie *does* arrive.
       const authToken = socket.handshake.auth && socket.handshake.auth.token;
+      const ticket = socket.handshake.auth && socket.handshake.auth.ticket;
       const cookieToken = extractCookie(socket.handshake.headers.cookie, 'access_token');
-      const token = authToken || cookieToken;
 
-      if (!token) return next(new Error('unauthorized'));
-
-      const decoded = verifyAccessToken(token);
-      if (decoded.type !== 'access') return next(new Error('unauthorized'));
+      let decoded;
+      if (ticket) {
+        decoded = verifySocketTicket(ticket);
+      } else {
+        const token = authToken || cookieToken;
+        if (!token) return next(new Error('unauthorized'));
+        decoded = verifyAccessToken(token);
+        if (decoded.type !== 'access') return next(new Error('unauthorized'));
+      }
 
       const user = await getUserById(decoded.uid);
       if (!user) return next(new Error('unauthorized'));
