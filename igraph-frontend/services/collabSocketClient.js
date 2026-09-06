@@ -75,7 +75,12 @@ const getSocket = () => {
   // Room membership lives on the server-side socket instance, which is a
   // brand new one after any reconnect — rejoin whatever diagram we were
   // last in so a dropped wifi connection doesn't silently end collaboration.
+  socket.on('connect_error', (err) => {
+    console.error('🔴 SOCKET CONNECT ERROR:', err.message);
+  });
+
   socket.on('connect', () => {
+    console.log('🟢 SOCKET CONNECTED, id:', socket.id);
     const isReconnect = hasConnectedOnce;
     hasConnectedOnce = true;
     if (joinedDiagramId) {
