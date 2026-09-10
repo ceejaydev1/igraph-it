@@ -108,7 +108,7 @@ const saveDiagram = async (req, res) => {
         data: {
           diagram: {
             id,
-            name: canRename ? name.trim() : existingData.name,
+            name: allowRename ? name.trim() : existingData.name,
             type: type || 'General',
             created_at: existingData.created_at,
           },
