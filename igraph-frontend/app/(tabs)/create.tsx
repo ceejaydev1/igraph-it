@@ -765,6 +765,19 @@ export default function CreateScreen() {
     console.log('🔍 create.tsx mounted, setSaveHandler available:', !!setSaveHandler);
   }, [setSaveHandler]);
 
+  // ─── Warm up the backend as soon as this screen mounts ─────────────────────
+  // A free-tier backend spins down after a period of inactivity — the first
+  // request after that eats a cold-start delay that can exceed a normal
+  // request timeout, returning an HTML error page instead of JSON. If that
+  // first request happens to be the user's very first Save (drop a shape,
+  // hit Save), that's exactly what throws "Server returned an invalid
+  // response". savedDiagrams.tsx already pings on its own focus; this covers
+  // arriving at Create directly instead. pingBackend() has its own 2-minute
+  // cooldown, so calling it here is always safe/cheap.
+  useEffect(() => {
+    authService.pingBackend();
+  }, []);
+
   // ─── ✅ FIX: Update ref whenever diagramXml changes ──────────────────────
   useEffect(() => {
     diagramXmlRef.current = diagramXml;
@@ -2675,14 +2688,24 @@ export default function CreateScreen() {
         return;
       }
 
-      // Check if response is OK before parsing JSON
+      // Read the body as text first — lets us log the exact raw response
+      // (HTML error page, empty body, etc.) instead of guessing from a
+      // generic message when it turns out not to be valid JSON.
+      const rawText = await response.text();
+      console.log('📥 Raw response:', rawText.substring(0, 500));
+
       if (!response.ok) {
-        const errorText = await response.text();
-        console.error('❌ Server error response:', errorText);
-        throw new Error(`Server error: ${response.status} - ${errorText || response.statusText}`);
+        console.error('❌ Server error response:', rawText);
+        throw new Error(`Server error: ${response.status} - ${rawText || response.statusText}`);
       }
 
-      const result = await response.json();
+      let result;
+      try {
+        result = JSON.parse(rawText);
+      } catch (parseError) {
+        console.error('❌ Response is not valid JSON:', parseError);
+        throw new Error('Server returned an invalid response. Please try again.');
+      }
       console.log('📥 Response data:', result);
 
       if (result.success) {
@@ -2807,9 +2830,19 @@ export default function CreateScreen() {
           body: JSON.stringify(payload),
           ...(urgent ? { keepalive: true } : {}),
         });
-        if (!response.ok) throw new Error(`Server error: ${response.status}`);
+        const rawText = await response.text();
+        if (!response.ok) {
+          console.warn('Background sync raw error response:', rawText);
+          throw new Error(`Server error: ${response.status} - ${rawText}`);
+        }
 
-        const result = await response.json();
+        let result;
+        try {
+          result = JSON.parse(rawText);
+        } catch (parseError) {
+          console.warn('Background sync response is not valid JSON:', rawText);
+          throw new Error('Invalid response from server during background sync.');
+        }
         if (result.success) {
           deletedPageIdsRef.current.clear();
           const savedId: string | undefined = result.data?.diagram?.id;

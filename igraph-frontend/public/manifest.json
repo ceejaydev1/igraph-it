@@ -25,19 +25,75 @@
   ],
 
   "screenshots": [
-    {
-      "src": "/screenshot-mobile.png",
-      "sizes": "390x844",
-      "type": "image/png",
-      "form_factor": "narrow",
-      "label": "iGraph IT Mobile"
-    },
-    {
-      "src": "/screenshot-desktop.png",
-      "sizes": "1280x720",
-      "type": "image/png",
-      "form_factor": "wide",
-      "label": "iGraph IT Desktop"
-    }
-  ]
+  {
+    "src": "/diagramlibrary.png",
+    "sizes": "1600x790",
+    "type": "image/png",
+    "form_factor": "wide",
+    "label": "Diagram Library"
+  },
+  {
+    "src": "/diagramlibrary1.png",
+    "sizes": "1600x792",
+    "type": "image/png",
+    "form_factor": "wide",
+    "label": "Diagram Library"
+  },
+  {
+    "src": "/creatediagram.png",
+    "sizes": "1600x791",
+    "type": "image/png",
+    "form_factor": "wide",
+    "label": "Create Diagram"
+  },
+  {
+    "src": "/references.png",
+    "sizes": "1600x789",
+    "type": "image/png",
+    "form_factor": "wide",
+    "label": "Learning References"
+  },
+  {
+    "src": "/useraccount.png",
+    "sizes": "1600x789",
+    "type": "image/png",
+    "form_factor": "wide",
+    "label": "Account"
+  },
+  {
+    "src": "/m_diagramlibrary.png",
+    "sizes": "760x1616",
+    "type": "image/png",
+    "form_factor": "narrow",
+    "label": "Diagram Library"
+  },
+  {
+    "src": "/m_diagramlibrary1.png",
+    "sizes": "760x1616",
+    "type": "image/png",
+    "form_factor": "narrow",
+    "label": "Diagram Library"
+  },
+  {
+    "src": "/m_creatediagram.png",
+    "sizes": "760x1616",
+    "type": "image/png",
+    "form_factor": "narrow",
+    "label": "Create Diagram"
+  },
+  {
+    "src": "/m_references.png",
+    "sizes": "760x1616",
+    "type": "image/png",
+    "form_factor": "narrow",
+    "label": "Learning References"
+  },
+  {
+    "src": "/m_useraccount.png",
+    "sizes": "760x1616",
+    "type": "image/png",
+    "form_factor": "narrow",
+    "label": "Account"
+  }
+]
 }
