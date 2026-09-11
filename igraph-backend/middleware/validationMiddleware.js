@@ -18,10 +18,11 @@ const handleValidationErrors = (req, res, next) => {
 };
 
 const validateSignup = [
-  body('fullName')
+    body('fullName')
     .trim()
     .notEmpty().withMessage('Full name is required.')
-    .isLength({ min: 2, max: 100 }).withMessage('Full name must be 2–100 characters.'),
+    .isLength({ min: 2, max: 100 }).withMessage('Full name must be 2–100 characters.')
+    .matches(/^[A-Za-zÀ-ÖØ-öø-ÿ]+(?:[ '-][A-Za-zÀ-ÖØ-öø-ÿ]+)*$/).withMessage('Full name can only contain letters, spaces, hyphens, and apostrophes (no consecutive symbols).'),
 
   // REMOVED username validation
 
