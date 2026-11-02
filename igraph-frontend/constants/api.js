@@ -6,7 +6,7 @@ const getAbsoluteApiUrl = () => {
   }
 
   // Fallback backend.
-  return 'https://rosybrown-fox-855047.hostingersite.com';
+  return 'https://api.igraphit.com';
 };
 
 // Always use the real backend origin.

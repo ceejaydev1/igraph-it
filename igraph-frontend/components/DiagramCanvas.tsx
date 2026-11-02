@@ -55,6 +55,11 @@ import { ShapePreview } from '@/components/shapes/ShapeIcon';
 import { tagShapeRole, getShapeRole, validateDiagram, FlowchartIssue, IssueSeverity } from '@/utils/flowchartRules';
 import { changesToPatches, applyPatches as applyPatchesToModel, DiagramPatch } from '@/utils/diagramPatch';
 
+// Verbose tracing for local development only; silent in production builds.
+const devLog = (...args: unknown[]) => {
+  if (__DEV__) console.log(...args);
+};
+
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const GRID_SIZE = 10;
@@ -157,7 +162,7 @@ EdgeHandlerConfig.selectionColor = BLUE;
 EdgeHandlerConfig.selectionDashed = true;
 EdgeHandlerConfig.selectionStrokeWidth = 1.5;
 
-console.log('🎨 All configs set to BLUE (#4c6fff)');
+devLog('All configs set to BLUE (#4c6fff)');
 
 if (Platform.OS === 'web') {
   // maxGraph's own built-in perimeters/edge-styles/edge-markers are opt-in —
@@ -177,7 +182,7 @@ if (Platform.OS === 'web') {
   registerDefaultEdgeStyles();
   registerDefaultEdgeMarkers();
   registerAllCustomShapes();
-  console.log('✅ All custom shapes registered with maxGraph');
+  devLog('All custom shapes registered with maxGraph');
 }
 
 function paintGridOnCanvas(
@@ -348,10 +353,10 @@ export function findConnectorDropEndpoints(
   // particular: a Main Cause is meant to branch off it, same as before it
   // was converted to a real edge, but findNearbyVertex alone can never
   // find it since it only ever looks at graph.getChildVertices).
-  const hSource = findNearbyVertex(graph, hStart.x, hStart.y, CONNECTOR_SNAP_DISTANCE)
-    ?? findEdgeNearPoint(graph, hStart.x, hStart.y, CONNECTOR_SNAP_DISTANCE);
-  const hTargetCandidate = findNearbyVertex(graph, hEnd.x, hEnd.y, CONNECTOR_SNAP_DISTANCE)
-    ?? findEdgeNearPoint(graph, hEnd.x, hEnd.y, CONNECTOR_SNAP_DISTANCE);
+  // Palette drops never auto-attach to a shape: the half-attached result
+  // rendered from the shape's corner through its interior. Attach by dragging an end.
+  const hSource = findEdgeNearPoint(graph, hStart.x, hStart.y, CONNECTOR_SNAP_DISTANCE);
+  const hTargetCandidate = findEdgeNearPoint(graph, hEnd.x, hEnd.y, CONNECTOR_SNAP_DISTANCE);
   const hTarget = hTargetCandidate && hTargetCandidate !== hSource ? hTargetCandidate : null;
   return { startPoint: hStart, endPoint: hEnd, sourceCell: hSource, targetCell: hTarget };
 }
@@ -413,8 +418,23 @@ function pinnedEdgeEndStyle(target: any, point: { x: number; y: number }, isSour
   const geo = target?.getGeometry?.();
   if (!geo) return {};
   const { x: bx, y: by, width: bw, height: bh } = geo;
-  const fx = bw > 0 ? Math.min(1, Math.max(0, (point.x - bx) / bw)) : 0.5;
-  const fy = bh > 0 ? Math.min(1, Math.max(0, (point.y - by) / bh)) : 0.5;
+  if (bw <= 0 || bh <= 0) return {};
+  // Clamp the point into the box, then, if it is inside, push it out to the
+  // nearest side. The end always lands ON the border, at the same height/width
+  // as the drop point, so a level connector stays level and never cuts through
+  // the shape. Fixed point (perimeter:false) means no perimeter function is needed.
+  let px = Math.min(bx + bw, Math.max(bx, point.x));
+  let py = Math.min(by + bh, Math.max(by, point.y));
+  const dl = px - bx, dr = bx + bw - px, dt = py - by, db = by + bh - py;
+  const m = Math.min(dl, dr, dt, db);
+  if (m > 0) {
+    if (m === dl) px = bx;
+    else if (m === dr) px = bx + bw;
+    else if (m === dt) py = by;
+    else py = by + bh;
+  }
+  const fx = (px - bx) / bw;
+  const fy = (py - by) / bh;
   return isSource
     ? { exitX: fx, exitY: fy, exitPerimeter: false, igraphAutoPinSource: true }
     : { entryX: fx, entryY: fy, entryPerimeter: false, igraphAutoPinTarget: true };
@@ -495,6 +515,114 @@ function runDedicatedEdgeSlide(graph: Graph, cell: any, dx: number, dy: number) 
     slideForkJoinStubAlongBar(graph, cell, dx);
   }
   slideAutoPinnedEdgeEnd(graph, cell, dx, dy);
+}
+
+function relationshipSplitPins(
+  start: { x: number; y: number } | null,
+  end: { x: number; y: number } | null,
+): { inPin: { x: number; y: number }; outPin: { x: number; y: number } } {
+  const dx = start && end ? end.x - start.x : 1;
+  const dy = start && end ? end.y - start.y : 0;
+  if (Math.abs(dx) >= Math.abs(dy)) {
+    return dx >= 0
+      ? { inPin: { x: 0, y: 0.5 }, outPin: { x: 1, y: 0.5 } }
+      : { inPin: { x: 1, y: 0.5 }, outPin: { x: 0, y: 0.5 } };
+  }
+  return dy >= 0
+    ? { inPin: { x: 0.5, y: 0 }, outPin: { x: 0.5, y: 1 } }
+    : { inPin: { x: 0.5, y: 1 }, outPin: { x: 0.5, y: 0 } };
+}
+
+function omitStyleKeys(style: CellStateStyle, keys: string[]): Record<string, unknown> {
+  const copy = { ...(style as Record<string, unknown>) };
+  keys.forEach((k) => delete copy[k]);
+  return copy;
+}
+
+// Cardinality dropped on the center of an existing shape: split it into two
+// legs (dangling end -> shape's left point, shape's right point -> dangling
+// end), the same result as dropping the shape onto a cardinality line.
+function splitCardinalityAroundShape(graph: Graph, shape: any, shapeId: string, styleKey: string): any {
+  const geo = shape.getGeometry();
+  const cy = geo.y + geo.height / 2;
+  const reach = 80;
+  const base = {
+    ...getShapeStyle(styleKey),
+    fontColor: BLACK,
+    fontSize: 12,
+    labelBackgroundColor: CANVAS_BG,
+  } as Record<string, unknown>;
+  let leftEdge: any;
+  let rightEdge: any;
+  graph.batchUpdate(() => {
+    leftEdge = graph.insertEdge(null, null, '', null, shape, {
+      ...base, cardinalitySide: 'start', entryX: 0, entryY: 0.5, entryPerimeter: false,
+    } as CellStateStyle);
+    const leftGeo = new Geometry(0, 0, 0, 0);
+    leftGeo.setTerminalPoint(new Point(geo.x - reach, cy), true);
+    graph.getDataModel().setGeometry(leftEdge, leftGeo);
+    tagShapeRole(leftEdge, shapeId);
+
+    rightEdge = graph.insertEdge(null, null, '', shape, null, {
+      ...base, cardinalitySide: 'end', exitX: 1, exitY: 0.5, exitPerimeter: false,
+    } as CellStateStyle);
+    const rightGeo = new Geometry(0, 0, 0, 0);
+    rightGeo.setTerminalPoint(new Point(geo.x + geo.width + reach, cy), false);
+    graph.getDataModel().setGeometry(rightEdge, rightGeo);
+    tagShapeRole(rightEdge, shapeId);
+  });
+  setTimeout(() => {
+    graph.getView().revalidate();
+    [leftEdge, rightEdge].forEach((e: any) => forceEdgeRepaint(graph, e));
+  }, 0);
+  return rightEdge;
+}
+
+// Stores an edited cardinality symbol in the edge's style. Split halves know
+// their side (cardinalitySide); an unsplit edge uses whichever end was clicked.
+function editCardinalityLabel(graph: Graph, edge: any, viewPoint: { x: number; y: number }): void {
+  const style = edge.getStyle();
+  const base = (typeof style === 'object' && style !== null ? style : {}) as Record<string, unknown>;
+  let side = base.cardinalitySide as string | undefined;
+  if (side !== 'start' && side !== 'end') {
+    const pts = (graph.getView().getState(edge)?.absolutePoints ?? []).filter((p) => p != null) as { x: number; y: number }[];
+    if (pts.length >= 2) {
+      const a = pts[0];
+      const b = pts[pts.length - 1];
+      side = Math.hypot(viewPoint.x - a.x, viewPoint.y - a.y) <= Math.hypot(viewPoint.x - b.x, viewPoint.y - b.y) ? 'start' : 'end';
+    } else {
+      side = 'start';
+    }
+  }
+  const key = side === 'start' ? 'cardinalityStartText' : 'cardinalityEndText';
+  const current = typeof base[key] === 'string' ? (base[key] as string) : '';
+  const container = graph.container;
+  if (!container) return;
+  const input = document.createElement('input');
+  input.value = current;
+  input.style.cssText = `position:absolute;left:${viewPoint.x - 24}px;top:${viewPoint.y - 12}px;width:48px;height:24px;` +
+    'z-index:20;text-align:center;font-size:12px;border:2px solid #4c6fff;border-radius:4px;outline:none;background:#fff;padding:0;';
+  container.appendChild(input);
+  input.focus();
+  input.select();
+
+  let done = false;
+  const finish = (commit: boolean) => {
+    if (done) return;
+    done = true;
+    const next = input.value.trim();
+    input.remove();
+    if (!commit) return;
+    graph.getDataModel().setStyle(edge, { ...base, [key]: next } as CellStateStyle);
+    graph.getView().revalidate();
+    forceEdgeRepaint(graph, edge);
+  };
+  input.addEventListener('keydown', (e) => {
+    e.stopPropagation();
+    if (e.key === 'Enter') finish(true);
+    if (e.key === 'Escape') finish(false);
+  });
+  input.addEventListener('blur', () => finish(true));
 }
 
 function distanceToSegment(px: number, py: number, ax: number, ay: number, bx: number, by: number): number {
@@ -1667,7 +1795,7 @@ export interface DiagramCanvasHandle {
 }
 
 // ════════════════════════════════════════════════════════════════════════════
-// ⭐ SHAPE STYLE DEFINITIONS - Match the panel previews exactly
+// SHAPE STYLE DEFINITIONS - Match the panel previews exactly
 // ════════════════════════════════════════════════════════════════════════════
 
 export function getShapeStyle(styleKey: string): CellStateStyle {
@@ -1766,6 +1894,13 @@ export function getShapeStyle(styleKey: string): CellStateStyle {
     'igraph.erdWeakEntity': {
       shape: 'igraph.erdWeakEntity',
       fillColor: '#ffffff',
+      strokeColor: BLACK,
+      strokeWidth: 2,
+    },
+
+    'igraph.totalParticipation': {
+      shape: 'igraph.totalParticipation',
+      fillColor: 'transparent',
       strokeColor: BLACK,
       strokeWidth: 2,
     },
@@ -2087,7 +2222,7 @@ export function getShapeStyle(styleKey: string): CellStateStyle {
 }
 
 // ════════════════════════════════════════════════════════════════════════════
-// ⭐ UML CLASS SHAPE — container + 3 independently-editable compartments
+// UML CLASS SHAPE — container + 3 independently-editable compartments
 // ════════════════════════════════════════════════════════════════════════════
 //
 // A plain single-cell box (the older igraph.umlClass) can only carry one
@@ -2403,7 +2538,7 @@ function syncClassCompartmentsToContainer(graph: Graph, container: any) {
 }
 
 // ════════════════════════════════════════════════════════════════════════════
-// ⭐ DFD DATA STORE SHAPE — container + 2 independently-editable compartments
+// DFD DATA STORE SHAPE — container + 2 independently-editable compartments
 // ════════════════════════════════════════════════════════════════════════════
 //
 // Same trick as insertUmlClassCell above: a single-cell data store can only
@@ -2497,7 +2632,7 @@ function syncDfdDataStoreCompartmentsToContainer(graph: Graph, container: any) {
 }
 
 // ════════════════════════════════════════════════════════════════════════════
-// ⭐ SEQUENCE LIFELINE — growable object-name header
+// SEQUENCE LIFELINE — growable object-name header
 // ════════════════════════════════════════════════════════════════════════════
 //
 // The lifeline's name header used to be a hardcoded 30px regardless of how
@@ -2763,7 +2898,7 @@ function fitCenterAvoidingLeftPanel(graph: Graph, leftObstruction: number, margi
 }
 
 // ════════════════════════════════════════════════════════════════════════════
-// ⭐ MAIN WEBCANVAS COMPONENT
+// MAIN WEBCANVAS COMPONENT
 // ════════════════════════════════════════════════════════════════════════════
 
 const WebCanvas = forwardRef<DiagramCanvasHandle, DiagramCanvasProps>(({ onReady, onChange, onSelectionChange, onZoomChange, umlType = 'flowchart', isMobile = false, leftObstruction = 0 }, ref) => {
@@ -2789,6 +2924,13 @@ const WebCanvas = forwardRef<DiagramCanvasHandle, DiagramCanvasProps>(({ onReady
   const [loading, setLoading] = useState(true);
   const [selectedCell, setSelectedCell] = useState<any>(null);
   const [flowchartIssues, setFlowchartIssues] = useState<FlowchartIssue[]>([]);
+  // What the top-center issues pill shows. The "This diagram is empty" notice
+  // is hidden here on purpose: a brand-new canvas isn't an error, and create.tsx
+  // already shows a friendly "Start your diagram" hint over it. It stays in
+  // flowchartIssues/getIssues() so Print and Download still refuse a blank canvas.
+  const visibleFlowchartIssues = flowchartIssues.filter(
+    (i) => i.code !== 'empty-diagram',
+  );
   // Mirrors flowchartIssues for getIssues() below (exposed via
   // useImperativeHandle) — that handle's own deps array deliberately stays
   // minimal (see its comment), so a plain closure over the state value
@@ -3794,11 +3936,11 @@ const WebCanvas = forwardRef<DiagramCanvasHandle, DiagramCanvasProps>(({ onReady
       stylesheet.putCellStyle(key, style);
     });
 
-    console.log('✅ Registered igraph stylesheet entries');
+    devLog('Registered igraph stylesheet entries');
   }, []);
 
   // ════════════════════════════════════════════════════════════════════════════
-  // ⭐ DIAGRAM VALIDATION (every diagram type, desktop AND mobile — see
+  // DIAGRAM VALIDATION (every diagram type, desktop AND mobile — see
   // utils/flowchartRules.ts for the full per-type rule set)
   // ════════════════════════════════════════════════════════════════════════════
 
@@ -3863,7 +4005,7 @@ const WebCanvas = forwardRef<DiagramCanvasHandle, DiagramCanvasProps>(({ onReady
   }, [runFlowchartValidation]);
 
   // ════════════════════════════════════════════════════════════════════════════
-  // ⭐ FIXED: Handle drop with proper shape styles
+  // Handle drop with proper shape styles
   // ════════════════════════════════════════════════════════════════════════════
 
   const handleDrop = useCallback((e: DragEvent) => {
@@ -3900,6 +4042,8 @@ const WebCanvas = forwardRef<DiagramCanvasHandle, DiagramCanvasProps>(({ onReady
         cell = insertUmlClassCell(graph, cx, cy, dropW, dropH);
       } else if (shapeId === 'dfd-data-store' || shapeId === 'dfd-data-store-gs') {
         cell = insertDfdDataStoreCell(graph, cx, cy, dropW, dropH, shapeId === 'dfd-data-store-gs' ? 'gs' : 'yourdon');
+      } else if (shapeId.startsWith('erd-cardinality') && findNearbyVertex(graph, x, y, 0)) {
+        cell = splitCardinalityAroundShape(graph, findNearbyVertex(graph, x, y, 0), shapeId, styleKey);
       } else if (CONNECTOR_SHAPE_IDS.has(shapeId)) {
         // Connector/line shapes represent a connection, not a box — insert
         // as a real edge so the user can drag either end onto a shape and
@@ -4155,7 +4299,7 @@ const WebCanvas = forwardRef<DiagramCanvasHandle, DiagramCanvasProps>(({ onReady
         geometry.setTerminalPoint(new Point(endPoint.x, endPoint.y), false);
         graph.getDataModel().setGeometry(cell, geometry);
       } else {
-        // ⭐ CRITICAL FIX: Use getShapeStyle to get the proper style
+        // Use getShapeStyle to get the proper style
         const styleObject = getShapeStyle(styleKey);
 
         // Add text properties. Defaults come first so a shape with its own
@@ -4188,7 +4332,7 @@ const WebCanvas = forwardRef<DiagramCanvasHandle, DiagramCanvasProps>(({ onReady
         // T-junction) — 'schematic-no-connection' is deliberately excluded,
         // it means "these do not connect" and stays a purely visual marker.
         const isSchematicJunctionDrop = shapeId === 'schematic-connection';
-        const edgeCell = (shapeId === 'erd-relationship' || shapeId === 'erd-identifying-rel' || isSchematicJunctionDrop)
+        const edgeCell = (shapeId.startsWith('erd-') || isSchematicJunctionDrop)
           ? findEdgeNearPoint(graph, x, y, CONNECTOR_SNAP_DISTANCE)
           : null;
 
@@ -4228,8 +4372,13 @@ const WebCanvas = forwardRef<DiagramCanvasHandle, DiagramCanvasProps>(({ onReady
           // isn't part of CellStateStyle's real type. A no-op on every
           // other connector shape, which never reads this key.
           const styleIsObject = typeof edgeStyle === 'object' && edgeStyle !== null;
-          const leftEdgeStyle = (styleIsObject ? { ...edgeStyle, cardinalitySide: 'start' } : edgeStyle) as CellStateStyle;
-          const rightEdgeStyle = (styleIsObject ? { ...edgeStyle, cardinalitySide: 'end' } : edgeStyle) as CellStateStyle;
+          const { inPin, outPin } = relationshipSplitPins(edgeEndpoint(edgeCell, true), edgeEndpoint(edgeCell, false));
+          const leftEdgeStyle = (styleIsObject
+            ? { ...omitStyleKeys(edgeStyle as CellStateStyle, ['igraphAutoPinTarget', 'entryDx', 'entryDy']), cardinalitySide: 'start', entryX: inPin.x, entryY: inPin.y, entryPerimeter: false }
+            : edgeStyle) as CellStateStyle;
+          const rightEdgeStyle = (styleIsObject
+            ? { ...omitStyleKeys(edgeStyle as CellStateStyle, ['igraphAutoPinSource', 'exitDx', 'exitDy']), cardinalitySide: 'end', exitX: outPin.x, exitY: outPin.y, exitPerimeter: false }
+            : edgeStyle) as CellStateStyle;
 
           // Center the diamond on the straight line between the edge's two
           // actual endpoints — "entity -<>- entity" — instead of wherever
@@ -4253,6 +4402,12 @@ const WebCanvas = forwardRef<DiagramCanvasHandle, DiagramCanvasProps>(({ onReady
           graph.batchUpdate(() => {
             cell = graph.insertVertex(null, null, label, centeredX, centeredY, dropW, dropH, fullStyle);
             graph.removeCells([edgeCell]);
+            {
+              const exactGeo = cell.getGeometry().clone();
+              exactGeo.x = midX - dropW / 2;
+              exactGeo.y = midY - dropH / 2;
+              graph.getDataModel().setGeometry(cell, exactGeo);
+            }
 
             // Always recreate both halves, even where the original edge
             // wasn't actually attached to anything on that side (source/
@@ -4279,6 +4434,10 @@ const WebCanvas = forwardRef<DiagramCanvasHandle, DiagramCanvasProps>(({ onReady
               graph.getDataModel().setGeometry(rightEdge, rightGeo);
             }
             tagShapeRole(rightEdge, edgeRole);
+            setTimeout(() => {
+              graph.getView().revalidate();
+              [leftEdge, rightEdge].forEach((e: any) => forceEdgeRepaint(graph, e));
+            }, 0);
           });
         } else if (shapeId === 'act-swimlane') {
           const neighbor = findNearestSwimlaneNeighbor(graph, x, y, CONNECTOR_SNAP_DISTANCE);
@@ -4377,14 +4536,14 @@ const WebCanvas = forwardRef<DiagramCanvasHandle, DiagramCanvasProps>(({ onReady
         handleSelectionChange();
       }, 10);
 
-      console.log(`✅ Dropped "${shapeId}" as "${styleKey}" at (${cx}, ${cy}) with size ${dropW}x${dropH}`);
+      devLog(`Dropped "${shapeId}" as "${styleKey}" at (${cx}, ${cy}) with size ${dropW}x${dropH}`);
     } catch (err) {
       console.error('Drop error:', err);
     }
   }, [handleSelectionChange]);
 
   // ════════════════════════════════════════════════════════════════════════════
-  // ⭐ Create a new shape adjacent to `sourceCell`, connected by an edge.
+  // Create a new shape adjacent to `sourceCell`, connected by an edge.
   // With no shapeId, clones the source's own style/size (used when there's
   // nothing to pick from). With a shapeId, uses that shape's own default
   // style/size instead — so choosing "Decision" from the picker gets a real
@@ -4524,7 +4683,7 @@ const WebCanvas = forwardRef<DiagramCanvasHandle, DiagramCanvasProps>(({ onReady
     };
     const edge = graph.insertEdge(null, null, '', sourceCell, newCell, edgeStyle);
     
-    // ⭐ FIX: Tag the edge as a connector so it doesn't get directional arrows
+    // Tag the edge as a connector so it doesn't get directional arrows
     // Using 'connector' which should be in CONNECTOR_SHAPE_IDS
     tagShapeRole(edge, 'connector');
 
@@ -4536,7 +4695,7 @@ const WebCanvas = forwardRef<DiagramCanvasHandle, DiagramCanvasProps>(({ onReady
   }, [handleSelectionChange]);
 
   // ════════════════════════════════════════════════════════════════════════════
-  // ⭐ DRAW.IO STYLE: CLICK ARROWS (Top, Bottom, Left, Right)
+  // DRAW.IO STYLE: CLICK ARROWS (Top, Bottom, Left, Right)
   // ════════════════════════════════════════════════════════════════════════════
 
   const setupClickArrows = useCallback((graph: Graph) => {
@@ -4815,7 +4974,7 @@ const WebCanvas = forwardRef<DiagramCanvasHandle, DiagramCanvasProps>(({ onReady
   }, [handleSelectionChange, isMobile]);
 
   // ════════════════════════════════════════════════════════════════════════════
-  // ⭐ DRAW.IO STYLE: HOVER CONNECTION POINTS
+  // DRAW.IO STYLE: HOVER CONNECTION POINTS
   // ════════════════════════════════════════════════════════════════════════════
 
   const setupHoverUI = useCallback((graph: Graph) => {
@@ -5072,7 +5231,7 @@ const WebCanvas = forwardRef<DiagramCanvasHandle, DiagramCanvasProps>(({ onReady
       lastHoveredCell = null;
     });
 
-    console.log('✅ Draw.io style hover UI enabled');
+    devLog('Draw.io style hover UI enabled');
   }, []);
 
   // ─── INIT GRAPH ────────────────────────────────────────────────────────────
@@ -5091,7 +5250,7 @@ const WebCanvas = forwardRef<DiagramCanvasHandle, DiagramCanvasProps>(({ onReady
     let cleanupClickArrows: (() => void) | undefined;
 
     try {
-      console.log('🔄 Initializing maxGraph...');
+      devLog('Initializing maxGraph...');
 
       gc.width = wrapper.offsetWidth;
       gc.height = wrapper.offsetHeight;
@@ -5232,7 +5391,7 @@ const WebCanvas = forwardRef<DiagramCanvasHandle, DiagramCanvasProps>(({ onReady
         }
       });
 
-      console.log('⚫ Default edge style set to BLACK');
+      devLog('Default edge style set to BLACK');
 
       const connectionHandler = graph.getPlugin('ConnectionHandler') as ConnectionHandler | null;
 
@@ -5447,7 +5606,7 @@ const WebCanvas = forwardRef<DiagramCanvasHandle, DiagramCanvasProps>(({ onReady
         }
       `;
       document.head.appendChild(styleElement);
-      console.log('🔵 Force blue CSS injected with black edges');
+      devLog('Force blue CSS injected with black edges');
 
       // A connector's end landing on a valid target — a shape or another
       // connector, see the unified CELL_CONNECTED handler further down —
@@ -5527,7 +5686,7 @@ const WebCanvas = forwardRef<DiagramCanvasHandle, DiagramCanvasProps>(({ onReady
 
         return handler;
       };
-      console.log('✅ Universal Vertex Handler bound to graph');
+      devLog('Universal Vertex Handler bound to graph');
 
       // EdgeHandler's own endpoint/bend handles hit-test touch input via a
       // dedicated `tolerance` field (getHandleForEvent) that's completely
@@ -5866,7 +6025,7 @@ const WebCanvas = forwardRef<DiagramCanvasHandle, DiagramCanvasProps>(({ onReady
       graph.setMultigraph(true);
       graph.setTooltips(true);
       graph.setAutoSizeCells(false);
-      graph.setEnterStopsCellEditing(true);
+      graph.setEnterStopsCellEditing(false);
       graph.setHtmlLabels(true);
       graph.setCellsMovable(true);
       graph.setCellsSelectable(true);
@@ -6204,6 +6363,9 @@ const WebCanvas = forwardRef<DiagramCanvasHandle, DiagramCanvasProps>(({ onReady
             pt = (source ? points?.[0] : points?.[points.length - 1]) ?? undefined;
           }
           if (!pt) return;
+          const pinInside = !isEdgeTarget
+            && pt.x > targetState.x + 1 && pt.x < targetState.x + targetState.width - 1
+            && pt.y > targetState.y + 1 && pt.y < targetState.y + targetState.height - 1;
           // An edge target's fraction means PATH LENGTH along its actual
           // rendered polyline (absolutePoints, bends included) — see
           // getConnectionPoint's override and pointAtPathFraction/
@@ -6235,8 +6397,8 @@ const WebCanvas = forwardRef<DiagramCanvasHandle, DiagramCanvasProps>(({ onReady
             graph.getDataModel().setStyle(edge, {
               ...base,
               ...(source
-                ? { exitX: fx, exitY: fy, exitPerimeter: false, igraphAutoPinSource: true }
-                : { entryX: fx, entryY: fy, entryPerimeter: false, igraphAutoPinTarget: true }),
+                ? { exitX: fx, exitY: fy, exitPerimeter: pinInside, igraphAutoPinSource: true }
+                : { entryX: fx, entryY: fy, entryPerimeter: pinInside, igraphAutoPinTarget: true }),
             } as CellStateStyle);
             // Belt-and-suspenders on top of the model's own automatic
             // revalidation — cheap enough for a one-off user action.
@@ -6380,6 +6542,16 @@ graph.addListener(InternalEvent.DOUBLE_CLICK, (_sender: any, evt: any) => {
         rawEvent instanceof MouseEvent ? rawEvent : undefined,
       );
     }
+    return;
+  }
+
+  if (
+    typeof cell.isEdge === 'function' && cell.isEdge() && point && graphDivRef.current &&
+    String((cell.getStyle() as any)?.shape ?? '').startsWith('igraph.erdCardinality')
+  ) {
+    evt.consume();
+    const rect = graphDivRef.current.getBoundingClientRect();
+    editCardinalityLabel(graph, cell, { x: point.clientX - rect.left, y: point.clientY - rect.top });
     return;
   }
 
@@ -6923,7 +7095,7 @@ graph.addListener(InternalEvent.DOUBLE_CLICK, (_sender: any, evt: any) => {
 
       repaintGrid();
 
-      console.log('✅ maxGraph ready with BLACK edges + BLUE selection + click arrows');
+      devLog('maxGraph ready with BLACK edges + BLUE selection + click arrows');
       onReadyRef.current?.(graph);
       if (!destroyed) setLoading(false);
 
@@ -6967,7 +7139,7 @@ graph.addListener(InternalEvent.DOUBLE_CLICK, (_sender: any, evt: any) => {
         flowchartIssuesRef.current = [];
       };
     } catch (err: any) {
-      console.error('❌ maxGraph init error:', err);
+      console.error('maxGraph init error:', err);
       setError(err.message || 'Failed to load diagram editor');
       setLoading(false);
       return undefined;
@@ -7078,7 +7250,7 @@ graph.addListener(InternalEvent.DOUBLE_CLICK, (_sender: any, evt: any) => {
           padding: 20,
           fontFamily: 'system-ui, sans-serif',
         }}>
-          <div style={{ fontSize: 48, marginBottom: 16 }}>⚠️</div>
+          <div style={{ marginBottom: 16 }}><SeverityIcon severity="warning" size={40} /></div>
           <h3 style={{ margin: 0, color: '#1e293b' }}>Diagram Editor Error</h3>
           <p style={{ color: '#64748b', textAlign: 'center', maxWidth: 500 }}>{error}</p>
         </div>
@@ -7113,15 +7285,15 @@ graph.addListener(InternalEvent.DOUBLE_CLICK, (_sender: any, evt: any) => {
         </div>
       )}
 
-      {!error && !loading && flowchartIssues.length > 0 && (() => {
-        const errorCount = flowchartIssues.filter((i) => i.severity === 'error').length;
-        const warningCount = flowchartIssues.filter((i) => i.severity === 'warning').length;
-        const infoCount = flowchartIssues.length - errorCount - warningCount;
-        const counts: { severity: IssueSeverity; count: number }[] = [
-          { severity: 'error', count: errorCount },
-          { severity: 'warning', count: warningCount },
-          { severity: 'info', count: infoCount },
-        ].filter((c) => c.count > 0);
+      {!error && !loading && visibleFlowchartIssues.length > 0 && (() => {
+        const errorCount = visibleFlowchartIssues.filter((i) => i.severity === 'error').length;
+        const warningCount = visibleFlowchartIssues.filter((i) => i.severity === 'warning').length;
+        const infoCount = visibleFlowchartIssues.length - errorCount - warningCount;
+        const counts = ([
+            { severity: 'error', count: errorCount },
+            { severity: 'warning', count: warningCount },
+            { severity: 'info', count: infoCount },
+          ] as { severity: IssueSeverity; count: number }[]).filter((c) => c.count > 0);
         return (
           // Top-center, not a corner — the right edge is where the Properties
           // panel docks (and the left edge is where the Shapes panel opens), so
@@ -7139,6 +7311,16 @@ graph.addListener(InternalEvent.DOUBLE_CLICK, (_sender: any, evt: any) => {
           }}>
             <div
               onClick={() => setShowIssuesList((prev) => !prev)}
+              role="button"
+              tabIndex={0}
+              aria-expanded={showIssuesList}
+              aria-label={`Diagram issues: ${errorCount} errors, ${warningCount} warnings, ${infoCount} suggestions. ${showIssuesList ? 'Hide' : 'Show'} list`}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  setShowIssuesList((prev) => !prev);
+                }
+              }}
               style={{
                 display: 'flex',
                 alignItems: 'center',
@@ -7167,7 +7349,7 @@ graph.addListener(InternalEvent.DOUBLE_CLICK, (_sender: any, evt: any) => {
                 width={10} height={10} viewBox="0 0 10 10" fill="none"
                 style={{ transform: showIssuesList ? 'rotate(180deg)' : 'none', transition: 'transform 0.15s ease' }}
               >
-                <path d="M1.5 3.5L5 7L8.5 3.5" stroke="#94a3b8" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+                <path d="M1.5 3.5L5 7L8.5 3.5" stroke="#64748b" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
               </svg>
             </div>
 
@@ -7183,7 +7365,7 @@ graph.addListener(InternalEvent.DOUBLE_CLICK, (_sender: any, evt: any) => {
                 boxShadow: '0 1px 2px rgba(15, 23, 42, 0.04), 0 12px 28px rgba(15, 23, 42, 0.12)',
                 padding: 6,
               }}>
-                {flowchartIssues.map((issue, i) => (
+                {visibleFlowchartIssues.map((issue, i) => (
                   <div
                     key={i}
                     onClick={() => {
@@ -7328,7 +7510,7 @@ const DiagramCanvas = forwardRef<DiagramCanvasHandle, DiagramCanvasProps>(({ onR
   if (Platform.OS !== 'web') {
     return (
       <View style={styles.nativeNotice}>
-        <Text style={styles.nativeNoticeTitle}>📐 Diagram Editor</Text>
+        <Text style={styles.nativeNoticeTitle}>Diagram Editor</Text>
         <Text style={styles.nativeNoticeText}>Available on the web version.</Text>
       </View>
     );

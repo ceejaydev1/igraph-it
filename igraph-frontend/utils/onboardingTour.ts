@@ -2,6 +2,7 @@ import { Platform } from 'react-native';
 import { driver, type Config, type DriveStep, type Driver } from 'driver.js';
 import 'driver.js/dist/driver.css';
 import './tourTheme.css';
+import { decoratePopover } from './tourPopover';
 import { getCachedUserSync } from '../services/authService';
 
 // driver.js is DOM-only — this whole module is a no-op on native (iOS/Android),
@@ -90,7 +91,7 @@ const isNewUserPendingOnboarding = (): boolean => {
 // Done buttons, blue on the outlined Back button) without needing separate
 // light/dark variants. Same stroke width/linecap as the app's own chevron
 // icon (see create.tsx's dropdown arrow, `M13 6l6 6-6 6`) for a matching feel.
-const CHEVRON_RIGHT_SVG = '<svg class="tour-btn-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg>';
+export const CHEVRON_RIGHT_SVG = '<svg class="tour-btn-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg>';
 const CHEVRON_LEFT_SVG = '<svg class="tour-btn-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M15 6l-6 6 6 6"/></svg>';
 // Exported so tours.ts's finishStep — the one place that overrides
 // doneBtnText per-step instead of using THEME's default — can stay visually
@@ -111,6 +112,13 @@ const THEME: Config = {
   nextBtnText: `Next ${CHEVRON_RIGHT_SVG}`,
   prevBtnText: `${CHEVRON_LEFT_SVG} Back`,
   doneBtnText: `Got it ${CHECK_SVG}`,
+  progressText: '{{current}} of {{total}}',
+  // driver.js has no notion of a hero image, a module banner or a skip link,
+  // so tourPopover.ts adds them to the rendered popover (keyed off each
+  // step's popoverClass — see tours.ts). activeDriver/activeTourId are read
+  // lazily, at render time, so declaring them further down is fine.
+  onPopoverRender: (popover) =>
+    decoratePopover(popover, activeTourId, () => activeDriver?.destroy()),
   // A step whose target hasn't mounted yet (e.g. a conditionally-rendered
   // toolbar button) is skipped rather than left dangling on a missing element.
   skipMissingElement: true,
@@ -213,7 +221,7 @@ export const resolveTourWait = (signal: string) => {
 };
 
 // A tour finishing on one tab can hand off straight into the next tab's
-// tour ("Got it" → next module, continuously) rather than stopping just
+// tour ("Continue" → next module, continuously) rather than stopping just
 // because that next tour was already marked seen from an earlier visit.
 // Call this right before navigating away; useOnboardingTour checks it (and
 // clears it) the next time that target tour's screen gains focus.

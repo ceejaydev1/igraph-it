@@ -54,7 +54,10 @@ export const isValidEmail = (email) => {
  * @returns {boolean}
  */
 export const isValidName = (name) => {
-  return name && name.trim().length >= 2;
+  if (!name) return false;
+  const trimmed = name.trim();
+  if (trimmed.length < 2 || trimmed.length > 100) return false;
+  return /^[A-Za-zÀ-ÖØ-öø-ÿ]+(?:[ '-][A-Za-zÀ-ÖØ-öø-ÿ]+)*$/.test(trimmed);
 };
 
 /**

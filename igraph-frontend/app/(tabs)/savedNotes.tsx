@@ -18,6 +18,7 @@ import { useRouter, useFocusEffect } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Svg, Path, Rect, Circle, Defs, Pattern } from 'react-native-svg';
 import { useNotes, LearningNote } from '../../contexts/NotesContext';
+import { usePageTitle } from '../../utils/usePageTitle';
 
 // ─── Design tokens (matching savedDiagrams.tsx) ─────────────────────────────
 
@@ -46,6 +47,8 @@ const COLORS = {
   background: '#f8faff',
   // Hover accent — same indigo used by reference.tsx's cardHovered border.
   hoverBorder: '#c7d2fe',
+  // Focus accent for the search bar.
+  searchFocus: '#3b5bdb',
 };
 
 const SPACING = { xs: 4, sm: 8, md: 12, lg: 16, xl: 20, xxl: 24, xxxl: 32 };
@@ -408,6 +411,7 @@ const Toast = ({ toast, onHide, bottomOffset }: { toast: ToastState; onHide: () 
 // ─── Main Screen ────────────────────────────────────────────────────────────
 
 export default function SavedNotes() {
+  usePageTitle('Saved Notes');
   const { notes, removeNoteLocal, deleteNoteServer, restoreNote, isLoading, refreshNotes } = useNotes() as {
     notes: LearningNote[];
     removeNoteLocal: (id: string) => void;
@@ -429,6 +433,7 @@ export default function SavedNotes() {
   const [noteToDelete, setNoteToDelete] = useState<LearningNote | null>(null);
   const [toast, setToast] = useState<ToastState>(null);
   const [searchQuery, setSearchQuery] = useState('');
+  const [isSearchFocused, setIsSearchFocused] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
   const [pendingDeleteIds, setPendingDeleteIds] = useState<string[]>([]);
@@ -568,7 +573,13 @@ export default function SavedNotes() {
 
   const hasAnyNotes = notes.some((note) => !pendingDeleteSetRef.current.has(note.id));
 
-  const isShowingEmptyState = !isLoading && (!hasAnyNotes || groupedNotes.length === 0);
+  // Only the "there are literally no notes yet" state should vertically
+  // center the whole scroll view (it has no search bar to keep pinned).
+  // A "no matches for this search" result must NOT re-trigger that
+  // centering, or the search bar itself jumps down to the middle of the
+  // screen along with the "No matches" text.
+  const isTrulyEmpty = !isLoading && !hasAnyNotes;
+  const isShowingNoMatches = !isLoading && hasAnyNotes && groupedNotes.length === 0;
 
   const hideToast = useCallback(() => {
     setToast(null);
@@ -596,7 +607,7 @@ export default function SavedNotes() {
             alignSelf: isDesktop ? 'center' : 'stretch',
             width: '100%',
           },
-          isShowingEmptyState && styles.emptyScrollContent,
+          isTrulyEmpty && styles.emptyScrollContent,
         ]}
       >
         {isLoading ? (
@@ -612,13 +623,15 @@ export default function SavedNotes() {
         ) : (
           <>
             <View style={styles.searchBarContainer}>
-              <View style={styles.searchBar}>
+              <View style={[styles.searchBar, isSearchFocused && styles.searchBarFocused]}>
                 <TextInput
                   value={searchQuery}
                   onChangeText={setSearchQuery}
                   placeholder="Search notes or diagrams"
                   placeholderTextColor="#94a3b8"
                   style={styles.searchInput}
+                  onFocus={() => setIsSearchFocused(true)}
+                  onBlur={() => setIsSearchFocused(false)}
                   onSubmitEditing={() => Keyboard.dismiss()}
                   autoCapitalize="none"
                   returnKeyType="search"
@@ -647,8 +660,8 @@ export default function SavedNotes() {
               </View>
             </View>
 
-            {groupedNotes.length === 0 ? (
-              <View style={styles.emptyState}>
+            {isShowingNoMatches ? (
+              <View style={styles.noMatchesState}>
                 <Text style={styles.emptyTitle}>No matches</Text>
                 <Text style={styles.emptySubtext}>Try a different search term.</Text>
               </View>
@@ -776,6 +789,13 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.04,
     shadowRadius: 3,
   },
+  searchBarFocused: {
+    borderColor: COLORS.searchFocus,
+    borderWidth: 1.5,
+    shadowColor: COLORS.searchFocus,
+    shadowOpacity: 0.15,
+    shadowRadius: 6,
+  },
   searchInput: {
     flex: 1,
     fontSize: 15,
@@ -839,6 +859,12 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingHorizontal: SPACING.xxxl,
     paddingVertical: SPACING.xxxl * 2,
+  },
+  noMatchesState: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: SPACING.xxxl,
+    paddingTop: SPACING.xxxl * 2,
   },
   emptyTitle: {
     fontSize: 20,
@@ -1084,4 +1110,3 @@ const styles = StyleSheet.create({
     letterSpacing: 0.4,
   },
 });
-

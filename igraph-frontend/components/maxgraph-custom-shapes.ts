@@ -608,9 +608,14 @@ function cardinalityLabels(
   full: [string, string],
 ): [string, string] {
   const side = (style as Record<string, unknown> | null | undefined)?.cardinalitySide;
-  if (side === 'start') return [full[0], ''];
-  if (side === 'end') return ['', full[1]];
-  return full;
+  const s = style as Record<string, unknown> | null | undefined;
+  const labels: [string, string] = [
+    typeof s?.cardinalityStartText === 'string' ? s.cardinalityStartText : full[0],
+    typeof s?.cardinalityEndText === 'string' ? s.cardinalityEndText : full[1],
+  ];
+  if (side === 'start') return [labels[0], ''];
+  if (side === 'end') return ['', labels[1]];
+  return labels;
 }
 
 // Fishbone's Sub-Cause variants draw a short second tick branching off their
@@ -3838,7 +3843,41 @@ class CrowManyShape extends Shape {
   }
 }
 
+function offsetPolyline(pts: Point[], dist: number): Array<{ x: number; y: number }> {
+  return pts.map((p, i) => {
+    const prev = pts[Math.max(0, i - 1)];
+    const next = pts[Math.min(pts.length - 1, i + 1)];
+    const inLen = Math.hypot(p.x - prev.x, p.y - prev.y);
+    const outLen = Math.hypot(next.x - p.x, next.y - p.y);
+    const n1 = inLen > 0 ? { x: -(p.y - prev.y) / inLen, y: (p.x - prev.x) / inLen } : null;
+    const n2 = outLen > 0 ? { x: -(next.y - p.y) / outLen, y: (next.x - p.x) / outLen } : null;
+    if (n1 && n2) {
+      let nx = n1.x + n2.x;
+      let ny = n1.y + n2.y;
+      const len = Math.hypot(nx, ny) || 1;
+      nx /= len; ny /= len;
+      const cos = Math.max(0.5, nx * n1.x + ny * n1.y);
+      return { x: p.x + (nx * dist) / cos, y: p.y + (ny * dist) / cos };
+    }
+    const n = n1 ?? n2 ?? { x: 0, y: 1 };
+    return { x: p.x + n.x * dist, y: p.y + n.y * dist };
+  });
+}
+
 class TotalParticipationShape extends Shape {
+  paintEdgeShape(c: AbstractCanvas2D, pts: Point[]) {
+    if (pts.length < 2) return;
+    c.setStrokeColor(this.stroke);
+    c.setStrokeWidth(this.strokeWidth);
+    if (this.strokeWidth <= 0) c.setStrokeColor('none');
+    for (const side of [-3, 3]) {
+      const line = offsetPolyline(pts, side);
+      c.begin();
+      c.moveTo(line[0].x, line[0].y);
+      for (let i = 1; i < line.length; i++) c.lineTo(line[i].x, line[i].y);
+      c.stroke();
+    }
+  }
   paintBackground(c: AbstractCanvas2D, x: number, y: number, w: number, h: number) {
     const cy = y + h / 2;
     c.setStrokeColor(this.stroke);
@@ -5733,6 +5772,7 @@ export const IGRAPH_ID_STYLE_MAP: Record<string, string> = {
   'erd-cardinality-n1': 'igraph.erdCardinalityN1',
   'erd-cardinality-mn': 'igraph.erdCardinalityMN',
   'erd-connector': 'igraph.erdConnector',
+  'erd-total-participation': 'igraph.totalParticipation',
 
   // ─── Fishbone ────────────────────────────────────────────────────────────
   'fishbone-spine': 'igraph.fishboneSpine',

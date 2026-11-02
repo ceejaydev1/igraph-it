@@ -76,6 +76,7 @@ export {
   ERDCardinalityN1Shape,
   ERDCardinalityMNShape,
   ERDConnectorShape,
+  ERDTotalParticipationShape,
 } from './ERDShapes';
 
 // ─── Fishbone Shapes ───────────────────────────────────────────────────────

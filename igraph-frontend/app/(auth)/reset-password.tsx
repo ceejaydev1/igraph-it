@@ -1,18 +1,23 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
-  View,
+  AccessibilityInfo,
+  ActivityIndicator,
+  Animated,
+  Dimensions,
+  Easing,
+  Image,
+  KeyboardAvoidingView,
+  Platform,
+  Pressable,
+  PressableProps,
+  ScrollView,
+  StyleProp,
+  StyleSheet,
   Text,
   TextInput,
-  TouchableOpacity,
-  StyleSheet,
-  ScrollView,
-  ActivityIndicator,
-  Platform,
-  Dimensions,
-  KeyboardAvoidingView,
-  Modal,
-  Image,
-  Animated,
+  TextInputProps,
+  View,
+  ViewStyle,
 } from 'react-native';
 import { Stack, useRouter, useLocalSearchParams } from 'expo-router';
 import { Svg, Circle, Rect, Path, Defs, LinearGradient, Stop } from 'react-native-svg';
@@ -20,174 +25,312 @@ import * as authService from '../../services/authService';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
+/* ────────────────────────────── Design tokens ────────────────────────────── */
+
+const C = {
+  brand: '#3b5bdb',
+  brandDisabled: '#6a80de',
+  ink: '#0f172a',
+  text: '#334155',
+  muted: '#64748b',
+  border: '#94a3b8',
+  error: '#dc2626',
+  errorText: '#b91c1c',
+  errorBg: '#fef2f2',
+  errorBorder: '#fecaca',
+  success: '#047857',
+  successBg: '#ecfdf5',
+  warn: '#b45309',
+  warnBg: '#fffbeb',
+  white: '#ffffff',
+};
+
+// 2px focus ring for web / keyboard users. Native touch has no focus state.
+const focusRing = (color: string = C.brand): ViewStyle =>
+  Platform.OS === 'web'
+    ? ({
+        outlineWidth: 2,
+        outlineStyle: 'solid',
+        outlineColor: color,
+        outlineOffset: 2,
+      } as unknown as ViewStyle)
+    : {};
+
+// Input focus ring (same as signup): 2px, offset 1, drawn on the field wrapper.
+const fieldRing = (color: string = C.brand): ViewStyle =>
+  Platform.OS === 'web'
+    ? ({
+        outlineWidth: 2,
+        outlineStyle: 'solid',
+        outlineColor: color,
+        outlineOffset: 1,
+      } as unknown as ViewStyle)
+    : {};
+
+const noWebOutline =
+  Platform.OS === 'web' ? ({ outlineStyle: 'none' } as unknown as TextInputProps['style']) : null;
+
+/* ───────────────────────────── Password rules ────────────────────────────── */
+
 const SPECIAL_CHARS_REGEX = /[!@#$%^&*(),.?":{}|<>]/;
 
-const isPasswordValid = (pwd: string) => {
+const RULES = [
+  { key: 'length', label: '8+ characters', test: (p: string) => p.length >= 8 },
+  { key: 'upper', label: 'Uppercase letter', test: (p: string) => /[A-Z]/.test(p) },
+  { key: 'lower', label: 'Lowercase letter', test: (p: string) => /[a-z]/.test(p) },
+  { key: 'number', label: 'A number', test: (p: string) => /[0-9]/.test(p) },
+  { key: 'special', label: 'Special character', test: (p: string) => SPECIAL_CHARS_REGEX.test(p) },
+];
+
+const isPasswordValid = (pwd: string) => RULES.every((r) => r.test(pwd));
+
+const getStrength = (pwd: string) => {
+  const met = RULES.filter((r) => r.test(pwd)).length;
+  if (met === RULES.length) return { label: 'Strong', color: C.success, ratio: 1 };
+  if (met >= 3) return { label: 'Fair', color: C.warn, ratio: met / RULES.length };
+  return { label: 'Weak', color: C.errorText, ratio: Math.max(met, 1) / RULES.length };
+};
+
+const maskEmail = (email: string) => {
+  const [local, domain] = email.split('@');
+  if (!local || !domain) return email;
+  return `${local.slice(0, local.length > 2 ? 2 : 1)}•••@${domain}`;
+};
+
+const firstParam = (value?: string | string[]) => (Array.isArray(value) ? value[0] : value) ?? '';
+
+const EXPIRED_PATTERN = /expired|invalid otp|invalid code|invalid token|incorrect code/i;
+
+/* ─────────────────────────────── Motion hook ─────────────────────────────── */
+
+// One quiet entrance per view. Skipped when the system asks for reduced motion.
+const useEntrance = (trigger: unknown) => {
+  const progress = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    let cancelled = false;
+    progress.setValue(0);
+    AccessibilityInfo.isReduceMotionEnabled().then((reduce) => {
+      if (cancelled) return;
+      if (reduce) {
+        progress.setValue(1);
+        return;
+      }
+      Animated.timing(progress, {
+        toValue: 1,
+        duration: 280,
+        easing: Easing.out(Easing.cubic),
+        useNativeDriver: Platform.OS !== 'web',
+      }).start();
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [trigger, progress]);
+
+  return {
+    opacity: progress,
+    transform: [{ translateY: progress.interpolate({ inputRange: [0, 1], outputRange: [12, 0] }) }],
+  };
+};
+
+/* ──────────────────────────────── Icons ──────────────────────────────────── */
+
+const CheckIcon = ({ color, size = 16 }: { color: string; size?: number }) => (
+  <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+    <Path d="M5 12.5l4.5 4.5L19 7.5" stroke={color} strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round" />
+  </Svg>
+);
+
+const CrossIcon = ({ color, size = 16 }: { color: string; size?: number }) => (
+  <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+    <Path d="M6 6l12 12M18 6L6 18" stroke={color} strokeWidth={2.4} strokeLinecap="round" />
+  </Svg>
+);
+
+const AlertIcon = ({ color, size = 20 }: { color: string; size?: number }) => (
+  <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+    <Circle cx="12" cy="12" r="10" stroke={color} strokeWidth={1.8} />
+    <Path d="M12 7.5v5M12 16.2h.01" stroke={color} strokeWidth={2.2} strokeLinecap="round" />
+  </Svg>
+);
+
+const EyeIcon = ({ visible }: { visible: boolean }) => (
+  <Svg width={20} height={20} viewBox="0 0 24 24" fill="none">
+    {visible ? (
+      <>
+        <Path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" stroke={C.muted} strokeWidth={1.8} />
+        <Circle cx={12} cy={12} r={3} stroke={C.muted} strokeWidth={1.8} />
+      </>
+    ) : (
+      <>
+        <Path d="M17.94 17.94A10.07 10.07 0 0112 20c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94" stroke={C.muted} strokeWidth={1.8} />
+        <Path d="M9.9 4.24A9.12 9.12 0 0112 4c7 0 11 8 11 8a18.5 18.5 0 01-2.16 3.19" stroke={C.muted} strokeWidth={1.8} />
+        <Path d="M1 1l22 22" stroke={C.muted} strokeWidth={1.8} />
+      </>
+    )}
+  </Svg>
+);
+
+/* ─────────────────────────────── Primitives ──────────────────────────────── */
+
+// Pressable that shows the shared focus ring and a pressed state.
+const FocusPressable = ({
+  style,
+  onFocus,
+  onBlur,
+  ...rest
+}: Omit<PressableProps, 'style'> & { style?: StyleProp<ViewStyle> }) => {
+  const [focused, setFocused] = useState(false);
   return (
-    pwd.length >= 8 &&
-    /[A-Z]/.test(pwd) &&
-    /[a-z]/.test(pwd) &&
-    /[0-9]/.test(pwd) &&
-    SPECIAL_CHARS_REGEX.test(pwd)
+    <Pressable
+      {...rest}
+      onFocus={(e) => {
+        setFocused(true);
+        onFocus?.(e);
+      }}
+      onBlur={(e) => {
+        setFocused(false);
+        onBlur?.(e);
+      }}
+      style={({ pressed }) => [style, pressed && styles.pressed, focused && focusRing()]}
+    />
   );
 };
 
-const getPasswordMissingRequirements = (pwd: string): string[] => {
-  const missing: string[] = [];
-  if (pwd.length < 8) missing.push('8+ characters');
-  if (!/[A-Z]/.test(pwd)) missing.push('uppercase letter');
-  if (!/[a-z]/.test(pwd)) missing.push('lowercase letter');
-  if (!/[0-9]/.test(pwd)) missing.push('number');
-  if (!SPECIAL_CHARS_REGEX.test(pwd)) missing.push('special character');
-  return missing;
-};
+const LogoTile = () => (
+  <View style={styles.logoTile} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+    <Svg width={26} height={26} viewBox="0 0 24 24" fill="none">
+      <Rect x={5} y={11} width={14} height={10} rx={2.5} stroke={C.white} strokeWidth={2} />
+      <Path d="M8 11V8a4 4 0 018 0v3" stroke={C.white} strokeWidth={2} strokeLinecap="round" />
+      <Circle cx={12} cy={16} r={1.3} fill={C.white} />
+    </Svg>
+  </View>
+);
 
-const getStrengthPercentage = (pwd: string): number => {
-  let score = 0;
-  if (pwd.length >= 8) score++;
-  if (/[A-Z]/.test(pwd)) score++;
-  if (/[a-z]/.test(pwd)) score++;
-  if (/[0-9]/.test(pwd)) score++;
-  if (SPECIAL_CHARS_REGEX.test(pwd)) score++;
-  return (score / 5) * 100;
-};
-
-const getStrengthColor = (pwd: string): string => {
-  const p = getStrengthPercentage(pwd);
-  if (p === 100) return '#10b981';
-  if (p >= 80) return '#f59e0b';
-  if (p >= 60) return '#f97316';
-  return '#ef4444';
-};
-
-const getStrengthLabel = (pwd: string): string => {
-  const p = getStrengthPercentage(pwd);
-  if (p === 100) return 'Strong';
-  if (p >= 80) return 'Good';
-  if (p >= 60) return 'Weak';
-  return 'Very weak';
-};
-
-const PasswordStrengthIndicator = ({ password }: { password: string }) => {
-  if (!password) return null;
-
-  const color = getStrengthColor(password);
-
+const StatusBadge = ({ tone }: { tone: 'success' | 'warning' }) => {
+  const success = tone === 'success';
   return (
-    <View style={styles.strengthContainer}>
-      <View style={styles.strengthRow}>
-        <View style={styles.strengthBar}>
-          <View
-            style={[
-              styles.strengthFill,
-              { width: `${getStrengthPercentage(password)}%`, backgroundColor: color },
-            ]}
-          />
-        </View>
-        <Text style={[styles.strengthText, { color }]}>{getStrengthLabel(password)}</Text>
-      </View>
+    <View
+      style={[styles.statusBadge, { backgroundColor: success ? C.successBg : C.warnBg }]}
+      accessibilityElementsHidden
+      importantForAccessibility="no-hide-descendants"
+    >
+      {success ? <CheckIcon color={C.success} size={30} /> : <AlertIcon color={C.warn} size={30} />}
     </View>
   );
 };
 
-const CustomToast = ({
-  visible,
-  message,
-  isError,
-  onHide,
-}: {
-  visible: boolean;
-  message: string;
-  isError: boolean;
-  onHide: () => void;
-}) => {
-  const fadeAnim = useRef(new Animated.Value(0)).current;
-  const slideAnim = useRef(new Animated.Value(-50)).current;
-  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+const Banner = ({ message }: { message: string }) => (
+  <View style={styles.banner} accessibilityRole="alert" accessibilityLiveRegion="assertive">
+    <AlertIcon color={C.errorText} size={18} />
+    <Text style={styles.bannerText}>{message}</Text>
+  </View>
+);
 
-  useEffect(() => {
-    if (visible) {
-      Animated.parallel([
-        Animated.timing(fadeAnim, {
-          toValue: 1,
-          duration: 300,
-          useNativeDriver: true,
-        }),
-        Animated.spring(slideAnim, {
-          toValue: 0,
-          tension: 50,
-          friction: 7,
-          useNativeDriver: true,
-        }),
-      ]).start();
-
-      timeoutRef.current = setTimeout(() => {
-        hideToast();
-      }, 3000);
-    }
-
-    return () => {
-      if (timeoutRef.current) {
-        clearTimeout(timeoutRef.current);
-      }
-    };
-  }, [visible]);
-
-  const hideToast = () => {
-    Animated.parallel([
-      Animated.timing(fadeAnim, {
-        toValue: 0,
-        duration: 300,
-        useNativeDriver: true,
-      }),
-      Animated.timing(slideAnim, {
-        toValue: -50,
-        duration: 300,
-        useNativeDriver: true,
-      }),
-    ]).start(() => {
-      onHide();
-    });
-  };
-
-  if (!visible) return null;
-
+const Rule = ({ met, touched, label }: { met: boolean; touched: boolean; label: string }) => {
+  const color = met ? C.success : touched ? C.error : C.muted;
   return (
-    <Animated.View
-      style={[
-        styles.toastContainer,
-        {
-          opacity: fadeAnim,
-          transform: [{ translateY: slideAnim }],
-        },
-      ]}
-    >
-      <View style={[styles.toastContent, isError ? styles.toastError : styles.toastSuccess]}>
-        {isError ? (
-          <Svg width={20} height={20} viewBox="0 0 24 24" fill="none">
-            <Circle cx="12" cy="12" r="10" stroke="#fff" strokeWidth="1.5" />
-            <Path d="M12 8v4M12 16h.01" stroke="#fff" strokeWidth="2" strokeLinecap="round" />
-          </Svg>
+    <View style={styles.rule} accessible accessibilityLabel={`${label}, ${met ? 'met' : 'not met'}`}>
+      <View style={styles.ruleIcon}>
+        {met ? (
+          <CheckIcon color={color} size={14} />
+        ) : touched ? (
+          <CrossIcon color={color} size={14} />
         ) : (
-          <Svg width={20} height={20} viewBox="0 0 24 24" fill="none">
-            <Circle cx="12" cy="12" r="10" stroke="#fff" strokeWidth="1.5" />
-            <Path d="M8 12l3 3 5-6" stroke="#fff" strokeWidth="2" strokeLinecap="round" />
-          </Svg>
+          <View style={styles.ruleDot} />
         )}
-        <Text style={styles.toastText}>{message}</Text>
       </View>
-    </Animated.View>
+      <Text style={[styles.ruleText, { color }]}>{label}</Text>
+    </View>
   );
 };
 
-// Matches signin.tsx / signup.tsx / forgot-password.tsx exactly — this
-// screen previously had its own thinner stand-in (no gradient wash, no
-// illustrated diagram motifs), which made it the one visibly plainer step
-// in an otherwise consistent Sign In → Forgot Password → Reset Password
-// flow. The card style already matched the shared system; only the
-// background didn't.
+const PasswordField = ({
+  label,
+  value,
+  onChangeText,
+  placeholder,
+  hasError,
+  onBlur,
+  inputRef,
+  returnKeyType,
+  onSubmitEditing,
+  editable = true,
+  children,
+}: {
+  label: string;
+  value: string;
+  onChangeText: (text: string) => void;
+  placeholder: string;
+  hasError?: boolean;
+  onBlur?: () => void;
+  inputRef?: React.Ref<TextInput>;
+  returnKeyType?: TextInputProps['returnKeyType'];
+  onSubmitEditing?: () => void;
+  editable?: boolean;
+  children?: React.ReactNode;
+}) => {
+  const [visible, setVisible] = useState(false);
+  const [focused, setFocused] = useState(false);
+
+  return (
+    <View style={styles.formGroup}>
+      <Text style={styles.label}>{label}</Text>
+      <View
+        style={[
+          styles.field,
+          focused && styles.fieldFocused,
+          hasError && styles.fieldError,
+          focused && fieldRing(hasError ? C.error : C.brand),
+        ]}
+      >
+        <TextInput
+          ref={inputRef}
+          style={[styles.input, noWebOutline]}
+          placeholder={placeholder}
+          placeholderTextColor={C.muted}
+          value={value}
+          onChangeText={onChangeText}
+          onFocus={() => setFocused(true)}
+          onBlur={() => {
+            setFocused(false);
+            onBlur?.();
+          }}
+          secureTextEntry={!visible}
+          autoCapitalize="none"
+          autoCorrect={false}
+          autoComplete="new-password"
+          textContentType="newPassword"
+          passwordRules={'minlength: 8; required: lower; required: upper; required: digit; required: [!@#$%^&*(),.?":{}|<>];'}
+          returnKeyType={returnKeyType}
+          onSubmitEditing={onSubmitEditing}
+          editable={editable}
+          accessibilityLabel={label}
+        />
+        <FocusPressable
+          style={styles.eyeBtn}
+          onPress={() => setVisible((v) => !v)}
+          accessibilityRole="button"
+          accessibilityLabel={visible ? 'Hide password' : 'Show password'}
+        >
+          <EyeIcon visible={visible} />
+        </FocusPressable>
+      </View>
+      {children}
+    </View>
+  );
+};
+
+/* ──────────────────────────── Decorative background ──────────────────────── */
+
 const DiagramBackground = () => (
-  <View style={StyleSheet.absoluteFillObject} pointerEvents="none">
+  <View
+    style={StyleSheet.absoluteFillObject}
+    pointerEvents="none"
+    accessibilityElementsHidden
+    importantForAccessibility="no-hide-descendants"
+  >
     <Svg width="100%" height="100%" viewBox={`0 0 ${SCREEN_WIDTH} ${SCREEN_HEIGHT}`} preserveAspectRatio="xMidYMid slice" style={StyleSheet.absoluteFillObject}>
       <Defs>
         <LinearGradient id="bgWash" x1="0%" y1="0%" x2="100%" y2="100%">
@@ -214,8 +357,7 @@ const DiagramBackground = () => (
     <View style={styles.gridOverlay} />
 
     <Svg width="100%" height="100%" viewBox={`0 0 ${SCREEN_WIDTH} ${SCREEN_HEIGHT}`} preserveAspectRatio="xMidYMid slice" style={StyleSheet.absoluteFillObject}>
-
-      {/* ── Mini class diagram (top-left): name / attributes / methods ── */}
+      {/* Mini class diagram (top-left) */}
       <Rect x={SCREEN_WIDTH * 0.06} y={SCREEN_HEIGHT * 0.09} width="118" height="88" rx="6" stroke="#a9b8ff" strokeWidth="1.5" fill="#ffffff" fillOpacity="0.4" opacity="0.55" />
       <Path d={`M ${SCREEN_WIDTH * 0.06} ${SCREEN_HEIGHT * 0.09 + 26} h 118`} stroke="#a9b8ff" strokeWidth="1.5" opacity="0.55" />
       <Path d={`M ${SCREEN_WIDTH * 0.06} ${SCREEN_HEIGHT * 0.09 + 58} h 118`} stroke="#a9b8ff" strokeWidth="1.5" opacity="0.55" />
@@ -225,11 +367,11 @@ const DiagramBackground = () => (
       <Rect x={SCREEN_WIDTH * 0.06 + 10} y={SCREEN_HEIGHT * 0.09 + 67} width="48" height="5" rx="2.5" fill="#c3cdff" opacity="0.5" />
       <Rect x={SCREEN_WIDTH * 0.06 + 10} y={SCREEN_HEIGHT * 0.09 + 77} width="56" height="5" rx="2.5" fill="#c3cdff" opacity="0.5" />
 
-      {/* Association line + multiplicity dot toward the ERD entity */}
+      {/* Association line toward the ERD entity */}
       <Path d={`M ${SCREEN_WIDTH * 0.06 + 118} ${SCREEN_HEIGHT * 0.09 + 44} C ${SCREEN_WIDTH * 0.34} ${SCREEN_HEIGHT * 0.05}, ${SCREEN_WIDTH * 0.58} ${SCREEN_HEIGHT * 0.12}, ${SCREEN_WIDTH * 0.72} ${SCREEN_HEIGHT * 0.13 + 35}`} stroke="#a9b8ff" strokeWidth="1.5" fill="none" opacity="0.45" />
       <Circle cx={SCREEN_WIDTH * 0.06 + 122} cy={SCREEN_HEIGHT * 0.09 + 44} r="2.5" fill="#a9b8ff" opacity="0.5" />
 
-      {/* ── ERD entity (upper-right): rectangle with header row ── */}
+      {/* ERD entity (upper-right) */}
       <Rect x={SCREEN_WIDTH * 0.72} y={SCREEN_HEIGHT * 0.13} width="132" height="70" rx="6" stroke="#a9b8ff" strokeWidth="1.5" fill="#ffffff" fillOpacity="0.4" opacity="0.5" />
       <Path d={`M ${SCREEN_WIDTH * 0.72} ${SCREEN_HEIGHT * 0.13 + 22} h 132`} stroke="#a9b8ff" strokeWidth="1.5" opacity="0.5" />
       <Rect x={SCREEN_WIDTH * 0.72 + 10} y={SCREEN_HEIGHT * 0.13 + 8} width="50" height="6" rx="3" fill="#a9b8ff" opacity="0.5" />
@@ -238,221 +380,111 @@ const DiagramBackground = () => (
       <Circle cx={SCREEN_WIDTH * 0.72 + 12} cy={SCREEN_HEIGHT * 0.13 + 48} r="2" fill="#c3cdff" opacity="0.6" />
       <Rect x={SCREEN_WIDTH * 0.72 + 20} y={SCREEN_HEIGHT * 0.13 + 45} width="58" height="5" rx="2.5" fill="#c3cdff" opacity="0.5" />
 
-      {/* ── Use-case oval + actor stick figure (lower-left) ── */}
+      {/* Use-case actor and oval (lower-left) */}
       <Circle cx={SCREEN_WIDTH * 0.10} cy={SCREEN_HEIGHT * 0.60} r="4.5" stroke="#a9b8ff" strokeWidth="1.6" fill="none" opacity="0.5" />
       <Path d={`M ${SCREEN_WIDTH * 0.10} ${SCREEN_HEIGHT * 0.60 + 4.5} v 16 M ${SCREEN_WIDTH * 0.10 - 8} ${SCREEN_HEIGHT * 0.60 + 12} h 16 M ${SCREEN_WIDTH * 0.10} ${SCREEN_HEIGHT * 0.60 + 20.5} l -7 12 M ${SCREEN_WIDTH * 0.10} ${SCREEN_HEIGHT * 0.60 + 20.5} l 7 12`} stroke="#a9b8ff" strokeWidth="1.6" fill="none" opacity="0.5" />
       <Path d={`M ${SCREEN_WIDTH * 0.10 + 12} ${SCREEN_HEIGHT * 0.60 + 12} L ${SCREEN_WIDTH * 0.24} ${SCREEN_HEIGHT * 0.60 + 6}`} stroke="#a9b8ff" strokeWidth="1.5" strokeDasharray="5 6" opacity="0.45" />
       <Path d={`M ${SCREEN_WIDTH * 0.24} ${SCREEN_HEIGHT * 0.60 + 6} m -22, 0 a 22,13 0 1,0 44,0 a 22,13 0 1,0 -44,0`} stroke="#a9b8ff" strokeWidth="1.5" fill="#ffffff" fillOpacity="0.35" opacity="0.5" />
 
-      {/* ── Flowchart bits (lower-right): decision diamond + terminator ── */}
+      {/* Flowchart decision and terminator (lower-right) */}
       <Path d={`M ${SCREEN_WIDTH * 0.80} ${SCREEN_HEIGHT * 0.66} L ${SCREEN_WIDTH * 0.80 + 20} ${SCREEN_HEIGHT * 0.66 + 14} L ${SCREEN_WIDTH * 0.80} ${SCREEN_HEIGHT * 0.66 + 28} L ${SCREEN_WIDTH * 0.80 - 20} ${SCREEN_HEIGHT * 0.66 + 14} Z`} stroke="#a9b8ff" strokeWidth="1.5" fill="#ffffff" fillOpacity="0.35" opacity="0.5" />
       <Path d={`M ${SCREEN_WIDTH * 0.80} ${SCREEN_HEIGHT * 0.66 + 28} v 22`} stroke="#a9b8ff" strokeWidth="1.5" strokeDasharray="4 5" opacity="0.4" />
       <Rect x={SCREEN_WIDTH * 0.80 - 30} y={SCREEN_HEIGHT * 0.66 + 50} width="60" height="24" rx="12" stroke="#a9b8ff" strokeWidth="1.5" fill="#ffffff" fillOpacity="0.35" opacity="0.5" />
 
-      {/* Faint sequence-diagram lifeline for balance, center-right */}
+      {/* Sequence-diagram lifeline (center-right) */}
       <Path d={`M ${SCREEN_WIDTH * 0.90} ${SCREEN_HEIGHT * 0.35} v 90`} stroke="#bfd0ff" strokeWidth="1.4" strokeDasharray="3 6" opacity="0.35" />
       <Rect x={SCREEN_WIDTH * 0.90 - 26} y={SCREEN_HEIGHT * 0.35} width="52" height="18" rx="4" stroke="#bfd0ff" strokeWidth="1.4" fill="none" opacity="0.35" />
     </Svg>
   </View>
 );
 
-const BackIcon = () => (
-  <Svg width={20} height={20} viewBox="0 0 24 24" fill="none">
-    <Path d="M19 12H5M5 12l7 7M5 12l7-7" stroke="#4a5568" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" />
-  </Svg>
-);
-
-const EyeIcon = ({ visible }: { visible: boolean }) => (
-  <Svg width={18} height={18} viewBox="0 0 24 24" fill="none">
-    {visible ? (
-      <>
-        <Path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" stroke="#8896b3" strokeWidth={1.8} />
-        <Circle cx={12} cy={12} r={3} stroke="#8896b3" strokeWidth={1.8} />
-      </>
-    ) : (
-      <>
-        <Path d="M17.94 17.94A10.07 10.07 0 0112 20c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94" stroke="#8896b3" strokeWidth={1.8} />
-        <Path d="M9.9 4.24A9.12 9.12 0 0112 4c7 0 11 8 11 8a18.5 18.5 0 01-2.16 3.19" stroke="#8896b3" strokeWidth={1.8} />
-        <Path d="M1 1l22 22" stroke="#8896b3" strokeWidth={1.8} />
-      </>
-    )}
-  </Svg>
-);
-
-const ErrorPopupModal = ({
-  visible,
-  title,
-  message,
-  onClose,
-  onAction,
-  actionButtonText,
-}: {
-  visible: boolean;
-  title: string;
-  message: string;
-  onClose: () => void;
-  onAction?: () => void;
-  actionButtonText?: string;
-}) => {
-  return (
-    <Modal
-      animationType="fade"
-      transparent={true}
-      visible={visible}
-      onRequestClose={onClose}
-    >
-      <TouchableOpacity
-        style={styles.errorModalOverlay}
-        activeOpacity={1}
-        onPress={onClose}
-      >
-        <View style={styles.errorModalContainer}>
-          <View style={styles.errorModalIconWrapper}>
-            <View style={styles.errorModalIconCircle}>
-              <Svg width={32} height={32} viewBox="0 0 24 24" fill="none">
-                <Circle cx="12" cy="12" r="10" stroke="#3b5bdb" strokeWidth="1.5" />
-                <Path d="M12 8v4M12 16h.01" stroke="#3b5bdb" strokeWidth="2" strokeLinecap="round" />
-              </Svg>
-            </View>
-          </View>
-          <Text style={styles.errorModalTitle}>{title}</Text>
-          <Text style={styles.errorModalMessage}>{message}</Text>
-          {onAction && (
-            <TouchableOpacity
-              style={styles.errorModalButtonPrimary}
-              onPress={() => {
-                onClose();
-                onAction();
-              }}
-            >
-              <Text style={styles.errorModalButtonTextPrimary}>{actionButtonText || 'Continue'}</Text>
-            </TouchableOpacity>
-          )}
-        </View>
-      </TouchableOpacity>
-    </Modal>
-  );
-};
-
-const getOutlineColor = (isFocused: boolean, hasError: string) => {
-  if (hasError) return '#ef4444';
-  if (isFocused) return '#4c6fff';
-  return '#dde3fa';
-};
+/* ──────────────────────────────── Screen ─────────────────────────────────── */
 
 export default function ResetPassword() {
   const router = useRouter();
-  const { email, otp } = useLocalSearchParams<{ email: string; otp: string }>();
+  const params = useLocalSearchParams<{ email?: string | string[]; otp?: string | string[] }>();
+
+  // Keep the email and code in state, then remove them from the URL so they
+  // don't linger in the address bar. A reload lands on the "expired" view.
+  const [credentials, setCredentials] = useState(() => ({
+    email: firstParam(params.email),
+    otp: firstParam(params.otp),
+  }));
+
+  useEffect(() => {
+    const email = firstParam(params.email);
+    const otp = firstParam(params.otp);
+    if (email && otp) {
+      setCredentials({ email, otp });
+      router.setParams({ email: undefined, otp: undefined } as any);
+    }
+  }, [params.email, params.otp]);
 
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
-  const [showPassword, setShowPassword] = useState(false);
-  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [newTouched, setNewTouched] = useState(false);
+  const [confirmTouched, setConfirmTouched] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [errors, setErrors] = useState({ newPassword: '', confirmPassword: '' });
-  const [newPasswordFocused, setNewPasswordFocused] = useState(false);
-  const [confirmPasswordFocused, setConfirmPasswordFocused] = useState(false);
-  const [inlinePasswordError, setInlinePasswordError] = useState('');
-  const [showErrorModal, setShowErrorModal] = useState(false);
-  const [toastVisible, setToastVisible] = useState(false);
-  const [toastMessage, setToastMessage] = useState('');
-  const [toastIsError, setToastIsError] = useState(false);
-  const [errorModalData, setErrorModalData] = useState({
-    title: '',
-    message: '',
-    onAction: undefined as (() => void) | undefined,
-    actionButtonText: '',
-  });
+  const [submitError, setSubmitError] = useState('');
+  const [codeExpired, setCodeExpired] = useState(false);
+  const [done, setDone] = useState(false);
 
   const confirmRef = useRef<TextInput>(null);
 
-  const showToast = (message: string, isError: boolean = false) => {
-    setToastMessage(message);
-    setToastIsError(isError);
-    setToastVisible(true);
-  };
+  const missingCredentials = !credentials.email || !credentials.otp;
+  const view: 'form' | 'success' | 'expired' = done
+    ? 'success'
+    : codeExpired || missingCredentials
+    ? 'expired'
+    : 'form';
 
-  const hideToast = () => {
-    setToastVisible(false);
-  };
+  const cardAnimation = useEntrance(view);
 
-  const showErrorPopup = (
-    title: string,
-    message: string,
-    onAction?: () => void,
-    actionButtonText?: string
-  ) => {
-    setErrorModalData({ title, message, onAction, actionButtonText: actionButtonText || '' });
-    setShowErrorModal(true);
-  };
+  const passwordOk = isPasswordValid(newPassword);
+  const matches = confirmPassword.length > 0 && newPassword === confirmPassword;
+  const showMismatch =
+    confirmPassword.length > 0 &&
+    !matches &&
+    (confirmTouched || confirmPassword.length >= newPassword.length);
+  const canSubmit = passwordOk && matches && !loading;
+  const strength = getStrength(newPassword);
 
-  const validate = () => {
-    const newErrors = { newPassword: '', confirmPassword: '' };
-    let isValid = true;
-
-    if (!newPassword) {
-      newErrors.newPassword = 'Password is required';
-      isValid = false;
-    } else if (!isPasswordValid(newPassword)) {
-      const missing = getPasswordMissingRequirements(newPassword);
-      newErrors.newPassword = `Password must include: ${missing.join(', ')}`;
-      isValid = false;
+  const handleFailure = (message?: string) => {
+    if (message && EXPIRED_PATTERN.test(message)) {
+      setCodeExpired(true);
+      return;
     }
-
-    if (!confirmPassword) {
-      newErrors.confirmPassword = 'Please confirm your password';
-      isValid = false;
-    } else if (newPassword !== confirmPassword) {
-      newErrors.confirmPassword = 'Passwords do not match';
-      isValid = false;
-    }
-
-    setErrors(newErrors);
-    return isValid;
+    setSubmitError(message || 'We couldn’t reset your password. Check your connection and try again.');
   };
 
   const handleReset = async () => {
-    if (!validate()) return;
+    if (!canSubmit) return;
 
+    setSubmitError('');
     setLoading(true);
     try {
-      const result = await authService.resetPassword(email!, otp!, newPassword);
-
+      const result = await authService.resetPassword(credentials.email, credentials.otp, newPassword);
       if (result.success) {
         await authService.clearTokens();
-        showToast('Password reset successful! Redirecting to sign in...', false);
-        setTimeout(() => {
-          router.replace('/(auth)/signin');
-        }, 400);
+        setNewPassword('');
+        setConfirmPassword('');
+        setDone(true);
       } else {
-        showToast(result.message || 'Failed to reset password', true);
+        handleFailure(result.message);
       }
     } catch (error: any) {
-      showToast(error.response?.data?.message || 'Something went wrong', true);
+      handleFailure(error?.response?.data?.message);
     } finally {
       setLoading(false);
     }
   };
 
+  const goToSignIn = () => router.replace('/(auth)/signin');
+  const requestNewCode = () => router.replace('/(auth)/forgot-password');
+
   return (
     <>
       <Stack.Screen options={{ headerShown: false }} />
-
-      <ErrorPopupModal
-        visible={showErrorModal}
-        title={errorModalData.title}
-        message={errorModalData.message}
-        onClose={() => setShowErrorModal(false)}
-        onAction={errorModalData.onAction}
-        actionButtonText={errorModalData.actionButtonText}
-      />
-
-      <CustomToast
-        visible={toastVisible}
-        message={toastMessage}
-        isError={toastIsError}
-        onHide={hideToast}
-      />
 
       <KeyboardAvoidingView
         style={styles.flex}
@@ -460,174 +492,165 @@ export default function ResetPassword() {
         keyboardVerticalOffset={Platform.OS === 'ios' ? 64 : 0}
       >
         <DiagramBackground />
-        <ScrollView
-          contentContainerStyle={styles.scrollContent}
-          keyboardShouldPersistTaps="handled"
-        >
-          <View style={styles.card}>
-            {/* Connectors */}
-            <View style={styles.connectorTop} />
-            <View style={styles.connectorBottom} />
-            <View style={styles.connectorLeft} />
-            <View style={styles.connectorRight} />
+        <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
+          <Animated.View style={[styles.card, cardAnimation]}>
+            {/* Diagram connector dots */}
+            <View style={[styles.connector, styles.connectorTop]} />
+            <View style={[styles.connector, styles.connectorBottom]} />
+            <View style={[styles.connector, styles.connectorLeft]} />
+            <View style={[styles.connector, styles.connectorRight]} />
 
-            <TouchableOpacity
-              style={styles.backBtn}
-              onPress={() => router.back()}
-              activeOpacity={0.7}
-            >
-              <BackIcon />
-              <Text style={styles.backText}>Back</Text>
-            </TouchableOpacity>
+            {view === 'form' && (
+              <>
+                <LogoTile />
+                <Text style={styles.heading} accessibilityRole="header">
+                  Create a new password
+                </Text>
+                <Text style={styles.subtitle}>
+                  Choose a new password for{' '}
+                  <Text style={styles.subtitleEmail}>{maskEmail(credentials.email)}</Text>.
+                </Text>
 
-            <Text style={styles.heading}>Reset Password</Text>
-            <Text style={styles.subtitle}>Enter your new password below</Text>
-
-            {/* New Password */}
-            <View style={styles.formGroup}>
-              <Text style={styles.label}>New Password</Text>
-              <View
-                style={[
-                  styles.inputWrap,
-                  newPasswordFocused && styles.inputWrapFocused,
-                  errors.newPassword ? styles.inputError : null,
-                ]}
-              >
-                <TextInput
-                  style={[
-                    styles.input,
-                    styles.inputWithIcon,
-                    Platform.OS === 'web' && {
-                      outlineWidth: 1,
-                      outlineStyle: 'solid',
-                      outlineOffset: 0,
-                      borderRadius: 12,
-                      outlineColor: getOutlineColor(newPasswordFocused, errors.newPassword),
-                    },
-                  ]}
-                  placeholder="At least 8 characters"
-                  placeholderTextColor="#b8c0d4"
+                <PasswordField
+                  label="New password"
                   value={newPassword}
                   onChangeText={(text) => {
                     setNewPassword(text);
-                    if (errors.newPassword) setErrors({ ...errors, newPassword: '' });
-                    setInlinePasswordError('');
+                    if (submitError) setSubmitError('');
                   }}
-                  onFocus={() => setNewPasswordFocused(true)}
+                  placeholder="At least 8 characters"
                   onBlur={() => {
-                    setNewPasswordFocused(false);
-                    if (newPassword && !isPasswordValid(newPassword)) {
-                      const missing = getPasswordMissingRequirements(newPassword);
-                      setInlinePasswordError(`Missing: ${missing.join(', ')}`);
-                    } else {
-                      setInlinePasswordError('');
-                    }
+                    if (newPassword.length > 0) setNewTouched(true);
                   }}
-                  secureTextEntry={!showPassword}
-                  autoCapitalize="none"
                   returnKeyType="next"
                   onSubmitEditing={() => confirmRef.current?.focus()}
-                />
-                <TouchableOpacity
-                  style={styles.eyeBtn}
-                  onPress={() => setShowPassword(!showPassword)}
+                  editable={!loading}
                 >
-                  <EyeIcon visible={showPassword} />
-                </TouchableOpacity>
-              </View>
-              <PasswordStrengthIndicator password={newPassword} />
-              {inlinePasswordError ? (
-                <Text style={styles.inlineErrorText}>{inlinePasswordError}</Text>
-              ) : null}
-              {errors.newPassword ? (
-                <Text style={styles.errorText}>{errors.newPassword}</Text>
-              ) : null}
-            </View>
+                  {newPassword.length > 0 && (
+                    <View style={styles.strengthRow}>
+                      <View style={styles.strengthTrack}>
+                        <View
+                          style={[
+                            styles.strengthFill,
+                            { width: `${strength.ratio * 100}%`, backgroundColor: strength.color },
+                          ]}
+                        />
+                      </View>
+                      <Text
+                        style={[styles.strengthLabel, { color: strength.color }]}
+                        accessibilityLabel={`Password strength: ${strength.label}`}
+                      >
+                        {strength.label}
+                      </Text>
+                    </View>
+                  )}
+                  <View style={styles.rules}>
+                    {RULES.map((rule) => (
+                      <Rule
+                        key={rule.key}
+                        label={rule.label}
+                        met={rule.test(newPassword)}
+                        touched={newTouched}
+                      />
+                    ))}
+                  </View>
+                </PasswordField>
 
-            {/* Confirm Password */}
-            <View style={styles.formGroup}>
-              <Text style={styles.label}>Confirm Password</Text>
-              <View
-                style={[
-                  styles.inputWrap,
-                  confirmPasswordFocused && styles.inputWrapFocused,
-                  errors.confirmPassword ? styles.inputError : null,
-                ]}
-              >
-                <TextInput
-                  ref={confirmRef}
-                  style={[
-                    styles.input,
-                    styles.inputWithIcon,
-                    Platform.OS === 'web' && {
-                      outlineWidth: 1,
-                      outlineStyle: 'solid',
-                      outlineOffset: 0,
-                      borderRadius: 12,
-                      outlineColor: getOutlineColor(
-                        confirmPasswordFocused,
-                        errors.confirmPassword
-                      ),
-                    },
-                  ]}
-                  placeholder="Re-enter your password"
-                  placeholderTextColor="#b8c0d4"
+                <PasswordField
+                  label="Confirm password"
                   value={confirmPassword}
                   onChangeText={(text) => {
                     setConfirmPassword(text);
-                    if (errors.confirmPassword) setErrors({ ...errors, confirmPassword: '' });
+                    if (submitError) setSubmitError('');
                   }}
-                  onFocus={() => setConfirmPasswordFocused(true)}
-                  onBlur={() => setConfirmPasswordFocused(false)}
-                  secureTextEntry={!showConfirmPassword}
-                  autoCapitalize="none"
+                  placeholder="Re-enter your password"
+                  hasError={showMismatch}
+                  onBlur={() => setConfirmTouched(true)}
+                  inputRef={confirmRef}
                   returnKeyType="done"
                   onSubmitEditing={handleReset}
-                />
-                <TouchableOpacity
-                  style={styles.eyeBtn}
-                  onPress={() => setShowConfirmPassword(!showConfirmPassword)}
+                  editable={!loading}
                 >
-                  <EyeIcon visible={showConfirmPassword} />
-                </TouchableOpacity>
-              </View>
-              {confirmPassword && newPassword === confirmPassword && !errors.confirmPassword && newPassword ? (
-                <Text style={styles.matchSuccess}>✓ Passwords match</Text>
-              ) : confirmPassword && newPassword !== confirmPassword && !errors.confirmPassword ? (
-                <Text style={styles.errorText}>✗ Doesn't match</Text>
-              ) : null}
-              {errors.confirmPassword ? (
-                <Text style={styles.errorText}>{errors.confirmPassword}</Text>
-              ) : null}
-            </View>
+                  {matches && (
+                    <View style={styles.matchRow} accessibilityLiveRegion="polite">
+                      <CheckIcon color={C.success} size={14} />
+                      <Text style={[styles.matchText, { color: C.success }]}>Passwords match</Text>
+                    </View>
+                  )}
+                  {showMismatch && (
+                    <View style={styles.matchRow} accessibilityLiveRegion="polite">
+                      <CrossIcon color={C.errorText} size={14} />
+                      <Text style={[styles.matchText, { color: C.errorText }]}>Passwords don’t match</Text>
+                    </View>
+                  )}
+                </PasswordField>
 
-            <TouchableOpacity
-              style={[styles.btnReset, loading && styles.btnDisabled]}
-              onPress={handleReset}
-              disabled={loading}
-            >
-              {loading ? (
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                  <ActivityIndicator color="#ffffff" size="small" />
-                  <Text style={styles.btnResetText}>Resetting...</Text>
-                </View>
-              ) : (
-                <Text style={styles.btnResetText}>Reset Password</Text>
-              )}
-            </TouchableOpacity>
+                {submitError ? <Banner message={submitError} /> : null}
 
-            <TouchableOpacity
-              style={styles.signinLink}
-              onPress={() => router.push('/(auth)/signin')}
-            >
-              <Text style={styles.signinText}>Back to Sign In</Text>
-            </TouchableOpacity>
-          </View>
+                <FocusPressable
+                  style={[styles.btn, !canSubmit && !loading && styles.btnDisabled]}
+                  onPress={handleReset}
+                  disabled={!canSubmit}
+                  accessibilityRole="button"
+                  accessibilityState={{ disabled: !canSubmit, busy: loading }}
+                >
+                  {loading ? (
+                    <View style={styles.btnContent}>
+                      <ActivityIndicator color={C.white} size="small" />
+                      <Text style={styles.btnText}>Resetting…</Text>
+                    </View>
+                  ) : (
+                    <Text style={styles.btnText}>Reset password</Text>
+                  )}
+                </FocusPressable>
+
+                <FocusPressable style={styles.linkBtn} onPress={goToSignIn} accessibilityRole="link">
+                  <Text style={styles.linkText}>Back to sign in</Text>
+                </FocusPressable>
+              </>
+            )}
+
+            {view === 'success' && (
+              <>
+                <StatusBadge tone="success" />
+                <Text style={styles.heading} accessibilityRole="header">
+                  Password updated
+                </Text>
+                <Text style={styles.subtitle}>
+                  Your password has been changed. Sign in with your new password to continue.
+                </Text>
+                <FocusPressable style={styles.btn} onPress={goToSignIn} accessibilityRole="button">
+                  <Text style={styles.btnText}>Continue to sign in</Text>
+                </FocusPressable>
+              </>
+            )}
+
+            {view === 'expired' && (
+              <>
+                <StatusBadge tone="warning" />
+                <Text style={styles.heading} accessibilityRole="header">
+                  This reset link has expired
+                </Text>
+                <Text style={styles.subtitle}>
+                  For your security, a reset code works once and only for a short time. Request a new
+                  code to continue.
+                </Text>
+                <FocusPressable style={styles.btn} onPress={requestNewCode} accessibilityRole="button">
+                  <Text style={styles.btnText}>Request a new code</Text>
+                </FocusPressable>
+                <FocusPressable style={styles.linkBtn} onPress={goToSignIn} accessibilityRole="link">
+                  <Text style={styles.linkText}>Back to sign in</Text>
+                </FocusPressable>
+              </>
+            )}
+          </Animated.View>
         </ScrollView>
       </KeyboardAvoidingView>
     </>
   );
 }
+
+/* ──────────────────────────────── Styles ─────────────────────────────────── */
 
 const styles = StyleSheet.create({
   flex: {
@@ -642,12 +665,17 @@ const styles = StyleSheet.create({
     paddingVertical: 40,
     minHeight: SCREEN_HEIGHT,
   },
+  pressed: {
+    opacity: 0.85,
+  },
+
+  // Card
   card: {
-    backgroundColor: '#ffffff',
+    backgroundColor: C.white,
     borderRadius: 28,
     paddingHorizontal: 32,
-    paddingTop: 34,
-    paddingBottom: 34,
+    paddingTop: 36,
+    paddingBottom: 28,
     width: '100%',
     maxWidth: 430,
     shadowColor: '#1e293b',
@@ -659,241 +687,243 @@ const styles = StyleSheet.create({
     borderColor: '#f1f5ff',
     position: 'relative',
   },
-  connectorTop: {
+  connector: {
     position: 'absolute',
-    top: -4,
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: C.white,
+    borderWidth: 1.5,
+    borderColor: '#c7d2fe',
+  },
+  connectorTop: { top: -4, alignSelf: 'center' },
+  connectorBottom: { bottom: -4, alignSelf: 'center' },
+  connectorLeft: { left: -4, top: '50%', transform: [{ translateY: -4 }] },
+  connectorRight: { right: -4, top: '50%', transform: [{ translateY: -4 }] },
+
+  // Header
+  logoTile: {
     alignSelf: 'center',
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: '#ffffff',
-    borderWidth: 1.5,
-    borderColor: '#c7d2fe',
-  },
-  connectorBottom: {
-    position: 'absolute',
-    bottom: -4,
-    alignSelf: 'center',
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: '#ffffff',
-    borderWidth: 1.5,
-    borderColor: '#c7d2fe',
-  },
-  connectorLeft: {
-    position: 'absolute',
-    left: -4,
-    top: '50%',
-    transform: [{ translateY: -4 }],
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: '#ffffff',
-    borderWidth: 1.5,
-    borderColor: '#c7d2fe',
-  },
-  connectorRight: {
-    position: 'absolute',
-    right: -4,
-    top: '50%',
-    transform: [{ translateY: -4 }],
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: '#ffffff',
-    borderWidth: 1.5,
-    borderColor: '#c7d2fe',
-  },
-  backBtn: {
-    flexDirection: 'row',
+    width: 56,
+    height: 56,
+    borderRadius: 16,
+    backgroundColor: C.brand,
     alignItems: 'center',
-    gap: 6,
-    marginBottom: 24,
-    alignSelf: 'flex-start',
+    justifyContent: 'center',
+    transform: [{ rotate: '-6deg' }],
+    marginBottom: 22,
+    shadowColor: C.brand,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.28,
+    shadowRadius: 14,
+    elevation: 6,
   },
-  backText: {
-    fontSize: 14,
-    color: '#4a5568',
-    fontWeight: '600',
+  statusBadge: {
+    alignSelf: 'center',
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 20,
   },
   heading: {
     fontSize: 26,
     fontWeight: '800',
-    color: '#0f172a',
+    color: C.ink,
     textAlign: 'center',
     letterSpacing: -0.6,
-    marginBottom: 12,
+    marginBottom: 10,
   },
   subtitle: {
-    fontSize: 14,
-    color: '#64748b',
+    fontSize: 15,
+    color: C.text,
     textAlign: 'center',
     marginBottom: 28,
-    lineHeight: 20,
+    lineHeight: 22,
   },
+  subtitleEmail: {
+    fontWeight: '600',
+    color: C.ink,
+  },
+
+  // Fields
   formGroup: {
-    marginBottom: 16,
+    marginBottom: 20,
   },
   label: {
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: '600',
-    color: '#4a5568',
+    color: C.text,
     marginBottom: 8,
   },
-  inputWrap: {
-    borderWidth: 1,
-    borderColor: '#dde3fa',
-    borderRadius: 12,
-    backgroundColor: '#ffffff',
+  field: {
     flexDirection: 'row',
     alignItems: 'center',
-    minHeight: 40,
+    minHeight: 48,
+    borderWidth: 1.5,
+    borderColor: C.border,
+    borderRadius: 12,
+    backgroundColor: C.white,
   },
-  inputWrapFocused: {
-    borderWidth: 1,
-    backgroundColor: '#ffffff',
-    borderColor: '#3b5bdb',
-    shadowColor: '#3b5bdb',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.15,
-    shadowRadius: 12,
-    elevation: 4,
+  fieldFocused: {
+    borderColor: C.brand,
+    shadowColor: C.brand,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 2,
   },
-  inputError: {
-    borderColor: '#ef4444',
+  fieldError: {
+    borderColor: C.error,
   },
   input: {
     flex: 1,
-    paddingHorizontal: 14,
-    paddingVertical: Platform.OS === 'ios' ? 13 : 11,
-    fontSize: 14,
-    color: '#1a1f36',
-    minHeight: 44,
+    minHeight: 46,
+    paddingLeft: 14,
+    paddingRight: 4,
+    fontSize: 16,
+    color: C.ink,
     textAlignVertical: 'center',
   },
-  inputWithIcon: {
-    paddingRight: 44,
-  },
   eyeBtn: {
-    position: 'absolute',
-    right: 12,
-    padding: 10,
+    width: 48,
+    height: 48,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 12,
   },
-  errorText: {
-    fontSize: 12,
-    color: '#ef4444',
-    marginTop: 6,
-    marginLeft: 4,
-    fontWeight: '500',
-  },
-  inlineErrorText: {
-    fontSize: 11,
-    color: '#f59e0b',
-    marginTop: 4,
-    marginLeft: 4,
-    fontWeight: '500',
-  },
-  // Strength indicator
-  strengthContainer: {
-    marginTop: 6,
-  },
+
+  // Strength and rules
   strengthRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: 10,
+    marginTop: 10,
   },
-  strengthBar: {
+  strengthTrack: {
     flex: 1,
     height: 4,
-    backgroundColor: '#e2e6f3',
     borderRadius: 2,
+    backgroundColor: '#e2e8f0',
     overflow: 'hidden',
   },
   strengthFill: {
     height: '100%',
     borderRadius: 2,
   },
-  strengthText: {
-    fontSize: 11,
-    fontWeight: '600',
-    minWidth: 52,
+  strengthLabel: {
+    fontSize: 13,
+    fontWeight: '700',
+    minWidth: 48,
     textAlign: 'right',
   },
-  matchSuccess: {
-    color: '#10b981',
-    fontSize: 11,
-    marginTop: 6,
-    marginLeft: 4,
+  rules: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    marginTop: 8,
+    rowGap: 4,
+  },
+  rule: {
+    flexBasis: '50%',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    minHeight: 24,
+  },
+  ruleIcon: {
+    width: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  ruleDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#cbd5e1',
+  },
+  ruleText: {
+    fontSize: 14,
+    lineHeight: 20,
+  },
+  matchRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 8,
+  },
+  matchText: {
+    fontSize: 14,
     fontWeight: '500',
   },
-  btnReset: {
-    backgroundColor: '#4c6fff',
+
+  // Banner
+  banner: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 10,
+    padding: 12,
+    marginBottom: 16,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: C.errorBorder,
+    backgroundColor: C.errorBg,
+  },
+  bannerText: {
+    flex: 1,
+    fontSize: 14,
+    lineHeight: 20,
+    color: C.errorText,
+    fontWeight: '500',
+  },
+
+  // Buttons and links
+  btn: {
+    minHeight: 52,
     borderRadius: 14,
-    paddingVertical: 16,
+    paddingVertical: 15,
+    paddingHorizontal: 16,
     alignItems: 'center',
-    marginTop: 18,
-    shadowColor: '#4c6fff',
+    justifyContent: 'center',
+    backgroundColor: C.brand,
+    shadowColor: C.brand,
     shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.32,
+    shadowOpacity: 0.3,
     shadowRadius: 20,
     elevation: 8,
   },
   btnDisabled: {
-    opacity: 0.75,
+    backgroundColor: C.brandDisabled,
+    shadowOpacity: 0,
+    elevation: 0,
   },
-  btnResetText: {
-    color: '#ffffff',
-    fontSize: 15,
-    fontWeight: '700',
-    letterSpacing: 0.3,
-  },
-  signinLink: {
-    alignItems: 'center',
-    marginTop: 20,
-  },
-  signinText: {
-    fontSize: 14,
-    color: '#4c6fff',
-    fontWeight: '600',
-  },
-  // Toast
-  toastContainer: {
-    position: 'absolute',
-    top: Platform.OS === 'ios' ? 60 : 50,
-    left: 20,
-    right: 20,
-    zIndex: 1000,
-    alignItems: 'center',
-  },
-  toastContent: {
+  btnContent: {
     flexDirection: 'row',
     alignItems: 'center',
+    gap: 8,
+  },
+  btnText: {
+    color: C.white,
+    fontSize: 16,
+    fontWeight: '700',
+    letterSpacing: 0.2,
+  },
+  linkBtn: {
+    alignSelf: 'center',
+    minHeight: 44,
     paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderRadius: 12,
-    minWidth: 200,
-    maxWidth: '90%',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15,
-    shadowRadius: 8,
-    elevation: 6,
+    marginTop: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 10,
   },
-  toastSuccess: {
-    backgroundColor: '#10b981',
-  },
-  toastError: {
-    backgroundColor: '#ef4444',
-  },
-  toastText: {
-    color: '#ffffff',
-    fontSize: 14,
+  linkText: {
+    fontSize: 15,
+    color: C.brand,
     fontWeight: '600',
-    marginLeft: 10,
-    flex: 1,
   },
-  // Grid background
+
+  // Background
   gridBackground: {
     ...StyleSheet.absoluteFillObject,
     width: '100%',
@@ -902,62 +932,5 @@ const styles = StyleSheet.create({
   gridOverlay: {
     ...StyleSheet.absoluteFillObject,
     backgroundColor: 'rgba(255,255,255,0.10)',
-  },
-  // Error modal
-  errorModalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  errorModalContainer: {
-    width: '85%',
-    maxWidth: 340,
-    backgroundColor: '#FFFFFF',
-    borderRadius: 20,
-    padding: 24,
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15,
-    shadowRadius: 12,
-    elevation: 8,
-  },
-  errorModalIconWrapper: {
-    marginBottom: 16,
-  },
-  errorModalIconCircle: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    backgroundColor: '#f0f4ff',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  errorModalTitle: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: '#1e293b',
-    textAlign: 'center',
-    marginBottom: 8,
-  },
-  errorModalMessage: {
-    fontSize: 14,
-    color: '#64748b',
-    textAlign: 'center',
-    lineHeight: 20,
-    marginBottom: 24,
-  },
-  errorModalButtonPrimary: {
-    width: '100%',
-    paddingVertical: 12,
-    borderRadius: 10,
-    alignItems: 'center',
-    backgroundColor: '#3b5bdb',
-  },
-  errorModalButtonTextPrimary: {
-    color: '#ffffff',
-    fontSize: 16,
-    fontWeight: '600',
   },
 });

@@ -23,6 +23,9 @@ export interface FlowchartIssue {
   cell?: Cell;
   severity: IssueSeverity;
   message: string;
+  // Machine-readable tag for issues that callers react to. Match on this, not
+  // on the message text, so rewording a message can't silently break a caller.
+  code?: 'empty-diagram';
 }
 
 // Every other validator below (Functional Decomposition, DFD, ERD, Fishbone,
@@ -120,7 +123,7 @@ function junctionLabel(role: string): string {
 }
 
 // ════════════════════════════════════════════════════════════════════════════
-// ⭐ GLOBAL RULES (G1-G8) — apply to every diagram type, layered underneath
+// GLOBAL RULES (G1-G8) — apply to every diagram type, layered underneath
 // each diagram's own per-type rules below. Where a per-diagram rule
 // contradicts one of these (e.g. Flowchart treats a self-loop as a warning,
 // not the generic error validateFlowchart used to hardcode), the per-diagram
@@ -133,7 +136,7 @@ function junctionLabel(role: string): string {
 // roles (and anything already flagged as foreign-palette, so an empty
 // canvas doesn't also get a confusing second message).
 function checkEmptyCanvas(count: number): DiagramIssue[] {
-  return count > 0 ? [] : [{ severity: 'error', message: 'This diagram is empty — add at least one shape.' }];
+  return count > 0 ? [] : [{ severity: 'error', code: 'empty-diagram', message: 'This diagram is empty — add at least one shape.' }];
 }
 
 // G2 — every edge needs both ends attached to a real cell. A "dangling" end
@@ -586,7 +589,7 @@ export function validateFlowchart(graph: Graph): FlowchartIssue[] {
 }
 
 // ════════════════════════════════════════════════════════════════════════════
-// ⭐ ALL OTHER DIAGRAM TYPES — shared structural rule engine
+// ALL OTHER DIAGRAM TYPES — shared structural rule engine
 // ════════════════════════════════════════════════════════════════════════════
 // validateFlowchart above is intentionally left untouched (it's the original,
 // battle-tested one-off). Every other diagram type's notation rules follow
@@ -1216,7 +1219,7 @@ export function validateERD(graph: Graph): DiagramIssue[] {
   // keeps recognizing those exactly as it always did.
   const claimedEdges = new Set<Cell>();
   for (const edge of entityRelationshipEdges) {
-    if (isCardinality(getShapeRole(edge))) claimedEdges.add(edge);
+    if (isCardinality(getShapeRole(edge)) || getShapeRole(edge) === 'erd-total-participation') claimedEdges.add(edge);
   }
 
   const cardinalityVertices = validVertices.filter((c) => isCardinality(getShapeRole(c)));

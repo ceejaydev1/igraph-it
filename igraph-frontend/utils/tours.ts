@@ -1,5 +1,5 @@
 import type { DriveStep } from 'driver.js';
-import { advanceWhenElementAppears, markTourWaiting, scheduleTourOnNextFocus, destroyForHandoff, CHECK_SVG } from './onboardingTour';
+import { advanceWhenElementAppears, markTourWaiting, scheduleTourOnNextFocus, destroyForHandoff, CHECK_SVG, CHEVRON_RIGHT_SVG } from './onboardingTour';
 
 // Bump the trailing version (e.g. -v5) if a tour's steps change enough that
 // past users should see it again — startTour() only skips a tour once its
@@ -8,7 +8,7 @@ import { advanceWhenElementAppears, markTourWaiting, scheduleTourOnNextFocus, de
 export const HOME_TOUR_ID = 'home-v4';
 export const CREATE_TOUR_ID = 'create-v6';
 export const REFERENCE_TOUR_ID = 'reference-v4';
-export const ACCOUNT_TOUR_ID = 'account-v5';
+export const ACCOUNT_TOUR_ID = 'account-v6';
 
 // The card the Home tour opens to continue onto the Diagram Detail page —
 // kept as a constant (rather than importing Home's local DIAGRAMS array)
@@ -34,12 +34,35 @@ type TourCtx = {
   closeMobileDownloadFormats?: () => void;
 };
 
-// An un-anchored intro step (no `element`) renders as a plain centered
-// popover instead of highlighting anything — the same technique used for
-// the closing hand-off step below, and for the same reason: it can't be
-// skipped by a missing/hidden target on some platform or screen.
+// Un-anchored steps (no `element`) render as a plain centered popover instead
+// of highlighting anything, so they can't be skipped by a missing/hidden
+// target on some platform or screen. Each one below also carries a
+// popoverClass: tourPopover.ts reads it to add the matching artwork, and
+// tourTheme.css styles it.
+
+// The very first thing a new user sees — the full welcome card with the
+// animated diagram and the four-module map. Only the Home tour opens with it.
 const welcomeStep = (title: string, description: string): DriveStep => ({
-  popover: { title, description },
+  popover: {
+    title,
+    description,
+    popoverClass: 'igraphit-tour-welcome',
+    nextBtnText: `Start tour ${CHEVRON_RIGHT_SVG}`,
+    // Start or "Skip tour" (added by tourPopover.ts) — no Back, no X.
+    showButtons: ['next'],
+  },
+});
+
+// The opening card of every later module (Create / Reference / Account):
+// a compact banner with the module's number, so the chain reads as four
+// chapters rather than one long popover sequence.
+const moduleIntroStep = (title: string, description: string): DriveStep => ({
+  popover: {
+    title,
+    description,
+    popoverClass: 'igraphit-tour-intro',
+    showButtons: ['next', 'close'],
+  },
 });
 
 // The navbar-orientation steps only ever appear in the Home tour — Create/
@@ -65,7 +88,7 @@ const NAVBAR_STEPS: DriveStep[] = [
   },
 ];
 
-// Builds a tour's last step so clicking "Got it" doesn't just close the
+// Builds a tour's last step so clicking "Continue" doesn't just close the
 // popover — it hands off straight into the next module's tour. No
 // `element` here on purpose (same reasoning as welcomeStep) — the mobile
 // Create screen hides the shared Navbar entirely, so a step anchored to a
@@ -81,6 +104,8 @@ const nextModuleStep = (
 ): DriveStep => ({
   popover: {
     ...popover,
+    popoverClass: 'igraphit-tour-handoff',
+    doneBtnText: `Continue ${CHEVRON_RIGHT_SVG}`,
     onDoneClick: (_el, _step, opts) => {
       // destroyForHandoff (not a plain destroy()) — this is the chain
       // continuing into the next module's tour, not the user's onboarding
@@ -94,11 +119,12 @@ const nextModuleStep = (
 });
 
 // Account is the last stop in the Home → Create → Reference → Account loop —
-// its last step reads "Finish" instead of "Got it" and just closes out back
+// its last step reads "Finish" instead of "Continue" and just closes out back
 // on the Diagram Library, rather than chaining into another tour.
 const finishStep = (popover: { title: string; description: string }, router: any): DriveStep => ({
   popover: {
     ...popover,
+    popoverClass: 'igraphit-tour-finish',
     doneBtnText: `Finish ${CHECK_SVG}`,
     onDoneClick: (_el, _step, opts) => {
       // destroy() synchronously fires startTour's onDestroyed (onboardingTour.ts),
@@ -118,8 +144,8 @@ const finishStep = (popover: { title: string; description: string }, router: any
 export function getHomeTourSteps({ router }: TourCtx): DriveStep[] {
   return [
     welcomeStep(
-      'Welcome to iGraph IT 👋',
-      "Let's take a quick look at your Diagram Library before you dive in."
+      'Welcome to iGraph IT',
+      'Learn SDLC and UML diagrams, then build your own. Here’s a short tour of what’s inside — it takes about two minutes.'
     ),
     ...NAVBAR_STEPS,
     {
@@ -190,7 +216,7 @@ export function getHomeTourSteps({ router }: TourCtx): DriveStep[] {
     nextModuleStep(
       {
         title: 'Ready to build one?',
-        description: 'Click Got it to head to Create Diagram and start drawing.',
+        description: 'Next up is the Create workspace, where you build your own diagrams.',
       },
       router,
       CREATE_TOUR_ID,
@@ -336,7 +362,7 @@ export function getCreateTourSteps({
       ];
 
   return [
-    welcomeStep(
+    moduleIntroStep(
       'Let’s build something',
       "Here's a quick walkthrough of the Create Diagram workspace."
     ),
@@ -472,7 +498,7 @@ export function getCreateTourSteps({
     nextModuleStep(
       {
         title: 'Need a refresher?',
-        description: 'Click Got it to head to Learning References for quick definitions of every diagram type.',
+        description: 'Next up is Learning References, with quick definitions for every diagram type.',
       },
       router,
       REFERENCE_TOUR_ID,
@@ -483,7 +509,7 @@ export function getCreateTourSteps({
 
 export function getReferenceTourSteps({ router }: TourCtx): DriveStep[] {
   return [
-    welcomeStep(
+    moduleIntroStep(
       'Learning References',
       "Quick definitions for every diagram type, whenever you need a refresher."
     ),
@@ -515,7 +541,7 @@ export function getReferenceTourSteps({ router }: TourCtx): DriveStep[] {
     nextModuleStep(
       {
         title: 'Manage your account',
-        description: 'Click Got it to check out your profile, saved diagrams, and settings.',
+        description: 'Next up is your account: profile, saved diagrams, and saved notes.',
       },
       router,
       ACCOUNT_TOUR_ID,
@@ -526,7 +552,7 @@ export function getReferenceTourSteps({ router }: TourCtx): DriveStep[] {
 
 export function getAccountTourSteps({ router }: TourCtx): DriveStep[] {
   return [
-    welcomeStep(
+    moduleIntroStep(
       'Your Account',
       "Here's where you manage your profile, saved diagrams, and settings."
     ),
@@ -555,6 +581,14 @@ export function getAccountTourSteps({ router }: TourCtx): DriveStep[] {
       },
     },
     {
+      element: '#tour-account-notes',
+      popover: {
+        title: 'Saved notes',
+        description: 'Open all the notes you’ve saved while learning, in one place.',
+        side: 'bottom',
+      },
+    },
+    {
       element: '#tour-account-privacy',
       popover: {
         title: 'Privacy & terms',
@@ -579,4 +613,3 @@ export function getAccountTourSteps({ router }: TourCtx): DriveStep[] {
     ),
   ];
 }
-

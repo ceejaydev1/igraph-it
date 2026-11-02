@@ -69,6 +69,7 @@ import {
   ERDCardinalityN1Shape,
   ERDCardinalityMNShape,
   ERDConnectorShape,
+  ERDTotalParticipationShape,
 
   // Fishbone Shapes
   FishboneSpineShape,
@@ -260,6 +261,7 @@ const componentMap: Record<string, React.ComponentType<any>> = {
   ERDCardinalityN1Shape: ERDCardinalityN1Shape,
   ERDCardinalityMNShape: ERDCardinalityMNShape,
   ERDConnectorShape: ERDConnectorShape,
+  ERDTotalParticipationShape: ERDTotalParticipationShape,
 
   // ─────────────────────────────────────────────────────────────
   // FISHBONE SHAPES

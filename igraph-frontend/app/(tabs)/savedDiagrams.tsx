@@ -24,6 +24,7 @@ import * as authService from '../../services/authService';
 import API_BASE_URL from '../../constants/api';
 import { usePullToRefreshWeb } from '../../hooks/usePullToRefreshWeb';
 import { PullToRefreshIndicator } from '../../components/PullToRefreshIndicator';
+import { usePageTitle } from '../../utils/usePageTitle';
 
 // ============================================================================
 // COLORS
@@ -601,14 +602,25 @@ const SavedDiagramCard = React.memo(({
     ]).start();
   }, [isHovered]);
 
+  // Shadow deepens and reads pure black (rather than a navy tint) so the
+  // lift on hover feels grounded rather than tinted/colored — matches
+  // Home's DiagramCard treatment exactly.
   const shadowOpacity = shadowAnim.interpolate({
     inputRange: [0, 1],
-    outputRange: [0.06, 0.16],
+    outputRange: [0.1, 0.22],
   });
 
   const elevation = shadowAnim.interpolate({
     inputRange: [0, 1],
-    outputRange: [3, 8],
+    outputRange: [3, 10],
+  });
+
+  // Hairline black border, subtle at rest and inked-in on hover — the
+  // border and the shadow move together so the card reads as one solid,
+  // deliberate edge instead of two independent effects. Same as Home.
+  const borderColor = shadowAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: ['rgba(15, 23, 42, 0.14)', 'rgba(15, 23, 42, 0.32)'],
   });
 
   return (
@@ -632,6 +644,7 @@ const SavedDiagramCard = React.memo(({
             transform: [{ scale: scaleAnim }],
             shadowOpacity,
             elevation,
+            borderColor,
           },
         ]}
       >
@@ -711,6 +724,7 @@ const SavedDiagramCard = React.memo(({
 // ============================================================================
 
 export default function SavedDiagrams() {
+  usePageTitle('Saved Diagrams');
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
@@ -1408,15 +1422,26 @@ const styles = StyleSheet.create({
     right: 0,
     bottom: 0,
     borderRadius: 26,
+    // Lighter hairline than the front card's, so the back sheet still
+    // reads as sitting behind it rather than competing with it — same as
+    // Home's stackedCard.
+    borderWidth: 1,
+    borderColor: 'rgba(15, 23, 42, 0.08)',
   },
   diagramCard: {
     backgroundColor: '#ffffff',
     borderRadius: 24,
     padding: 8,
-    shadowColor: '#0f172a',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.06,
-    shadowRadius: 16,
+    // Hairline black border — base color set here, animated toward a
+    // darker black on hover via the borderColor Animated.Value above.
+    borderWidth: 1,
+    borderColor: 'rgba(15, 23, 42, 0.14)',
+    // Pure black shadow for a crisper, more deliberate lift — matches
+    // Home's diagramCard exactly.
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.1,
+    shadowRadius: 18,
     elevation: 3,
   },
   cardPreview: {

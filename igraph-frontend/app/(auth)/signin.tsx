@@ -48,8 +48,37 @@ import {
 import * as authService from '../../services/authService';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { markNewUserForOnboarding } from '../../utils/onboardingTour';
+import { usePageTitle } from '../../utils/usePageTitle';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
+
+// ─── DESIGN TOKENS ────────────────────────────────────────────────────────────
+// Secondary text colours were too light (#8896b3 / #94a3b8 ≈ 2.9–3:1 on white).
+// These all pass WCAG AA (4.5:1) on white or the page background.
+
+const BRAND_NAME = 'iGraph IT'; // one spelling, used everywhere
+const C = {
+  primary: '#3b5bdb', // 6.3:1 on white — safe for small link text
+  textStrong: '#0f172a',
+  textBody: '#334155',
+  textMuted: '#64748b', // 4.8:1 on white (was #8896b3 / #94a3b8)
+  placeholder: '#7b8aa3',
+  border: '#d5dcf2',
+  divider: '#dbe2f3',
+};
+// Doodle colours — deeper than before so they register on laptop screens
+// while still reading as background.
+// Input focus design (same as signup): brand border + soft glow on the wrapper, plus a
+// 2px ring (offset 1) on web. The inner TextInput never draws its own outline.
+const INPUT_ERROR = '#e11d48';
+const inputRing = (color: string): any =>
+  Platform.OS === 'web'
+    ? { outlineWidth: 2, outlineStyle: 'solid', outlineColor: color, outlineOffset: 1 }
+    : {};
+const noWebOutline: any = Platform.OS === 'web' ? { outlineStyle: 'none' } : null;
+
+const DOODLE_STROKE = '#8ea1ff';
+const DOODLE_FILL = '#aebbff';
 
 // ─── RESPONSIVE LOGO SIZE ─────────────────────────────────────────────────────
 
@@ -160,6 +189,9 @@ const AnimatedLogo = ({
 
   return (
     <Animated.View
+      accessible
+      accessibilityRole="image"
+      accessibilityLabel={`${BRAND_NAME} logo`}
       style={[
         styles.logoWrapper,
         {
@@ -250,15 +282,15 @@ const ErrorPopupModal = ({
               </Svg>
             </View>
           </View>
-          <Text style={styles.errorModalTitle}>{title}</Text>
+          <Text style={styles.errorModalTitle} accessibilityRole="header">{title}</Text>
           <Text style={styles.errorModalMessage}>{message}</Text>
           {onAction ? (
-            <TouchableOpacity style={styles.errorModalButtonPrimary} onPress={() => { onClose(); onAction(); }}>
+            <TouchableOpacity style={styles.errorModalButtonPrimary} onPress={() => { onClose(); onAction(); }} accessibilityRole="button">
               {actionIcon && <View style={{ marginRight: 8 }}>{actionIcon}</View>}
               <Text style={styles.errorModalButtonTextPrimary}>{actionButtonText || 'Continue'}</Text>
             </TouchableOpacity>
           ) : (
-            <TouchableOpacity style={styles.errorModalButtonPrimary} onPress={onClose}>
+            <TouchableOpacity style={styles.errorModalButtonPrimary} onPress={onClose} accessibilityRole="button">
               <Text style={styles.errorModalButtonTextPrimary}>OK</Text>
             </TouchableOpacity>
           )}
@@ -294,9 +326,9 @@ const SuccessModal = ({
               </Svg>
             </View>
           </View>
-          <Text style={styles.errorModalTitle}>{title}</Text>
+          <Text style={styles.errorModalTitle} accessibilityRole="header">{title}</Text>
           <Text style={styles.errorModalMessage}>{message}</Text>
-          <TouchableOpacity style={[styles.errorModalButtonPrimary, { backgroundColor: '#10b981' }]} onPress={onClose}>
+          <TouchableOpacity style={[styles.errorModalButtonPrimary, { backgroundColor: '#10b981' }]} onPress={onClose} accessibilityRole="button">
             <Text style={styles.errorModalButtonTextPrimary}>{buttonText}</Text>
           </TouchableOpacity>
         </View>
@@ -332,6 +364,7 @@ const LinkGoogleModal = ({
   onCancel: () => void;
   onConfirm: () => void;
 }) => {
+  const [inputFocused, setInputFocused] = useState(false);
   return (
     <Modal animationType="fade" transparent visible={visible} onRequestClose={onCancel}>
       <TouchableOpacity style={styles.errorModalOverlay} activeOpacity={1} onPress={onCancel}>
@@ -343,17 +376,19 @@ const LinkGoogleModal = ({
               </Svg>
             </View>
           </View>
-          <Text style={styles.errorModalTitle}>Link Your Google Account</Text>
+          <Text style={styles.errorModalTitle} accessibilityRole="header">Link Your Google Account</Text>
           <Text style={styles.errorModalMessage}>
             {email || 'This email'} already has a password-protected account. Enter its password to also sign in with Google from now on.
           </Text>
 
           <View style={[styles.formGroup, { width: '100%' }]}>
-            <View style={[styles.inputWrap, error && styles.inputError]}>
+            <View style={[styles.inputWrap, inputFocused && styles.inputWrapFocused, error && styles.inputError, inputFocused && inputRing(error ? INPUT_ERROR : C.primary)]}>
               <TextInput
-                style={[styles.input, styles.inputWithIcon]}
+                style={[styles.input, styles.inputWithIcon, noWebOutline]}
+                onFocus={() => setInputFocused(true)}
+                onBlur={() => setInputFocused(false)}
                 placeholder="Enter your password"
-                placeholderTextColor="#b8c0d4"
+                placeholderTextColor={C.placeholder}
                 value={password}
                 onChangeText={onChangePassword}
                 secureTextEntry={!showPassword}
@@ -362,18 +397,26 @@ const LinkGoogleModal = ({
                 autoFocus
                 onSubmitEditing={onConfirm}
                 returnKeyType="done"
+                accessibilityLabel="Password"
               />
-              <TouchableOpacity style={styles.eyeBtn} onPress={onToggleShowPassword} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+              <TouchableOpacity
+                style={styles.eyeBtn}
+                onPress={onToggleShowPassword}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                accessibilityRole="button"
+                accessibilityLabel={showPassword ? 'Hide password' : 'Show password'}
+              >
                 <EyeIcon visible={showPassword} />
               </TouchableOpacity>
             </View>
-            {error ? <Text style={styles.errorText}>{error}</Text> : null}
+            {error ? <Text style={styles.errorText} accessibilityLiveRegion="polite">{error}</Text> : null}
           </View>
 
           <TouchableOpacity
             style={[styles.errorModalButtonPrimary, loading && { opacity: 0.7 }]}
             onPress={onConfirm}
             disabled={loading}
+            accessibilityRole="button"
           >
             {loading ? (
               <ActivityIndicator color="#ffffff" size="small" />
@@ -381,7 +424,7 @@ const LinkGoogleModal = ({
               <Text style={styles.errorModalButtonTextPrimary}>Link Account</Text>
             )}
           </TouchableOpacity>
-          <TouchableOpacity style={styles.linkGoogleCancelBtn} onPress={onCancel} disabled={loading}>
+          <TouchableOpacity style={styles.linkGoogleCancelBtn} onPress={onCancel} disabled={loading} accessibilityRole="button">
             <Text style={styles.linkGoogleCancelText}>Cancel</Text>
           </TouchableOpacity>
         </TouchableOpacity>
@@ -393,7 +436,7 @@ const LinkGoogleModal = ({
 // ─── BACKGROUND ─────────────────────────────────────────────────────────────
 
 const DiagramBackground = () => (
-  <View style={StyleSheet.absoluteFillObject} pointerEvents="none">
+  <View style={StyleSheet.absoluteFillObject} pointerEvents="none" importantForAccessibility="no-hide-descendants" accessibilityElementsHidden>
     <Svg width="100%" height="100%" viewBox={`0 0 ${SCREEN_WIDTH} ${SCREEN_HEIGHT}`} preserveAspectRatio="xMidYMid slice" style={StyleSheet.absoluteFillObject}>
       <Defs>
         <LinearGradient id="bgWash" x1="0%" y1="0%" x2="100%" y2="100%">
@@ -422,65 +465,65 @@ const DiagramBackground = () => (
     <Svg width="100%" height="100%" viewBox={`0 0 ${SCREEN_WIDTH} ${SCREEN_HEIGHT}`} preserveAspectRatio="xMidYMid slice" style={StyleSheet.absoluteFillObject}>
 
       {/* ── Mini class diagram (top-left): name / attributes / methods ── */}
-      <Rect x={SCREEN_WIDTH * 0.06} y={SCREEN_HEIGHT * 0.09} width="118" height="88" rx="6" stroke="#a9b8ff" strokeWidth="1.5" fill="#ffffff" fillOpacity="0.4" opacity="0.55" />
-      <Path d={`M ${SCREEN_WIDTH * 0.06} ${SCREEN_HEIGHT * 0.09 + 26} h 118`} stroke="#a9b8ff" strokeWidth="1.5" opacity="0.55" />
-      <Path d={`M ${SCREEN_WIDTH * 0.06} ${SCREEN_HEIGHT * 0.09 + 58} h 118`} stroke="#a9b8ff" strokeWidth="1.5" opacity="0.55" />
-      <Rect x={SCREEN_WIDTH * 0.06 + 10} y={SCREEN_HEIGHT * 0.09 + 10} width="54" height="7" rx="3" fill="#a9b8ff" opacity="0.5" />
-      <Rect x={SCREEN_WIDTH * 0.06 + 10} y={SCREEN_HEIGHT * 0.09 + 35} width="40" height="5" rx="2.5" fill="#c3cdff" opacity="0.5" />
-      <Rect x={SCREEN_WIDTH * 0.06 + 10} y={SCREEN_HEIGHT * 0.09 + 45} width="60" height="5" rx="2.5" fill="#c3cdff" opacity="0.5" />
-      <Rect x={SCREEN_WIDTH * 0.06 + 10} y={SCREEN_HEIGHT * 0.09 + 67} width="48" height="5" rx="2.5" fill="#c3cdff" opacity="0.5" />
-      <Rect x={SCREEN_WIDTH * 0.06 + 10} y={SCREEN_HEIGHT * 0.09 + 77} width="56" height="5" rx="2.5" fill="#c3cdff" opacity="0.5" />
+      <Rect x={SCREEN_WIDTH * 0.06} y={SCREEN_HEIGHT * 0.09} width="118" height="88" rx="6" stroke={DOODLE_STROKE} strokeWidth="1.5" fill="#ffffff" fillOpacity="0.5" opacity="0.75" />
+      <Path d={`M ${SCREEN_WIDTH * 0.06} ${SCREEN_HEIGHT * 0.09 + 26} h 118`} stroke={DOODLE_STROKE} strokeWidth="1.5" opacity="0.75" />
+      <Path d={`M ${SCREEN_WIDTH * 0.06} ${SCREEN_HEIGHT * 0.09 + 58} h 118`} stroke={DOODLE_STROKE} strokeWidth="1.5" opacity="0.75" />
+      <Rect x={SCREEN_WIDTH * 0.06 + 10} y={SCREEN_HEIGHT * 0.09 + 10} width="54" height="7" rx="3" fill={DOODLE_STROKE} opacity="0.7" />
+      <Rect x={SCREEN_WIDTH * 0.06 + 10} y={SCREEN_HEIGHT * 0.09 + 35} width="40" height="5" rx="2.5" fill={DOODLE_FILL} opacity="0.7" />
+      <Rect x={SCREEN_WIDTH * 0.06 + 10} y={SCREEN_HEIGHT * 0.09 + 45} width="60" height="5" rx="2.5" fill={DOODLE_FILL} opacity="0.7" />
+      <Rect x={SCREEN_WIDTH * 0.06 + 10} y={SCREEN_HEIGHT * 0.09 + 67} width="48" height="5" rx="2.5" fill={DOODLE_FILL} opacity="0.7" />
+      <Rect x={SCREEN_WIDTH * 0.06 + 10} y={SCREEN_HEIGHT * 0.09 + 77} width="56" height="5" rx="2.5" fill={DOODLE_FILL} opacity="0.7" />
 
       {/* Association line + multiplicity dot toward the ERD entity */}
-      <Path d={`M ${SCREEN_WIDTH * 0.06 + 118} ${SCREEN_HEIGHT * 0.09 + 44} C ${SCREEN_WIDTH * 0.34} ${SCREEN_HEIGHT * 0.05}, ${SCREEN_WIDTH * 0.58} ${SCREEN_HEIGHT * 0.12}, ${SCREEN_WIDTH * 0.72} ${SCREEN_HEIGHT * 0.13 + 35}`} stroke="#a9b8ff" strokeWidth="1.5" fill="none" opacity="0.45" />
-      <Circle cx={SCREEN_WIDTH * 0.06 + 122} cy={SCREEN_HEIGHT * 0.09 + 44} r="2.5" fill="#a9b8ff" opacity="0.5" />
+      <Path d={`M ${SCREEN_WIDTH * 0.06 + 118} ${SCREEN_HEIGHT * 0.09 + 44} C ${SCREEN_WIDTH * 0.34} ${SCREEN_HEIGHT * 0.05}, ${SCREEN_WIDTH * 0.58} ${SCREEN_HEIGHT * 0.12}, ${SCREEN_WIDTH * 0.72} ${SCREEN_HEIGHT * 0.13 + 35}`} stroke={DOODLE_STROKE} strokeWidth="1.5" fill="none" opacity="0.6" />
+      <Circle cx={SCREEN_WIDTH * 0.06 + 122} cy={SCREEN_HEIGHT * 0.09 + 44} r="2.5" fill={DOODLE_STROKE} opacity="0.7" />
 
       {/* ── ERD entity (upper-right): rectangle with header row ── */}
-      <Rect x={SCREEN_WIDTH * 0.72} y={SCREEN_HEIGHT * 0.13} width="132" height="70" rx="6" stroke="#a9b8ff" strokeWidth="1.5" fill="#ffffff" fillOpacity="0.4" opacity="0.5" />
-      <Path d={`M ${SCREEN_WIDTH * 0.72} ${SCREEN_HEIGHT * 0.13 + 22} h 132`} stroke="#a9b8ff" strokeWidth="1.5" opacity="0.5" />
-      <Rect x={SCREEN_WIDTH * 0.72 + 10} y={SCREEN_HEIGHT * 0.13 + 8} width="50" height="6" rx="3" fill="#a9b8ff" opacity="0.5" />
-      <Circle cx={SCREEN_WIDTH * 0.72 + 12} cy={SCREEN_HEIGHT * 0.13 + 34} r="2" fill="#c3cdff" opacity="0.6" />
-      <Rect x={SCREEN_WIDTH * 0.72 + 20} y={SCREEN_HEIGHT * 0.13 + 31} width="46" height="5" rx="2.5" fill="#c3cdff" opacity="0.5" />
-      <Circle cx={SCREEN_WIDTH * 0.72 + 12} cy={SCREEN_HEIGHT * 0.13 + 48} r="2" fill="#c3cdff" opacity="0.6" />
-      <Rect x={SCREEN_WIDTH * 0.72 + 20} y={SCREEN_HEIGHT * 0.13 + 45} width="58" height="5" rx="2.5" fill="#c3cdff" opacity="0.5" />
+      <Rect x={SCREEN_WIDTH * 0.72} y={SCREEN_HEIGHT * 0.13} width="132" height="70" rx="6" stroke={DOODLE_STROKE} strokeWidth="1.5" fill="#ffffff" fillOpacity="0.5" opacity="0.7" />
+      <Path d={`M ${SCREEN_WIDTH * 0.72} ${SCREEN_HEIGHT * 0.13 + 22} h 132`} stroke={DOODLE_STROKE} strokeWidth="1.5" opacity="0.7" />
+      <Rect x={SCREEN_WIDTH * 0.72 + 10} y={SCREEN_HEIGHT * 0.13 + 8} width="50" height="6" rx="3" fill={DOODLE_STROKE} opacity="0.7" />
+      <Circle cx={SCREEN_WIDTH * 0.72 + 12} cy={SCREEN_HEIGHT * 0.13 + 34} r="2" fill={DOODLE_FILL} opacity="0.8" />
+      <Rect x={SCREEN_WIDTH * 0.72 + 20} y={SCREEN_HEIGHT * 0.13 + 31} width="46" height="5" rx="2.5" fill={DOODLE_FILL} opacity="0.7" />
+      <Circle cx={SCREEN_WIDTH * 0.72 + 12} cy={SCREEN_HEIGHT * 0.13 + 48} r="2" fill={DOODLE_FILL} opacity="0.8" />
+      <Rect x={SCREEN_WIDTH * 0.72 + 20} y={SCREEN_HEIGHT * 0.13 + 45} width="58" height="5" rx="2.5" fill={DOODLE_FILL} opacity="0.7" />
 
       {/* ── Use-case oval + actor stick figure (lower-left) ── */}
-      <Circle cx={SCREEN_WIDTH * 0.10} cy={SCREEN_HEIGHT * 0.60} r="4.5" stroke="#a9b8ff" strokeWidth="1.6" fill="none" opacity="0.5" />
-      <Path d={`M ${SCREEN_WIDTH * 0.10} ${SCREEN_HEIGHT * 0.60 + 4.5} v 16 M ${SCREEN_WIDTH * 0.10 - 8} ${SCREEN_HEIGHT * 0.60 + 12} h 16 M ${SCREEN_WIDTH * 0.10} ${SCREEN_HEIGHT * 0.60 + 20.5} l -7 12 M ${SCREEN_WIDTH * 0.10} ${SCREEN_HEIGHT * 0.60 + 20.5} l 7 12`} stroke="#a9b8ff" strokeWidth="1.6" fill="none" opacity="0.5" />
-      <Path d={`M ${SCREEN_WIDTH * 0.10 + 12} ${SCREEN_HEIGHT * 0.60 + 12} L ${SCREEN_WIDTH * 0.24} ${SCREEN_HEIGHT * 0.60 + 6}`} stroke="#a9b8ff" strokeWidth="1.5" strokeDasharray="5 6" opacity="0.45" />
-      <Path d={`M ${SCREEN_WIDTH * 0.24} ${SCREEN_HEIGHT * 0.60 + 6} m -22, 0 a 22,13 0 1,0 44,0 a 22,13 0 1,0 -44,0`} stroke="#a9b8ff" strokeWidth="1.5" fill="#ffffff" fillOpacity="0.35" opacity="0.5" />
+      <Circle cx={SCREEN_WIDTH * 0.10} cy={SCREEN_HEIGHT * 0.60} r="4.5" stroke={DOODLE_STROKE} strokeWidth="1.6" fill="none" opacity="0.7" />
+      <Path d={`M ${SCREEN_WIDTH * 0.10} ${SCREEN_HEIGHT * 0.60 + 4.5} v 16 M ${SCREEN_WIDTH * 0.10 - 8} ${SCREEN_HEIGHT * 0.60 + 12} h 16 M ${SCREEN_WIDTH * 0.10} ${SCREEN_HEIGHT * 0.60 + 20.5} l -7 12 M ${SCREEN_WIDTH * 0.10} ${SCREEN_HEIGHT * 0.60 + 20.5} l 7 12`} stroke={DOODLE_STROKE} strokeWidth="1.6" fill="none" opacity="0.7" />
+      <Path d={`M ${SCREEN_WIDTH * 0.10 + 12} ${SCREEN_HEIGHT * 0.60 + 12} L ${SCREEN_WIDTH * 0.24} ${SCREEN_HEIGHT * 0.60 + 6}`} stroke={DOODLE_STROKE} strokeWidth="1.5" strokeDasharray="5 6" opacity="0.6" />
+      <Path d={`M ${SCREEN_WIDTH * 0.24} ${SCREEN_HEIGHT * 0.60 + 6} m -22, 0 a 22,13 0 1,0 44,0 a 22,13 0 1,0 -44,0`} stroke={DOODLE_STROKE} strokeWidth="1.5" fill="#ffffff" fillOpacity="0.45" opacity="0.7" />
 
       {/* ── Flowchart bits (lower-right): decision diamond + terminator ── */}
-      <Path d={`M ${SCREEN_WIDTH * 0.80} ${SCREEN_HEIGHT * 0.66} L ${SCREEN_WIDTH * 0.80 + 20} ${SCREEN_HEIGHT * 0.66 + 14} L ${SCREEN_WIDTH * 0.80} ${SCREEN_HEIGHT * 0.66 + 28} L ${SCREEN_WIDTH * 0.80 - 20} ${SCREEN_HEIGHT * 0.66 + 14} Z`} stroke="#a9b8ff" strokeWidth="1.5" fill="#ffffff" fillOpacity="0.35" opacity="0.5" />
-      <Path d={`M ${SCREEN_WIDTH * 0.80} ${SCREEN_HEIGHT * 0.66 + 28} v 22`} stroke="#a9b8ff" strokeWidth="1.5" strokeDasharray="4 5" opacity="0.4" />
-      <Rect x={SCREEN_WIDTH * 0.80 - 30} y={SCREEN_HEIGHT * 0.66 + 50} width="60" height="24" rx="12" stroke="#a9b8ff" strokeWidth="1.5" fill="#ffffff" fillOpacity="0.35" opacity="0.5" />
+      <Path d={`M ${SCREEN_WIDTH * 0.80} ${SCREEN_HEIGHT * 0.66} L ${SCREEN_WIDTH * 0.80 + 20} ${SCREEN_HEIGHT * 0.66 + 14} L ${SCREEN_WIDTH * 0.80} ${SCREEN_HEIGHT * 0.66 + 28} L ${SCREEN_WIDTH * 0.80 - 20} ${SCREEN_HEIGHT * 0.66 + 14} Z`} stroke={DOODLE_STROKE} strokeWidth="1.5" fill="#ffffff" fillOpacity="0.45" opacity="0.7" />
+      <Path d={`M ${SCREEN_WIDTH * 0.80} ${SCREEN_HEIGHT * 0.66 + 28} v 22`} stroke={DOODLE_STROKE} strokeWidth="1.5" strokeDasharray="4 5" opacity="0.55" />
+      <Rect x={SCREEN_WIDTH * 0.80 - 30} y={SCREEN_HEIGHT * 0.66 + 50} width="60" height="24" rx="12" stroke={DOODLE_STROKE} strokeWidth="1.5" fill="#ffffff" fillOpacity="0.45" opacity="0.7" />
 
       {/* Faint sequence-diagram lifeline for balance, center-right */}
-      <Path d={`M ${SCREEN_WIDTH * 0.90} ${SCREEN_HEIGHT * 0.35} v 90`} stroke="#bfd0ff" strokeWidth="1.4" strokeDasharray="3 6" opacity="0.35" />
-      <Rect x={SCREEN_WIDTH * 0.90 - 26} y={SCREEN_HEIGHT * 0.35} width="52" height="18" rx="4" stroke="#bfd0ff" strokeWidth="1.4" fill="none" opacity="0.35" />
+      <Path d={`M ${SCREEN_WIDTH * 0.90} ${SCREEN_HEIGHT * 0.35} v 90`} stroke={DOODLE_STROKE} strokeWidth="1.4" strokeDasharray="3 6" opacity="0.5" />
+      <Rect x={SCREEN_WIDTH * 0.90 - 26} y={SCREEN_HEIGHT * 0.35} width="52" height="18" rx="4" stroke={DOODLE_STROKE} strokeWidth="1.4" fill="none" opacity="0.5" />
     </Svg>
   </View>
 );
 
 const EyeIcon = ({ visible }: { visible: boolean }) => (
-  <Svg width={16} height={16} viewBox="0 0 24 24" fill="none">
+  <Svg width={18} height={18} viewBox="0 0 24 24" fill="none">
     {visible ? (
       <>
-        <Path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" stroke="#8896b3" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" />
-        <Circle cx={12} cy={12} r={3} stroke="#8896b3" strokeWidth={1.8} />
+        <Path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" stroke={C.textMuted} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" />
+        <Circle cx={12} cy={12} r={3} stroke={C.textMuted} strokeWidth={1.8} />
       </>
     ) : (
       <>
-        <Path d="M17.94 17.94A10.07 10.07 0 0112 20c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94" stroke="#8896b3" strokeWidth={1.8} strokeLinecap="round" />
-        <Path d="M9.9 4.24A9.12 9.12 0 0112 4c7 0 11 8 11 8a18.5 18.5 0 01-2.16 3.19" stroke="#8896b3" strokeWidth={1.8} strokeLinecap="round" />
-        <Path d="M1 1l22 22" stroke="#8896b3" strokeWidth={1.8} strokeLinecap="round" />
+        <Path d="M17.94 17.94A10.07 10.07 0 0112 20c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94" stroke={C.textMuted} strokeWidth={1.8} strokeLinecap="round" />
+        <Path d="M9.9 4.24A9.12 9.12 0 0112 4c7 0 11 8 11 8a18.5 18.5 0 01-2.16 3.19" stroke={C.textMuted} strokeWidth={1.8} strokeLinecap="round" />
+        <Path d="M1 1l22 22" stroke={C.textMuted} strokeWidth={1.8} strokeLinecap="round" />
       </>
     )}
   </Svg>
 );
 
 const GoogleIcon = () => (
-  <Svg width={16} height={16} viewBox="0 0 24 24">
+  <Svg width={18} height={18} viewBox="0 0 24 24">
     <Path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4" />
     <Path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853" />
     <Path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05" />
@@ -529,6 +572,7 @@ const loadRememberedEmail = async () => {
 //THE MAIN COMPONENT
 
 export default function SignIn() {
+  usePageTitle('Sign In');
   const router = useRouter();
   const params = useLocalSearchParams();
   const { width: windowWidth, height: windowHeight } = useWindowDimensions();
@@ -932,12 +976,6 @@ export default function SignIn() {
 
   const isAnyInputFocused = emailFocused || passwordFocused;
 
-  const getOutlineColor = (isFocused: boolean, hasError: string, defaultColor: string = '#dde3fa') => {
-    if (hasError) return '#ef4444';
-    if (isFocused) return '#4c6fff';
-    return defaultColor;
-  };
-
   return (
     <>
       <Stack.Screen options={{
@@ -997,16 +1035,18 @@ export default function SignIn() {
               <View style={styles.connectorLeft} />
               <View style={styles.connectorRight} />
 
-              <Text style={[styles.heading, isSmallScreen && { fontSize: 22 }]}>Welcome Back</Text>
-              <Text style={[styles.subtitle, isSmallScreen && { fontSize: 12, marginBottom: 12 }]}>Sign in to continue learning</Text>
+              {/* Wordmark — the brand name now appears on the page, spelled the same everywhere */}
+              <Text style={styles.brand}>{BRAND_NAME}</Text>
+              <Text style={[styles.heading, isSmallScreen && { fontSize: 22 }]} accessibilityRole="header">Welcome Back</Text>
+              <Text style={[styles.subtitle, isSmallScreen && { fontSize: 13, marginBottom: 12 }]}>Sign in to continue learning</Text>
 
               <View style={styles.formGroup}>
                 <Text style={styles.label}>Email</Text>
-                <View style={[styles.inputWrap, emailFocused && styles.inputWrapFocused, errors.email && styles.inputError]}>
+                <View style={[styles.inputWrap, emailFocused && styles.inputWrapFocused, errors.email && styles.inputError, emailFocused && inputRing(errors.email ? INPUT_ERROR : C.primary)]}>
                   <TextInput
-                    style={[styles.input, Platform.OS === 'web' && { outlineWidth: 1, outlineStyle: 'solid', outlineOffset: 0, borderRadius: 10, outlineColor: getOutlineColor(emailFocused, errors.email) }]}
+                    style={[styles.input, noWebOutline]}
                     placeholder="you@example.com"
-                    placeholderTextColor="#b8c0d4"
+                    placeholderTextColor={C.placeholder}
                     value={email}
                     onChangeText={(text) => { setEmail(text); if (errors.email) setErrors((prev) => ({ ...prev, email: '' })); }}
                     onFocus={() => setEmailFocused(true)}
@@ -1020,21 +1060,23 @@ export default function SignIn() {
                     underlineColorAndroid="transparent"
                     selectionColor="#3b5bdb"
                     cursorColor="#3b5bdb"
-                    autoComplete="off"
-                    importantForAutofill="no"
+                    // Lets browsers / password managers fill this correctly
+                    autoComplete="email"
+                    textContentType="emailAddress"
+                    accessibilityLabel="Email"
                   />
                 </View>
-                {errors.email ? <Text style={styles.errorText}>{errors.email}</Text> : null}
+                {errors.email ? <Text style={styles.errorText} accessibilityLiveRegion="polite">{errors.email}</Text> : null}
               </View>
 
               <View style={styles.formGroup}>
                 <Text style={styles.label}>Password</Text>
-                <View style={[styles.inputWrap, passwordFocused && styles.inputWrapFocused, errors.password && styles.inputError]}>
+                <View style={[styles.inputWrap, passwordFocused && styles.inputWrapFocused, errors.password && styles.inputError, passwordFocused && inputRing(errors.password ? INPUT_ERROR : C.primary)]}>
                   <TextInput
                     ref={passwordRef}
-                    style={[styles.input, styles.inputWithIcon, Platform.OS === 'web' && { outlineWidth: 1, outlineStyle: 'solid', outlineOffset: 0, borderRadius: 10, outlineColor: getOutlineColor(passwordFocused, errors.password) }]}
+                    style={[styles.input, styles.inputWithIcon, noWebOutline]}
                     placeholder="Enter your password"
-                    placeholderTextColor="#b8c0d4"
+                    placeholderTextColor={C.placeholder}
                     value={password}
                     onChangeText={(text) => { setPassword(text); if (errors.password) setErrors((prev) => ({ ...prev, password: '' })); }}
                     onFocus={() => setPasswordFocused(true)}
@@ -1047,33 +1089,58 @@ export default function SignIn() {
                     underlineColorAndroid="transparent"
                     selectionColor="#3b5bdb"
                     cursorColor="#3b5bdb"
-                    autoComplete="off"
-                    importantForAutofill="no"
+                    autoComplete="current-password"
+                    textContentType="password"
+                    accessibilityLabel="Password"
                   />
-                  <TouchableOpacity style={styles.eyeBtn} onPress={() => setShowPassword(!showPassword)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+                  <TouchableOpacity
+                    style={styles.eyeBtn}
+                    onPress={() => setShowPassword(!showPassword)}
+                    hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                    accessibilityRole="button"
+                    accessibilityLabel={showPassword ? 'Hide password' : 'Show password'}
+                  >
                     <EyeIcon visible={showPassword} />
                   </TouchableOpacity>
                 </View>
-                {errors.password ? <Text style={styles.errorText}>{errors.password}</Text> : null}
+                {errors.password ? <Text style={styles.errorText} accessibilityLiveRegion="polite">{errors.password}</Text> : null}
 
                 <View style={styles.optionsRow}>
-                  <TouchableOpacity style={styles.rememberMeRow} onPress={() => setRememberMe(!rememberMe)}>
+                  <TouchableOpacity
+                    style={styles.rememberMeRow}
+                    onPress={() => setRememberMe(!rememberMe)}
+                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                    accessibilityRole="checkbox"
+                    accessibilityState={{ checked: rememberMe }}
+                    accessibilityLabel="Remember me"
+                  >
                     <View style={[styles.checkbox, rememberMe && styles.checkboxChecked]}>
                       {rememberMe && (
-                        <Svg width={9} height={9} viewBox="0 0 10 10">
+                        <Svg width={12} height={12} viewBox="0 0 10 10">
                           <Path d="M2 5l2.5 2.5L8 3" stroke="white" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" fill="none" />
                         </Svg>
                       )}
                     </View>
                     <Text style={styles.rememberMeText}>Remember me</Text>
                   </TouchableOpacity>
-                  <TouchableOpacity style={styles.forgotWrap} onPress={() => router.push('/(auth)/forgot-password')}>
-                    <Text style={styles.forgotText}>Forgot Password?</Text>
+                  <TouchableOpacity
+                    style={styles.forgotWrap}
+                    onPress={() => router.push('/(auth)/forgot-password')}
+                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                    accessibilityRole="link"
+                  >
+                    <Text style={styles.forgotText}>Forgot password?</Text>
                   </TouchableOpacity>
                 </View>
               </View>
 
-              <Pressable style={({ pressed }) => [styles.btnSignIn, loading && styles.btnDisabled, { transform: [{ scale: pressed ? 0.97 : 1 }], opacity: pressed ? 0.9 : 1 }]} onPress={handleSignIn} disabled={loading}>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Sign in"
+                style={({ pressed }) => [styles.btnSignIn, loading && styles.btnDisabled, { transform: [{ scale: pressed ? 0.97 : 1 }], opacity: pressed ? 0.9 : 1 }]}
+                onPress={handleSignIn}
+                disabled={loading}
+              >
                 {loading ? (
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
                     <ActivityIndicator color="#fff" size="small" />
@@ -1091,30 +1158,46 @@ export default function SignIn() {
               </View>
 
               {Platform.OS === 'web' ? (
-                <TouchableOpacity style={[styles.btnGoogle, loading && styles.btnDisabled]} onPress={handleFirebaseGoogleSignIn} activeOpacity={0.85} disabled={loading}>
+                <TouchableOpacity
+                  style={[styles.btnGoogle, loading && styles.btnDisabled]}
+                  onPress={handleFirebaseGoogleSignIn}
+                  activeOpacity={0.85}
+                  disabled={loading}
+                  accessibilityRole="button"
+                  accessibilityLabel="Sign in with Google"
+                >
                   {loading ? <ActivityIndicator color="#3b5bdb" size="small" /> : <GoogleIcon />}
                   <Text style={styles.btnGoogleText}>Sign in with Google</Text>
                 </TouchableOpacity>
               ) : null}
 
               <View style={styles.signupWrap}>
-                <Text style={styles.signupText}>New here? </Text>
-                <TouchableOpacity onPress={navigateToSignUp}>
+                <Text style={styles.signupText}>New here?</Text>
+                <TouchableOpacity
+                  onPress={navigateToSignUp}
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                  accessibilityRole="link"
+                >
                   <Text style={styles.signupLink}>Sign Up</Text>
                 </TouchableOpacity>
               </View>
 
               <View style={styles.footerDivider} />
 
+              {/* Deliberate two-line break so "Policy" is never orphaned */}
               <View style={styles.termsWrap}>
+                <Text style={styles.termsText}>By signing in, you agree to our</Text>
                 <Text style={styles.termsText}>
-                  By signing in, you agree to the{' '}
-                  <Text style={styles.termsLink} onPress={openPrivacyPage}>Terms and Condition</Text>
-                  {' & '}
-                  <Text style={styles.termsLink} onPress={openPrivacyPage}>Privacy Policy</Text>
+                  <Text style={styles.termsLink} onPress={openPrivacyPage} accessibilityRole="link">Terms and Conditions</Text>
+                  {' and '}
+                  <Text style={styles.termsLink} onPress={openPrivacyPage} accessibilityRole="link">Privacy Policy</Text>
                 </Text>
               </View>
             </Animated.View>
+
+            <Text style={styles.copyrightTextFixed}>
+              © {new Date().getFullYear()} {BRAND_NAME}. All rights reserved.
+            </Text>
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
@@ -1239,117 +1322,130 @@ const styles = StyleSheet.create({
   logo: {
     backgroundColor: 'transparent',
   },
-  heading: {
-    fontSize: 24,
+  brand: {
+    fontSize: 13,
     fontWeight: '800',
-    color: '#0f172a',
+    color: C.primary,
     textAlign: 'center',
-    marginBottom: 2,
+    letterSpacing: 0.4,
+    marginBottom: 4,
+  },
+  heading: {
+    fontSize: 26,
+    fontWeight: '800',
+    color: C.textStrong,
+    textAlign: 'center',
+    marginBottom: 4,
   },
   subtitle: {
-    fontSize: 13,
-    color: '#64748b',
-    marginBottom: 16,
+    fontSize: 14,
+    color: C.textMuted,
+    marginBottom: 18,
     textAlign: 'center',
   },
   formGroup: {
-    marginBottom: 12,
+    marginBottom: 14,
   },
   label: {
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: '600',
-    color: '#334155',
-    marginBottom: 4,
+    color: C.textBody,
+    marginBottom: 6,
   },
   inputWrap: {
     borderWidth: 1,
-    borderColor: '#dde3fa',
+    borderColor: C.border,
     borderRadius: 10,
     backgroundColor: '#ffffff',
-    minHeight: 38,
+    minHeight: 44, // 44pt minimum touch target
     justifyContent: 'center',
   },
   inputWrapFocused: {
-    backgroundColor: '#ffffff',
-    shadowColor: '#3b5bdb',
+    borderColor: C.primary,
+    shadowColor: C.primary,
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.12,
+    shadowOpacity: 0.1,
     shadowRadius: 8,
-    elevation: 3,
+    elevation: 2,
   },
   input: {
     flex: 1,
     paddingHorizontal: 12,
-    paddingVertical: Platform.OS === 'ios' ? 10 : 9,
-    fontSize: 14,
+    paddingVertical: Platform.OS === 'ios' ? 11 : 10,
+    fontSize: 16, // 16px also stops iOS Safari from zooming on focus
     color: '#1a1f36',
     backgroundColor: 'transparent',
-    minHeight: 40,
+    minHeight: 44,
     textAlignVertical: 'center',
   },
   inputWithIcon: {
-    paddingRight: 40,
+    paddingRight: 44,
   },
   eyeBtn: {
     position: 'absolute',
-    right: 8,
+    right: 4,
     padding: 12,
   },
   optionsRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginTop: 4,
+    marginTop: 10,
     marginBottom: 0,
   },
   rememberMeRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    gap: 8,
+    paddingVertical: 4,
   },
   checkbox: {
-    width: 16,
-    height: 16,
-    borderRadius: 4,
+    width: 20,
+    height: 20,
+    borderRadius: 5,
     borderWidth: 2,
-    borderColor: '#8896b3',
+    borderColor: C.textMuted,
     alignItems: 'center',
     justifyContent: 'center',
   },
   checkboxChecked: {
-    backgroundColor: '#3b5bdb',
-    borderColor: '#3b5bdb',
+    backgroundColor: C.primary,
+    borderColor: C.primary,
   },
   rememberMeText: {
-    fontSize: 12,
-    color: '#4a5568',
+    fontSize: 14,
+    color: C.textBody,
   },
   forgotWrap: {
     alignItems: 'flex-end',
+    paddingVertical: 4,
   },
+  // Recovery is a key action — now the link blue at 14px/600, not pale gray 12px
   forgotText: {
-    fontSize: 12,
-    color: '#8896b3',
-    fontWeight: '500',
+    fontSize: 14,
+    color: C.primary,
+    fontWeight: '600',
   },
   inputError: {
-    borderColor: '#e11d48',
+    borderColor: INPUT_ERROR,
   },
   errorText: {
-    fontSize: 11,
+    fontSize: 13,
     color: '#e11d48',
-    marginTop: 4,
+    marginTop: 6,
     marginLeft: 4,
     fontWeight: '500',
   },
   btnSignIn: {
-    backgroundColor: '#3b5bdb',
+    backgroundColor: C.primary,
     borderRadius: 10,
     borderWidth: 1,
     borderColor: '#2f49c7',
-    paddingVertical: 10,
+    paddingVertical: 13,
+    minHeight: 48,
+    justifyContent: 'center',
     alignItems: 'center',
-    marginTop: 2,
+    marginTop: 4,
     shadowColor: '#3b5bdb',
     shadowOffset: { width: 0, height: 6 },
     shadowOpacity: 0.2,
@@ -1361,24 +1457,24 @@ const styles = StyleSheet.create({
   },
   btnSignInText: {
     color: '#ffffff',
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: '700',
     letterSpacing: 0.3,
   },
   divider: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginVertical: 6,
+    marginVertical: 10,
   },
   line: {
     flex: 1,
     height: 1,
-    backgroundColor: '#e5e9f5',
+    backgroundColor: C.divider,
   },
   orText: {
-    marginHorizontal: 10,
-    fontSize: 11,
-    color: '#8896b3',
+    marginHorizontal: 12,
+    fontSize: 13,
+    color: C.textMuted,
     fontWeight: '600',
   },
   btnGoogle: {
@@ -1387,51 +1483,54 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 8,
     borderWidth: 1,
-    borderColor: '#e5e7eb',
+    borderColor: '#cbd5e1',
     borderRadius: 10,
-    paddingVertical: 9,
+    paddingVertical: 12,
+    minHeight: 48,
     marginTop: 2,
     backgroundColor: '#ffffff',
   },
   btnGoogleText: {
-    fontSize: 13,
-    fontWeight: '500',
+    fontSize: 14,
+    fontWeight: '600',
     color: '#1a1f36',
-    marginLeft: 6,
   },
   footerDivider: {
     height: 1,
-    backgroundColor: '#e5e9f5',
-    marginTop: 14,
-    marginBottom: 10,
+    backgroundColor: C.divider,
+    marginTop: 16,
+    marginBottom: 12,
   },
   termsWrap: {
     paddingHorizontal: 2,
+    alignItems: 'center',
   },
   termsText: {
-    fontSize: 12,
-    color: '#4a5568',
-    lineHeight: 17,
+    fontSize: 13,
+    color: C.textBody,
+    lineHeight: 19,
     textAlign: 'center',
   },
   termsLink: {
     fontWeight: '700',
-    color: '#3b5bdb',
+    color: C.primary,
   },
+  // gap replaces the trailing space in "New here? " that RN collapses
   signupWrap: {
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
-    marginTop: 12,
+    gap: 6,
+    marginTop: 14,
   },
   signupText: {
-    fontSize: 12,
-    color: '#64748b',
+    fontSize: 14,
+    color: C.textMuted,
   },
   signupLink: {
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: '700',
-    color: '#3b5bdb',
+    color: C.primary,
   },
   errorModalOverlay: {
     flex: 1,
@@ -1471,15 +1570,15 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   errorModalMessage: {
-    fontSize: 13,
-    color: '#64748b',
+    fontSize: 14,
+    color: C.textMuted,
     textAlign: 'center',
-    lineHeight: 19,
+    lineHeight: 20,
     marginBottom: 20,
   },
   errorModalButtonPrimary: {
     width: '100%',
-    paddingVertical: 11,
+    paddingVertical: 12,
     borderRadius: 10,
     alignItems: 'center',
     backgroundColor: '#3b5bdb',
@@ -1493,13 +1592,19 @@ const styles = StyleSheet.create({
   },
   linkGoogleCancelBtn: {
     width: '100%',
-    paddingVertical: 11,
+    paddingVertical: 12,
     alignItems: 'center',
     marginTop: 6,
   },
   linkGoogleCancelText: {
-    color: '#64748b',
+    color: C.textMuted,
     fontSize: 14,
     fontWeight: '600',
+  },
+  copyrightTextFixed: {
+    fontSize: 12,
+    color: C.textMuted,
+    textAlign: 'center',
+    marginTop: 16,
   },
 });

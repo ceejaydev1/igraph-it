@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useRef, useEffect } from 'react';
+import React, { useState, useMemo, useRef, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -13,22 +13,77 @@ import {
   Keyboard,
   Animated,
   Easing,
+  AccessibilityInfo,
 } from 'react-native';
-import { Svg, Path, Circle } from 'react-native-svg';
+import { Svg, Path, Circle, Defs, Pattern, Rect } from 'react-native-svg';
 import { useRouter } from 'expo-router';
 import { useOnboardingTour } from '../../hooks/useOnboardingTour';
 import { REFERENCE_TOUR_ID, getReferenceTourSteps } from '../../utils/tours';
+import { usePageTitle } from '../../utils/usePageTitle';
 
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
   UIManager.setLayoutAnimationEnabledExperimental(true);
 }
 
-// ── Icons (same style as Home screen's search bar) ──────
+// ── Design tokens (shared with the Home screen) ─────────
+const COLORS = {
+  brand: '#4c6fff',
+  brandStrong: '#3b5bdb',
+  title: '#1a1f36',
+  ink: '#0f172a',
+  body: '#475569',
+  bodyStrong: '#334155', // definition text: more contrast at small sizes
+  muted: '#64748b', // placeholders, icons, helper text (AA on white)
+  border: '#e2e8f0',
+  page: '#f8fafc',
+};
+
+// ── Accessibility helpers ───────────────────────────────
+// Focus rings should show for keyboard users, not after a mouse click.
+let keyboardNavigation = false;
+if (Platform.OS === 'web' && typeof window !== 'undefined') {
+  window.addEventListener('keydown', (e) => { if (e.key === 'Tab') keyboardNavigation = true; }, true);
+  window.addEventListener('pointerdown', () => { keyboardNavigation = false; }, true);
+}
+
+const webFocusRing: any =
+  Platform.OS === 'web'
+    ? { outlineWidth: 2, outlineStyle: 'solid', outlineColor: COLORS.brand, outlineOffset: 2 }
+    : null;
+
+const useKeyboardFocus = () => {
+  const [kbFocus, setKbFocus] = useState(false);
+  return {
+    kbFocus,
+    focusProps: {
+      onFocus: () => setKbFocus(Platform.OS === 'web' && keyboardNavigation),
+      onBlur: () => setKbFocus(false),
+    },
+  };
+};
+
+const useReduceMotion = (): boolean => {
+  const [reduce, setReduce] = useState(false);
+  useEffect(() => {
+    let mounted = true;
+    AccessibilityInfo.isReduceMotionEnabled()
+      .then((value) => { if (mounted) setReduce(value); })
+      .catch(() => {});
+    const sub = AccessibilityInfo.addEventListener('reduceMotionChanged', setReduce);
+    return () => {
+      mounted = false;
+      sub?.remove?.();
+    };
+  }, []);
+  return reduce;
+};
+
+// ── Icons ───────────────────────────────────────────────
 const SearchIcon = () => (
-  <Svg width={16} height={16} viewBox="0 0 24 24" fill="none">
+  <Svg width={18} height={18} viewBox="0 0 24 24" fill="none">
     <Path
       d="M21 21L16.65 16.65M19 11C19 15.4183 15.4183 19 11 19C6.58172 19 3 15.4183 3 11C3 6.58172 6.58172 3 11 3C15.4183 3 19 6.58172 19 11Z"
-      stroke="#ffffff"
+      stroke={COLORS.muted}
       strokeWidth={2}
       strokeLinecap="round"
     />
@@ -36,29 +91,31 @@ const SearchIcon = () => (
 );
 
 const ClearIcon = () => (
-  <Svg width={16} height={16} viewBox="0 0 24 24" fill="none">
-    <Circle cx="12" cy="12" r="10" stroke="#8896b3" strokeWidth={1.5} />
-    <Path d="M15 9L9 15M9 9L15 15" stroke="#8896b3" strokeWidth={1.8} strokeLinecap="round" />
+  <Svg width={18} height={18} viewBox="0 0 24 24" fill="none">
+    <Circle cx="12" cy="12" r="10" stroke={COLORS.muted} strokeWidth={1.5} />
+    <Path d="M15 9L9 15M9 9L15 15" stroke={COLORS.muted} strokeWidth={1.8} strokeLinecap="round" />
   </Svg>
 );
 
 const EmptySearchIcon = () => (
-  <Svg width={64} height={64} viewBox="0 0 24 24" fill="none">
+  <Svg width={52} height={52} viewBox="0 0 24 24" fill="none">
     <Path
       d="M21 21L16.65 16.65M19 11C19 15.4183 15.4183 19 11 19C6.58172 19 3 15.4183 3 11C3 6.58172 6.58172 3 11 3C15.4183 3 19 6.58172 19 11Z"
-      stroke="#cbd5e1"
+      stroke={COLORS.brand}
       strokeWidth={1.5}
+      strokeLinecap="round"
+      opacity={0.55}
     />
   </Svg>
 );
 
-// No default color — every call site passes colors.primary explicitly, and a
+// No default color — every call site passes a color explicitly, and a
 // silent fallback here would just mask the day a call site forgets to.
 // Always points down — ReferenceCard spins it with Animated on expand/collapse
 // rather than swapping a second up/down path, the same idiom ShapesPanel.tsx
 // already uses for its own category-expand arrow.
-const ChevronIcon = ({ color }: { color: string }) => (
-  <Svg width={18} height={18} viewBox="0 0 24 24" fill="none">
+const ChevronIcon = ({ color, size = 16 }: { color: string; size?: number }) => (
+  <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
     <Path
       d="M6 9L12 15L18 9"
       stroke={color}
@@ -69,30 +126,40 @@ const ChevronIcon = ({ color }: { color: string }) => (
   </Svg>
 );
 
-const DotGrid = () => {
-  const { width: screenWidth, height: screenHeight } = useWindowDimensions();
-  const DOT_SPACING = 32;
-  const DOT_SIZE = 1.4;
+const DOT_SPACING = 32;
+const DOT_SIZE = 1.4;
 
+const webDots: any =
+  Platform.OS === 'web'
+    ? {
+        backgroundImage: 'radial-gradient(circle, rgba(76, 111, 255, 0.14) 1.4px, transparent 1.6px)',
+        backgroundSize: `${DOT_SPACING}px ${DOT_SPACING}px`,
+      }
+    : null;
+
+const DotGrid = React.memo(function DotGrid() {
+  const { width: screenWidth, height: screenHeight } = useWindowDimensions();
+
+  // On the web a single CSS gradient draws the dots.
+  if (Platform.OS === 'web') {
+    return <View style={[styles.dotGridContainer, webDots]} pointerEvents="none" />;
+  }
+
+  // On native, one <Pattern> tile repeated by a single <Rect> replaces what
+  // used to be a <Circle> per dot (about 1,700 nodes on a full viewport).
   return (
     <View style={styles.dotGridContainer} pointerEvents="none">
       <Svg width={screenWidth} height={screenHeight}>
-        {Array.from({ length: Math.ceil(screenHeight / DOT_SPACING) }).map((_, row) =>
-          Array.from({ length: Math.ceil(screenWidth / DOT_SPACING) }).map((_, col) => (
-            <Circle
-              key={`${row}-${col}`}
-              cx={col * DOT_SPACING}
-              cy={row * DOT_SPACING}
-              r={DOT_SIZE}
-              fill="#4c6fff"
-              opacity={0.12}
-            />
-          ))
-        )}
+        <Defs>
+          <Pattern id="reference-dots" width={DOT_SPACING} height={DOT_SPACING} patternUnits="userSpaceOnUse">
+            <Circle cx={DOT_SPACING / 2} cy={DOT_SPACING / 2} r={DOT_SIZE} fill={COLORS.brand} opacity={0.12} />
+          </Pattern>
+        </Defs>
+        <Rect width={screenWidth} height={screenHeight} fill="url(#reference-dots)" />
       </Svg>
     </View>
   );
-};
+});
 
 // ── Types ──────────────────────────────────────────────
 type Category = 'All' | 'UML' | 'SDLC' | 'General Terms';
@@ -1194,252 +1261,538 @@ const REFERENCE_DATA: ReferenceTerm[] = [
 
 const CATEGORIES: Category[] = ['All', 'UML', 'SDLC', 'General Terms'];
 
-// Mirrors Home screen's TYPE_COLORS so the same category reads as the same color across screens.
-const CATEGORY_COLORS: Record<Exclude<Category, 'All'>, { primary: string; light: string }> = {
-  UML: { primary: '#4c6fff', light: '#eef2ff' },
-  SDLC: { primary: '#10b981', light: '#ecfdf5' },
-  'General Terms': { primary: '#8b5cf6', light: '#f5f3ff' },
+// "General Terms" is long for a segmented control that has to fit a phone, so
+// the tab says "General"; the screen-reader label still says the full name.
+const TAB_LABEL: Record<Category, string> = {
+  All: 'All',
+  UML: 'UML',
+  SDLC: 'SDLC',
+  'General Terms': 'General',
 };
 
+// Mirrors Home screen's TYPE_COLORS so the same category reads as the same
+// color across screens. `strong` is the darker shade used for text so it
+// clears WCAG AA on white and on the light tint; `paper` is the faint tint
+// behind an opened definition.
+const CATEGORY_COLORS: Record<
+  Exclude<Category, 'All'>,
+  { primary: string; strong: string; light: string; paper: string }
+> = {
+  UML: { primary: '#4c6fff', strong: '#3b5bdb', light: '#eef2ff', paper: '#f5f8ff' },
+  SDLC: { primary: '#10b981', strong: '#047857', light: '#ecfdf5', paper: '#f3fbf7' },
+  'General Terms': { primary: '#8b5cf6', strong: '#6d28d9', light: '#f5f3ff', paper: '#f8f6ff' },
+};
+
+// ── Sections ───────────────────────────────────────────
+// The terms are four different kinds of thing (diagram types, the symbols
+// drawn inside them, development models, and the phases those models are made
+// of), so the list is grouped instead of one flat run. A term's group comes
+// from its id prefix, which keeps the data above untouched.
+type GroupKey = 'uml-types' | 'uml-notation' | 'sdlc-models' | 'sdlc-phases' | 'general';
+
+const GROUPS: {
+  key: GroupKey;
+  category: Exclude<Category, 'All'>;
+  title: string;
+  blurb: string;
+}[] = [
+  { key: 'uml-types', category: 'UML', title: 'UML diagram types', blurb: 'The diagrams in the library.' },
+  { key: 'uml-notation', category: 'UML', title: 'UML notation elements', blurb: 'Shapes, symbols and connectors used inside the diagrams.' },
+  { key: 'sdlc-models', category: 'SDLC', title: 'SDLC models', blurb: 'The development models in the library.' },
+  { key: 'sdlc-phases', category: 'SDLC', title: 'SDLC phases and steps', blurb: 'The stages the models are built from.' },
+  { key: 'general', category: 'General Terms', title: 'General terms', blurb: 'Ideas that show up in both UML and SDLC.' },
+];
+
+const groupOf = (id: string): GroupKey =>
+  id.startsWith('uml-') ? 'uml-types'
+  : id.startsWith('sdlc-') ? 'sdlc-models'
+  : id.startsWith('step-') ? 'sdlc-phases'
+  : id.startsWith('shape-') ? 'uml-notation'
+  : 'general';
+
+// ── Search ─────────────────────────────────────────────
+// Searches the term AND its definition, every word must match (any order).
+// A match in the term itself ranks above a match only in the definition, so
+// "class" still lists the Class Diagram first. Lower-cased once, up here.
+const SEARCH_INDEX = new Map<string, { term: string; full: string }>(
+  REFERENCE_DATA.map((t) => [
+    t.id,
+    { term: t.term.toLowerCase(), full: `${t.term} ${t.category} ${t.definition}`.toLowerCase() },
+  ])
+);
+
+// 0 = matches in the term, 1 = matches in the definition, null = no match.
+const searchScore = (item: ReferenceTerm, tokens: string[]): number | null => {
+  if (tokens.length === 0) return 0;
+  const idx = SEARCH_INDEX.get(item.id);
+  if (!idx) return null;
+  if (tokens.every((t) => idx.term.includes(t))) return 0;
+  if (tokens.every((t) => idx.full.includes(t))) return 1;
+  return null;
+};
+
+const SUGGESTED_SEARCHES = ['Actor', 'Waterfall', 'Testing'];
+
 // ── Term card ──────────────────────────────────────────
-const ReferenceCard = ({
+// Flat and bordered at rest. Collapsed, it shows a two-line preview of the
+// definition so the list can be scanned without opening anything. A cut-off
+// preview always carries a "Show more" label with a chevron, so the truncation
+// is never ambiguous; opened, the full definition sits in a block ruled with
+// the category colour.
+//
+// Definitions short enough to fit the preview have nothing to reveal, so they
+// are shown in full and the card is not interactive.
+const PREVIEW_LINES = 2;
+const EXPANDABLE_MIN_LENGTH = 80;
+
+const ReferenceCard = React.memo(({
   item,
-  index,
   isExpanded,
   onToggle,
+  reduceMotion,
 }: {
   item: ReferenceTerm;
-  index: number;
   isExpanded: boolean;
-  onToggle: () => void;
+  onToggle: (id: string) => void;
+  reduceMotion: boolean;
 }) => {
   const [isHovered, setIsHovered] = useState(false);
+  const { kbFocus, focusProps } = useKeyboardFocus();
   const colors = CATEGORY_COLORS[item.category];
+  const canExpand = item.definition.length > EXPANDABLE_MIN_LENGTH;
+  const open = canExpand && isExpanded;
+  const engaged = canExpand && (isHovered || kbFocus);
 
-  // Entrance: fades/slides in once per mount, staggered by list position —
-  // capped at 10 so a long filtered list doesn't leave the last cards
-  // waiting a second before they're even visible.
-  const mountAnim = useRef(new Animated.Value(0)).current;
+  // One value drives the lift, the tinted shadow and the border on hover or
+  // keyboard focus, same idea as Home screen's DiagramCard.
+  const lift = useRef(new Animated.Value(0)).current;
   useEffect(() => {
-    Animated.timing(mountAnim, {
-      toValue: 1,
-      duration: 320,
-      delay: Math.min(index, 10) * 35,
+    Animated.timing(lift, {
+      toValue: engaged ? 1 : 0,
+      duration: reduceMotion ? 0 : 160,
       easing: Easing.out(Easing.cubic),
-      useNativeDriver: true,
+      useNativeDriver: false,
     }).start();
-    // Runs once per mount only — re-fires naturally if filtering unmounts
-    // and later remounts this card, which reads as a nice "it's back" cue.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [engaged, reduceMotion, lift]);
+
+  const translateY = lift.interpolate({ inputRange: [0, 1], outputRange: [0, reduceMotion ? 0 : -2] });
+  const shadowOpacity = lift.interpolate({ inputRange: [0, 1], outputRange: [0, 0.14] });
+  const hoverBorder = lift.interpolate({
+    inputRange: [0, 1],
+    outputRange: [COLORS.border, `${colors.primary}99`],
+  });
 
   // Chevron spin — same rotate-a-down-arrow idiom as ShapesPanel.tsx's own
   // category-expand arrow, so both screens share one interaction language.
-  const chevronSpin = useRef(new Animated.Value(isExpanded ? 1 : 0)).current;
+  const chevronSpin = useRef(new Animated.Value(open ? 1 : 0)).current;
   useEffect(() => {
     Animated.timing(chevronSpin, {
-      toValue: isExpanded ? 1 : 0,
-      duration: 220,
+      toValue: open ? 1 : 0,
+      duration: reduceMotion ? 0 : 220,
       easing: Easing.out(Easing.cubic),
       useNativeDriver: true,
     }).start();
-  }, [isExpanded]);
+  }, [open, reduceMotion, chevronSpin]);
   const chevronRotate = chevronSpin.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '180deg'] });
 
-  // Tactile press feedback, same spring values as the diagram detail page's
-  // Shapes Used badges — a light touch since these cards are already large
-  // tap targets, not the primary signal (hover/pressed opacity still carry that).
-  const pressScale = useRef(new Animated.Value(1)).current;
-  const handlePressIn = () => {
-    Animated.spring(pressScale, { toValue: 0.985, useNativeDriver: true, speed: 30, bounciness: 4 }).start();
-  };
-  const handlePressOut = () => {
-    Animated.spring(pressScale, { toValue: 1, useNativeDriver: true, speed: 20, bounciness: 6 }).start();
-  };
+  return (
+    <Pressable
+      onPress={() => onToggle(item.id)}
+      disabled={!canExpand}
+      style={({ pressed }) => [
+        styles.cardTouchable,
+        pressed && canExpand && styles.cardPressed,
+        kbFocus && webFocusRing,
+      ]}
+      accessibilityRole={canExpand ? 'button' : undefined}
+      accessibilityLabel={
+        canExpand
+          ? `${item.term}, ${item.category}`
+          : `${item.term}, ${item.category}. ${item.definition}`
+      }
+      accessibilityHint={canExpand ? (open ? 'Collapses the definition' : 'Expands the definition') : undefined}
+      accessibilityState={canExpand ? { expanded: open } : undefined}
+      {...focusProps}
+      // @ts-ignore - React Native Web specific props
+      onMouseEnter={() => setIsHovered(true)}
+      onMouseLeave={() => setIsHovered(false)}
+    >
+      <Animated.View
+        style={[
+          styles.card,
+          {
+            transform: [{ translateY }],
+            shadowColor: colors.primary,
+            shadowOpacity,
+            borderColor: open ? `${colors.primary}99` : hoverBorder,
+          },
+        ]}
+      >
+        <Text style={styles.cardTerm}>{item.term}</Text>
+
+        {open ? (
+          <View style={[styles.definitionBlock, { backgroundColor: colors.paper }]}>
+            <Text style={styles.definitionText}>{item.definition}</Text>
+          </View>
+        ) : (
+          <Text style={styles.cardPreview} numberOfLines={canExpand ? PREVIEW_LINES : undefined}>
+            {item.definition}
+          </Text>
+        )}
+
+        <View style={styles.cardFooterRow}>
+          <View style={[styles.categoryBadge, { backgroundColor: colors.light }]}>
+            <Text style={[styles.categoryBadgeText, { color: colors.strong }]}>{item.category}</Text>
+          </View>
+
+          {canExpand ? (
+            <View style={styles.expandHint} accessible={false}>
+              <Text style={[styles.expandHintText, { color: colors.strong }]}>
+                {open ? 'Show less' : 'Show more'}
+              </Text>
+              <Animated.View style={{ transform: [{ rotate: chevronRotate }] }}>
+                <ChevronIcon color={colors.strong} />
+              </Animated.View>
+            </View>
+          ) : null}
+        </View>
+      </Animated.View>
+    </Pressable>
+  );
+});
+
+// ── Category tab ───────────────────────────────────────
+const CategoryTab = React.memo(({
+  category,
+  count,
+  isActive,
+  stretch,
+  onPress,
+}: {
+  category: Category;
+  count: number;
+  isActive: boolean;
+  stretch: boolean;
+  onPress: (c: Category) => void;
+}) => {
+  const { kbFocus, focusProps } = useKeyboardFocus();
 
   return (
-    <Animated.View
-      style={{
-        opacity: mountAnim,
-        transform: [
-          { translateY: mountAnim.interpolate({ inputRange: [0, 1], outputRange: [10, 0] }) },
-          { scale: pressScale },
-        ],
-      }}
+    <Pressable
+      onPress={() => onPress(category)}
+      style={({ pressed }) => [
+        styles.tab,
+        stretch && styles.tabStretch,
+        isActive && styles.tabActive,
+        pressed && !isActive && styles.tabPressed,
+        kbFocus && webFocusRing,
+      ]}
+      accessibilityRole="tab"
+      accessibilityLabel={`${category}, ${count} ${count === 1 ? 'term' : 'terms'}`}
+      accessibilityState={{ selected: isActive }}
+      {...focusProps}
     >
-      <Pressable
-        onPress={onToggle}
-        onPressIn={handlePressIn}
-        onPressOut={handlePressOut}
-        style={({ pressed }) => [
-          styles.card,
-          isHovered && styles.cardHovered,
-          pressed && styles.cardPressed,
-        ]}
-        accessibilityRole="button"
-        accessibilityLabel={`${item.term}, ${item.category}`}
-        accessibilityHint={isExpanded ? 'Collapses the definition' : 'Expands the definition'}
-        accessibilityState={{ expanded: isExpanded }}
-        // @ts-ignore - React Native Web specific props
-        onMouseEnter={() => setIsHovered(true)}
-        onMouseLeave={() => setIsHovered(false)}
+      <Text
+        style={[styles.tabText, stretch && styles.tabTextCompact, isActive && styles.tabTextActive]}
+        numberOfLines={1}
       >
-        <View style={styles.cardHeader}>
-          <View style={{ flex: 1 }}>
-            <Text style={styles.cardTerm}>{item.term}</Text>
-            <View style={[styles.categoryBadge, { backgroundColor: colors.light }]}>
-              <Text style={[styles.categoryBadgeText, { color: colors.primary }]}>
-                {item.category}
-              </Text>
-            </View>
-          </View>
-          <Animated.View style={{ transform: [{ rotate: chevronRotate }] }}>
-            <ChevronIcon color={colors.primary} />
-          </Animated.View>
-        </View>
-        {isExpanded && (
-          <>
-            <View style={styles.cardDivider} />
-            <Text style={styles.cardDefinition}>{item.definition}</Text>
-          </>
-        )}
-      </Pressable>
-    </Animated.View>
+        {TAB_LABEL[category]}
+      </Text>
+      <View style={[styles.tabBadge, stretch && styles.tabBadgeCompact, isActive && styles.tabBadgeActive]}>
+        <Text style={[styles.tabBadgeText, stretch && styles.tabBadgeTextCompact, isActive && styles.tabBadgeTextActive]}>
+          {count}
+        </Text>
+      </View>
+    </Pressable>
+  );
+});
+
+const SuggestionChip = ({ label, onPress }: { label: string; onPress: () => void }) => {
+  const { kbFocus, focusProps } = useKeyboardFocus();
+
+  return (
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={`Search for ${label}`}
+      {...focusProps}
+      style={({ pressed }) => [
+        styles.chip,
+        pressed && styles.chipPressed,
+        kbFocus && webFocusRing,
+      ]}
+    >
+      <Text style={styles.chipText}>{label}</Text>
+    </Pressable>
   );
 };
 
 // ── Component ──────────────────────────────────────────
 export default function LearningReference() {
+  usePageTitle('Reference');
   const [search, setSearch] = useState('');
+  const [isSearchFocused, setIsSearchFocused] = useState(false);
   const [activeCategory, setActiveCategory] = useState<Category>('All');
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const inputRef = useRef<TextInput>(null);
   const { width } = useWindowDimensions();
   const isDesktop = width >= 1024;
   const router = useRouter();
+  const reduceMotion = useReduceMotion();
+  const clearFocus = useKeyboardFocus();
+  const resetFocus = useKeyboardFocus();
 
-  // The list was a single centered column capped at 720px wide no matter
-  // how wide the viewport got — fine when there were only a couple dozen
-  // terms, but with 168 real terms now in REFERENCE_DATA it turned desktop
-  // into a lot of scrolling past unused space on both sides. Same
-  // column-count-then-derive-card-width approach as home.tsx's diagram
-  // grid, just without that screen's FlatList/virtualization since this
-  // list's cards are variable-height (accordion expand) and a plain
-  // wrapping flexbox handles that more simply.
+  // Column count, then card width derived from it, same approach as Home
+  // screen's grid. Cards here are variable height (they expand), so each
+  // column below is its own stack: opening one card pushes down only the
+  // cards under it in that column, instead of stretching its whole row.
   const GRID_GAP = 12;
   const numColumns = width >= 1440 ? 3 : width >= 768 ? 2 : 1;
   const gridMaxWidth = numColumns === 3 ? 1200 : numColumns === 2 ? 860 : 720;
-  const gridPadding = 16;
-  const availableGridWidth = Math.min(width, gridMaxWidth) - gridPadding * 2;
-  const cardWidth =
-    numColumns === 1 ? '100%' : (availableGridWidth - GRID_GAP * (numColumns - 1)) / numColumns;
+  const gridPadding = width >= 768 ? 24 : 16;
+  const frameStyle = { maxWidth: gridMaxWidth, paddingHorizontal: gridPadding };
 
   const referenceTourSteps = useMemo(() => getReferenceTourSteps({ router }), [router]);
   useOnboardingTour(REFERENCE_TOUR_ID, referenceTourSteps);
 
-  const filteredTerms = useMemo(() => {
-    const query = search.trim().toLowerCase();
-    return REFERENCE_DATA.filter((item) => {
-      const matchesCategory = activeCategory === 'All' || item.category === activeCategory;
-      const matchesSearch = item.term.toLowerCase().includes(query);
-      return matchesCategory && matchesSearch;
+  const tokens = useMemo(() => search.trim().toLowerCase().split(/\s+/).filter(Boolean), [search]);
+
+  // Per-category counts for the tabs, from the search alone (the same way
+  // Home screen counts), so each tab shows what it would list.
+  const tabCounts = useMemo(() => {
+    const counts: Record<Category, number> = { All: 0, UML: 0, SDLC: 0, 'General Terms': 0 };
+    REFERENCE_DATA.forEach((item) => {
+      if (searchScore(item, tokens) !== null) {
+        counts.All++;
+        counts[item.category]++;
+      }
     });
-  }, [search, activeCategory]);
+    return counts;
+  }, [tokens]);
 
-  const toggleExpand = (id: string) => {
-    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+  const sections = useMemo(() => {
+    const buckets = new Map<GroupKey, { item: ReferenceTerm; score: number; order: number }[]>();
+    REFERENCE_DATA.forEach((item, order) => {
+      if (activeCategory !== 'All' && item.category !== activeCategory) return;
+      const score = searchScore(item, tokens);
+      if (score === null) return;
+      const key = groupOf(item.id);
+      const list = buckets.get(key) ?? [];
+      list.push({ item, score, order });
+      buckets.set(key, list);
+    });
+    return GROUPS.map((group) => ({
+      group,
+      items: (buckets.get(group.key) ?? [])
+        .sort((a, b) => a.score - b.score || a.order - b.order)
+        .map((entry) => entry.item),
+    })).filter((section) => section.items.length > 0);
+  }, [tokens, activeCategory]);
+
+  const total = sections.reduce((sum, s) => sum + s.items.length, 0);
+
+  const animateLayout = useCallback(() => {
+    if (!reduceMotion) LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+  }, [reduceMotion]);
+
+  const toggleExpand = useCallback((id: string) => {
+    animateLayout();
     setExpandedId((prev) => (prev === id ? null : id));
-  };
+  }, [animateLayout]);
 
-  const handleClearSearch = () => {
-    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+  const handleCategoryChange = useCallback((cat: Category) => {
+    animateLayout();
+    setActiveCategory(cat);
+  }, [animateLayout]);
+
+  const handleClearSearch = useCallback(() => {
+    animateLayout();
     setSearch('');
     if (Platform.OS === 'web') inputRef.current?.focus();
-  };
+  }, [animateLayout]);
 
-  // Live filtering already does the actual search on every keystroke — this
-  // just confirms the action (dismisses the keyboard) so "Search" on the
-  // keyboard/the button isn't a dead end. Matches Home screen's identical
-  // handleSearchSubmit, which this search bar was copied from.
-  const handleSearchSubmit = () => {
+  const handleResetFilters = useCallback(() => {
+    animateLayout();
+    setSearch('');
+    setActiveCategory('All');
+  }, [animateLayout]);
+
+  const handleSuggestion = useCallback((term: string) => {
+    animateLayout();
+    setActiveCategory('All');
+    setSearch(term.toLowerCase());
+  }, [animateLayout]);
+
+  // Search is live (it filters as you type), so Enter only needs to close the
+  // keyboard. There is no separate search button.
+  const handleSearchSubmit = useCallback(() => {
     Keyboard.dismiss();
-  };
+  }, []);
+
+  // Web: press "/" anywhere outside a text field to jump to search.
+  useEffect(() => {
+    if (Platform.OS !== 'web' || typeof window === 'undefined') return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key !== '/' || e.metaKey || e.ctrlKey || e.altKey) return;
+      const el = document.activeElement as HTMLElement | null;
+      const tag = el?.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || el?.isContentEditable) return;
+      e.preventDefault();
+      inputRef.current?.focus();
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, []);
+
+  const trimmedQuery = search.trim();
+  const resultText = trimmedQuery
+    ? `${total} ${total === 1 ? 'result' : 'results'} for “${trimmedQuery}”`
+    : `${total} ${total === 1 ? 'term' : 'terms'}`;
+
+  const showSlashHint = Platform.OS === 'web' && isDesktop && !isSearchFocused && search.length === 0;
+
+  // Section header, then its cards, as flat siblings so the header can be a
+  // sticky child of the ScrollView (stickyHeaderIndices below): scrolling
+  // through a long section always shows which one you are in.
+  const listChildren: React.ReactElement[] = sections.flatMap(({ group, items }) => {
+    const colors = CATEGORY_COLORS[group.category];
+    // Cards are laid out in independent column stacks. When the last row
+    // would be incomplete (10 cards in 3 columns leaves one alone), the
+    // leftover cards are pulled out into a final row that shares the full
+    // width instead, so there is no empty slot. Short result sets (no more
+    // than one row) keep the plain column layout.
+    const leftover = items.length > numColumns ? items.length % numColumns : 0;
+    const body = leftover ? items.slice(0, items.length - leftover) : items;
+    const tail = leftover ? items.slice(items.length - leftover) : [];
+    const columns: ReferenceTerm[][] = Array.from({ length: numColumns }, () => []);
+    body.forEach((item, i) => columns[i % numColumns].push(item));
+
+    const renderCard = (item: ReferenceTerm) => (
+      <ReferenceCard
+        key={item.id}
+        item={item}
+        isExpanded={expandedId === item.id}
+        onToggle={toggleExpand}
+        reduceMotion={reduceMotion}
+      />
+    );
+
+    return [
+      <View key={`h-${group.key}`} style={styles.sectionBar}>
+        <View style={[styles.frame, frameStyle, styles.sectionRow]}>
+          <View style={[styles.sectionDot, { backgroundColor: colors.primary }]} />
+          <Text accessibilityRole="header" style={styles.sectionTitle}>
+            {group.title}
+          </Text>
+          {width >= 768 ? (
+            <Text style={styles.sectionBlurb} numberOfLines={1}>
+              {group.blurb}
+            </Text>
+          ) : null}
+          <Text style={styles.sectionCount}>{items.length}</Text>
+        </View>
+      </View>,
+      <View key={`g-${group.key}`} style={[styles.frame, frameStyle, styles.gridSection]}>
+        <View style={styles.gridColumnsRow}>
+          {columns.map((column, ci) => (
+            <View key={ci} style={styles.gridColumn}>
+              {column.map(renderCard)}
+            </View>
+          ))}
+        </View>
+        {tail.length > 0 ? (
+          <View style={styles.tailRow}>
+            {tail.map((item) => (
+              <View key={item.id} style={styles.tailCell}>
+                {renderCard(item)}
+              </View>
+            ))}
+          </View>
+        ) : null}
+      </View>,
+    ];
+  });
 
   return (
     <View style={styles.container}>
       <DotGrid />
 
-      {/* Header — centered */}
+      {/* Toolbar: stays pinned above the list, since there are far too many
+          terms to scroll back up for every new search. */}
       <View style={styles.headerSection}>
-        {/* Search Bar — same pattern as Home screen */}
-        <View nativeID="tour-reference-search" style={styles.searchBarContainer}>
-          <View style={styles.searchBar}>
-            <TextInput
-              ref={inputRef}
-              style={styles.searchInput}
-              placeholder="Search a term (e.g. Class Diagram)"
-              placeholderTextColor="#94a3b8"
-              value={search}
-              onChangeText={setSearch}
-              autoCapitalize="none"
-              returnKeyType="search"
-              onSubmitEditing={handleSearchSubmit}
-              accessibilityLabel="Search reference terms"
-            />
-            {search.length > 0 && (
-              <Pressable
-                onPress={handleClearSearch}
-                style={({ pressed }) => [styles.clearButton, pressed && styles.clearButtonPressed]}
-                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                accessibilityRole="button"
-                accessibilityLabel="Clear search"
-              >
-                <ClearIcon />
-              </Pressable>
-            )}
-            <Pressable
-              style={({ pressed }) => [styles.searchButton, pressed && styles.searchButtonPressed]}
-              onPress={handleSearchSubmit}
-              accessibilityRole="button"
-              accessibilityLabel="Search"
+        <View style={[styles.frame, frameStyle]}>
+          <View style={[styles.toolbar, isDesktop && styles.toolbarDesktop]}>
+            <View
+              nativeID="tour-reference-search"
+              accessibilityRole="search"
+              style={[styles.searchBarContainer, isDesktop && styles.searchBarContainerDesktop]}
             >
-              <SearchIcon />
-            </Pressable>
-          </View>
-        </View>
+              <View style={[styles.searchBar, isSearchFocused && styles.searchBarFocused]}>
+                <SearchIcon />
+                <TextInput
+                  ref={inputRef}
+                  style={styles.searchInput}
+                  placeholder="Search terms or definitions, like “Class Diagram”"
+                  placeholderTextColor={COLORS.muted}
+                  value={search}
+                  onChangeText={setSearch}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  returnKeyType="search"
+                  onSubmitEditing={handleSearchSubmit}
+                  onFocus={() => setIsSearchFocused(true)}
+                  onBlur={() => setIsSearchFocused(false)}
+                  accessibilityLabel="Search reference terms and definitions"
+                />
+                {search.length > 0 ? (
+                  <Pressable
+                    onPress={handleClearSearch}
+                    style={({ pressed }) => [
+                      styles.clearButton,
+                      pressed && styles.clearButtonPressed,
+                      clearFocus.kbFocus && webFocusRing,
+                    ]}
+                    hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+                    accessibilityRole="button"
+                    accessibilityLabel="Clear search"
+                    {...clearFocus.focusProps}
+                  >
+                    <ClearIcon />
+                  </Pressable>
+                ) : showSlashHint ? (
+                  <View style={styles.kbd} accessible={false}>
+                    <Text style={styles.kbdText}>/</Text>
+                  </View>
+                ) : null}
+              </View>
+            </View>
 
-        {/* Category Filter Tabs — centered, wraps instead of horizontal scroll */}
-        <View nativeID="tour-reference-categories" style={styles.tabsRow}>
-          {CATEGORIES.map((cat) => {
-            const isActive = activeCategory === cat;
-            return (
-              <Pressable
-                key={cat}
-                onPress={() => setActiveCategory(cat)}
-                style={[styles.categoryChip, isActive && styles.categoryChipActive]}
-                accessibilityRole="tab"
-                accessibilityLabel={`${cat} category`}
-                accessibilityState={{ selected: isActive }}
-              >
-                <Text style={[styles.categoryChipText, isActive && styles.categoryChipTextActive]}>
-                  {cat}
-                </Text>
-              </Pressable>
-            );
-          })}
-        </View>
-
-        {search.length > 0 && (
-          <View style={styles.searchInfo}>
-            <Text style={styles.searchInfoText}>
-              Found {filteredTerms.length} result{filteredTerms.length !== 1 ? 's' : ''} for "{search}"
-            </Text>
+            <View
+              nativeID="tour-reference-categories"
+              accessibilityRole="tablist"
+              style={[styles.tabsRow, !isDesktop && styles.tabsRowStretch]}
+            >
+              {CATEGORIES.map((cat) => (
+                <CategoryTab
+                  key={cat}
+                  category={cat}
+                  count={tabCounts[cat]}
+                  isActive={activeCategory === cat}
+                  stretch={!isDesktop}
+                  onPress={handleCategoryChange}
+                />
+              ))}
+            </View>
           </View>
-        )}
+
+          <Text style={styles.resultCount} accessibilityLiveRegion="polite" numberOfLines={1}>
+            {resultText}
+          </Text>
+        </View>
       </View>
 
-      {/* Term List — centered column */}
       <ScrollView
+        nativeID="tour-reference-list"
         style={styles.list}
         contentContainerStyle={[
           styles.listContent,
@@ -1447,39 +1800,38 @@ export default function LearningReference() {
           // behind the floating docked bottom navbar (Navbar.tsx).
           { paddingBottom: isDesktop ? 32 : 120 },
         ]}
+        stickyHeaderIndices={sections.map((_, i) => i * 2)}
+        keyboardShouldPersistTaps="handled"
       >
-        <View
-          nativeID="tour-reference-list"
-          style={[
-            styles.listInner,
-            {
-              maxWidth: gridMaxWidth,
-              paddingHorizontal: gridPadding,
-              flexDirection: numColumns === 1 ? 'column' : 'row',
-              flexWrap: numColumns === 1 ? 'nowrap' : 'wrap',
-              gap: GRID_GAP,
-            },
-          ]}
-        >
-          {filteredTerms.length === 0 ? (
-            <View style={[styles.emptyState, { width: '100%' }]}>
+        {listChildren.length > 0 ? (
+          listChildren
+        ) : (
+          <View key="empty" style={styles.emptyState}>
+            <View style={styles.emptyIconWrap}>
               <EmptySearchIcon />
-              <Text style={styles.emptyStateTitle}>No matching terms found</Text>
-              <Text style={styles.emptyText}>Try adjusting your search or category</Text>
             </View>
-          ) : (
-            filteredTerms.map((item, index) => (
-              <View key={item.id} style={{ width: cardWidth }}>
-                <ReferenceCard
-                  item={item}
-                  index={index}
-                  isExpanded={expandedId === item.id}
-                  onToggle={() => toggleExpand(item.id)}
-                />
-              </View>
-            ))
-          )}
-        </View>
+            <Text style={styles.emptyStateTitle}>No matching terms</Text>
+            <Text style={styles.emptyText}>Try a term or a topic instead, or clear your filters.</Text>
+            <View style={styles.chipsRow}>
+              {SUGGESTED_SEARCHES.map((term) => (
+                <SuggestionChip key={term} label={term} onPress={() => handleSuggestion(term)} />
+              ))}
+            </View>
+            <Pressable
+              onPress={handleResetFilters}
+              accessibilityRole="button"
+              accessibilityLabel="Reset search and filters"
+              {...resetFocus.focusProps}
+              style={({ pressed }) => [
+                styles.emptyButton,
+                pressed && styles.emptyButtonPressed,
+                resetFocus.kbFocus && webFocusRing,
+              ]}
+            >
+              <Text style={styles.emptyButtonText}>Reset search and filters</Text>
+            </Pressable>
+          </View>
+        )}
       </ScrollView>
     </View>
   );
@@ -1488,7 +1840,7 @@ export default function LearningReference() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f8faff',
+    backgroundColor: COLORS.page,
   },
   dotGridContainer: {
     position: 'absolute',
@@ -1499,190 +1851,405 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
 
-  // Header — everything centered, same as Home screen's headerSection
-  headerSection: {
-    paddingTop: Platform.OS === 'ios' ? 50 : 16,
-    paddingHorizontal: 16,
-    paddingBottom: 12,
-    alignItems: 'center',
+  // Centers a block and caps its width; each caller adds maxWidth/padding.
+  frame: {
+    width: '100%',
+    alignSelf: 'center',
   },
 
-  // Search bar — copied from Home screen (centered, max width 640, search button)
+  // Toolbar — left-aligned to the grid edge, like Home screen's
+  headerSection: {
+    paddingTop: Platform.OS === 'ios' ? 50 : 16,
+    paddingBottom: 6,
+  },
+  toolbar: {
+    gap: 12,
+  },
+  toolbarDesktop: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 16,
+  },
   searchBarContainer: {
-    alignSelf: 'center',
     width: '100%',
-    maxWidth: 640,
-    marginBottom: 16,
+  },
+  searchBarContainerDesktop: {
+    width: 'auto',
+    flex: 1,
+    maxWidth: 560,
   },
   searchBar: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#ffffff',
     borderRadius: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 6,
+    minHeight: 50,
+    paddingLeft: 14,
+    paddingRight: 8,
     borderWidth: 1,
-    borderColor: '#e2e8f0',
+    borderColor: COLORS.border,
     gap: 10,
     width: '100%',
-    elevation: 1,
-    shadowColor: '#000',
+  },
+  // Focused: the neutral hairline becomes the brand blue, with a faint
+  // matching glow (same as Home screen).
+  searchBarFocused: {
+    borderColor: COLORS.brand,
+    shadowColor: COLORS.brand,
     shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.04,
-    shadowRadius: 3,
+    shadowOpacity: 0.18,
+    shadowRadius: 6,
+    ...Platform.select({
+      web: { boxShadow: '0 0 0 3px rgba(76, 111, 255, 0.16)' },
+    }),
   },
   searchInput: {
     flex: 1,
-    fontSize: 15,
-    color: '#0f172a',
+    minWidth: 0,
+    fontSize: 16, // 16px stops iOS Safari zooming on focus
+    color: COLORS.ink,
     paddingVertical: 8,
     ...Platform.select({
       web: { outlineStyle: 'none' as any },
     }),
   },
   clearButton: {
-    padding: 4,
-    borderRadius: 4,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   clearButtonPressed: {
     backgroundColor: '#f1f5f9',
   },
-  searchButton: {
-    backgroundColor: '#3b5bdb',
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 8,
-    justifyContent: 'center',
+  kbd: {
+    minWidth: 24,
+    height: 24,
+    paddingHorizontal: 7,
+    marginRight: 4,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    backgroundColor: COLORS.page,
     alignItems: 'center',
+    justifyContent: 'center',
   },
-  searchButtonPressed: {
-    backgroundColor: '#2f4bc0',
-  },
-  searchInfo: {
-    marginTop: 4,
-    paddingHorizontal: 16,
-    paddingVertical: 6,
-    backgroundColor: '#eef2ff',
-    borderRadius: 20,
-  },
-  searchInfoText: {
+  kbdText: {
     fontSize: 12,
-    color: '#3b5bdb',
+    fontWeight: '600',
+    color: COLORS.muted,
+  },
+  resultCount: {
+    marginTop: 12,
+    fontSize: 13,
+    lineHeight: 18,
+    color: COLORS.muted,
     fontWeight: '500',
   },
 
-  // Category tabs — centered, wraps on small widths
+  // Category tabs — separate pills (classic style)
   tabsRow: {
     flexDirection: 'row',
+    alignSelf: 'flex-start',
     gap: 8,
-    justifyContent: 'center',
-    flexWrap: 'wrap',
+    flexWrap: 'nowrap', // always a single row
   },
-  categoryChip: {
+  tabsRowStretch: {
+    alignSelf: 'stretch',
+  },
+  tab: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    minHeight: 38,
     paddingHorizontal: 14,
     paddingVertical: 8,
     borderRadius: 20,
     backgroundColor: '#f1f5f9',
   },
-  categoryChipActive: {
-    backgroundColor: '#3b5bdb',
+  // On a phone the four tabs share the row by content width, with tighter
+  // padding so "General" and its count still fit.
+  tabStretch: {
+    flexGrow: 1,
+    flexShrink: 1,
+    flexBasis: 0,
+    minWidth: 0,
+    paddingHorizontal: 4,
+    gap: 4,
+  },
+  tabActive: {
+    backgroundColor: '#4c6fff',
     elevation: 3,
-    shadowColor: '#3b5bdb',
+    shadowColor: '#4c6fff',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.2,
     shadowRadius: 4,
   },
-  categoryChipText: {
+  tabPressed: {
+    backgroundColor: '#e2e8f0',
+  },
+  tabText: {
     fontSize: 13,
     fontWeight: '600',
     color: '#475569',
   },
-  categoryChipTextActive: {
+  tabTextActive: {
+    color: '#ffffff',
+  },
+  tabTextCompact: {
+    fontSize: 12,
+    flexShrink: 1,
+  },
+  tabBadge: {
+    backgroundColor: '#ffffff',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 10,
+    minWidth: 22,
+    alignItems: 'center',
+  },
+  tabBadgeActive: {
+    backgroundColor: 'rgba(255, 255, 255, 0.25)',
+  },
+  tabBadgeCompact: {
+    paddingHorizontal: 4,
+    minWidth: 18,
+  },
+  tabBadgeTextCompact: {
+    fontSize: 10,
+  },
+  tabBadgeText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#4c6fff',
+  },
+  tabBadgeTextActive: {
     color: '#ffffff',
   },
 
-  // Term list — centered column, capped width like the desktop grid
+  // Term list
   list: {
     flex: 1,
   },
+  // No alignItems: 'center' here. It made the sticky section header shrink to
+  // its content and float in the middle; children stretch instead, and the
+  // grid blocks centre themselves with `frame`.
   listContent: {
     flexGrow: 1,
-    alignItems: 'center',
-    paddingBottom: 32,
   },
-  listInner: {
-    // maxWidth, paddingHorizontal, flexDirection/flexWrap, and gap are all
-    // supplied inline above, computed from the current column count.
+
+  // Sticky section header — an (almost) opaque bar so cards scrolling
+  // underneath don't show through the text.
+  sectionBar: {
     width: '100%',
+    alignSelf: 'stretch',
+    backgroundColor: 'rgba(248, 250, 252, 0.97)',
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.border,
+  },
+  sectionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingVertical: 12,
+  },
+  sectionDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  sectionTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: COLORS.title,
+    letterSpacing: -0.2,
+  },
+  sectionBlurb: {
+    flex: 1,
+    minWidth: 0,
+    fontSize: 13,
+    color: COLORS.muted,
+  },
+  sectionCount: {
+    marginLeft: 'auto',
+    fontSize: 13,
+    fontWeight: '600',
+    color: COLORS.muted,
+    ...Platform.select({
+      web: { fontVariant: ['tabular-nums'] as any },
+    }),
+  },
+  gridSection: {
+    gap: 12,
+    paddingTop: 14,
+    paddingBottom: 20,
+  },
+  gridColumnsRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 12,
+  },
+  // Final, shared-width row for cards that would otherwise sit alone.
+  tailRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 12,
+  },
+  tailCell: {
+    flex: 1,
+    minWidth: 0,
+  },
+  gridColumn: {
+    flex: 1,
+    minWidth: 0,
+    gap: 12,
+  },
+
+  // Card — flat and bordered at rest; the tinted shadow only appears on
+  // hover or keyboard focus (see the lift value in ReferenceCard).
+  cardTouchable: {
+    borderRadius: 14,
+  },
+  cardPressed: {
+    opacity: 0.94,
   },
   card: {
     backgroundColor: '#ffffff',
     borderRadius: 14,
     padding: 14,
     borderWidth: 1,
-    borderColor: '#e2e8f0',
-    shadowColor: '#0f172a',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.04,
-    shadowRadius: 6,
-    elevation: 1,
-  },
-  cardHovered: {
-    borderColor: '#c7d2fe',
-    shadowOpacity: 0.1,
-    shadowRadius: 10,
-    elevation: 3,
-  },
-  cardPressed: {
-    opacity: 0.92,
-  },
-  cardHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
+    borderColor: COLORS.border,
+    shadowOffset: { width: 0, height: 6 },
+    shadowRadius: 14,
   },
   cardTerm: {
     fontSize: 15,
+    lineHeight: 21,
     fontWeight: '700',
-    color: '#1a1f36',
+    color: COLORS.title,
+    letterSpacing: -0.1,
+  },
+  cardPreview: {
+    marginTop: 6,
+    fontSize: 14,
+    lineHeight: 20,
+    color: COLORS.bodyStrong,
+  },
+  // The opened definition: ruled with the category colour on the left and
+  // set on that category's paper tint.
+  definitionBlock: {
+    marginTop: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 6,
+  },
+  definitionText: {
+    fontSize: 14,
+    lineHeight: 21,
+    color: COLORS.bodyStrong,
+  },
+  cardFooterRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+    marginTop: 12,
+  },
+  expandHint: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  expandHintText: {
+    fontSize: 13,
+    fontWeight: '600',
   },
   categoryBadge: {
-    alignSelf: 'flex-start',
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 8,
-    marginTop: 6,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 9,
+    paddingVertical: 4,
+    borderRadius: 6,
   },
   categoryBadgeText: {
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: '700',
     letterSpacing: 0.2,
   },
-  cardDivider: {
-    height: 1,
-    backgroundColor: '#e2e8f0',
-    marginTop: 12,
-  },
-  cardDefinition: {
-    marginTop: 12,
-    fontSize: 13,
-    lineHeight: 19,
-    color: '#475569',
-  },
+
+  // Empty state
   emptyState: {
+    width: '100%',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingTop: 60,
-    gap: 6,
+    paddingTop: 48,
+    paddingHorizontal: 32,
+  },
+  emptyIconWrap: {
+    width: 104,
+    height: 104,
+    borderRadius: 52,
+    backgroundColor: '#eef2ff',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   emptyStateTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#1a1f36',
-    marginTop: 12,
+    fontSize: 20,
+    fontWeight: '700',
+    letterSpacing: -0.3,
+    color: COLORS.ink,
+    marginTop: 20,
+    marginBottom: 8,
   },
   emptyText: {
-    fontSize: 13,
-    color: '#94a3b8',
+    fontSize: 14,
+    lineHeight: 20,
+    color: COLORS.body,
+    textAlign: 'center',
+    maxWidth: 320,
+  },
+  chipsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'center',
+    gap: 8,
+    marginTop: 20,
+  },
+  chip: {
+    minHeight: 40,
+    paddingHorizontal: 16,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    backgroundColor: '#ffffff',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  chipPressed: {
+    backgroundColor: '#eef2ff',
+  },
+  chipText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: COLORS.body,
+  },
+  emptyButton: {
+    marginTop: 12,
+    minHeight: 44,
+    paddingHorizontal: 20,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  emptyButtonPressed: {
+    backgroundColor: '#e0e7ff',
+  },
+  emptyButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: COLORS.brandStrong,
   },
 });

@@ -32,16 +32,17 @@ export interface DiagramPrintPayload {
 // applied) — this is a fresh navigation that loads already in its final,
 // print-ready state.
 //
-// print() is only ever called from the on-screen Print button — NOT
-// automatically once the image loads. Two reasons: (1) auto-firing it meant
-// the system dialog took over instantly, before the user ever actually saw
-// this page, which read as the app "randomly" launching a system screen out
-// of nowhere; (2) an <img> firing 'load' only means the browser has decoded
-// the image, not that it's actually been painted to screen yet — calling
-// print() from that event could race ahead of the paint, which is why the
-// diagram sometimes showed up blank in the print preview. Waiting for a real
-// tap sidesteps both: by the time the user can see this page well enough to
-// press Print, the image has definitely painted.
+// The user already expressed clear intent to print by clicking Print on the
+// previous screen (see executePrint in create.tsx) — this page opening at
+// all IS that action, so making them click a second "Print" button just to
+// reach the OS dialog is a redundant extra step. print() is now called
+// automatically once the diagram image has actually painted, via nested
+// requestAnimationFrame calls (see handleImageLoad below) — the <img>
+// 'load' event alone only means the browser has decoded the pixels, not
+// that they've reached the screen yet, which is why the diagram used to
+// sometimes print blank when print() fired too early. The on-screen Print
+// button stays as a manual fallback (e.g. to reprint after dismissing the
+// dialog), it's just no longer the only way to reach it.
 export default function PrintScreen() {
   const [payload, setPayload] = useState<DiagramPrintPayload | null | undefined>(undefined);
 
@@ -54,8 +55,47 @@ export default function PrintScreen() {
     // print margins on top of whatever margin the user's printer driver adds.
     const style = document.createElement('style');
     style.textContent = `
-      @page { margin: 8mm; }
-      @media print { #igraphit-print-toolbar { display: none !important; } }
+      @page {
+        /* Fixed to Letter so this matches the physical dimensions used
+           below — the user's print dialog can still override paper size,
+           but our own fit-to-page math needs one fixed target to compute
+           against. margin stays 8mm, same as before. */
+        size: 8.5in 11in;
+        margin: 8mm;
+      }
+      @media print {
+        #igraphit-print-toolbar { display: none !important; }
+        /* The label row (name/title) sits ABOVE the image — giving the
+           image its own full-page frame (the previous attempt) still
+           overflowed once the label's height was added on top of it,
+           spilling onto a 2nd sheet. This instead makes the label row +
+           image share ONE fixed-height page box: the sheet becomes a
+           column flexbox pinned to the exact printable page size, the
+           label keeps its natural height, and the image gets whatever
+           space is left via flex. min-height: 0 is required — flex items
+           default to min-height: auto, which lets a replaced element
+           (img) refuse to shrink below its intrinsic size regardless of
+           max-height, silently reproducing the same overflow.
+        */
+        #igraphit-print-sheet {
+          display: flex !important;
+          flex-direction: column !important;
+          width: calc(8.5in - 16mm) !important;
+          height: calc(11in - 16mm) !important;
+          max-width: none !important;
+          padding: 0 !important;
+          margin: 0 !important;
+        }
+        #igraphit-print-image {
+          flex: 1 1 auto !important;
+          width: 100% !important;
+          height: auto !important;
+          min-height: 0 !important;
+          max-width: 100% !important;
+          max-height: 100% !important;
+          object-fit: contain !important;
+        }
+      }
     `;
     document.head.appendChild(style);
 
@@ -76,6 +116,47 @@ export default function PrintScreen() {
   const triggerPrint = () => {
     window.focus();
     window.print();
+  };
+
+  // Guards against calling triggerPrint twice — both the ref callback below
+  // (if the image is already complete by the time it runs) and the onLoad
+  // handler (the normal case) can each independently decide to fire this.
+  const hasAutoPrintedRef = React.useRef(false);
+  const handleImageLoad = () => {
+    if (hasAutoPrintedRef.current) return;
+    hasAutoPrintedRef.current = true;
+
+    // A single requestAnimationFrame fires before the NEXT frame paints —
+    // not necessarily after the frame containing the just-loaded image has
+    // painted, since 'load' can fire mid-frame. Nesting two guarantees a
+    // full paint cycle has actually completed: the outer rAF runs at the
+    // start of the next frame (before THAT frame paints), and the inner one
+    // only runs once that frame has painted and the browser is about to
+    // start the one after it. That's what makes it safe to hand off to
+    // window.print() here without risking the blank-print race.
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        triggerPrint();
+      });
+    });
+  };
+
+  // <img> onLoad is unreliable for a data: URL specifically: decoding a
+  // data URI can be fully synchronous, so the 'load' event can fire the
+  // instant the src attribute is set on the DOM node — which happens
+  // during React's commit, potentially before React has finished attaching
+  // the onLoad listener passed as a prop. When that race is lost, onLoad
+  // below never fires at all, and the auto-print silently never happens
+  // (the manual Print button still works, since it doesn't depend on this).
+  // This ref callback runs the instant the <img> DOM node is created/
+  // attached, so checking img.complete here catches exactly that case —
+  // if the browser already finished decoding by then, .complete is already
+  // true and this fires handleImageLoad directly instead of waiting on an
+  // event that already happened.
+  const printImageRef = (img: HTMLImageElement | null) => {
+    if (img && img.complete && img.naturalWidth > 0) {
+      handleImageLoad();
+    }
   };
 
   if (Platform.OS !== 'web') {
@@ -105,7 +186,7 @@ export default function PrintScreen() {
         </TouchableOpacity>
       </View>
 
-      <View style={styles.sheet}>
+      <View nativeID="igraphit-print-sheet" style={styles.sheet}>
         {(payload.name.trim() || payload.title.trim()) && (
           <View style={styles.labelRow}>
             <Text style={styles.labelName}>{payload.name.trim()}</Text>
@@ -119,8 +200,11 @@ export default function PrintScreen() {
             that would override that). An <img> is ordinary page content, so
             it prints like anything else. */}
         <img
+          id="igraphit-print-image"
+          ref={printImageRef}
           src={payload.image}
           style={{ width: '100%', height: 'auto', display: 'block' }}
+          onLoad={handleImageLoad}
         />
       </View>
     </View>

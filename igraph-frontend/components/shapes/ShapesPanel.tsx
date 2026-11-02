@@ -148,6 +148,7 @@ const getShapeComponent = (svgComponentName: string): React.ComponentType<any> |
     'ERDCardinalityN1Shape': shapeComponents.ERDCardinalityN1Shape,
     'ERDCardinalityMNShape': shapeComponents.ERDCardinalityMNShape,
     'ERDConnectorShape': shapeComponents.ERDConnectorShape,
+    'ERDTotalParticipationShape': shapeComponents.ERDTotalParticipationShape,
     
     // ─── Fishbone Shapes ──────────────────────────────────────────────────
     'FishboneSpineShape': shapeComponents.FishboneSpineShape,
@@ -312,11 +313,6 @@ export default function ShapesPanel({
   const [expandedCategory, setExpandedCategory] = useState<string>(activeDiagramType || 'Standard');
   const [selectedShape, setSelectedShape] = useState<string | null>(null);
   const [hoveredShape, setHoveredShape] = useState<string | null>(null);
-  // Measured width of a .grid row (all categories share the same panel
-  // width, so one measurement is enough) — used to work out which row a
-  // hovered tile sits in, so its tooltip can flip instead of covering the
-  // next category's header. See tooltipPlacementFor below.
-  const [gridContentWidth, setGridContentWidth] = useState(0);
   
   // ─── Drag ghost state ───────────────────────────────────────────────────────
   const [dragGhost, setDragGhost] = useState<{ shape: ShapeDefinition; x: number; y: number } | null>(null);
@@ -440,30 +436,7 @@ export default function ShapesPanel({
   const iconWidth = isMobile ? 40 : 48;
   const iconHeight = isMobile ? 26 : 32;
 
-  // Grid uses flexWrap, so column count isn't fixed — derive it from the
-  // measured row width (styles.grid: paddingHorizontal 10 + gap 8) instead
-  // of assuming a breakpoint-specific constant.
-  const columnsPerRow = gridContentWidth > 0
-    ? Math.max(1, Math.floor((gridContentWidth - 20 + 8) / (tileSize + 8)))
-    : 3;
-
-  // Where a hovered tile's tooltip should render: below is the norm, but a
-  // tile in a category's last row would have its tooltip spill onto the
-  // NEXT category's header (search results often filter a category down to
-  // a single row, making "last row" also "first row" — there, above would
-  // just as surely spill onto THIS category's own header, so it goes to
-  // the side instead, clear of both).
-  const tooltipPlacementFor = useCallback((index: number, totalShapes: number): 'above' | 'below' | 'side' => {
-    const totalRows = Math.ceil(totalShapes / columnsPerRow);
-    const rowIndex = Math.floor(index / columnsPerRow);
-    const isFirstRow = rowIndex === 0;
-    const isLastRow = rowIndex === totalRows - 1;
-    if (isFirstRow && isLastRow) return 'side';
-    if (isLastRow) return 'above';
-    return 'below';
-  }, [columnsPerRow]);
-
-  // ⭐ Colors for active state - BLUE
+  // Colors for active state - BLUE
   const activeColor = '#4c6fff';
   const activeBgColor = '#eef2ff';
 
@@ -521,18 +494,18 @@ export default function ShapesPanel({
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Shapes</Text>
         {isGraphReady && (
-          <Text style={styles.headerHint}>Drag to canvas</Text>
+          <Text style={styles.headerHint}>Drag or click to add</Text>
         )}
       </View>
 
       {/* Search */}
       <View style={styles.searchContainer}>
         <View style={styles.searchInputWrapper}>
-          <SearchIcon color="#94a3b8" />
+          <SearchIcon color="#64748b" />
           <TextInput
             style={styles.searchInput}
             placeholder="Search shapes..."
-            placeholderTextColor="#94a3b8"
+            placeholderTextColor="#64748b"
             value={searchQuery}
             onChangeText={setSearchQuery}
             clearButtonMode="while-editing"
@@ -584,20 +557,16 @@ export default function ShapesPanel({
                 {searchQuery.length === 0 && (
                   <AnimatedArrow 
                     expanded={isExpanded} 
-                    color={isActive ? activeColor : '#94a3b8'} 
+                    color={isActive ? activeColor : '#64748b'} 
                   />
                 )}
               </TouchableOpacity>
 
               {(isExpanded || searchQuery.length > 0) && (
-                <View
-                  style={styles.grid}
-                  onLayout={(e) => setGridContentWidth(e.nativeEvent.layout.width)}
-                >
+                <View style={styles.grid}>
                   {shapes.map((shape, shapeIndex) => {
                     const isSelected = selectedShape === shape.id;
                     const isHovered = hoveredShape === shape.id;
-                    const tooltipPlacement = tooltipPlacementFor(shapeIndex, shapes.length);
 
                     if (Platform.OS === 'web') {
                       return (
@@ -608,6 +577,15 @@ export default function ShapesPanel({
                           onDrag={handleDrag}
                           onDragEnd={handleDragEnd}
                           onClick={() => handleShapeSelect(shape)}
+                          role="button"
+                          tabIndex={isGraphReady ? 0 : -1}
+                          aria-label={`Add ${shape.label}`}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter' || e.key === ' ') {
+                              e.preventDefault();
+                              if (isGraphReady) handleShapeSelect(shape);
+                            }
+                          }}
                           onMouseEnter={(e) => {
                             setHoveredShape(shape.id);
                           }}
@@ -639,86 +617,63 @@ export default function ShapesPanel({
                             selected={isSelected}
                             showLabel={false}
                           />
-                          {/* Tooltip on hover — placement flips (above/below/side)
-                              so it never covers a neighboring category header,
-                              see tooltipPlacementFor above. */}
+                          <span
+                            style={{
+                              fontSize: 11,
+                              lineHeight: '13px',
+                              fontWeight: 500,
+                              color: '#475569',
+                              textAlign: 'center',
+                              width: tileSize - 6,
+                              overflow: 'hidden',
+                              display: '-webkit-box',
+                              WebkitLineClamp: 2,
+                              WebkitBoxOrient: 'vertical',
+                              wordBreak: 'break-word',
+                            }}
+                          >
+                            {shape.label}
+                          </span>
+                          {/* Tooltip on hover — always anchored directly below
+                              the tile at a fixed offset, so every tooltip in
+                              the panel lines up identically regardless of
+                              which row it's in. Compact padding/font keeps it
+                              from crowding neighboring tiles. */}
                           {isHovered && (
                             <div
                               style={{
                                 position: 'absolute',
-                                ...(tooltipPlacement === 'below' && {
-                                  bottom: -8,
-                                  left: '50%',
-                                  transform: 'translateX(-50%) translateY(100%)',
-                                }),
-                                ...(tooltipPlacement === 'above' && {
-                                  top: -8,
-                                  left: '50%',
-                                  transform: 'translateX(-50%) translateY(-100%)',
-                                }),
-                                ...(tooltipPlacement === 'side' && {
-                                  top: '50%',
-                                  left: '100%',
-                                  transform: 'translateY(-50%) translateX(8px)',
-                                }),
+                                top: '100%',
+                                left: '50%',
+                                marginTop: 6,
+                                transform: 'translateX(-50%)',
                                 backgroundColor: '#1a1f36',
                                 color: '#ffffff',
-                                padding: '4px 10px',
-                                borderRadius: '6px',
-                                fontSize: '11px',
+                                padding: '3px 8px',
+                                borderRadius: '5px',
+                                fontSize: '10.5px',
                                 fontWeight: '500',
+                                lineHeight: '14px',
                                 pointerEvents: 'none',
                                 zIndex: 1000,
                                 whiteSpace: 'nowrap',
-                                boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+                                boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
                               }}
                             >
                               {shape.label}
-                              {tooltipPlacement === 'below' && (
-                                <div
-                                  style={{
-                                    position: 'absolute',
-                                    top: -6,
-                                    left: '50%',
-                                    transform: 'translateX(-50%)',
-                                    width: 0,
-                                    height: 0,
-                                    borderLeft: '6px solid transparent',
-                                    borderRight: '6px solid transparent',
-                                    borderBottom: '6px solid #1a1f36',
-                                  }}
-                                />
-                              )}
-                              {tooltipPlacement === 'above' && (
-                                <div
-                                  style={{
-                                    position: 'absolute',
-                                    bottom: -6,
-                                    left: '50%',
-                                    transform: 'translateX(-50%)',
-                                    width: 0,
-                                    height: 0,
-                                    borderLeft: '6px solid transparent',
-                                    borderRight: '6px solid transparent',
-                                    borderTop: '6px solid #1a1f36',
-                                  }}
-                                />
-                              )}
-                              {tooltipPlacement === 'side' && (
-                                <div
-                                  style={{
-                                    position: 'absolute',
-                                    left: -6,
-                                    top: '50%',
-                                    transform: 'translateY(-50%)',
-                                    width: 0,
-                                    height: 0,
-                                    borderTop: '6px solid transparent',
-                                    borderBottom: '6px solid transparent',
-                                    borderRight: '6px solid #1a1f36',
-                                  }}
-                                />
-                              )}
+                              <div
+                                style={{
+                                  position: 'absolute',
+                                  bottom: '100%',
+                                  left: '50%',
+                                  transform: 'translateX(-50%)',
+                                  width: 0,
+                                  height: 0,
+                                  borderLeft: '5px solid transparent',
+                                  borderRight: '5px solid transparent',
+                                  borderBottom: '5px solid #1a1f36',
+                                }}
+                              />
                             </div>
                           )}
                         </div>
@@ -735,6 +690,8 @@ export default function ShapesPanel({
                           { width: tileSize, height: tileSize + 20 },
                         ]}
                         onPress={() => handleShapeSelect(shape)}
+                        accessibilityRole="button"
+                        accessibilityLabel={`Add ${shape.label}`}
                         activeOpacity={0.7}
                         disabled={!isGraphReady}
                       >
@@ -745,6 +702,7 @@ export default function ShapesPanel({
                           selected={isSelected}
                           showLabel={false}
                         />
+                        <Text style={styles.tileLabel} numberOfLines={2}>{shape.label}</Text>
                       </TouchableOpacity>
                     );
                   })}
@@ -766,7 +724,7 @@ export default function ShapesPanel({
       {isDesktop && (
         <View style={styles.footer}>
           <Text style={styles.footerText}>
-            {isGraphReady ? 'Drop shapes onto canvas' : 'Loading editor...'}
+            {isGraphReady ? 'Drag shapes onto the canvas, or click to add' : 'Loading editor...'}
           </Text>
         </View>
       )}
@@ -806,9 +764,8 @@ const styles = StyleSheet.create({
     color: '#1a1f36',
   },
   headerHint: {
-    fontSize: 10,
-    color: '#94a3b8',
-    fontStyle: 'italic',
+    fontSize: 11,
+    color: '#64748b',
   },
 
   searchContainer: {
@@ -836,8 +793,8 @@ const styles = StyleSheet.create({
     padding: 4,
   },
   searchResults: {
-    fontSize: 11,
-    color: '#94a3b8',
+    fontSize: 12,
+    color: '#64748b',
     marginTop: 6,
     paddingHorizontal: 4,
   },
@@ -891,7 +848,7 @@ const styles = StyleSheet.create({
   },
 
   categoryTitle: {
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: '600',
     color: '#1a1f36',
   },
@@ -920,6 +877,14 @@ const styles = StyleSheet.create({
       },
     }),
   },
+  tileLabel: {
+    fontSize: 11,
+    lineHeight: 13,
+    fontWeight: '500',
+    color: '#475569',
+    textAlign: 'center',
+    paddingHorizontal: 2,
+  },
   tileSelected: {
     backgroundColor: '#eef2ff',
     transform: [{ scale: 0.95 }],
@@ -938,8 +903,8 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
   noResultsSubtext: {
-    fontSize: 12,
-    color: '#94a3b8',
+    fontSize: 13,
+    color: '#64748b',
     marginTop: 4,
   },
 
@@ -952,8 +917,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   footerText: {
-    fontSize: 11,
-    color: '#94a3b8',
+    fontSize: 12,
+    color: '#64748b',
   },
 });
 

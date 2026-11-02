@@ -25,6 +25,7 @@ import { SvgCanvas2D, ImageExport, Geometry, Point, CellHighlight } from '@maxgr
 import DiagramCanvas, { DiagramCanvasHandle, getShapeStyle, insertUmlClassCell, insertDfdDataStoreCell, insertForkJoinStubs, findSequenceMessageEndpoints, sequenceMessageConnectionStyle, SEQUENCE_MESSAGE_SHAPE_IDS } from '@/components/DiagramCanvas';
 import { DiagramPatch, patchKey } from '@/utils/diagramPatch';
 import ShareModal, { Avatar, getAvatarColor } from '@/components/ShareModal';
+import AdsterraPopup, { AdsterraPopupHandle } from '@/components/AdsterraPopup';
 import RequestAccessModal from '@/components/RequestAccessModal';
 import ShapesPanel from '@/components/shapes/ShapesPanel';
 import ShapesBottomPanel from '../../components/shapes/ShapesBottomPanel';
@@ -44,6 +45,12 @@ import { useOnboardingTour } from '@/hooks/useOnboardingTour';
 import { CREATE_TOUR_ID, getCreateTourSteps } from '@/utils/tours';
 import { resolveTourWait } from '@/utils/onboardingTour';
 import API_BASE_URL from '@/constants/api';
+import { usePageTitle } from '@/utils/usePageTitle';
+
+// Verbose tracing for local development only; silent in production builds.
+const devLog = (...args: unknown[]) => {
+  if (__DEV__) console.log(...args);
+};
 
 const UndoIcon = ({ color = '#4a5568', size = 20 }: { color?: string; size?: number }) => (
   <Svg width={size} height={size} viewBox="0 0 24 24" fill={color}>
@@ -129,10 +136,10 @@ const DownloadDropdown = ({
   nativeID?: string;
 }) => {
   const formats = [
-    { id: 'png', label: 'PNG', description: 'High quality, lossless', icon: '🖼️' },
-    { id: 'svg', label: 'SVG', description: 'Vector, scalable', icon: '📐' },
-    { id: 'pdf', label: 'PDF', description: 'Document format', icon: '📄' },
-    { id: 'jpg', label: 'JPG', description: 'Smaller file size', icon: '🖼️' },
+    { id: 'png', label: 'PNG', description: 'High quality, lossless' },
+    { id: 'svg', label: 'SVG', description: 'Vector, scalable' },
+    { id: 'pdf', label: 'PDF', description: 'Document format' },
+    { id: 'jpg', label: 'JPG', description: 'Smaller file size' },
   ] as const;
 
   return (
@@ -155,7 +162,6 @@ const DownloadDropdown = ({
           onPress={() => onSelectFormat(format.id)}
           activeOpacity={0.6}
         >
-          <Text style={styles.downloadDropdownIcon}>{format.icon}</Text>
           <View style={styles.downloadDropdownTextWrap}>
             <Text style={styles.downloadDropdownLabel}>{format.label}</Text>
             <Text style={styles.downloadDropdownDescription}>{format.description}</Text>
@@ -192,10 +198,10 @@ const SYNC_STATUS_META: Record<SyncStatus, { label: string; color: string }> = {
   // icon, a plain "Saved on device" read as if the cloud icon meant it was
   // already backed up. This makes the gap explicit: nothing has reached the
   // server yet.
-  local: { label: 'Saved on device only', color: '#d97706' },
+  local: { label: 'Saved on device only', color: '#b45309' },
   syncing: { label: 'Saving…', color: '#4c6fff' },
   synced: { label: 'Saved', color: '#10b981' },
-  offline: { label: 'Saved on device only', color: '#94a3b8' },
+  offline: { label: 'Saved on device only', color: '#64748b' },
 };
 
 // Sits beside the diagram title so the user always knows whether their work
@@ -402,6 +408,8 @@ export default function CreateScreen() {
   );
   const { width } = useWindowDimensions();
   const isDesktop = width >= 768;
+  // Toolbar actions get text labels once there's room for them.
+  const showToolbarLabels = width >= 1180;
 
   // Opening a /create?share=<token> link (see ShareModal's "Copy link")
   // redeems the token — which is what actually grants standing access, not
@@ -431,6 +439,7 @@ export default function CreateScreen() {
   }, [shareToken]);
 
   const [diagramName, setDiagramName] = useState('Blank diagram');
+  usePageTitle(diagramName && diagramName !== 'Blank diagram' ? diagramName : 'Create Diagram');
   const [isGraphReady, setIsGraphReady] = useState(false);
 
   const [graphInstance, setGraphInstance] = useState<any>(null);
@@ -505,7 +514,7 @@ export default function CreateScreen() {
   const [activeTool, setActiveTool] = useState<'shapes' | 'text' | 'draw' | 'arrange' | 'connectors'>('shapes');
   const [activeUmlType, setActiveUmlType] = useState('Functional Decomposition Diagram');
 
-  // ─── ✅ FIX: Use ref to store diagramXml without causing re-renders ───────
+  // ─── Use ref to store diagramXml without causing re-renders ───────
   const diagramXmlRef = useRef<string>('');
   // Same idea for the name: reading it via ref keeps handleSaveDiagram's
   // identity stable while typing, so it isn't recreated (and re-registered
@@ -547,6 +556,7 @@ export default function CreateScreen() {
   const [dialogState, setDialogState] = useState<{
     title: string;
     message?: string;
+    items?: string[];
     confirmText?: string;
     onConfirm?: () => void;
   } | null>(null);
@@ -626,6 +636,7 @@ export default function CreateScreen() {
 
   // ─── Persistence: continue-a-diagram / per-account local draft ──────────────
   const diagramCanvasRef = useRef<DiagramCanvasHandle>(null);
+  const adRef = useRef<AdsterraPopupHandle>(null);
   // Diagram currently being edited; null = never-saved new diagram.
   const currentDiagramIdRef = useRef<string | null>(null);
   // Same value as currentDiagramIdRef, mirrored into state — plain effects
@@ -762,7 +773,7 @@ export default function CreateScreen() {
 
   // ─── Debug: Log when component mounts ──────────────────────────────────────
   useEffect(() => {
-    console.log('🔍 create.tsx mounted, setSaveHandler available:', !!setSaveHandler);
+    devLog('create.tsx mounted, setSaveHandler available:', !!setSaveHandler);
   }, [setSaveHandler]);
 
   // ─── Warm up the backend as soon as this screen mounts ─────────────────────
@@ -778,7 +789,7 @@ export default function CreateScreen() {
     authService.pingBackend();
   }, []);
 
-  // ─── ✅ FIX: Update ref whenever diagramXml changes ──────────────────────
+  // ─── Update ref whenever diagramXml changes ──────────────────────
   useEffect(() => {
     diagramXmlRef.current = diagramXml;
   }, [diagramXml]);
@@ -1081,10 +1092,25 @@ export default function CreateScreen() {
 
   const toolbarHeight = Platform.OS === 'ios' ? 68 : 56;
 
+  // True while nothing is drawn yet; drives the empty-state hint below.
+  // diagramXml is in the deps on purpose: it changes on every edit.
+  const isCanvasEmpty = useMemo(() => {
+    if (!graphInstance) return true;
+    try {
+      const parent = graphInstance.getDefaultParent();
+      return (
+        graphInstance.getChildVertices(parent).length === 0 &&
+        graphInstance.getChildEdges(parent).length === 0
+      );
+    } catch {
+      return false;
+    }
+  }, [graphInstance, diagramXml]);
+
   // ─── Graph callbacks ────────────────────────────────────────────────────────
 
   const handleGraphReady = (graph: any) => {
-    console.log('🟢 Graph ready, setting graphInstance');
+    devLog('Graph ready, setting graphInstance');
     setGraphInstance(graph);
     setIsGraphReady(true);
 
@@ -1109,7 +1135,7 @@ export default function CreateScreen() {
           const activeXml = content.pages?.[0]?.xml || content.xml || '';
           if (!activeXml || activeXml.length === 0) return;
 
-          console.log('🔁 onReady restore — xmlLen:', activeXml.length);
+          devLog('onReady restore — xmlLen:', activeXml.length);
           isHydratingRef.current = true;
           diagramCanvasRef.current?.loadXml(activeXml);
           diagramCanvasRef.current?.refresh();
@@ -1142,7 +1168,7 @@ export default function CreateScreen() {
 
   const handleGraphChange = (xml: string, patches: DiagramPatch[]) => {
     if (isHydratingRef.current) return;
-    console.log('🔄 handleGraphChange — xmlLen:', xml?.length || 0, 'activePageId:', activePageId, 'hydrated:', hasHydratedRef.current);
+    devLog('handleGraphChange — xmlLen:', xml?.length || 0, 'activePageId:', activePageId, 'hydrated:', hasHydratedRef.current);
     setDiagramXml(xml);
     // Captured now (the page this edit actually happened on), not read again
     // inside the debounced setTimeout below — the user can switch pages
@@ -1295,7 +1321,7 @@ export default function CreateScreen() {
     if (!isGraphReady || !graphInstance) return;
     let cancelled = false;
 
-    console.log('🔍 hydrate effect — diagramId:', diagramId,
+    devLog('hydrate effect — diagramId:', diagramId,
       'hasHydrated:', hasHydratedRef.current,
       'hydratedGraphRef:', hydratedGraphRef.current === graphInstance ? 'same' : 'different');
 
@@ -1333,7 +1359,7 @@ export default function CreateScreen() {
 
     if (isMidSessionRemount) {
       const xmlToRestore = pageXmlCache.current.get(activePageId) || diagramXmlRef.current || '';
-      console.log('🔍 remount restore — cacheHas:', pageXmlCache.current.has(activePageId),
+      devLog('remount restore — cacheHas:', pageXmlCache.current.has(activePageId),
         'xmlLen:', xmlToRestore.length, 'graphReady:', !!(diagramCanvasRef.current));
 
       // Guard: only trust this shortcut when there's real content to restore.
@@ -1480,13 +1506,13 @@ export default function CreateScreen() {
         // that breaks the moment a newer, unrelated diagram exists that the
         // user never meant to resume.
         if (!restoredLocally && uid && !cancelled) {
-          console.log('🌐 POINTER: no local draft found, checking server-side active-diagram pointer for uid:', uid);
+          devLog('POINTER: no local draft found, checking server-side active-diagram pointer for uid:', uid);
           try {
             const pointerResult = await authService.getActiveDiagramPointer();
             const pointerDiagramId = pointerResult?.success ? pointerResult.data?.lastActiveDiagramId : null;
 
             if (!cancelled && pointerDiagramId) {
-              console.log('🌐 POINTER: found active diagram id:', pointerDiagramId);
+              devLog('POINTER: found active diagram id:', pointerDiagramId);
               const API_URL = API_BASE_URL;
               const detailResponse = await authService.authFetch(`${API_URL}/api/diagrams/${pointerDiagramId}`);
               const detailResult = await detailResponse.json();
@@ -1498,15 +1524,15 @@ export default function CreateScreen() {
                 loadedDiagramIdRef.current = pointerDiagramId;
                 await AsyncStorage.setItem(draftKey(uid, pointerDiagramId), JSON.stringify(loaded));
                 await AsyncStorage.setItem(activePointerKey(uid), JSON.stringify({ diagramId: pointerDiagramId }));
-                console.log('✅ POINTER SUCCESS: loaded diagram', pointerDiagramId, 'into canvas and cached locally');
+                devLog('POINTER SUCCESS: loaded diagram', pointerDiagramId, 'into canvas and cached locally');
               } else {
-                console.warn('❌ POINTER FAILED: diagram detail fetch returned no usable data', detailResult);
+                console.warn('POINTER FAILED: diagram detail fetch returned no usable data', detailResult);
               }
             } else if (!cancelled) {
-              console.log('ℹ️ POINTER: no active-diagram pointer set for this account yet');
+              devLog('ℹ️ POINTER: no active-diagram pointer set for this account yet');
             }
           } catch (e) {
-            console.error('❌ POINTER ERROR: could not resolve active-diagram pointer:', e);
+            console.error('POINTER ERROR: could not resolve active-diagram pointer:', e);
           }
         }
 
@@ -1636,7 +1662,7 @@ export default function CreateScreen() {
         const container = graphInstance.container;
         if (container && typeof container.focus === 'function') {
           container.focus();
-          console.log('🎯 Graph container focused');
+          devLog('Graph container focused');
         }
       } catch (e) {
         console.warn('Could not focus graph:', e);
@@ -2129,7 +2155,7 @@ export default function CreateScreen() {
       }
 
       graph.setSelectionCell(cell);
-      console.log(`✅ Added "${shapeId}" as "${styleKey}" at (${x}, ${y})`);
+      devLog(`Added "${shapeId}" as "${styleKey}" at (${x}, ${y})`);
       resolveTourWait('create-shape-drop');
 
       setTimeout(focusGraph, 50);
@@ -2197,18 +2223,27 @@ export default function CreateScreen() {
   // Only used for raster export (forRaster) — see wrapPlainTextToWidth above
   // for why plain SVG text otherwise overflows instead of wrapping.
   class WrappingSvgCanvas2D extends SvgCanvas2D {
-    plainText(
-      x: number, y: number, w: number, h: number, str: string,
-      align: any, valign: any, wrap: boolean, overflow: any, clip: boolean,
-      rotation?: number, dir?: string,
-    ) {
-      if (wrap && w > 0 && typeof str === 'string' && !str.includes('\n')) {
-        str = wrapPlainTextToWidth(str, w, (this as any).state.fontSize, (this as any).state.fontFamily);
-      }
-      // @ts-ignore — base signature matches at runtime, just not exactly typed
-      super.plainText(x, y, w, h, str, align, valign, wrap, overflow, clip, rotation, dir);
+  plainText(
+    x: number, y: number, w: number, h: number, str: string,
+    align: any, valign: any, wrap: boolean, overflow: any, clip: boolean,
+    rotation?: number, dir?: string,
+  ) {
+    // Raster export disables foreignObject (see foEnabled = false below),
+    // so HTML labels are never parsed as HTML here — a stored label like
+    // "line1<br/>line2" would otherwise print the literal tag instead of
+    // breaking the line. Converting common <br> variants to real newlines
+    // before wrap/measurement restores the line breaks the on-canvas
+    // (foreignObject) rendering already shows.
+    if (typeof str === 'string' && /<br\s*\/?>/i.test(str)) {
+      str = str.replace(/<br\s*\/?>/gi, '\n');
     }
+    if (wrap && w > 0 && typeof str === 'string' && !str.includes('\n')) {
+      str = wrapPlainTextToWidth(str, w, (this as any).state.fontSize, (this as any).state.fontFamily);
+    }
+    // @ts-ignore — base signature matches at runtime, just not exactly typed
+    super.plainText(x, y, w, h, str, align, valign, wrap, overflow, clip, rotation, dir);
   }
+}
 
   // Saved-diagram card thumbnails pass this as buildDiagramSvgElement's
   // minSize so a diagram with only one or two small shapes doesn't get
@@ -2397,6 +2432,17 @@ export default function CreateScreen() {
   ): Promise<HTMLCanvasElement> => {
     return new Promise((resolve, reject) => {
       try {
+        // Force the view to recompute every CellState against the CURRENT
+        // model before reading bounds/state from it (buildDiagramSvgElement
+        // calls graph.getGraphBounds() and graph.getView().getState(...),
+        // both of which read from the view's CellState cache). Without this,
+        // Print/Save/background-sync triggered shortly after a page switch,
+        // a remote collaborative patch, or a diagram load can capture stale
+        // CellStates left over from whatever was on screen before that
+        // change — rendering a shape that doesn't match the live model.
+        (graph as any).sizeDidChange?.();
+        graph.getView().revalidate();
+
         const svg = buildDiagramSvgElement(graph, {
           forRaster: true,
           minSize: options?.minSize,
@@ -2466,11 +2512,14 @@ export default function CreateScreen() {
   // look like clicking the button did nothing at all. window.alert works but
   // shows the browser's native "localhost says..." chrome; this shows an
   // in-app modal instead (see dialogState above).
-  const notify = (title: string, message?: string) => {
+  const notify = (title: string, message?: string, items?: string[]) => {
     if (Platform.OS === 'web') {
-      setDialogState({ title, message });
+      setDialogState({ title, message, items });
     } else {
-      Alert.alert(title, message);
+      const itemsText = items?.length
+        ? items.map((item, i) => `${i + 1}. ${item}`).join('\n')
+        : undefined;
+      Alert.alert(title, [message, itemsText].filter(Boolean).join('\n\n'));
     }
   };
 
@@ -2498,11 +2547,14 @@ export default function CreateScreen() {
     }
   };
 
-  const confirmDialog = (title: string, message: string, confirmText: string, onConfirm: () => void) => {
+  const confirmDialog = (title: string, message: string, confirmText: string, onConfirm: () => void, items?: string[]) => {
     if (Platform.OS === 'web') {
-      setDialogState({ title, message, confirmText, onConfirm });
+      setDialogState({ title, message, confirmText, onConfirm, items });
     } else {
-      Alert.alert(title, message, [
+      const itemsText = items?.length
+        ? items.map((item, i) => `${i + 1}. ${item}`).join('\n')
+        : undefined;
+      Alert.alert(title, [message, itemsText].filter(Boolean).join('\n\n'), [
         { text: 'Cancel', style: 'cancel' },
         { text: confirmText, onPress: onConfirm },
       ]);
@@ -2521,17 +2573,17 @@ export default function CreateScreen() {
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   };
 
-  // ─── ✅ FIXED: SAVE FUNCTION - Uses ref for XML, stable dependencies ──────
+  // ─── SAVE FUNCTION - Uses ref for XML, stable dependencies ──────
 
   const handleSaveDiagram = useCallback(async () => {
-    console.log('🟢 SAVE BUTTON CLICKED - handleSaveDiagram called');
+    devLog('SAVE BUTTON CLICKED - handleSaveDiagram called');
 
     if (isSavingRef.current) {
-      console.log('⏳ Save already in progress, ignoring duplicate click');
+      devLog('⏳ Save already in progress, ignoring duplicate click');
       return;
     }
     if (isHydratingRef.current || !diagramXmlRef.current) {
-      console.log('⏭️ skipping save — hydrating or empty');
+      devLog('skipping save — hydrating or empty');
       return;
     }
     // Set synchronously, before any `await`, so a rapid second click (which
@@ -2540,18 +2592,18 @@ export default function CreateScreen() {
     isSavingRef.current = true;
 
     if (!graphInstance) {
-      console.log('❌ No graphInstance');
+      devLog('No graphInstance');
       isSavingRef.current = false;
       return;
     }
 
     // Check if user is authenticated
-    console.log('🔑 Checking authentication...');
+    devLog('Checking authentication...');
     const signedIn = await authService.hasActiveSession();
-    console.log('🔑 Session:', signedIn ? 'Active' : 'None');
+    devLog('Session:', signedIn ? 'Active' : 'None');
 
     if (!signedIn) {
-      console.log('❌ Not signed in');
+      devLog('Not signed in');
       isSavingRef.current = false;
       confirmDialog('Sign In Required', 'Please sign in to save your diagram.', 'Sign In', () => {
         router.push('/(auth)/signin');
@@ -2559,16 +2611,16 @@ export default function CreateScreen() {
       return;
     }
 
-    console.log('📤 Starting save process...');
+    devLog('Starting save process...');
     setIsSaving(true);
     setContextIsSaving(true);
 
     try {
-      // ✅ FIX: Use the ref instead of state to prevent recreating the function
+      // Use the ref instead of state to prevent recreating the function
       const xml = diagramXmlRef.current;
       
-      console.log('📄 XML length:', xml?.length || 0);
-      console.log('📄 XML preview:', xml?.substring(0, 200) || 'EMPTY');
+      devLog('XML length:', xml?.length || 0);
+      devLog('XML preview:', xml?.substring(0, 200) || 'EMPTY');
 
       // Check if the diagram has actual content
       const isEmptyXml = !xml || 
@@ -2578,12 +2630,12 @@ export default function CreateScreen() {
         xml === '<mxGraphModel><root><mxCell id="0"/><mxCell id="1" parent="0"/></mxGraphModel>';
       
       if (isEmptyXml) {
-        console.log('❌ Empty diagram content - no shapes added yet');
+        devLog('Empty diagram content - no shapes added yet');
         return;
       }
 
       // Generate a preview image
-      console.log('🖼️ Generating preview image...');
+      devLog('Generating preview image...');
       let imageDataUrl = '';
       try {
         const canvas = await renderDiagramToCanvas(graphInstance, 0.5, {
@@ -2598,9 +2650,9 @@ export default function CreateScreen() {
           maxDimension: 480,
         });
         imageDataUrl = canvas.toDataURL('image/png');
-        console.log('🖼️ Preview generated, size:', (imageDataUrl.length / 1024).toFixed(1), 'KB');
+        devLog('Preview generated, size:', (imageDataUrl.length / 1024).toFixed(1), 'KB');
       } catch (renderError) {
-        console.warn('⚠️ Could not generate preview image:', renderError);
+        console.warn('Could not generate preview image:', renderError);
         // Continue without preview - it's optional
       }
 
@@ -2630,8 +2682,8 @@ export default function CreateScreen() {
       const API_URL = API_BASE_URL;
       const url = `${API_URL}/api/diagrams/save`;
       
-      console.log(`📤 Sending POST to: ${url}`);
-      console.log('📤 Payload:', { 
+      devLog(`Sending POST to: ${url}`);
+      devLog('Payload:', { 
         name: payload.name, 
         type: payload.type, 
         xmlLength: payload.xml.length,
@@ -2648,7 +2700,7 @@ export default function CreateScreen() {
         body: JSON.stringify(payload)
       });
 
-      console.log('📥 Response status:', response.status);
+      devLog('Response status:', response.status);
 
       // A 404 here means payload.id pointed at a diagram that no longer
       // exists server-side — e.g. it was deleted from another device/tab,
@@ -2669,7 +2721,7 @@ export default function CreateScreen() {
       // something that doesn't exist) that surfacing it plainly is better
       // than quietly working around it.
       if (response.status === 404 && payload.id && collabViewersRef.current.length === 0) {
-        console.warn('⚠️ Referenced diagram id not found on server, retrying as a new diagram');
+        console.warn('Referenced diagram id not found on server, retrying as a new diagram');
         setMyAccessLevel('owner');
         setHasPendingAccessRequest(false);
         setCurrentDiagramId(null);
@@ -2682,7 +2734,7 @@ export default function CreateScreen() {
           },
           body: JSON.stringify(retryPayload)
         });
-        console.log('📥 Retry response status:', response.status);
+        devLog('Retry response status:', response.status);
       } else if (response.status === 404 && payload.id) {
         notify('Diagram Not Found', 'This diagram no longer exists on the server, but other collaborators are still shown as present in it. Please refresh before continuing to avoid losing work.');
         return;
@@ -2692,10 +2744,10 @@ export default function CreateScreen() {
       // (HTML error page, empty body, etc.) instead of guessing from a
       // generic message when it turns out not to be valid JSON.
       const rawText = await response.text();
-      console.log('📥 Raw response:', rawText.substring(0, 500));
+      devLog('Raw response:', rawText.substring(0, 500));
 
       if (!response.ok) {
-        console.error('❌ Server error response:', rawText);
+        console.error('Server error response:', rawText);
         throw new Error(`Server error: ${response.status} - ${rawText || response.statusText}`);
       }
 
@@ -2703,13 +2755,13 @@ export default function CreateScreen() {
       try {
         result = JSON.parse(rawText);
       } catch (parseError) {
-        console.error('❌ Response is not valid JSON:', parseError);
+        console.error('Response is not valid JSON:', parseError);
         throw new Error('Server returned an invalid response. Please try again.');
       }
-      console.log('📥 Response data:', result);
+      devLog('Response data:', result);
 
       if (result.success) {
-        console.log('✅ Diagram saved successfully!');
+        devLog('Diagram saved successfully!');
         deletedPageIdsRef.current.clear();
         const savedId: string | undefined = result.data?.diagram?.id;
         if (savedId) {
@@ -2719,13 +2771,14 @@ export default function CreateScreen() {
             if (uid) persistDraft(uid, savedId);
           });
         }
+        // adRef.current?.show();
       } else {
-        console.log('❌ Save failed:', result.message);
+        devLog('Save failed:', result.message);
         notify('Error', result.message || 'Failed to save diagram. Please try again.');
       }
     } catch (error: any) {
-      console.error('❌ Save diagram error:', error);
-      console.error('❌ Error stack:', error.stack);
+      console.error('Save diagram error:', error);
+      console.error('Error stack:', error.stack);
 
       if (error.message?.includes('Network') || error.message?.includes('fetch') || error.message?.includes('Failed to fetch')) {
         notify('Network Error', 'Could not connect to server. Please check your internet connection and make sure the backend is running.');
@@ -2735,7 +2788,7 @@ export default function CreateScreen() {
         notify('Error', error.message || 'Failed to save diagram. Please try again.');
       }
     } finally {
-      console.log('🔚 Save process finished');
+      devLog('Save process finished');
       isSavingRef.current = false;
       setIsSaving(false);
       setContextIsSaving(false);
@@ -2922,14 +2975,14 @@ export default function CreateScreen() {
     );
   }, [startNewDiagram]);
 
-  // ─── ✅ FIXED: Register save handler with context - Stable registration ──
+  // ─── Register save handler with context - Stable registration ──
 
   // Use ref to track the current handler to prevent re-registration loops
   const saveHandlerRef = useRef<(() => Promise<void>) | null>(null);
 
   // Register save handler with context
   useEffect(() => {
-    console.log('🔄 Registering save handler...');
+    devLog('Registering save handler...');
     const handler = handleSaveDiagram;
     
     // Only register if the handler has changed
@@ -2941,7 +2994,7 @@ export default function CreateScreen() {
     return () => {
       // Only unregister if we're the ones who registered
       if (saveHandlerRef.current === handler) {
-        console.log('🔄 Unregistering save handler');
+        devLog('Unregistering save handler');
         saveHandlerRef.current = null;
         setSaveHandler(null);
       }
@@ -2964,26 +3017,42 @@ export default function CreateScreen() {
     }
 
     // Same validation rules that already drive the on-canvas badges and the
-    // issues panel (see utils/flowchartRules.ts) — an exported file is a
-    // snapshot someone else will read without the editor's own issues list
-    // next to it, so a diagram with an unresolved error OR warning (just
-    // not an info-level nudge, which is a style suggestion rather than a
-    // correctness problem) shouldn't be exportable until it's addressed.
+    // issues panel (see utils/flowchartRules.ts) — warn before exporting
+    // with an unresolved error OR warning (not an info-level nudge, which
+    // is a style suggestion rather than a correctness problem), but let the
+    // user proceed anyway if they choose to.
     const blockingIssues = (diagramCanvasRef.current?.getIssues() ?? []).filter(
       (issue) => issue.severity === 'error' || issue.severity === 'warning'
     );
+    const isEmptyDiagram = blockingIssues.some((issue) => issue.code === 'empty-diagram');
+    if (isEmptyDiagram) {
+      notify(
+        'Nothing to download',
+        'Your canvas is empty. Add at least one shape, then try again.'
+      );
+      return;
+    }
     if (blockingIssues.length > 0) {
       const hasErrors = blockingIssues.some((issue) => issue.severity === 'error');
       const hasWarnings = blockingIssues.some((issue) => issue.severity === 'warning');
       const kind = hasErrors && hasWarnings ? 'errors and warnings' : hasErrors ? 'errors' : 'warnings';
-      notify(
-        `Fix ${kind} before exporting`,
+      confirmDialog(
+        `This diagram has ${kind}`,
         blockingIssues.length === 1
           ? blockingIssues[0].message
-          : `This diagram has ${blockingIssues.length} issues that need fixing first: ${blockingIssues.map((i) => i.message).join(' ')}`
+          : `This diagram has ${blockingIssues.length} unresolved issues. Download anyway?`,
+        'Download Anyway',
+        () => performDownload(format),
+        blockingIssues.map((i) => i.message)
       );
       return;
     }
+
+    await performDownload(format);
+  };
+
+  const performDownload = async (format: 'png' | 'svg' | 'pdf' | 'jpg') => {
+    if (!graphInstance) return;
 
     setIsDownloading(true);
 
@@ -3004,20 +3073,25 @@ export default function CreateScreen() {
         return;
       }
 
-      const canvas = await renderDiagramToCanvas(graphInstance, format === 'jpg' ? 2 : 3);
+      const pdfRenderScale = 3;
+      const canvas = await renderDiagramToCanvas(graphInstance, format === 'jpg' ? 2 : pdfRenderScale);
 
       if (format === 'pdf') {
-        // A real PDF file, generated client-side — no print dialog involved.
-        // Page size matches the rendered canvas exactly (unit 'px' + an
-        // explicit [width, height] format) so the diagram fills the one
-        // page at full resolution instead of being scaled/cropped to fit a
-        // fixed paper size.
+        // canvas.width/height are rendered at pdfRenderScale for crisp
+        // raster quality — dividing back out gives the diagram's real,
+        // 1x size. Without this, the PDF page itself was set to the
+        // oversized canvas dimensions (unit 'px'), so the "page" ended up
+        // 3x too big and every shape looked zoomed in when viewed/scrolled.
+        // The high-res image is still drawn into that normal-size page, so
+        // quality is unaffected — only the page dimensions are fixed.
+        const pageWidth = canvas.width / pdfRenderScale;
+        const pageHeight = canvas.height / pdfRenderScale;
         const pdf = new jsPDF({
-          orientation: canvas.width >= canvas.height ? 'landscape' : 'portrait',
+          orientation: pageWidth >= pageHeight ? 'landscape' : 'portrait',
           unit: 'px',
-          format: [canvas.width, canvas.height],
+          format: [pageWidth, pageHeight],
         });
-        pdf.addImage(canvas.toDataURL('image/png'), 'PNG', 0, 0, canvas.width, canvas.height);
+        pdf.addImage(canvas.toDataURL('image/png'), 'PNG', 0, 0, pageWidth, pageHeight);
         downloadFile(pdf.output('blob'), `${name}.pdf`, 'application/pdf');
         notify('Success', 'PDF diagram downloaded successfully!');
         notifyExportComplete(`"${name}.pdf" downloaded successfully.`);
@@ -3056,11 +3130,8 @@ export default function CreateScreen() {
     setShowShareModal(true);
   }, []);
 
-  const handlePrint = useCallback(() => {
-    if (!graphInstance) {
-      Alert.alert('No Diagram', 'Please create a diagram first.');
-      return;
-    }
+  const performPrint = useCallback(() => {
+    if (!graphInstance) return;
 
     setIsPreparingPrint(true);
 
@@ -3078,6 +3149,42 @@ export default function CreateScreen() {
         setIsPreparingPrint(false);
       });
   }, [graphInstance]);
+
+  const handlePrint = useCallback(() => {
+    if (!graphInstance) {
+      Alert.alert('No Diagram', 'Please create a diagram first.');
+      return;
+    }
+
+    const blockingIssues = (diagramCanvasRef.current?.getIssues() ?? []).filter(
+      (issue) => issue.severity === 'error' || issue.severity === 'warning'
+    );
+    const isEmptyDiagram = blockingIssues.some((issue) => issue.code === 'empty-diagram');
+    if (isEmptyDiagram) {
+      notify(
+        'Nothing to print',
+        'Your canvas is empty. Add at least one shape, then try again.'
+      );
+      return;
+    }
+    if (blockingIssues.length > 0) {
+      const hasErrors = blockingIssues.some((issue) => issue.severity === 'error');
+      const hasWarnings = blockingIssues.some((issue) => issue.severity === 'warning');
+      const kind = hasErrors && hasWarnings ? 'errors and warnings' : hasErrors ? 'errors' : 'warnings';
+      confirmDialog(
+        `This diagram has ${kind}`,
+        blockingIssues.length === 1
+          ? blockingIssues[0].message
+          : `This diagram has ${blockingIssues.length} unresolved issues. Print anyway?`,
+        'Print Anyway',
+        () => performPrint(),
+        blockingIssues.map((i) => i.message)
+      );
+      return;
+    }
+
+    performPrint();
+  }, [graphInstance, performPrint]);
 
   // Ctrl+P / Cmd+P opens this diagram's own print screen instead of the
   // browser's native "print this webpage" dialog, which would otherwise just
@@ -3323,7 +3430,7 @@ export default function CreateScreen() {
           <View style={styles.mobileTopBarLeft}>
             <TouchableOpacity
               style={styles.mobileTopBarBtn}
-              onPress={() => router.navigate('/(tabs)/home')}
+              onPress={() => router.navigate('/(tabs)/home')} accessibilityRole="button" accessibilityLabel="Close editor"
               activeOpacity={0.7}
               hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
             >
@@ -3332,6 +3439,8 @@ export default function CreateScreen() {
             <TouchableOpacity
               // @ts-ignore - nativeID renders as a DOM id on web (react-native-web); missing from TouchableOpacityProps' types
               nativeID="tour-create-new"
+              accessibilityRole="button"
+              accessibilityLabel="New diagram"
               style={styles.mobileTopBarBtn}
               onPress={handleNewDiagram}
               activeOpacity={0.7}
@@ -3366,6 +3475,8 @@ export default function CreateScreen() {
             <TouchableOpacity
               // @ts-ignore - nativeID renders as a DOM id on web (react-native-web); missing from TouchableOpacityProps' types
               nativeID="tour-create-share"
+              accessibilityRole="button"
+              accessibilityLabel="Share"
               style={[styles.mobileTopBarBtn, !isGraphReady && styles.mobileTopBarBtnDisabled]}
               onPress={handleShare}
               disabled={!isGraphReady}
@@ -3381,6 +3492,8 @@ export default function CreateScreen() {
             <TouchableOpacity
               // @ts-ignore - nativeID renders as a DOM id on web (react-native-web); missing from TouchableOpacityProps' types
               nativeID="tour-create-save"
+              accessibilityRole="button"
+              accessibilityLabel="Save"
               style={[styles.mobileTopBarBtn, !isGraphReady && styles.mobileTopBarBtnDisabled]}
               onPress={handleSaveDiagram}
               disabled={!isGraphReady || isSaving}
@@ -3398,6 +3511,8 @@ export default function CreateScreen() {
             <TouchableOpacity
               // @ts-ignore - nativeID renders as a DOM id on web (react-native-web); missing from TouchableOpacityProps' types
               nativeID="tour-create-more"
+              accessibilityRole="button"
+              accessibilityLabel="More options"
               style={styles.mobileTopBarBtn}
               onPress={() => setShowMoreMenu((v) => !v)}
               activeOpacity={0.7}
@@ -3420,6 +3535,8 @@ export default function CreateScreen() {
             umlType={activeUmlType}
             isMobile
           />
+
+          {isCanvasEmpty && <EmptyCanvasHint isMobile />}
 
 
           {pendingConnector && (
@@ -3449,7 +3566,7 @@ export default function CreateScreen() {
           <View nativeID="tour-create-undo-redo" style={styles.floatingUndoRedoContainer}>
             <TouchableOpacity
               style={[styles.floatingUndoRedoBtn, !isGraphReady && styles.floatingUndoRedoBtnDisabled]}
-              onPress={handleUndo}
+              onPress={handleUndo} accessibilityRole="button" accessibilityLabel="Undo"
               disabled={!isGraphReady}
               activeOpacity={0.7}
               hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
@@ -3459,7 +3576,7 @@ export default function CreateScreen() {
 
             <TouchableOpacity
               style={[styles.floatingUndoRedoBtn, !isGraphReady && styles.floatingUndoRedoBtnDisabled]}
-              onPress={handleRedo}
+              onPress={handleRedo} accessibilityRole="button" accessibilityLabel="Redo"
               disabled={!isGraphReady}
               activeOpacity={0.7}
               hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
@@ -3479,6 +3596,8 @@ export default function CreateScreen() {
                 <TouchableOpacity
                   // @ts-ignore - nativeID renders as a DOM id on web (react-native-web); missing from TouchableOpacityProps' types
                   nativeID="tour-create-shapes"
+              accessibilityRole="button"
+              accessibilityLabel="Shapes"
                   style={[styles.mobileBottomToolBtn, showShapesPanel && styles.mobileBottomToolBtnActive]}
                   onPress={toggleShapesPanel}
                 >
@@ -3487,6 +3606,8 @@ export default function CreateScreen() {
                 <TouchableOpacity
                   // @ts-ignore - nativeID renders as a DOM id on web (react-native-web); missing from TouchableOpacityProps' types
                   nativeID="tour-create-text"
+              accessibilityRole="button"
+              accessibilityLabel="Text"
                   style={[
                     styles.mobileBottomToolBtn,
                     showMobileProperties && activeTool === 'text' && styles.mobileBottomToolBtnActive,
@@ -3498,6 +3619,8 @@ export default function CreateScreen() {
                 <TouchableOpacity
                   // @ts-ignore - nativeID renders as a DOM id on web (react-native-web); missing from TouchableOpacityProps' types
                   nativeID="tour-create-style"
+              accessibilityRole="button"
+              accessibilityLabel="Style"
                   style={[
                     styles.mobileBottomToolBtn,
                     showMobileProperties && activeTool === 'draw' && styles.mobileBottomToolBtnActive,
@@ -3509,6 +3632,8 @@ export default function CreateScreen() {
                 <TouchableOpacity
                   // @ts-ignore - nativeID renders as a DOM id on web (react-native-web); missing from TouchableOpacityProps' types
                   nativeID="tour-create-arrange"
+              accessibilityRole="button"
+              accessibilityLabel="Arrange"
                   style={[
                     styles.mobileBottomToolBtn,
                     showMobileProperties && activeTool === 'arrange' && styles.mobileBottomToolBtnActive,
@@ -3520,6 +3645,8 @@ export default function CreateScreen() {
                 <TouchableOpacity
                   // @ts-ignore - nativeID renders as a DOM id on web (react-native-web); missing from TouchableOpacityProps' types
                   nativeID="tour-create-connectors"
+              accessibilityRole="button"
+              accessibilityLabel="Connectors"
                   style={[styles.mobileBottomToolBtn, showConnectorsPanel && styles.mobileBottomToolBtnActive]}
                   onPress={toggleConnectorsPanel}
                 >
@@ -3547,7 +3674,7 @@ export default function CreateScreen() {
             <View nativeID="tour-create-zoom" style={styles.mobileToolGroup}>
               <TouchableOpacity
                 style={[styles.mobileBottomToolBtn, !isGraphReady && styles.mobileTopBarBtnDisabled]}
-                onPress={handleZoomOut}
+                onPress={handleZoomOut} accessibilityRole="button" accessibilityLabel="Zoom out"
                 disabled={!isGraphReady}
               >
                 <ZoomOutIcon color={isGraphReady ? '#4a5568' : '#cbd5e1'} />
@@ -3555,7 +3682,7 @@ export default function CreateScreen() {
               <Text style={styles.mobileZoomLabel}>{Math.round(zoomLevel)}%</Text>
               <TouchableOpacity
                 style={[styles.mobileBottomToolBtn, !isGraphReady && styles.mobileTopBarBtnDisabled]}
-                onPress={handleZoomIn}
+                onPress={handleZoomIn} accessibilityRole="button" accessibilityLabel="Zoom in"
                 disabled={!isGraphReady}
               >
                 <ZoomInIcon color={isGraphReady ? '#4a5568' : '#cbd5e1'} />
@@ -3706,6 +3833,7 @@ export default function CreateScreen() {
             onSent={() => setHasPendingAccessRequest(true)}
           />
         )}
+        <AdsterraPopup ref={adRef} />
         <AppDialog dialogState={dialogState} onDismiss={() => setDialogState(null)} />
       </SafeAreaView>
     );
@@ -3722,12 +3850,14 @@ export default function CreateScreen() {
       <View style={styles.container}>
         <View style={styles.navbar}>
           <View style={styles.navbarLeft}>
-            <TouchableOpacity style={styles.navIconBtn} onPress={() => router.navigate('/(tabs)/home')} activeOpacity={0.7}>
+            <TouchableOpacity style={styles.navIconBtn} onPress={() => router.navigate('/(tabs)/home')} accessibilityRole="button" accessibilityLabel="Close editor" activeOpacity={0.7}>
               <ICONS.Close color="#4a5568" />
             </TouchableOpacity>
             <TouchableOpacity
               // @ts-ignore - nativeID renders as a DOM id on web (react-native-web); missing from TouchableOpacityProps' types
               nativeID="tour-create-new"
+              accessibilityRole="button"
+              accessibilityLabel="New diagram"
               style={styles.navIconBtn}
               onPress={handleNewDiagram}
               activeOpacity={0.7}
@@ -3746,6 +3876,8 @@ export default function CreateScreen() {
             <TouchableOpacity
               // @ts-ignore - nativeID renders as a DOM id on web (react-native-web); missing from TouchableOpacityProps' types
               nativeID="tour-create-type"
+              accessibilityRole="button"
+              accessibilityLabel="Change diagram type"
               style={styles.typeChipBtn}
               onPress={() => setShowTypeModal(true)}
               activeOpacity={0.7}
@@ -3771,12 +3903,15 @@ export default function CreateScreen() {
             <TouchableOpacity
               // @ts-ignore - nativeID renders as a DOM id on web (react-native-web); missing from TouchableOpacityProps' types
               nativeID="tour-create-share"
-              style={[styles.navIconBtn, styles.navBtnPrimary, !isGraphReady && styles.navBtnDisabled]}
+              accessibilityRole="button"
+              accessibilityLabel="Share"
+              style={[showToolbarLabels ? styles.navLabelBtn : styles.navIconBtn, styles.navBtnPrimary, !isGraphReady && styles.navBtnDisabled]}
               onPress={handleShare}
               activeOpacity={0.7}
               disabled={!isGraphReady}
             >
               <ShareIcon color={isGraphReady ? '#ffffff' : '#94a3b8'} />
+              {showToolbarLabels && <Text style={styles.navLabelText}>Share</Text>}
             </TouchableOpacity>
             )}
 
@@ -3785,7 +3920,9 @@ export default function CreateScreen() {
             <TouchableOpacity
               // @ts-ignore - nativeID renders as a DOM id on web (react-native-web); missing from TouchableOpacityProps' types
               nativeID="tour-create-save"
-              style={[styles.navIconBtn, styles.navBtnSuccess, !isGraphReady && styles.navBtnDisabled]}
+              accessibilityRole="button"
+              accessibilityLabel="Save"
+              style={[showToolbarLabels ? styles.navLabelBtn : styles.navIconBtn, styles.navBtnSuccess, !isGraphReady && styles.navBtnDisabled]}
               onPress={handleSaveDiagram}
               activeOpacity={0.7}
               disabled={!isGraphReady || isSaving}
@@ -3795,33 +3932,40 @@ export default function CreateScreen() {
               ) : (
                 <SaveIcon color={isGraphReady ? '#ffffff' : '#94a3b8'} />
               )}
+              {showToolbarLabels && <Text style={styles.navLabelText}>{isSaving ? 'Saving…' : 'Save'}</Text>}
             </TouchableOpacity>
             )}
 
             <TouchableOpacity
               // @ts-ignore - nativeID renders as a DOM id on web (react-native-web); missing from TouchableOpacityProps' types
               nativeID="tour-create-print"
-              style={[styles.navIconBtn, styles.navBtnPrimary, !isGraphReady && styles.navBtnDisabled]}
+              accessibilityRole="button"
+              accessibilityLabel="Print"
+              style={[showToolbarLabels ? styles.navLabelBtn : styles.navIconBtn, styles.navBtnSecondary, !isGraphReady && styles.navBtnDisabled]}
               onPress={handlePrint}
               activeOpacity={0.7}
               disabled={!isGraphReady || isPreparingPrint}
             >
-              <PrintIcon color={isGraphReady ? '#ffffff' : '#94a3b8'} />
+              <PrintIcon color={isGraphReady ? '#475569' : '#94a3b8'} />
+              {showToolbarLabels && <Text style={[styles.navLabelText, styles.navLabelTextSecondary]}>Print</Text>}
             </TouchableOpacity>
 
             <TouchableOpacity
               // @ts-ignore - nativeID renders as a DOM id on web (react-native-web); missing from TouchableOpacityProps' types
               nativeID="tour-create-download"
-              style={[styles.navIconBtn, styles.navBtnPrimary, !isGraphReady && styles.navBtnDisabled]}
+              accessibilityRole="button"
+              accessibilityLabel="Download"
+              style={[showToolbarLabels ? styles.navLabelBtn : styles.navIconBtn, styles.navBtnSecondary, !isGraphReady && styles.navBtnDisabled]}
               onPress={() => setShowDownloadDropdown(prev => !prev)}
               activeOpacity={0.7}
               disabled={!isGraphReady || isDownloading}
             >
               {isDownloading ? (
-                <View style={styles.downloadSpinnerSmall} />
+                <View style={styles.downloadSpinner} />
               ) : (
-                <DownloadIcon color={isGraphReady ? '#ffffff' : '#94a3b8'} />
+                <DownloadIcon color={isGraphReady ? '#475569' : '#94a3b8'} />
               )}
+              {showToolbarLabels && <Text style={[styles.navLabelText, styles.navLabelTextSecondary]}>Download</Text>}
             </TouchableOpacity>
           </View>
         </View>
@@ -3831,7 +3975,7 @@ export default function CreateScreen() {
           <View nativeID="tour-create-undo-redo" style={styles.formatBar}>
             <TouchableOpacity
               style={[styles.formatBtn, !isGraphReady && styles.formatBtnDisabled]}
-              onPress={handleUndo}
+              onPress={handleUndo} accessibilityRole="button" accessibilityLabel="Undo"
               disabled={!isGraphReady}
               activeOpacity={0.7}
             >
@@ -3839,7 +3983,7 @@ export default function CreateScreen() {
             </TouchableOpacity>
             <TouchableOpacity
               style={[styles.formatBtn, !isGraphReady && styles.formatBtnDisabled]}
-              onPress={handleRedo}
+              onPress={handleRedo} accessibilityRole="button" accessibilityLabel="Redo"
               disabled={!isGraphReady}
               activeOpacity={0.7}
             >
@@ -3886,6 +4030,10 @@ export default function CreateScreen() {
               leftObstruction={canEditDiagram ? 36 + (isPanelVisible ? 280 : 0) : 0}
             />
 
+            {isCanvasEmpty && (
+              <EmptyCanvasHint leftInset={canEditDiagram ? 36 + (isPanelVisible ? 280 : 0) : 0} />
+            )}
+
 
             {pendingConnector && (
               <View style={styles.connectHintBanner} pointerEvents="box-none">
@@ -3910,6 +4058,8 @@ export default function CreateScreen() {
               <TouchableOpacity
                 // @ts-ignore - nativeID renders as a DOM id on web (react-native-web); missing from TouchableOpacityProps' types
                 nativeID="tour-create-shapes"
+              accessibilityRole="button"
+              accessibilityLabel="Shapes"
                 style={[styles.railBtn, isPanelVisible && styles.railBtnActive]}
                 onPress={() => {
                   setIsPanelVisible(prev => !prev);
@@ -3999,7 +4149,7 @@ export default function CreateScreen() {
           <View nativeID="tour-create-zoom" style={styles.zoomRow}>
             <TouchableOpacity
               style={styles.zoomBtn}
-              onPress={handleZoomOut}
+              onPress={handleZoomOut} accessibilityRole="button" accessibilityLabel="Zoom out"
               disabled={!isGraphReady}
               activeOpacity={0.7}
             >
@@ -4008,7 +4158,7 @@ export default function CreateScreen() {
             <Text style={styles.zoomLabel}>{Math.round(zoomLevel)}%</Text>
             <TouchableOpacity
               style={styles.zoomBtn}
-              onPress={handleZoomIn}
+              onPress={handleZoomIn} accessibilityRole="button" accessibilityLabel="Zoom in"
               disabled={!isGraphReady}
               activeOpacity={0.7}
             >
@@ -4065,6 +4215,7 @@ export default function CreateScreen() {
             onSent={() => setHasPendingAccessRequest(true)}
           />
         )}
+        <AdsterraPopup ref={adRef} />
         <AppDialog dialogState={dialogState} onDismiss={() => setDialogState(null)} />
       </View>
     </SafeAreaView>
@@ -4072,6 +4223,20 @@ export default function CreateScreen() {
 }
 
 // ─── ICONS ────────────────────────────────────────────────────────────────────
+
+// Shown over an empty canvas so a new diagram starts with direction, not a blank grid.
+const EmptyCanvasHint = ({ isMobile, leftInset = 0 }: { isMobile?: boolean; leftInset?: number }) => (
+  <View pointerEvents="none" style={[styles.emptyHint, { paddingLeft: leftInset }]}>
+    <View style={styles.emptyHintCard}>
+      <Text style={styles.emptyHintTitle}>Start your diagram</Text>
+      <Text style={styles.emptyHintBody}>
+        {isMobile
+          ? 'Tap the shapes button below, then pick a shape to place it here.'
+          : 'Drag a shape from the panel onto the canvas.'}
+      </Text>
+    </View>
+  </View>
+);
 
 const PrintIcon = ({ color = '#4a5568' }: { color?: string }) => (
   <Svg width={20} height={20} viewBox="0 0 24 24" fill="none">
@@ -4151,6 +4316,7 @@ interface AppDialogProps {
   dialogState: {
     title: string;
     message?: string;
+    items?: string[];
     confirmText?: string;
     onConfirm?: () => void;
   } | null;
@@ -4159,7 +4325,7 @@ interface AppDialogProps {
 
 function AppDialog({ dialogState, onDismiss }: AppDialogProps) {
   if (!dialogState) return null;
-  const { title, message, confirmText, onConfirm } = dialogState;
+  const { title, message, items, confirmText, onConfirm } = dialogState;
 
   return (
     <Modal
@@ -4172,6 +4338,16 @@ function AppDialog({ dialogState, onDismiss }: AppDialogProps) {
         <Pressable style={styles.modalContent} onPress={(e) => e.stopPropagation()}>
           <Text style={styles.modalTitle}>{title}</Text>
           {message ? <Text style={styles.modalSubtitle}>{message}</Text> : null}
+          {items && items.length > 0 ? (
+            <View style={styles.modalIssueList}>
+              {items.map((item, i) => (
+                <View key={i} style={styles.modalIssueRow}>
+                  <Text style={styles.modalIssueNumber}>{i + 1}.</Text>
+                  <Text style={styles.modalIssueText}>{item}</Text>
+                </View>
+              ))}
+            </View>
+          ) : null}
           <View style={styles.modalButtons}>
             {onConfirm && (
               <TouchableOpacity
@@ -4601,6 +4777,29 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  navLabelBtn: {
+    height: 34,
+    paddingHorizontal: 12,
+    borderRadius: 7,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 7,
+  },
+  navLabelText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#ffffff',
+  },
+  navLabelTextSecondary: {
+    color: '#334155',
+  },
+  // Print/Download are secondary: quiet outline, so Share and Save carry the weight.
+  navBtnSecondary: {
+    backgroundColor: '#ffffff',
+    borderWidth: 1,
+    borderColor: '#d5dcea',
+  },
   navBtnPrimary: {
     backgroundColor: '#4c6fff',
   },
@@ -4614,9 +4813,12 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '600',
     color: '#1a1f36',
-    paddingVertical: 2,
-    paddingHorizontal: 4,
+    paddingVertical: 4,
+    paddingHorizontal: 8,
     minWidth: 100,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    borderRadius: 6,
   },
   titleInputDesktop: {
     fontSize: 16,
@@ -4655,7 +4857,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#f8fafc',
   },
   autosaveIndicatorLabel: {
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: '600',
   },
   formatBar: {
@@ -4682,6 +4884,34 @@ const styles = StyleSheet.create({
     color: '#4c6fff',
     textTransform: 'uppercase',
     letterSpacing: 0.3,
+  },
+  emptyHint: {
+    ...StyleSheet.absoluteFillObject,
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 2,
+  },
+  emptyHintCard: {
+    maxWidth: 300,
+    paddingVertical: 16,
+    paddingHorizontal: 20,
+    borderRadius: 12,
+    backgroundColor: 'rgba(255,255,255,0.88)',
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    alignItems: 'center',
+  },
+  emptyHintTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#1a1f36',
+    marginBottom: 4,
+  },
+  emptyHintBody: {
+    fontSize: 14,
+    lineHeight: 20,
+    color: '#475569',
+    textAlign: 'center',
   },
   presenceStack: {
     flexDirection: 'row',
@@ -4882,7 +5112,7 @@ const styles = StyleSheet.create({
     zIndex: 25,
   },
   bottomBar: {
-    height: 36,
+    height: 40,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
@@ -4946,9 +5176,9 @@ const styles = StyleSheet.create({
     marginLeft: 'auto',
   },
   zoomBtn: {
-    width: 24,
-    height: 24,
-    borderRadius: 5,
+    width: 28,
+    height: 28,
+    borderRadius: 6,
     backgroundColor: '#f1f5f9',
     alignItems: 'center',
     justifyContent: 'center',
@@ -4963,10 +5193,10 @@ const styles = StyleSheet.create({
     color: '#cbd5e1',
   },
   zoomLabel: {
-    fontSize: 12,
+    fontSize: 13,
     color: '#475569',
     fontWeight: '500',
-    minWidth: 32,
+    minWidth: 40,
     textAlign: 'center',
   },
   modalOverlay: {
@@ -4993,6 +5223,26 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#64748b',
     marginBottom: 16,
+  },
+  modalIssueList: {
+    marginBottom: 16,
+    gap: 6,
+  },
+  modalIssueRow: {
+    flexDirection: 'row',
+    gap: 6,
+  },
+  modalIssueNumber: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#94a3b8',
+    minWidth: 16,
+  },
+  modalIssueText: {
+    flex: 1,
+    fontSize: 13,
+    color: '#475569',
+    lineHeight: 18,
   },
   modalInput: {
     borderWidth: 1,
@@ -5083,8 +5333,8 @@ const styles = StyleSheet.create({
     color: '#1a1f36',
   },
   downloadDropdownDescription: {
-    fontSize: 11,
-    color: '#94a3b8',
+    fontSize: 12,
+    color: '#64748b',
     marginTop: 1,
   },
   downloadSpinner: {
@@ -5415,7 +5665,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    flexShrink: 0, // ✅ FIX: never let the back button get squeezed
+    flexShrink: 0, // never let the back button get squeezed
   },
   mobileTopBarBtn: {
     width: 34,
@@ -5426,14 +5676,14 @@ const styles = StyleSheet.create({
     backgroundColor: '#f8fafc',
     borderWidth: 1,
     borderColor: '#eef2f6',
-    flexShrink: 0, // ✅ FIX: fixed-size icon buttons must never shrink to 0 width
+    flexShrink: 0, // fixed-size icon buttons must never shrink to 0 width
   },
   mobileTopBarBtnDisabled: {
     opacity: 0.4,
   },
   mobileTitle: {
     flex: 1,
-    minWidth: 0, // ✅ FIX: THE ACTUAL BUG. On web, flex items default to
+    minWidth: 0, // On web, flex items default to
                  // min-width: auto, so this TextInput refused to shrink below
                  // its text content width and pushed the Save/Print/Download
                  // buttons (mobileTopBarRight) off the visible row on narrow
@@ -5451,7 +5701,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    flexShrink: 0, // ✅ FIX: never let this button group get squeezed to 0
+    flexShrink: 0, // never let this button group get squeezed to 0
   },
   mobileCanvasContainer: {
     flex: 1,

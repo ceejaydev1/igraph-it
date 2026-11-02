@@ -959,18 +959,14 @@ export const updateProfile = async (data) => {
     console.log('📥 Update profile response:', response.data);
     
     if (response.data.success && response.data.data?.user) {
-      const storedUser = await storage.getItem('user');
-      if (storedUser) {
-        const userData = JSON.parse(storedUser);
-        const updatedUser = {
-          ...userData,
-          ...response.data.data.user,
-        };
-        await storage.setItem('user', JSON.stringify(updatedUser));
-        if (Platform.OS === 'web') {
-          localStorage.setItem('user', JSON.stringify(updatedUser));
-        }
-        setCachedUser(updatedUser);
+      const existingUser = (await getCachedUser()) || {};
+      const updatedUser = {
+        ...existingUser,
+        ...response.data.data.user,
+      };
+      setCachedUser(updatedUser);
+      if (Platform.OS === 'web') {
+        localStorage.setItem('user', JSON.stringify(updatedUser));
       }
     }
     

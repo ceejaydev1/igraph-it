@@ -114,7 +114,7 @@ export const DIAGRAM_SHAPES: Record<string, ShapeDefinition[]> = {
     { id: 'erd-cardinality-1n', svgComponent: 'ERDCardinality1NShape', label: 'Cardinality 1:N', description: 'One to many', width: 240, height: 40, category: 'UML' },
     { id: 'erd-cardinality-n1', svgComponent: 'ERDCardinalityN1Shape', label: 'Cardinality N:1', description: 'Many to one', width: 240, height: 40, category: 'UML' },
     { id: 'erd-cardinality-mn', svgComponent: 'ERDCardinalityMNShape', label: 'Cardinality M:N', description: 'Many to many', width: 240, height: 40, category: 'UML' },
-    { id: 'erd-connector', svgComponent: 'ERDConnectorShape', label: 'Connector', description: 'Relationship line', width: 60, height: 20, category: 'UML' },
+    { id: 'erd-total-participation', svgComponent: 'ERDTotalParticipationShape', label: 'Total Participation', description: 'Double line: total participation', width: 120, height: 24, category: 'UML' },
   ],
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -320,6 +320,7 @@ export const SHAPE_STYLE_MAP: Record<string, string> = {
   'ERDCardinality1NShape': 'text',
   'ERDCardinalityN1Shape': 'text',
   'ERDCardinalityMNShape': 'text',
+  'ERDTotalParticipationShape': 'totalParticipation',
   
   // ─── Arrow Shapes ────────────────────────────────────────────────────────
   'ArrowShape': 'arrow',
@@ -516,6 +517,7 @@ export const IGRAPH_ID_STYLE_MAP: Record<string, string> = {
   'erd-cardinality-n1': 'igraph.erdCardinalityN1',
   'erd-cardinality-mn': 'igraph.erdCardinalityMN',
   'erd-connector': 'igraph.erdConnector',
+  'erd-total-participation': 'igraph.totalParticipation',
 
   // ─── Fishbone ────────────────────────────────────────────────────────────
   'fishbone-spine': 'igraph.fishboneSpine',
@@ -710,6 +712,7 @@ export const IGRAPH_STYLE_MAP: Record<string, string> = {
   'ERDCardinality1NShape': 'igraph.erdCardinality1N',
   'ERDCardinalityN1Shape': 'igraph.erdCardinalityN1',
   'ERDCardinalityMNShape': 'igraph.erdCardinalityMN',
+  'ERDTotalParticipationShape': 'igraph.totalParticipation',
 
   // ─── Arrows ─────────────────────────────────────────────────────────────
   'ArrowShape': 'igraph.arrow',
@@ -832,7 +835,7 @@ export const CONNECTOR_SHAPE_IDS = new Set([
   // Data Flow Diagram
   'dfd-data-flow', 'dfd-bidirectional',
   // Entity Relationship Diagram
-  'erd-connector', 'erd-cardinality-11', 'erd-cardinality-1n', 'erd-cardinality-n1', 'erd-cardinality-mn',
+  'erd-connector', 'erd-total-participation', 'erd-cardinality-11', 'erd-cardinality-1n', 'erd-cardinality-n1', 'erd-cardinality-mn',
   // Fishbone Diagram
   'fishbone-spine', 'fishbone-arrow', 'fishbone-dashed-arrow',
   'fishbone-cause-top', 'fishbone-cause-bottom', 'fishbone-sub-top', 'fishbone-sub-bottom', 'fishbone-tertiary',

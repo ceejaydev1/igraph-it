@@ -33,6 +33,7 @@ import { useOnboardingTour } from '../../hooks/useOnboardingTour';
 import { usePullToRefreshWeb } from '../../hooks/usePullToRefreshWeb';
 import { ACCOUNT_TOUR_ID, getAccountTourSteps } from '../../utils/tours';
 import { PullToRefreshIndicator } from '../../components/PullToRefreshIndicator';
+import { usePageTitle } from '../../utils/usePageTitle';
 
 // authService.logout() only clears iGraph IT's own tokens/session — it can't
 // touch Google's own browser session, but it should at least drop Firebase's
@@ -110,6 +111,37 @@ const WEB_NO_OUTLINE: any = Platform.OS === 'web' ? { outlineStyle: 'none', outl
 const RADIUS = { sm: 6, md: 10, lg: 14, xl: 18, xxl: 24, full: 999 };
 
 const TAB_BAR_ALLOWANCE = 90;
+const ROW_MIN_HEIGHT = 60;
+const TILE = 40;
+
+// Hover / pressed / keyboard-only focus ring. On web, React Native Web reports
+// `focused` after a mouse click too, which left a sharp blue box stuck on the
+// row (its square corners poking past the card's rounded corners). We only show
+// the ring when the user is navigating with the keyboard, and round + inset it
+// so it sits inside the card.
+let isKeyboardNav = false;
+if (Platform.OS === 'web' && typeof window !== 'undefined') {
+  window.addEventListener('keydown', (e: KeyboardEvent) => {
+    if (e.key === 'Tab') isKeyboardNav = true;
+  }, true);
+  window.addEventListener('mousedown', () => { isKeyboardNav = false; }, true);
+  window.addEventListener('touchstart', () => { isKeyboardNav = false; }, true);
+}
+
+const interactiveRow = ({ pressed, hovered, focused }: any): any[] => [
+  pressed && { backgroundColor: COLORS.gray100 },
+  !pressed && hovered && { backgroundColor: COLORS.gray50 },
+  Platform.OS === 'web' &&
+    (focused && isKeyboardNav
+      ? {
+          outlineStyle: 'solid',
+          outlineWidth: 2,
+          outlineColor: COLORS.primary,
+          outlineOffset: -4,
+          borderRadius: RADIUS.md,
+        }
+      : { outlineStyle: 'none' }),
+];
 
 const SHADOWS = {
   sm: {
@@ -206,22 +238,6 @@ const DotGrid = React.memo(() => {
   );
 });
 
-const ProfileBannerAccent = React.memo(() => (
-  <Svg
-    width={140}
-    height={100}
-    viewBox="0 0 140 100"
-    style={styles.profileBannerAccent}
-    pointerEvents="none"
-  >
-    <Path d="M58 78 L92 50" stroke="#ffffff" strokeWidth={1.5} opacity={0.22} />
-    <Path d="M92 50 L118 66" stroke="#ffffff" strokeWidth={1.5} opacity={0.22} />
-    <Rect x={38} y={68} width={40} height={22} rx={6} fill="#ffffff" opacity={0.14} />
-    <Circle cx={92} cy={50} r={7} fill="#ffffff" opacity={0.18} />
-    <Circle cx={118} cy={66} r={5} stroke="#ffffff" strokeWidth={1.5} fill="none" opacity={0.22} />
-  </Svg>
-));
-
 const LockIcon = ({ color = '#000000' }: { color?: string }) => (
   <Svg width={24} height={24} viewBox="0 0 24 24" fill="none">
     <Rect x="3" y="11" width="18" height="11" rx="2" stroke={color} strokeWidth={2} />
@@ -231,8 +247,10 @@ const LockIcon = ({ color = '#000000' }: { color?: string }) => (
 
 const DiagramIcon = ({ color = '#000000' }: { color?: string }) => (
   <Svg width={24} height={24} viewBox="0 0 24 24" fill="none">
-    <Rect x="3" y="3" width="18" height="18" rx="2" stroke={color} strokeWidth={2} />
-    <Path d="M8 8h8M8 12h6M8 16h4" stroke={color} strokeWidth={2} strokeLinecap="round" />
+    <Rect x="9" y="3" width="6" height="5" rx="1" stroke={color} strokeWidth={2} />
+    <Rect x="3" y="16" width="6" height="5" rx="1" stroke={color} strokeWidth={2} />
+    <Rect x="15" y="16" width="6" height="5" rx="1" stroke={color} strokeWidth={2} />
+    <Path d="M12 8v4M6 16v-4h12v4" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
   </Svg>
 );
 
@@ -296,7 +314,7 @@ const GoogleIcon = () => (
   </Svg>
 );
 
-const ChevronRight = ({ color = '#94a3b8' }: { color?: string }) => (
+const ChevronRight = ({ color = '#64748b' }: { color?: string }) => (
   <Svg width={20} height={20} viewBox="0 0 24 24" fill="none">
     <Path d="M9 18l6-6-6-6" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
   </Svg>
@@ -324,7 +342,7 @@ const ProfileIcon = ({ color = '#000000' }: { color?: string }) => (
 );
 
 const EditIcon = ({ color = '#4c6fff' }: { color?: string }) => (
-  <Svg width={20} height={20} viewBox="0 0 24 24" fill="none">
+  <Svg width={24} height={24} viewBox="0 0 24 24" fill="none">
     <Path d="M11 4H4C3.46957 4 2.96086 4.21071 2.58579 4.58579C2.21071 4.96086 2 5.46957 2 6V20C2 20.5304 2.21071 21.0391 2.58579 21.4142C2.96086 21.7893 3.46957 22 4 22H18C18.5304 22 19.0391 21.7893 19.4142 21.4142C19.7893 21.0391 20 20.5304 20 20V13" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
     <Path d="M18.5 2.5L21.5 5.5L12 15H9V12L18.5 2.5Z" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
   </Svg>
@@ -354,6 +372,137 @@ const AnimatedChevron = ({ expanded, color }: { expanded: boolean; color: string
     </Animated.View>
   );
 };
+
+const IconTile = ({ children, tone = 'default' }: { children: React.ReactNode; tone?: 'default' | 'danger' }) => (
+  <View style={[styles.iconTile, tone === 'danger' && styles.iconTileDanger]}>{children}</View>
+);
+
+const Row = ({
+  icon,
+  title,
+  subtitle,
+  badge,
+  onPress,
+  accessibilityLabel,
+  nativeID,
+  tone = 'default',
+  showChevron = true,
+  trailing,
+  expanded,
+}: {
+  icon: React.ReactNode;
+  title: string;
+  subtitle?: string;
+  badge?: number;
+  onPress: () => void;
+  accessibilityLabel: string;
+  nativeID?: string;
+  tone?: 'default' | 'danger';
+  showChevron?: boolean;
+  trailing?: React.ReactNode;
+  expanded?: boolean;
+}) => (
+  <Pressable
+    nativeID={nativeID}
+    onPress={onPress}
+    accessibilityRole="button"
+    accessibilityLabel={accessibilityLabel}
+    accessibilityState={expanded === undefined ? undefined : { expanded }}
+    style={(state: any) => [styles.row, ...interactiveRow(state)]}
+  >
+    <IconTile tone={tone}>{icon}</IconTile>
+    <View style={styles.rowContent}>
+      <Text style={[styles.rowTitle, tone === 'danger' && styles.rowTitleDanger]}>{title}</Text>
+      {subtitle ? <Text style={styles.rowSubtitle}>{subtitle}</Text> : null}
+    </View>
+    {badge !== undefined && (
+      <View style={styles.badge}>
+        <Text style={styles.badgeText}>{badge}</Text>
+      </View>
+    )}
+    {trailing ?? (showChevron ? <ChevronRight /> : null)}
+  </Pressable>
+);
+
+const SubRow = ({
+  icon,
+  label,
+  onPress,
+  accessibilityLabel,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  onPress: () => void;
+  accessibilityLabel: string;
+}) => (
+  <Pressable
+    onPress={onPress}
+    accessibilityRole="button"
+    accessibilityLabel={accessibilityLabel}
+    style={(state: any) => [styles.subRow, ...interactiveRow(state)]}
+  >
+    <View style={styles.subIcon}>{icon}</View>
+    <Text style={styles.subRowText}>{label}</Text>
+    <ChevronRight />
+  </Pressable>
+);
+
+const Group = ({ label, children }: { label?: string; children: React.ReactNode }) => (
+  <View style={styles.group}>
+    {label ? (
+      <Text accessibilityRole="header" style={styles.groupLabel}>
+        {label}
+      </Text>
+    ) : null}
+    <View style={styles.groupCard}>{children}</View>
+  </View>
+);
+
+const RowDivider = () => <View style={styles.rowDivider} />;
+
+const ProfileBannerAccent = React.memo(() => (
+  <Svg
+    width={140}
+    height={100}
+    viewBox="0 0 140 100"
+    style={styles.profileBannerAccent}
+    pointerEvents="none"
+  >
+    <Path d="M58 78 L92 50" stroke="#ffffff" strokeWidth={1.5} opacity={0.22} />
+    <Path d="M92 50 L118 66" stroke="#ffffff" strokeWidth={1.5} opacity={0.22} />
+    <Rect x={38} y={68} width={40} height={22} rx={6} fill="#ffffff" opacity={0.14} />
+    <Circle cx={92} cy={50} r={7} fill="#ffffff" opacity={0.18} />
+    <Circle cx={118} cy={66} r={5} stroke="#ffffff" strokeWidth={1.5} fill="none" opacity={0.22} />
+  </Svg>
+));
+
+const Stat = ({
+  value,
+  label,
+  onPress,
+  accessibilityLabel,
+}: {
+  value: number;
+  label: string;
+  onPress: () => void;
+  accessibilityLabel: string;
+}) => (
+  <Pressable
+    onPress={onPress}
+    accessibilityRole="button"
+    accessibilityLabel={accessibilityLabel}
+    style={(state: any) => [
+      styles.stat,
+      state.pressed && { backgroundColor: 'rgba(255,255,255,0.18)' },
+      !state.pressed && state.hovered && { backgroundColor: 'rgba(255,255,255,0.10)' },
+      Platform.OS === 'web' && ({ cursor: 'pointer', outlineStyle: 'none' } as any),
+    ]}
+  >
+    <Text style={styles.statValue}>{value}</Text>
+    <Text style={styles.statLabel}>{label}</Text>
+  </Pressable>
+);
+
 
 const SkeletonLoader = () => {
   const opacity = useRef(new Animated.Value(0.35)).current;
@@ -467,8 +616,20 @@ const EditProfileModal = ({
   const isDesktop = windowWidth >= 1024;
   const isMobile = windowWidth < 768;
 
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
+  useEffect(() => {
+    const showEvt = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
+    const hideEvt = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
+    const showSub = Keyboard.addListener(showEvt, (e) => setKeyboardHeight(e.endCoordinates.height));
+    const hideSub = Keyboard.addListener(hideEvt, () => setKeyboardHeight(0));
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
+  }, []);
+
   const modalWidth = isDesktop ? 460 : isMobile ? windowWidth - 32 : 420;
-  const maxModalHeight = Math.min(windowHeight * 0.85, 640);
+  const maxModalHeight = Math.min(windowHeight * 0.85, 640, windowHeight - keyboardHeight - SPACING.xxl * 2);
   const isDirty = fullName.trim() !== (userData.fullName || '').trim();
   const hasError = !!error;
 
@@ -482,8 +643,17 @@ const EditProfileModal = ({
 
   const handleSave = async () => {
     if (loading) return;
-    if (!fullName.trim()) {
+    const trimmedName = fullName.trim();
+    if (!trimmedName) {
       setError('Name cannot be empty');
+      return;
+    }
+    if (trimmedName.length < 2 || trimmedName.length > 100) {
+      setError('Name must be between 2 and 100 characters');
+      return;
+    }
+    if (!/^[A-Za-zÀ-ÖØ-öø-ÿ]+(?:[ '-][A-Za-zÀ-ÖØ-öø-ÿ]+)*$/.test(trimmedName)) {
+      setError('Name can only contain letters, spaces, hyphens, and apostrophes');
       return;
     }
     if (!isDirty) {
@@ -509,8 +679,8 @@ const EditProfileModal = ({
   };
 
   return (
-    <Modal animationType="fade" transparent visible={visible} onRequestClose={handleClose}>
-      <Pressable style={styles.modalOverlay} onPress={handleClose}>
+    <Modal animationType="fade" transparent visible={visible} onRequestClose={() => {}}>
+      <View style={styles.modalOverlay}>
         <KeyboardAvoidingView
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
           style={[styles.modalWrapper, { padding: isMobile ? SPACING.md : SPACING.xl }]}
@@ -533,7 +703,7 @@ const EditProfileModal = ({
               </TouchableOpacity>
             </View>
 
-            <ScrollView showsVerticalScrollIndicator={false} bounces={false}>
+            <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false} bounces={false}>
               <View style={[styles.editProfileField, { marginTop: SPACING.sm }]}>
                 <Text style={styles.editProfileLabel}>Full name</Text>
                 <View
@@ -548,7 +718,8 @@ const EditProfileModal = ({
                     style={[styles.editProfileNameInput, { fontSize: isMobile ? 15 : 16 }]}
                     value={fullName}
                     onChangeText={(text) => {
-                      setFullName(text);
+                      const filtered = text.replace(/[^A-Za-zÀ-ÖØ-öø-ÿ\s'-]/g, '').slice(0, 100);
+                      setFullName(filtered);
                       setError('');
                     }}
                     onFocus={() => setNameFocused(true)}
@@ -603,12 +774,15 @@ const EditProfileModal = ({
             </View>
           </Pressable>
         </KeyboardAvoidingView>
-      </Pressable>
+      </View>
     </Modal>
   );
 };
 
 type PasswordFieldError = 'current' | 'new' | 'confirm' | null;
+// Which of the three ChangePasswordModal fields currently has focus, so we
+// can apply the (previously-defined-but-unused) passwordInputFocused style.
+type PasswordFieldFocus = 'current' | 'new' | 'confirm' | null;
 
 const PASSWORD_RULES: { key: string; label: string; test: (pwd: string) => boolean }[] = [
   { key: 'length', label: 'At least 8 characters', test: (p) => p.length >= 8 },
@@ -647,8 +821,6 @@ const PasswordStrengthMeter = ({ password }: { password: string }) => {
   );
 };
 
-// Shows only what's still missing, as a single compact line — the always-on
-// five-row checklist read as a gamified progress bar rather than a form hint.
 const PasswordChecklist = ({ password, isMobile }: { password: string; isMobile: boolean }) => {
   const unmet = PASSWORD_RULES.filter((rule) => !rule.test(password));
   if (unmet.length === 0) return null;
@@ -673,8 +845,21 @@ const ChangePasswordModal = ({
   const { width: windowWidth, height: windowHeight } = useWindowDimensions();
   const isDesktop = windowWidth >= 1024;
   const isMobile = windowWidth < 768;
+
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
+  useEffect(() => {
+    const showEvt = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
+    const hideEvt = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
+    const showSub = Keyboard.addListener(showEvt, (e) => setKeyboardHeight(e.endCoordinates.height));
+    const hideSub = Keyboard.addListener(hideEvt, () => setKeyboardHeight(0));
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
+  }, []);
+
   const modalWidth = isDesktop ? 460 : isMobile ? windowWidth - 32 : 420;
-  const maxModalHeight = Math.min(windowHeight * 0.85, 640);
+  const maxModalHeight = Math.min(windowHeight * 0.85, 640, windowHeight - keyboardHeight - SPACING.xxl * 2);
 
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
@@ -685,6 +870,10 @@ const ChangePasswordModal = ({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [errorField, setErrorField] = useState<PasswordFieldError>(null);
+  // FIX: passwordInputFocused was already defined in styles but never
+  // applied — tracks which field is focused so its container gets the
+  // blue-border focus treatment on tap, matching the other inputs in the app.
+  const [focusedField, setFocusedField] = useState<PasswordFieldFocus>(null);
 
   const handleChangePassword = async () => {
     if (loading) return;
@@ -737,12 +926,13 @@ const ChangePasswordModal = ({
     setShowConfirmPassword(false);
     setError('');
     setErrorField(null);
+    setFocusedField(null);
     onClose();
   };
 
   return (
-    <Modal animationType="fade" transparent visible={visible} onRequestClose={handleClose}>
-      <Pressable style={styles.modalOverlay} onPress={handleClose}>
+    <Modal animationType="fade" transparent visible={visible} onRequestClose={() => {}}>
+      <View style={styles.modalOverlay}>
         <KeyboardAvoidingView
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
           style={[styles.modalWrapper, { padding: isMobile ? SPACING.md : SPACING.xl }]}
@@ -765,10 +955,17 @@ const ChangePasswordModal = ({
             </TouchableOpacity>
           </View>
 
-          <ScrollView showsVerticalScrollIndicator={false} bounces={false}>
+          <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false} bounces={false}>
           <View style={styles.passwordInputWrapper}>
             <Text style={[styles.inputLabel, { fontSize: isMobile ? 12 : 13 }]}>Current password</Text>
-            <View style={[styles.passwordInputContainer, errorField === 'current' && styles.inputError, loading && styles.disabledInput]}>
+            <View
+              style={[
+                styles.passwordInputContainer,
+                focusedField === 'current' && styles.passwordInputFocused,
+                errorField === 'current' && styles.inputError,
+                loading && styles.disabledInput,
+              ]}
+            >
               <TextInput
                 style={[styles.passwordInput, { fontSize: isMobile ? 15 : 16 }]}
                 placeholder="Enter your current password"
@@ -779,6 +976,8 @@ const ChangePasswordModal = ({
                   setError('');
                   setErrorField(null);
                 }}
+                onFocus={() => setFocusedField('current')}
+                onBlur={() => setFocusedField((prev) => (prev === 'current' ? null : prev))}
                 secureTextEntry={!showCurrentPassword}
                 autoCapitalize="none"
                 editable={!loading}
@@ -797,7 +996,14 @@ const ChangePasswordModal = ({
 
           <View style={styles.passwordInputWrapper}>
             <Text style={[styles.inputLabel, { fontSize: isMobile ? 12 : 13 }]}>New password</Text>
-            <View style={[styles.passwordInputContainer, errorField === 'new' && styles.inputError, loading && styles.disabledInput]}>
+            <View
+              style={[
+                styles.passwordInputContainer,
+                focusedField === 'new' && styles.passwordInputFocused,
+                errorField === 'new' && styles.inputError,
+                loading && styles.disabledInput,
+              ]}
+            >
               <TextInput
                 style={[styles.passwordInput, { fontSize: isMobile ? 15 : 16 }]}
                 placeholder="Enter new password"
@@ -808,6 +1014,8 @@ const ChangePasswordModal = ({
                   setError('');
                   setErrorField(null);
                 }}
+                onFocus={() => setFocusedField('new')}
+                onBlur={() => setFocusedField((prev) => (prev === 'new' ? null : prev))}
                 secureTextEntry={!showNewPassword}
                 autoCapitalize="none"
                 editable={!loading}
@@ -832,6 +1040,7 @@ const ChangePasswordModal = ({
             <View
               style={[
                 styles.passwordInputContainer,
+                focusedField === 'confirm' && styles.passwordInputFocused,
                 (errorField === 'confirm' || (confirmPassword && newPassword !== confirmPassword)) && styles.inputError,
                 loading && styles.disabledInput,
               ]}
@@ -846,6 +1055,8 @@ const ChangePasswordModal = ({
                   setError('');
                   setErrorField(null);
                 }}
+                onFocus={() => setFocusedField('confirm')}
+                onBlur={() => setFocusedField((prev) => (prev === 'confirm' ? null : prev))}
                 secureTextEntry={!showConfirmPassword}
                 autoCapitalize="none"
                 editable={!loading}
@@ -896,7 +1107,7 @@ const ChangePasswordModal = ({
           </View>
         </Pressable>
         </KeyboardAvoidingView>
-      </Pressable>
+      </View>
     </Modal>
   );
 };
@@ -919,8 +1130,21 @@ const SetPasswordModal = ({
   const { width: windowWidth, height: windowHeight } = useWindowDimensions();
   const isDesktop = windowWidth >= 1024;
   const isMobile = windowWidth < 768;
+
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
+  useEffect(() => {
+    const showEvt = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
+    const hideEvt = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
+    const showSub = Keyboard.addListener(showEvt, (e) => setKeyboardHeight(e.endCoordinates.height));
+    const hideSub = Keyboard.addListener(hideEvt, () => setKeyboardHeight(0));
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
+  }, []);
+
   const modalWidth = isDesktop ? 460 : isMobile ? windowWidth - 32 : 420;
-  const maxModalHeight = Math.min(windowHeight * 0.85, 640);
+  const maxModalHeight = Math.min(windowHeight * 0.85, 640, windowHeight - keyboardHeight - SPACING.xxl * 2);
 
   const [step, setStep] = useState<'verify' | 'password'>(verifiedToken ? 'password' : 'verify');
   const [verifying, setVerifying] = useState(false);
@@ -1051,7 +1275,7 @@ const SetPasswordModal = ({
             </TouchableOpacity>
           </View>
 
-          <ScrollView showsVerticalScrollIndicator={false} bounces={false}>
+          <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false} bounces={false}>
           {step === 'verify' ? (
             <View style={styles.setPasswordVerifyStep}>
               {wrongAccountEmail ? (
@@ -1213,6 +1437,19 @@ const SetPasswordModal = ({
   );
 };
 
+// Focus ring for the dialog buttons: only for keyboard users, same rule as
+// the account rows (see isKeyboardNav above).
+const dialogFocusRing = ({ focused }: any): any =>
+  Platform.OS === 'web'
+    ? focused && isKeyboardNav
+      ? { outlineStyle: 'solid', outlineWidth: 2, outlineColor: COLORS.primary, outlineOffset: 2 }
+      : { outlineStyle: 'none' }
+    : null;
+
+// Signing out is routine and fully recoverable, so this is a plain
+// confirmation, not a danger dialog: same shell, type and buttons as the Edit
+// profile and Change password modals, with the safe action (Cancel) focused
+// when it opens.
 const SignOutModal = ({
   visible,
   onClose,
@@ -1225,47 +1462,74 @@ const SignOutModal = ({
   loading: boolean;
 }) => {
   const { width: windowWidth } = useWindowDimensions();
-  const isDesktop = windowWidth >= 1024;
-  const isMobile = windowWidth < 768;
-  const modalWidth = isDesktop ? 400 : isMobile ? windowWidth - 32 : 380;
+  const modalWidth = Math.min(400, windowWidth - SPACING.xxl * 2);
+  const cancelRef = useRef<View>(null);
+
+  useEffect(() => {
+    if (Platform.OS !== 'web' || !visible) return;
+    const t = setTimeout(() => (cancelRef.current as any)?.focus?.(), 60);
+    return () => clearTimeout(t);
+  }, [visible]);
+
+  const dismiss = () => {
+    if (!loading) onClose();
+  };
+
+  const dialogA11y: any =
+    Platform.OS === 'web'
+      ? { role: 'alertdialog', 'aria-modal': true, 'aria-labelledby': 'sign-out-title', 'aria-describedby': 'sign-out-message' }
+      : { accessibilityViewIsModal: true };
 
   return (
-    <Modal animationType="fade" transparent visible={visible} onRequestClose={() => !loading && onClose()}>
-      <Pressable style={styles.modalOverlay} onPress={() => !loading && onClose()}>
-        <Pressable style={[styles.signOutModalContainer, { width: modalWidth }]}>
-          <View style={styles.signOutIconWrapper}>
-            <View style={[styles.signOutIconCircle, { width: isDesktop ? 72 : 64, height: isDesktop ? 72 : 64 }]}>
-              <SignOutIcon color={COLORS.danger} />
-            </View>
-          </View>
-
-          <Text style={[styles.signOutModalTitle, { fontSize: isDesktop ? 20 : 18 }]}>Sign Out</Text>
-          <Text style={[styles.signOutModalMessage, { fontSize: isMobile ? 14 : 16 }]}>
-            Are you sure you want to sign out of your account?
+    <Modal animationType="fade" transparent visible={visible} onRequestClose={dismiss}>
+      <Pressable style={styles.modalOverlay} onPress={dismiss}>
+        <Pressable style={[styles.signOutDialog, { width: modalWidth }]} {...dialogA11y}>
+          <Text nativeID="sign-out-title" accessibilityRole="header" style={styles.signOutTitle}>
+            Sign out of your account?
+          </Text>
+          <Text nativeID="sign-out-message" style={styles.signOutMessage}>
+            You'll need to sign in again to get back to your diagrams and notes.
           </Text>
 
-          <View style={styles.signOutModalButtons}>
-            <TouchableOpacity
-              style={[styles.signOutModalButton, styles.signOutModalCancelButton, loading && styles.disabledTouchable]}
+          <View style={styles.signOutActions}>
+            <Pressable
+              ref={cancelRef}
               onPress={onClose}
               disabled={loading}
               accessibilityRole="button"
-              accessibilityLabel="Cancel sign out"
+              accessibilityLabel="Cancel"
+              style={(state: any) => [
+                styles.signOutButton,
+                styles.signOutCancel,
+                state.hovered && !state.pressed && { backgroundColor: COLORS.gray50 },
+                state.pressed && { backgroundColor: COLORS.gray100 },
+                loading && styles.disabledTouchable,
+                dialogFocusRing(state),
+              ]}
             >
-              <Text style={[styles.signOutModalCancelText, { fontSize: isMobile ? 14 : 16 }]}>Cancel</Text>
-            </TouchableOpacity>
+              <Text style={styles.signOutCancelText}>Cancel</Text>
+            </Pressable>
 
-            <TouchableOpacity
-              style={[styles.signOutModalButton, styles.signOutModalConfirmButton, loading && styles.modalButtonDisabled]}
+            <Pressable
               onPress={onConfirm}
               disabled={loading}
               accessibilityRole="button"
-              accessibilityLabel="Confirm sign out"
+              accessibilityLabel={loading ? 'Signing out' : 'Sign out'}
+              accessibilityState={{ busy: loading, disabled: loading }}
+              style={(state: any) => [
+                styles.signOutButton,
+                styles.signOutConfirm,
+                state.hovered && !state.pressed && { backgroundColor: COLORS.primaryDark },
+                state.pressed && { backgroundColor: COLORS.primaryDark },
+                dialogFocusRing(state),
+              ]}
             >
-              {loading ? <ActivityIndicator color={COLORS.white} size="small" /> : (
-                <Text style={[styles.signOutModalConfirmText, { fontSize: isMobile ? 14 : 16 }]}>Sign Out</Text>
+              {loading ? (
+                <ActivityIndicator color={COLORS.white} size="small" />
+              ) : (
+                <Text style={styles.signOutConfirmText}>Sign out</Text>
               )}
-            </TouchableOpacity>
+            </Pressable>
           </View>
         </Pressable>
       </Pressable>
@@ -1324,6 +1588,7 @@ const Toast = ({
 };
 
 export default function UserAccount() {
+  usePageTitle('Account');
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { width: windowWidth } = useWindowDimensions();
@@ -1558,8 +1823,11 @@ export default function UserAccount() {
             refreshing={pullToRefreshWeb.refreshing}
             tintColor={COLORS.primary}
           />
-          {/* Profile Card */}
-          <View nativeID="tour-account-profile" style={[styles.profileCard, { marginBottom: SPACING.xxxl }]}>
+          {/* Profile banner */}
+          <View
+            nativeID="tour-account-profile"
+            style={[styles.profileCard, isMobile && styles.profileCardMobile, { marginBottom: SPACING.xxl }]}
+          >
             <LinearGradient
               colors={[avatarColor, darkenHex(avatarColor, 0.35)]}
               start={{ x: 0, y: 0 }}
@@ -1567,13 +1835,12 @@ export default function UserAccount() {
               style={styles.profileBanner}
             >
               <ProfileBannerAccent />
-              <View style={styles.profileInfo}>
+              <View style={[styles.profileInfo, isMobile && { padding: SPACING.lg }]}>
                 <View style={styles.avatarRing}>
                   <View style={[styles.avatar, styles.avatarPlaceholder, { backgroundColor: avatarColor }]}>
                     <Text style={styles.avatarInitials}>{avatarInitials}</Text>
                   </View>
                 </View>
-
                 <View style={styles.userInfo}>
                   <Text style={[styles.userName, { fontSize: isDesktop ? 20 : 18 }]} numberOfLines={1}>
                     {getDisplayName()}
@@ -1583,151 +1850,123 @@ export default function UserAccount() {
                   </Text>
                 </View>
               </View>
+              <View style={styles.statsRow}>
+                <Stat
+                  value={savedDiagrams.length}
+                  label="Diagrams"
+                  accessibilityLabel={`Saved diagrams, ${savedDiagrams.length} saved`}
+                  onPress={() => router.navigate('/(tabs)/savedDiagrams')}
+                />
+                <View style={styles.statDivider} />
+                <Stat
+                  value={notes.length}
+                  label="Notes"
+                  accessibilityLabel={`Saved notes, ${notes.length} saved`}
+                  onPress={() => router.navigate('/(tabs)/savedNotes')}
+                />
+              </View>
             </LinearGradient>
           </View>
 
-          {/* Action Cards */}
-          <View style={[styles.actionsGrid, { gap: isDesktop ? SPACING.lg : SPACING.md }]}>
-            {/* Profile Expandable Card */}
-            <View nativeID="tour-account-settings" style={styles.profileExpandableCard}>
-              <Pressable
-                style={({ pressed }) => [styles.profileExpandableHeader, pressed && styles.actionCardPressed]}
+          {/* ACCOUNT */}
+          <Group label="ACCOUNT">
+            <View nativeID="tour-account-settings">
+              <Row
+                icon={<ProfileIcon color={COLORS.gray700} />}
+                title="Profile"
+                subtitle="Manage your account details"
                 onPress={toggleProfileExpanded}
-                accessibilityRole="button"
                 accessibilityLabel="Profile settings"
-                accessibilityState={{ expanded: isProfileExpanded }}
-              >
-                <View style={styles.profileExpandableHeaderLeft}>
-                  <ProfileIcon color={COLORS.gray700} />
-                  <View style={styles.actionContent}>
-                    <Text style={[styles.actionTitle, { fontSize: isMobile ? 15 : 16 }]}>Profile</Text>
-                    <Text style={[styles.actionDescription, { fontSize: isMobile ? 11 : 12 }]}>
-                      {isProfileExpanded ? 'Tap to collapse' : 'Manage your account details'}
-                    </Text>
-                  </View>
-                </View>
-                <AnimatedChevron expanded={isProfileExpanded} color={isProfileExpanded ? COLORS.primary : COLORS.gray400} />
-              </Pressable>
-
+                expanded={isProfileExpanded}
+                trailing={
+                  <AnimatedChevron
+                    expanded={isProfileExpanded}
+                    color={isProfileExpanded ? COLORS.primary : COLORS.gray500}
+                  />
+                }
+              />
               {isProfileExpanded && (
-                <View style={styles.profileExpandableContent}>
-                  <Pressable
-                    style={({ pressed }) => [styles.profileOption, pressed && styles.profileOptionPressed]}
+                <View style={styles.subList}>
+                  <SubRow
+                    icon={<EditIcon color={COLORS.gray700} />}
+                    label="Edit Profile"
+                    accessibilityLabel="Edit profile"
                     onPress={() => {
                       toggleProfileExpanded();
                       setTimeout(() => setShowEditProfileModal(true), PROFILE_COLLAPSE_DURATION);
                     }}
-                    accessibilityRole="button"
-                    accessibilityLabel="Edit profile"
-                  >
-                    <View style={styles.profileOptionLeft}>
-                      <EditIcon />
-                      <Text style={[styles.profileOptionText, { fontSize: isMobile ? 15 : 16 }]}>Edit Profile</Text>
-                    </View>
-                    <ChevronRight color={COLORS.gray400} />
-                  </Pressable>
-
-                  <Pressable
-                    style={({ pressed }) => [styles.profileOption, pressed && styles.profileOptionPressed]}
+                  />
+                  <SubRow
+                    icon={<LockIcon color={COLORS.gray700} />}
+                    label={isGoogleUser && !userData.hasPassword ? 'Set Password' : 'Change Password'}
+                    accessibilityLabel={isGoogleUser && !userData.hasPassword ? 'Set password' : 'Change password'}
                     onPress={() => {
                       const needsSetPassword = isGoogleUser && !userData.hasPassword;
                       toggleProfileExpanded();
                       setTimeout(() => {
-                        if (needsSetPassword) {
-                          setShowSetPasswordModal(true);
-                        } else {
-                          setShowPasswordModal(true);
-                        }
+                        if (needsSetPassword) setShowSetPasswordModal(true);
+                        else setShowPasswordModal(true);
                       }, PROFILE_COLLAPSE_DURATION);
                     }}
-                    accessibilityRole="button"
-                    accessibilityLabel={isGoogleUser && !userData.hasPassword ? 'Set password' : 'Change password'}
-                  >
-                    <View style={styles.profileOptionLeft}>
-                      <LockIcon color={COLORS.primary} />
-                      <Text style={[styles.profileOptionText, { fontSize: isMobile ? 15 : 16 }]}>
-                        {isGoogleUser && !userData.hasPassword ? 'Set Password' : 'Change Password'}
-                      </Text>
-                    </View>
-                    <ChevronRight color={COLORS.gray400} />
-                  </Pressable>
-
+                  />
                 </View>
               )}
             </View>
+          </Group>
 
-            <Pressable
+          {/* LIBRARY */}
+          <Group label="LIBRARY">
+            <Row
               nativeID="tour-account-saved"
-              style={({ pressed }) => [styles.actionCard, pressed && styles.actionCardPressed]}
-              onPress={() => router.navigate('/(tabs)/savedDiagrams')}
-              accessibilityRole="button"
+              icon={<DiagramIcon color={COLORS.gray700} />}
+              title="Saved Diagrams"
+              badge={savedDiagrams.length}
               accessibilityLabel={`Saved diagrams, ${savedDiagrams.length} saved`}
-            >
-              <DiagramIcon color={COLORS.gray700} />
-              <View style={styles.actionContent}>
-                <Text style={[styles.actionTitle, { fontSize: isMobile ? 15 : 16 }]}>Saved Diagrams</Text>
-                <Text style={[styles.actionDescription, { fontSize: isMobile ? 11 : 12 }]}>{savedDiagrams.length} saved</Text>
-              </View>
-              <ChevronRight />
-            </Pressable>
+              onPress={() => router.navigate('/(tabs)/savedDiagrams')}
+            />
+            <RowDivider />
+            <Row
+  nativeID="tour-account-notes"
+  icon={<NoteIcon color={COLORS.gray700} />}
+  title="Saved Notes"
+  badge={notes.length}
+  accessibilityLabel={`Saved notes, ${notes.length} saved`}
+  onPress={() => router.navigate('/(tabs)/savedNotes')}
+/>
+          </Group>
 
-            <Pressable
-              style={({ pressed }) => [styles.actionCard, pressed && styles.actionCardPressed]}
-              onPress={() => router.navigate('/(tabs)/savedNotes')}
-              accessibilityRole="button"
-              accessibilityLabel={`Saved notes, ${notes.length} saved`}
-            >
-              <NoteIcon color={COLORS.gray700} />
-              <View style={styles.actionContent}>
-                <Text style={[styles.actionTitle, { fontSize: isMobile ? 15 : 16 }]}>Saved Notes</Text>
-                <Text style={[styles.actionDescription, { fontSize: isMobile ? 11 : 12 }]}>{notes.length} saved</Text>
-              </View>
-              <ChevronRight />
-            </Pressable>
-
-            <Pressable
+          {/* SUPPORT */}
+          <Group label="SUPPORT">
+            <Row
               nativeID="tour-account-privacy"
-              style={({ pressed }) => [styles.actionCard, pressed && styles.actionCardPressed]}
-              onPress={() => router.navigate('/(tabs)/privacy')}
-              accessibilityRole="button"
+              icon={<ShieldIcon color={COLORS.gray700} />}
+              title="Privacy"
+              subtitle="Terms and policies"
               accessibilityLabel="Privacy, terms and policies"
-            >
-              <ShieldIcon color={COLORS.gray700} />
-              <View style={styles.actionContent}>
-                <Text style={[styles.actionTitle, { fontSize: isMobile ? 15 : 16 }]}>Privacy</Text>
-                <Text style={[styles.actionDescription, { fontSize: isMobile ? 11 : 12 }]}>Terms & policies</Text>
-              </View>
-              <ChevronRight />
-            </Pressable>
-
-            <Pressable
+              onPress={() => router.navigate('/(tabs)/privacy')}
+            />
+            <RowDivider />
+            <Row
               nativeID="tour-account-about"
-              style={({ pressed }) => [styles.actionCard, pressed && styles.actionCardPressed]}
+              icon={<InfoIcon color={COLORS.gray700} />}
+              title="About iGraph IT"
+              subtitle="The team behind the project"
+              accessibilityLabel="About iGraph IT, the team behind the project"
               onPress={() => router.navigate('/(tabs)/aboutUs')}
-              accessibilityRole="button"
-              accessibilityLabel="About us, team and system info"
-            >
-              <InfoIcon color={COLORS.gray700} />
-              <View style={styles.actionContent}>
-                <Text style={[styles.actionTitle, { fontSize: isMobile ? 15 : 16 }]}>About Us</Text>
-                <Text style={[styles.actionDescription, { fontSize: isMobile ? 11 : 12 }]}>Team & system info</Text>
-              </View>
-              <ChevronRight />
-            </Pressable>
+            />
+          </Group>
 
-            <Pressable
-              style={({ pressed }) => [styles.actionCard, styles.signOutCard, pressed && styles.actionCardPressed]}
-              onPress={handleSignOutPress}
-              accessibilityRole="button"
+          {/* Sign out: its own group, no chevron (it's an action, and the confirm modal already exists) */}
+          <Group>
+            <Row
+              tone="danger"
+              icon={<SignOutIcon color={COLORS.dangerText} />}
+              title="Sign Out"
+              showChevron={false}
               accessibilityLabel="Sign out"
-            >
-              <SignOutIcon color={COLORS.dangerText} />
-              <View style={styles.actionContent}>
-                <Text style={[styles.actionTitle, styles.signOutText, { fontSize: isMobile ? 15 : 16 }]}>Sign Out</Text>
-              </View>
-              <ChevronRight color={COLORS.dangerText} />
-            </Pressable>
-          </View>
+              onPress={handleSignOutPress}
+            />
+          </Group>
         </ScrollView>
       </TouchableWithoutFeedback>
 
@@ -1778,7 +2017,8 @@ const styles = StyleSheet.create({
 
   profileCard: { borderRadius: RADIUS.xxl, overflow: 'hidden', ...SHADOWS.md },
   profileBanner: { minHeight: 120 },
-  profileBannerAccent: { position: 'absolute', right: 0, bottom: 0 },
+  // Sits in the top (name/email) area so it never overlaps the tappable stats row
+  profileBannerAccent: { position: 'absolute', right: 0, top: 20 },
   profileInfo: { flexDirection: 'row', alignItems: 'center', padding: SPACING.xxl, gap: SPACING.lg },
   avatarRing: {
     width: 92,
@@ -1793,7 +2033,7 @@ const styles = StyleSheet.create({
   avatarInitials: { fontSize: 28, fontWeight: '700', color: COLORS.white },
   userInfo: { flex: 1 },
   userName: { ...TYPOGRAPHY.h3, color: COLORS.white },
-  userEmail: { ...TYPOGRAPHY.caption, color: 'rgba(255,255,255,0.9)', marginTop: 2 },
+  userEmail: { ...TYPOGRAPHY.caption, color: 'rgba(255,255,255,0.92)', marginTop: 2 },
 
   actionsGrid: { gap: SPACING.md },
   actionCard: {
@@ -1819,6 +2059,89 @@ const styles = StyleSheet.create({
   profileOptionPressed: { backgroundColor: COLORS.gray50 },
   profileOptionLeft: { flexDirection: 'row', alignItems: 'center', gap: SPACING.md },
   profileOptionText: { ...TYPOGRAPHY.body, color: COLORS.gray800 },
+
+  // Mobile: banner goes full-bleed
+  profileCardMobile: { marginHorizontal: -SPACING.xl, borderRadius: 0 },
+
+  statsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(255,255,255,0.18)',
+  },
+  stat: { flex: 1, alignItems: 'center', alignSelf: 'stretch', justifyContent: 'center', paddingVertical: SPACING.md },
+  statValue: { fontSize: 20, fontWeight: '700', color: COLORS.white, lineHeight: 26 },
+  statLabel: { fontSize: 13, color: 'rgba(255,255,255,0.9)', lineHeight: 18 },
+  statDivider: { width: 1, height: 28, backgroundColor: 'rgba(255,255,255,0.18)' },
+
+  group: { marginBottom: SPACING.xxl },
+  groupLabel: {
+    fontSize: 12,
+    fontWeight: '700',
+    letterSpacing: 1,
+    color: COLORS.gray500,
+    marginBottom: SPACING.sm,
+    marginLeft: SPACING.xs,
+  },
+  groupCard: {
+    backgroundColor: COLORS.white,
+    borderRadius: RADIUS.lg,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: COLORS.gray200,
+    ...SHADOWS.sm,
+  },
+
+  row: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    minHeight: ROW_MIN_HEIGHT,
+    paddingVertical: SPACING.md,
+    paddingHorizontal: SPACING.lg,
+  },
+  iconTile: {
+    width: TILE,
+    height: TILE,
+    borderRadius: RADIUS.md,
+    backgroundColor: 'transparent',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  iconTileDanger: { backgroundColor: COLORS.dangerLight },
+  rowContent: { flex: 1, marginLeft: SPACING.md },
+  rowTitle: { ...TYPOGRAPHY.bodyBold, color: COLORS.gray900 },
+  rowTitleDanger: { color: COLORS.dangerText },
+  rowSubtitle: { fontSize: 13, lineHeight: 18, color: COLORS.gray500, marginTop: 2 },
+  rowDivider: {
+    height: 1,
+    backgroundColor: COLORS.gray100,
+    marginLeft: SPACING.lg + TILE + SPACING.md,
+  },
+
+  badge: {
+    minWidth: 28,
+    height: 24,
+    paddingHorizontal: SPACING.sm,
+    borderRadius: RADIUS.full,
+    backgroundColor: COLORS.primaryLight,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: SPACING.sm,
+  },
+  badgeText: { fontSize: 13, fontWeight: '700', color: COLORS.primaryDark },
+
+  // Sub-items: icon lines up with the parent title's x position
+  subList: { borderTopWidth: 1, borderTopColor: COLORS.gray100 },
+  subRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    minHeight: 52,
+    paddingRight: SPACING.lg,
+    paddingLeft: SPACING.lg + TILE + SPACING.md,
+  },
+  subIcon: { width: 24, height: 24, alignItems: 'center', justifyContent: 'center', marginRight: SPACING.md },
+  subRowText: { flex: 1, ...TYPOGRAPHY.body, color: COLORS.gray800 },
+
 
   editProfileModalContainer: {
     backgroundColor: COLORS.white,
@@ -1920,24 +2243,35 @@ const styles = StyleSheet.create({
   },
   modalButtonText: { ...TYPOGRAPHY.bodyBold, color: COLORS.white },
 
-  signOutModalContainer: { backgroundColor: COLORS.white, borderRadius: RADIUS.xxl, padding: SPACING.xxl, alignItems: 'center', ...SHADOWS.lg },
-  signOutIconWrapper: { marginBottom: SPACING.lg },
-  signOutIconCircle: { borderRadius: RADIUS.full, backgroundColor: COLORS.dangerLight, justifyContent: 'center', alignItems: 'center' },
-  signOutModalTitle: { ...TYPOGRAPHY.h3, color: COLORS.gray900, marginBottom: SPACING.sm },
-  signOutModalMessage: { ...TYPOGRAPHY.body, color: COLORS.gray500, textAlign: 'center', marginBottom: SPACING.xl, lineHeight: 22 },
-  signOutModalButtons: { flexDirection: 'row', gap: SPACING.md, width: '100%' },
-  signOutModalButton: { flex: 1, paddingVertical: SPACING.md, borderRadius: RADIUS.lg, alignItems: 'center', justifyContent: 'center', minHeight: 48 },
-  signOutModalCancelButton: { backgroundColor: COLORS.gray100 },
-  signOutModalConfirmButton: {
-    backgroundColor: COLORS.danger,
-    shadowColor: COLORS.danger,
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.2,
-    shadowRadius: 12,
-    elevation: 6,
+  // Sign-out confirmation: same shell as the other modals, left-aligned.
+  signOutDialog: {
+    backgroundColor: COLORS.white,
+    borderRadius: RADIUS.xl,
+    padding: SPACING.xxl,
+    borderWidth: 1,
+    borderColor: 'rgba(15,23,42,0.06)',
+    ...SHADOWS.modal,
   },
-  signOutModalCancelText: { ...TYPOGRAPHY.bodyBold, color: COLORS.gray700 },
-  signOutModalConfirmText: { ...TYPOGRAPHY.bodyBold, color: COLORS.white },
+  signOutTitle: { ...TYPOGRAPHY.h3, color: COLORS.gray900, fontWeight: '600' },
+  signOutMessage: {
+    ...TYPOGRAPHY.caption,
+    color: COLORS.gray600,
+    marginTop: SPACING.sm,
+    ...Platform.select({ web: { textWrap: 'pretty' } as any }),
+  },
+  signOutActions: { flexDirection: 'row', gap: SPACING.md, marginTop: SPACING.xxl },
+  signOutButton: {
+    flex: 1,
+    minHeight: 46,
+    paddingVertical: 13,
+    borderRadius: RADIUS.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  signOutCancel: { backgroundColor: COLORS.white, borderWidth: 1, borderColor: COLORS.gray200 },
+  signOutConfirm: { backgroundColor: COLORS.primary },
+  signOutCancelText: { ...TYPOGRAPHY.bodyBold, color: COLORS.gray700 },
+  signOutConfirmText: { ...TYPOGRAPHY.bodyBold, color: COLORS.white },
 
   passwordInputWrapper: { paddingHorizontal: SPACING.xl, paddingTop: SPACING.lg },
   inputLabel: { ...TYPOGRAPHY.captionBold, color: COLORS.gray700, marginBottom: SPACING.sm, fontWeight: '600' },
@@ -1955,8 +2289,6 @@ const styles = StyleSheet.create({
   passwordInput: { flex: 1, paddingVertical: 12, ...TYPOGRAPHY.body, color: COLORS.gray900, ...WEB_NO_OUTLINE },
   passwordEyeBtn: { padding: SPACING.sm, marginRight: -SPACING.sm, borderRadius: RADIUS.sm, ...WEB_NO_OUTLINE },
 
-  // Compact strength row: label + inline unmet-requirement hint, replacing the
-  // segmented meter + always-on checklist (too much decoration for a form).
   strengthMeterWrap: { marginTop: SPACING.sm, flexDirection: 'row', alignItems: 'center' },
   strengthSegmentRow: { flex: 1, flexDirection: 'row', gap: 3, marginRight: SPACING.sm },
   strengthSegment: { flex: 1, height: 3, borderRadius: RADIUS.full, backgroundColor: COLORS.gray200 },

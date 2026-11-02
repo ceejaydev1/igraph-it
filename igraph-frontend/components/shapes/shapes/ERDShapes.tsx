@@ -224,6 +224,20 @@ export const ERDCardinalityN1Shape: React.FC<ShapeProps> = ({
   );
 };
 
+// ─── 13. Total Participation (double line) ───────────────────────────────
+
+export const ERDTotalParticipationShape: React.FC<ShapeProps> = ({
+  width,
+  height,
+  color = '#1a1f36',
+  strokeWidth = 2,
+}) => (
+  <Svg width={width} height={height} viewBox={`0 0 ${width} ${height}`}>
+    <Line x1={2} y1={height / 3} x2={width - 2} y2={height / 3} stroke={color} strokeWidth={strokeWidth} />
+    <Line x1={2} y1={(2 * height) / 3} x2={width - 2} y2={(2 * height) / 3} stroke={color} strokeWidth={strokeWidth} />
+  </Svg>
+);
+
 // ─── 12. Cardinality M:N ──────────────────────────────────────────────────
 
 export const ERDCardinalityMNShape: React.FC<ShapeProps> = ({

@@ -15,6 +15,8 @@ import {
   Linking,
   Easing,
   ActivityIndicator,
+  Modal,
+  Pressable,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useIsFocused } from '@react-navigation/native';
@@ -27,6 +29,7 @@ import { ShapeIcon } from '../../../components/shapes/ShapeIcon';
 import * as authService from '../../../services/authService';
 import API_BASE_URL from '../../../constants/api';
 import { useNotes } from '../../../contexts/NotesContext';
+import { usePageTitle } from '../../../utils/usePageTitle';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -52,9 +55,15 @@ interface DiagramContent {
   shapesUsed?: ShapeUsed[];
   imageAlt: string;
   placeholderImage?: ImageSourcePropType;
+  imageSource?: ImageSource;
 }
 
 interface ReferenceLink {
+  label: string;
+  url: string;
+}
+
+interface ImageSource {
   label: string;
   url: string;
 }
@@ -96,11 +105,28 @@ const VIDEO_IDS = {
   SPIRAL: 'https://res.cloudinary.com/qehbqnx0/video/upload/v1787457105/Spiral_vid.mp4',
 } as const;
 
-// Turns a Cloudinary video URL into a JPG snapshot of its first frame, so
+// Some tutorial videos open on a shot of the presenter's face, which reads as
+// awkward and unpolished when it's frozen as the static preview thumbnail.
+// This map lets specific videos grab a later frame — once the presenter has
+// moved off-screen and the on-screen content (diagram/whiteboard) is what's
+// showing — instead of defaulting to the very first frame.
+//
+// The numbers below (in seconds) are a starting point; nudge them up or down
+// per video until the snapshot lands on a clean, presenter-free frame.
+const THUMBNAIL_TIME_OVERRIDES: Partial<Record<string, number>> = {
+  [VIDEO_IDS.FDD]: 15,
+  [VIDEO_IDS.FLOWCHART]: 20,
+};
+
+// Turns a Cloudinary video URL into a JPG snapshot of a specific frame, so
 // the player has a real preview of the video's actual content to show
-// instead of a plain black box while it loads.
-const getVideoThumbnail = (videoUrl: string): string =>
-  videoUrl.replace('/upload/', '/upload/so_0/').replace(/\.mp4($|\?)/, '.jpg$1');
+// instead of a plain black box while it loads. Defaults to the first frame
+// unless a later, presenter-free timestamp has been configured above.
+const getVideoThumbnail = (videoUrl: string): string => {
+  const overrideSeconds = THUMBNAIL_TIME_OVERRIDES[videoUrl];
+  const timeMarker = overrideSeconds !== undefined ? `so_${overrideSeconds}` : 'so_0';
+  return videoUrl.replace('/upload/', `/upload/${timeMarker}/`).replace(/\.mp4($|\?)/, '.jpg$1');
+};
 
 // ─── Content Data ─────────────────────────────────────────────────────────────
 
@@ -259,6 +285,7 @@ const MODIFIED_WATERFALL_CONTENT: DiagramContent = {
   videoId: VIDEO_IDS.MODIFIED_WATERFALL,
   imageAlt: 'Modified Waterfall Model diagram',
   placeholderImage: require('../../../assets/diagram library/Modified Waterfall.png'),
+  imageSource: { label: 'Image: ResearchGate', url: 'https://www.researchgate.net/figure/Modified-Waterfall-Model-Approach_fig1_321801137' },
   sections: [
     {
       heading: 'What It Is',
@@ -417,6 +444,7 @@ const WATERFALL_CONTENT: DiagramContent = {
   videoId: VIDEO_IDS.WATERFALL,
   imageAlt: 'Waterfall Model diagram',
   placeholderImage: require('../../../assets/diagram library/Waterfall.png'),
+  imageSource: { label: 'Image: Cisco Learning Network', url: 'https://learningnetwork.cisco.com/s/blogs/a0D6e000012G2j9EAC/transforming-network-automation-and-security-with-modern-sdlcs-by-stuart-clark' },
   sections: [
     {
       heading: 'What It Is',
@@ -468,6 +496,7 @@ const PROTOTYPE_CONTENT: DiagramContent = {
   videoId: VIDEO_IDS.PROTOTYPE,
   imageAlt: 'Prototype Model diagram',
   placeholderImage: require('../../../assets/diagram library/Prototype.jpg'),
+  imageSource: { label: 'Image: Shiksha', url: 'https://www.shiksha.com/online-courses/articles/prototype-model-in-software-engineering/' },
   sections: [
     {
       heading: 'What It Is',
@@ -475,7 +504,7 @@ const PROTOTYPE_CONTENT: DiagramContent = {
     },
     {
       heading: 'When to Use It',
-      body: 'It is most useful when requirements are unclear, still evolving, or hard for users to describe in the abstract. Seeing and interacting with something concrete makes it far easier for them to say what is right and what is missing. It is less suited to large, mission critical applications, where a prototype is structural shortcuts would be too costly to leave in the final build.',
+      body: 'It is most useful when requirements are unclear, still evolving, or hard for users to describe in the abstract. Seeing and interacting with something concrete makes it far easier for them to say what is right and what is missing. It is less suited to large, mission critical applications, where a prototype\'s structural shortcuts would be too costly to leave in the final build.',
     },
   ],
   advantages: [
@@ -486,7 +515,7 @@ const PROTOTYPE_CONTENT: DiagramContent = {
   ],
   disadvantages: [
     'Users can get too involved, continually requesting changes that stretch the project well past its original scope.',
-    'The system is underlying structure can be damaged by the sheer number of changes made along the way, since the prototype was never designed to be the final architecture.',
+    'The system\'s underlying structure can be damaged by the sheer number of changes made along the way, since the prototype was never designed to be the final architecture.',
     'Not suitable for large applications, where a prototype driven approach struggles to scale to the full complexity involved.',
     'Can create a false impression that the system is nearly finished, when the prototype may be missing performance, security, or reliability work not visible from the outside.',
   ],
@@ -518,6 +547,7 @@ const AGILE_CONTENT: DiagramContent = {
   videoId: VIDEO_IDS.AGILE,
   imageAlt: 'Agile Model diagram',
   placeholderImage: require('../../../assets/diagram library/Agile.png'),
+  imageSource: { label: 'Image: Nature (Scientific Reports)', url: 'https://www.nature.com/articles/s41598-024-78613-x' },
   sections: [
     {
       heading: 'What It Is',
@@ -536,7 +566,7 @@ const AGILE_CONTENT: DiagramContent = {
   ],
   disadvantages: [
     "Without proper control, agile projects can suffer from scope creep, where the project's scope keeps expanding past the initial plan.",
-    'Requires active, ongoing participation from team members, stakeholders, and customers, which can be demanding of everyone is time.',
+    'Requires active, ongoing participation from team members, stakeholders, and customers, which can be demanding of everyone\'s time.',
     'Its lighter emphasis on documentation prepared in advance can make it harder for new team members to understand past decisions later on.',
     'Progress and final cost are harder to predict at the outset than in a plan driven model like Waterfall, since scope is expected to shift.',
   ],
@@ -568,6 +598,7 @@ const RAD_CONTENT: DiagramContent = {
   videoId: VIDEO_IDS.RAD,
   imageAlt: 'RAD Model diagram',
   placeholderImage: require('../../../assets/diagram library/RAD.jpg'),
+  imageSource: { label: 'Image: Blackcurrant Labs Training', url: 'https://training.blackcurrantlabs.com/BA/Software_Engineering_Models/rad/' },
   sections: [
     {
       heading: 'What It Is',
@@ -618,6 +649,7 @@ const SPIRAL_CONTENT: DiagramContent = {
   videoId: VIDEO_IDS.SPIRAL,
   imageAlt: 'Spiral Model diagram',
   placeholderImage: require('../../../assets/diagram library/spiral-model.jpg'),
+  imageSource: { label: 'Image: ProfessionalQA', url: 'https://www.professionalqa.com/spiral-model' },
   sections: [
     {
       heading: 'What It Is',
@@ -669,6 +701,7 @@ const BIG_BANG_CONTENT: DiagramContent = {
   videoId: VIDEO_IDS.BIG_BANG,
   imageAlt: 'Big Bang Model diagram',
   placeholderImage: require('../../../assets/diagram library/bigbang2.png'),
+  imageSource: { label: 'Image: GeeksforGeeks', url: 'https://www.geeksforgeeks.org/software-engineering/overview-of-big-bang-model/' },
   sections: [
     {
       heading: 'What It Is',
@@ -717,6 +750,7 @@ const ITERATIVE_CONTENT: DiagramContent = {
   videoId: VIDEO_IDS.ITERATIVE,
   imageAlt: 'Iterative Model diagram',
   placeholderImage: require('../../../assets/diagram library/Iterative.png'),
+  imageSource: { label: 'Image: Richard Harris via LinkedIn', url: 'https://www.linkedin.com/pulse/software-development-life-cycle-sdlc-tutorial-richard-harris' },
   sections: [
     {
       heading: 'What It Is',
@@ -736,7 +770,7 @@ const ITERATIVE_CONTENT: DiagramContent = {
   disadvantages: [
     'Requires more overall planning and management than a strictly linear model, since each iteration has to be scoped and tracked on its own.',
     'Total project cost and timeline can be harder to predict at the outset, since the full scope emerges gradually.',
-    'Repeated design changes across iterations can put strain on the system is architecture if it was not planned with growth in mind.',
+    'Repeated design changes across iterations can put strain on the system\'s architecture if it was not planned with growth in mind.',
     'Frequent iterations mean more documentation and coordination overhead than a single pass through the process.',
   ],
   steps: [
@@ -767,6 +801,7 @@ const V_MODEL_CONTENT: DiagramContent = {
   videoId: VIDEO_IDS.V_MODEL,
   imageAlt: 'V Model diagram',
   placeholderImage: require('../../../assets/diagram library/V-Model.png'),
+  imageSource: { label: 'Image: Teaching Agile', url: 'https://teachingagile.com/sdlc/models/v-model' },
   sections: [
     {
       heading: 'What It Is',
@@ -820,7 +855,7 @@ const FDD_CONTENT: DiagramContent = {
   sections: [
     {
       heading: 'What It Is',
-      body: 'A Functional Decomposition Diagram, or FDD, is a structural diagram that breaks a system is overall function down into smaller and smaller sub functions, arranged in a hierarchy. Each box represents one function, and functions connect down to the more specific sub functions they are made up of, giving a top down picture of everything the system does without describing how it does it.',
+      body: 'A Functional Decomposition Diagram, or FDD, is a structural diagram that breaks a system\'s overall function down into smaller and smaller sub functions, arranged in a hierarchy. Each box represents one function, and functions connect down to the more specific sub functions they are made up of, giving a top down picture of everything the system does without describing how it does it.',
     },
     {
       heading: 'When to Use It',
@@ -837,7 +872,7 @@ const FDD_CONTENT: DiagramContent = {
     'Shows what the system does, not how or in what order, so it needs to be paired with another diagram for behavior or data flow.',
     'Very large systems can produce a diagram with so many boxes that it becomes hard to read at a glance.',
     'Does not capture relationships between functions beyond the parent and child hierarchy, such as shared data or timing dependencies.',
-    'Can go out of date quickly if the system is scope changes and the diagram is not actively maintained.',
+    'Can go out of date quickly if the system\'s scope changes and the diagram is not actively maintained.',
   ],
   steps: [
     'Identify the top level function. Name the single overall purpose the system exists to fulfill.',
@@ -982,7 +1017,7 @@ const ERD_CONTENT: DiagramContent = {
     },
   ],
   advantages: [
-    'Gives a clear, visual map of a system is data before any database tables actually get created.',
+    'Gives a clear, visual map of a system\'s data before any database tables actually get created.',
     'Makes relationships between entities explicit, including how many records on each side can be involved.',
     'Provides a shared reference point between developers, database administrators, and business stakeholders.',
     'Catches structural problems, like missing relationships or duplicated data, early, while they are still cheap to fix.',
@@ -1277,23 +1312,45 @@ const BackIcon: React.FC = () => (
   </Svg>
 );
 
+// Focus rings should show for keyboard users, not after a mouse click.
+let keyboardNavigation = false;
+if (Platform.OS === 'web' && typeof window !== 'undefined') {
+  window.addEventListener('keydown', (e) => { if (e.key === 'Tab') keyboardNavigation = true; }, true);
+  window.addEventListener('pointerdown', () => { keyboardNavigation = false; }, true);
+}
+
+const webFocusRing: any =
+  Platform.OS === 'web'
+    ? { outlineWidth: 2, outlineStyle: 'solid', outlineColor: '#4c6fff', outlineOffset: 2 }
+    : null;
+
 interface BackButtonProps {
   onPress: () => void;
   style?: any;
+  label?: string;
 }
 
-const BackButton: React.FC<BackButtonProps> = ({ onPress, style }) => {
-  const [isHovered, setIsHovered] = useState(false);
+const BackButton: React.FC<BackButtonProps> = ({ onPress, style, label }) => {
+  const [kbFocus, setKbFocus] = useState(false);
   return (
-    <TouchableOpacity
+    <Pressable
       onPress={onPress}
-      style={[styles.backButtonBase, isHovered && styles.backButtonHovered, style]}
-      activeOpacity={0.6}
+      onFocus={() => setKbFocus(Platform.OS === 'web' && keyboardNavigation)}
+      onBlur={() => setKbFocus(false)}
+      style={(state: any) => [
+        styles.backButtonBase,
+        label ? styles.backButtonWithLabel : null,
+        state.hovered && styles.backButtonHovered,
+        state.pressed && styles.backButtonPressed,
+        kbFocus && webFocusRing,
+        style,
+      ]}
       accessibilityLabel="Go back to home"
       accessibilityRole="button"
     >
       <BackIcon />
-    </TouchableOpacity>
+      {label ? <Text style={styles.backButtonLabel}>{label}</Text> : null}
+    </Pressable>
   );
 };
 
@@ -1625,6 +1682,7 @@ interface DiagramPlaceholderProps {
   label: string;
   title: string;
   placeholderImage?: ImageSourcePropType;
+  imageSource?: ImageSource;
 }
 
 // ─── FIX: images were being cropped ("not full") on every diagram except
@@ -1634,42 +1692,110 @@ interface DiagramPlaceholderProps {
 // to a thin, stretched vertical sliver. Switching every image to
 // resizeMode="contain" (with a white background to fill any letterboxing)
 // makes every diagram image display in full, regardless of its aspect ratio.
+const ZoomIcon: React.FC<IconProps> = ({ color }) => (
+  <Svg width={16} height={16} viewBox="0 0 24 24" fill="none">
+    <Circle cx="11" cy="11" r="7" stroke={color} strokeWidth={2} />
+    <Path d="M21 21l-4.35-4.35M11 8v6M8 11h6" stroke={color} strokeWidth={2} strokeLinecap="round" />
+  </Svg>
+);
+
+const CloseIcon: React.FC = () => (
+  <Svg width={20} height={20} viewBox="0 0 24 24" fill="none">
+    <Path d="M6 6l12 12M18 6L6 18" stroke="#1E293B" strokeWidth={2} strokeLinecap="round" />
+  </Svg>
+);
+
+// Every diagram card shares one footprint, so the hero stays balanced from
+// page to page. The image is fitted inside it with resizeMode="contain", and
+// tapping the card opens the diagram at full size.
+const getCardRatio = (isMobile: boolean, isDesktop: boolean): number =>
+  isDesktop ? 2.25 : isMobile ? 1.5 : 2;
+
 const DiagramPlaceholder: React.FC<DiagramPlaceholderProps> = ({
   color,
   label,
   title,
   placeholderImage,
+  imageSource,
 }) => {
   const Icon = DIAGRAM_ICON_MAP[title] ?? GenericDiagramGlyph;
   const { width } = useWindowDimensions();
   const isMobile = width < BREAKPOINTS.tablet;
+  const isDesktop = width >= BREAKPOINTS.desktop;
+  const [zoomed, setZoomed] = useState(false);
+  const cardMaxWidth = isDesktop ? 760 : 640;
+  const cardRatio = getCardRatio(isMobile, isDesktop);
 
   return (
     <View style={placeholderStyles.container}>
       {placeholderImage ? (
-        <Image
-          source={placeholderImage}
-          style={[
-            placeholderStyles.imageBox,
-            placeholderStyles.imageWithShadow,
-            {
-              height: isMobile ? 200 : 400,
-              backgroundColor: '#ffffff',
-            },
-          ]}
-          resizeMode="contain"
-          accessibilityLabel={label}
-        />
+        <>
+          <TouchableOpacity
+            onPress={() => setZoomed(true)}
+            activeOpacity={0.85}
+            style={[
+              placeholderStyles.card,
+              { maxWidth: cardMaxWidth, aspectRatio: cardRatio, padding: isMobile ? 12 : 20 },
+            ]}
+            accessibilityRole="button"
+            accessibilityLabel={`${label}. Tap to enlarge.`}
+          >
+            <Image
+              source={placeholderImage}
+              style={{ flex: 1, width: '100%' }}
+              resizeMode="contain"
+            />
+            <View
+              style={[placeholderStyles.zoomHint, { backgroundColor: `${color}12` }]}
+              pointerEvents="none"
+            >
+              <ZoomIcon color={color} />
+            </View>
+          </TouchableOpacity>
+
+          <Modal
+            visible={zoomed}
+            transparent
+            animationType="fade"
+            onRequestClose={() => setZoomed(false)}
+          >
+            <View style={placeholderStyles.lightbox}>
+              <TouchableOpacity
+                style={StyleSheet.absoluteFillObject}
+                activeOpacity={1}
+                onPress={() => setZoomed(false)}
+                accessibilityRole="button"
+                accessibilityLabel="Close enlarged diagram"
+              />
+              <View style={placeholderStyles.lightboxPanel} pointerEvents="none">
+                <Image
+                  source={placeholderImage}
+                  style={placeholderStyles.lightboxImage}
+                  resizeMode="contain"
+                  accessibilityLabel={label}
+                />
+              </View>
+              <TouchableOpacity
+                onPress={() => setZoomed(false)}
+                style={placeholderStyles.lightboxClose}
+                activeOpacity={0.7}
+                accessibilityRole="button"
+                accessibilityLabel="Close"
+              >
+                <CloseIcon />
+              </TouchableOpacity>
+            </View>
+          </Modal>
+        </>
       ) : (
         <View
           style={[
-            placeholderStyles.imageBox,
             placeholderStyles.iconBox,
-            placeholderStyles.imageWithShadow,
-            { 
-              height: isMobile ? 200 : 400,
-              backgroundColor: `${color}15`, 
-              borderColor: `${color}30` 
+            {
+              maxWidth: cardMaxWidth,
+              aspectRatio: cardRatio,
+              backgroundColor: `${color}15`,
+              borderColor: `${color}30`,
             },
           ]}
           accessibilityLabel={label}
@@ -1677,6 +1803,19 @@ const DiagramPlaceholder: React.FC<DiagramPlaceholderProps> = ({
         >
           <Icon color={color} />
         </View>
+      )}
+      {placeholderImage && imageSource && (
+        <TouchableOpacity
+          onPress={() => Linking.openURL(imageSource.url)}
+          activeOpacity={0.6}
+          style={placeholderStyles.creditWrap}
+          accessibilityRole="link"
+          accessibilityLabel={imageSource.label}
+        >
+          <Text style={placeholderStyles.creditText} numberOfLines={1}>
+            {imageSource.label}
+          </Text>
+        </TouchableOpacity>
       )}
     </View>
   );
@@ -1687,36 +1826,81 @@ const placeholderStyles = StyleSheet.create({
     width: '100%',
     flexShrink: 0,
   },
-  imageBox: {
+  card: {
     width: '100%',
-    maxWidth: 640,
     alignSelf: 'center',
-    borderRadius: 8,
-    justifyContent: 'center',
-    alignItems: 'center',
-    gap: 6,
-  },
-  imageWithShadow: {
+    backgroundColor: '#ffffff',
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    overflow: 'hidden',
     shadowColor: '#0f172a',
-    shadowOffset: { width: 0, height: 6 },
+    shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.06,
-    shadowRadius: 16,
-    elevation: 3,
-    ...Platform.select({
-      web: {
-        boxShadow: '0 4px 16px rgba(15, 23, 42, 0.08)',
-      },
-    }),
+    shadowRadius: 12,
+    elevation: 2,
   },
   iconBox: {
+    width: '100%',
+    alignSelf: 'center',
+    borderRadius: 16,
+    justifyContent: 'center',
+    alignItems: 'center',
     borderWidth: 1.5,
     borderStyle: 'dashed',
   },
-  text: {
-    fontSize: 10,
-    fontWeight: '500',
+  zoomHint: {
+    position: 'absolute',
+    right: 10,
+    bottom: 10,
+    width: 28,
+    height: 28,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  lightbox: {
+    flex: 1,
+    backgroundColor: 'rgba(15, 23, 42, 0.86)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 24,
+  },
+  lightboxPanel: {
+    width: '100%',
+    maxWidth: 1100,
+    height: '80%',
+    backgroundColor: '#ffffff',
+    borderRadius: 16,
+    padding: 16,
+  },
+  lightboxImage: {
+    width: '100%',
+    height: '100%',
+  },
+  lightboxClose: {
+    position: 'absolute',
+    top: Platform.OS === 'ios' ? 56 : 24,
+    right: 24,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: '#ffffff',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  creditWrap: {
+    maxWidth: 640,
+    alignSelf: 'center',
+    marginTop: 8,
+    minHeight: 32,
+    justifyContent: 'center',
+  },
+  creditText: {
+    fontSize: 12,
+    color: '#64748b',
     textAlign: 'center',
-    opacity: 0.8,
+    textDecorationLine: 'underline',
   },
 });
 
@@ -1738,8 +1922,9 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videoId, color }) => {
     setIsBuffering(true);
   };
   const videoUrl = videoId;
-  // A real snapshot of the video's first frame, pulled from Cloudinary
-  // directly, rather than a solid black box while it loads.
+  // A real snapshot of the video's frame, pulled from Cloudinary directly,
+  // rather than a solid black box while it loads. Uses a later, presenter-
+  // free timestamp for videos configured in THUMBNAIL_TIME_OVERRIDES.
   const posterUri = getVideoThumbnail(videoUrl);
 
   // Diagram detail stays mounted in the background when navigating back to
@@ -1784,7 +1969,9 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videoId, color }) => {
             <View style={[videoStyles.playButton, { backgroundColor: color }]}>
               <PlayIcon />
             </View>
-            <Text style={videoStyles.thumbnailText}>Watch Tutorial</Text>
+            <View style={videoStyles.thumbnailPill} pointerEvents="none">
+              <Text style={videoStyles.thumbnailPillText}>Watch tutorial</Text>
+            </View>
           </TouchableOpacity>
         ) : (
           <View style={videoStyles.iframeContainer}>
@@ -1806,6 +1993,11 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videoId, color }) => {
             />
             {isBuffering && (
               <View style={videoStyles.bufferingOverlay} pointerEvents="none">
+                <Image source={{ uri: posterUri }} style={StyleSheet.absoluteFillObject} resizeMode="cover" />
+                <View style={StyleSheet.absoluteFillObject} pointerEvents="none">
+                  {/* dark scrim on top of poster */}
+                  <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)' }} />
+                </View>
                 <ActivityIndicator size="large" color="#ffffff" />
               </View>
             )}
@@ -1866,7 +2058,7 @@ const MobileVideoPlayer: React.FC<{
           <View style={[videoStyles.playButton, { backgroundColor: color }]}>
             <PlayIcon />
           </View>
-          <Text style={[videoStyles.thumbnailText, { color }]}>Watch Tutorial</Text>
+          <Text style={[videoStyles.thumbnailText, { color }]}>Watch tutorial</Text>
         </TouchableOpacity>
       ) : (
         <>
@@ -1920,7 +2112,7 @@ const videoStyles = StyleSheet.create({
     bottom: 0,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: 'rgba(0,0,0,0.25)',
+    backgroundColor: 'rgba(0,0,0,0.85)',
   },
   comingSoon: {
     borderWidth: 1.5,
@@ -1943,6 +2135,21 @@ const videoStyles = StyleSheet.create({
   thumbnailOverlay: {
     ...StyleSheet.absoluteFillObject,
     backgroundColor: 'rgba(15, 23, 42, 0.45)',
+  },
+  thumbnailPill: {
+    position: 'absolute',
+    top: 10,
+    left: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 999,
+    backgroundColor: 'rgba(15, 23, 42, 0.72)',
+  },
+  thumbnailPillText: {
+    fontSize: 12,
+    fontWeight: '600',
+    letterSpacing: 0.3,
+    color: '#ffffff',
   },
   playButton: {
     width: 56,
@@ -2041,9 +2248,10 @@ const sectionStyles = StyleSheet.create({
     textTransform: 'uppercase',
   },
   body: {
-    fontSize: 15,
+    fontSize: 16,
     color: '#334155',
-    lineHeight: 24,
+    lineHeight: 26,
+    maxWidth: 720,
   },
 });
 
@@ -2708,7 +2916,7 @@ const LearningFeedbackForm: React.FC<FeedbackFormProps> = ({ color, diagramType,
     }
   };
 
-  const question = diagramType === 'SDLC' ? 'What did you learn in this SDLC?' : 'What did you learn in this diagram?';
+  const question = diagramType === 'SDLC' ? 'Create a Note about this SDLC?' : 'Create a Note about this diagram?';
   const charsRemaining = MAX_FEEDBACK_LENGTH - feedback.length;
   const isNearLimit = charsRemaining <= FEEDBACK_LENGTH_WARNING_THRESHOLD;
 
@@ -2719,7 +2927,7 @@ const LearningFeedbackForm: React.FC<FeedbackFormProps> = ({ color, diagramType,
       </Text>
       <TextInput
         style={[feedbackStyles.input, { borderColor: '#e2e8f0' }]}
-        placeholder="Share your learning experience..."
+        placeholder="Write a note, submit it and check the Saved Notes"
         placeholderTextColor="#94a3b8"
         multiline
         numberOfLines={4}
@@ -2853,6 +3061,8 @@ const DiagramDetail: React.FC = () => {
 
   const diagramId = parseInt(id ?? '1', 10);
   const content = DIAGRAM_CONTENT[diagramId];
+
+  usePageTitle(content ? content.title : 'Diagram');
 
   useEffect(() => {
     scrollViewRef.current?.scrollTo({ y: 0, animated: false });
@@ -3065,11 +3275,23 @@ const DiagramDetail: React.FC = () => {
           isDesktop && styles.scrollContentDesktop,
         ]}
       >
-        <View nativeID="tour-detail-hero" style={[styles.hero, { backgroundColor: colors.light }]}>
-          <BackButton onPress={handleGoHome} style={styles.heroBackBtnPosition} />
+        <View
+          nativeID="tour-detail-hero"
+          style={[
+            styles.hero,
+            { backgroundColor: colors.light },
+            isTablet && styles.heroTablet,
+            isDesktop && styles.heroDesktop,
+          ]}
+        >
+          <BackButton
+            onPress={handleGoHome}
+            style={styles.heroBackBtnPosition}
+            label={isTablet ? 'Back' : undefined}
+          />
 
-          <View style={styles.heroContent}>
-            <View style={styles.titleStack}>
+          <View style={[styles.heroContent, isDesktop && styles.heroContentDesktop]}>
+            <View style={[styles.titleStack, isDesktop && styles.titleStackDesktop]}>
               <Text style={[
                 styles.heroTitle,
                 isTablet && styles.heroTitleTablet,
@@ -3080,12 +3302,13 @@ const DiagramDetail: React.FC = () => {
               <Text style={styles.heroTagline}>{content.tagline}</Text>
             </View>
 
-            <View nativeID="tour-detail-image">
+            <View nativeID="tour-detail-image" style={isDesktop ? styles.heroImageColumn : undefined}>
               <DiagramPlaceholder
                 color={colors.primary}
                 label={content.imageAlt}
                 title={content.title}
                 placeholderImage={content.placeholderImage}
+                imageSource={content.imageSource}
               />
             </View>
 
@@ -3150,9 +3373,11 @@ const styles = StyleSheet.create({
     }),
   },
   backButtonBase: {
-    width: 36,
-    height: 36,
-    borderRadius: 8,
+    minWidth: 44,
+    height: 44,
+    borderRadius: 12,
+    flexDirection: 'row',
+    gap: 6,
     backgroundColor: '#FFFFFF',
     justifyContent: 'center',
     alignItems: 'center',
@@ -3180,6 +3405,18 @@ const styles = StyleSheet.create({
       web: { boxShadow: '0 2px 8px rgba(15, 23, 42, 0.1)' },
     }),
   },
+  backButtonPressed: {
+    opacity: 0.7,
+  },
+  backButtonWithLabel: {
+    paddingLeft: 10,
+    paddingRight: 16,
+  },
+  backButtonLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#1E293B',
+  },
   floatingTitle: {
     flex: 1,
     fontSize: 16,
@@ -3189,7 +3426,18 @@ const styles = StyleSheet.create({
   hero: {
     paddingTop: Platform.OS === 'ios' ? 60 : 24,
     paddingBottom: 28,
+    paddingHorizontal: 16,
+  },
+  heroTablet: {
     paddingHorizontal: 24,
+  },
+  heroDesktop: {
+    marginTop: 24,
+    marginHorizontal: 32,
+    paddingHorizontal: 40,
+    paddingTop: 28,
+    paddingBottom: 40,
+    borderRadius: 24,
   },
   heroBackBtnPosition: {
     marginBottom: 24,
@@ -3198,8 +3446,22 @@ const styles = StyleSheet.create({
   heroContent: {
     gap: 16,
   },
+  heroContentDesktop: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 48,
+  },
   titleStack: {
     gap: 8,
+  },
+  titleStackDesktop: {
+    flex: 1,
+    minWidth: 0,
+    maxWidth: 440,
+  },
+  heroImageColumn: {
+    flex: 1.4,
+    minWidth: 0,
   },
   heroTitle: {
     fontSize: 28,
@@ -3217,9 +3479,9 @@ const styles = StyleSheet.create({
     lineHeight: 44,
   },
   heroTagline: {
-    fontSize: 15,
-    color: '#64748b',
-    lineHeight: 22,
+    fontSize: 16,
+    color: '#475569',
+    lineHeight: 24,
   },
   heroImage: {
     width: '100%',
@@ -3276,10 +3538,10 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   sectionLabel: {
-    fontSize: 12,
+    fontSize: 13,
     fontWeight: '700',
     textTransform: 'uppercase',
-    letterSpacing: 1,
+    letterSpacing: 0.8,
   },
   errorContainer: {
     flex: 1,

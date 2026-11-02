@@ -4,6 +4,7 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
+  Pressable,
   StyleSheet,
   ScrollView,
   ActivityIndicator,
@@ -14,6 +15,7 @@ import {
   Image,
   Animated,
   Easing,
+  AccessibilityInfo,
 } from 'react-native';
 import { Stack, useRouter } from 'expo-router';
 import { Svg, Circle, Rect, Path, Defs, LinearGradient, Stop } from 'react-native-svg';
@@ -22,6 +24,41 @@ import { getAuth, Auth, signInWithPopup, GoogleAuthProvider, browserSessionPersi
 import * as authService from '../../services/authService';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
+
+// ─── COLOR TOKENS ───────────────────────────────────────────────────────────
+// Every text color below passes WCAG AA (4.5:1) on white.
+const COLORS = {
+  brand: '#3b5bdb', // white text on this is ~6:1 (the old #4c6fff was ~4.3:1)
+  brandDark: '#364fc7',
+  textStrong: '#0f172a',
+  textBody: '#475569', // helper text
+  textMuted: '#64748b', // placeholder, secondary text
+  label: '#334155',
+  error: '#dc2626', // ~4.8:1 on white (old #ef4444 was ~3.8:1)
+  success: '#047857', // ~5.5:1 on white
+  border: '#dde3fa',
+};
+
+// Visible keyboard focus ring (web). On native the browser outline doesn't exist,
+// so this is simply an empty style there.
+const focusRing: any =
+  Platform.OS === 'web'
+    ? {
+        outlineWidth: 2,
+        outlineStyle: 'solid',
+        outlineColor: COLORS.brand,
+        outlineOffset: 2,
+      }
+    : {};
+
+// Input focus design (same as signup): brand border + soft glow on the wrapper,
+// plus a 2px ring (offset 1) on web. The inner TextInput draws no outline itself.
+const inputRing = (color: string): any =>
+  Platform.OS === 'web'
+    ? { outlineWidth: 2, outlineStyle: 'solid', outlineColor: color, outlineOffset: 1 }
+    : {};
+
+const noWebOutline: any = Platform.OS === 'web' ? { outlineStyle: 'none' } : null;
 
 // Firebase configuration
 const firebaseConfig = {
@@ -101,6 +138,8 @@ const CustomToast = ({ visible, message, isError, onHide }: {
 
   return (
     <Animated.View
+      accessibilityRole="alert"
+      accessibilityLiveRegion="polite"
       style={[
         styles.toastContainer,
         {
@@ -130,13 +169,13 @@ const CustomToast = ({ visible, message, isError, onHide }: {
 // Helper function to get input wrapper style
 const getInputWrapperStyle = (isFocused: boolean, hasError: string) => {
   if (hasError && isFocused) {
-    return [styles.inputWrap, styles.inputWrapError, styles.inputWrapErrorFocused];
+    return [styles.inputWrap, styles.inputWrapFocused, styles.inputWrapError, inputRing(COLORS.error)];
   }
   if (hasError) {
     return [styles.inputWrap, styles.inputWrapError];
   }
   if (isFocused) {
-    return [styles.inputWrap, styles.inputWrapFocused];
+    return [styles.inputWrap, styles.inputWrapFocused, inputRing(COLORS.brand)];
   }
   return [styles.inputWrap];
 };
@@ -144,7 +183,12 @@ const getInputWrapperStyle = (isFocused: boolean, hasError: string) => {
 // ─── BACKGROUND (matches signin.tsx / signup.tsx) ──────────────────────────
 
 const DiagramBackground = () => (
-  <View style={StyleSheet.absoluteFillObject} pointerEvents="none">
+  <View
+    style={StyleSheet.absoluteFillObject}
+    pointerEvents="none"
+    accessibilityElementsHidden
+    importantForAccessibility="no-hide-descendants"
+  >
     <Svg width="100%" height="100%" viewBox={`0 0 ${SCREEN_WIDTH} ${SCREEN_HEIGHT}`} preserveAspectRatio="xMidYMid slice" style={StyleSheet.absoluteFillObject}>
       <Defs>
         <LinearGradient id="bgWash" x1="0%" y1="0%" x2="100%" y2="100%">
@@ -215,7 +259,34 @@ const DiagramBackground = () => (
 
 const BackIcon = () => (
   <Svg width={20} height={20} viewBox="0 0 24 24" fill="none">
-    <Path d="M19 12H5M5 12l7 7M5 12l7-7" stroke="#4a5568" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" />
+    <Path d="M19 12H5M5 12l7 7M5 12l7-7" stroke="#334155" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" />
+  </Svg>
+);
+
+// Logo tile shown above the heading (tilted rounded square, same idea as sign-in).
+// If signin.tsx already has a LogoTile component, import and reuse that instead
+// so both screens stay identical.
+const LogoTile = () => (
+  <View style={styles.logoTile} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+    <Svg width={26} height={26} viewBox="0 0 24 24" fill="none">
+      <Rect x="5" y="11" width="14" height="10" rx="2.5" stroke="#ffffff" strokeWidth="1.8" />
+      <Path d="M8 11V8a4 4 0 0 1 8 0v3" stroke="#ffffff" strokeWidth="1.8" strokeLinecap="round" />
+      <Circle cx="12" cy="16" r="1.4" fill="#ffffff" />
+    </Svg>
+  </View>
+);
+
+const InlineErrorIcon = () => (
+  <Svg width={16} height={16} viewBox="0 0 24 24" fill="none">
+    <Circle cx="12" cy="12" r="10" stroke={COLORS.error} strokeWidth="1.8" />
+    <Path d="M12 7.5v5M12 16h.01" stroke={COLORS.error} strokeWidth="2" strokeLinecap="round" />
+  </Svg>
+);
+
+const InlineSuccessIcon = () => (
+  <Svg width={16} height={16} viewBox="0 0 24 24" fill="none">
+    <Circle cx="12" cy="12" r="10" stroke={COLORS.success} strokeWidth="1.8" />
+    <Path d="M8 12l3 3 5-6" stroke={COLORS.success} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
   </Svg>
 );
 
@@ -284,7 +355,9 @@ export default function ForgotPassword() {
   const [email, setEmail] = useState('');
   const [emailFocused, setEmailFocused] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [sent, setSent] = useState(false); // true briefly after the OTP is sent
   const [error, setError] = useState('');
+  const [focusedControl, setFocusedControl] = useState<'back' | 'send' | 'signin' | null>(null);
   const [showErrorModal, setShowErrorModal] = useState(false);
   const [toastVisible, setToastVisible] = useState(false);
   const [toastMessage, setToastMessage] = useState('');
@@ -297,6 +370,9 @@ export default function ForgotPassword() {
     actionIcon: undefined as React.ReactNode | undefined
   });
 
+  const navTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const reduceMotionRef = useRef(false);
+
   // Card entrance/exit animation — matches the transition used between
   // signin.tsx <-> signup.tsx, now shared with forgot-password <-> signin.
   const cardOpacity = useRef(new Animated.Value(0)).current;
@@ -304,19 +380,38 @@ export default function ForgotPassword() {
   const [isAnimatingOut, setIsAnimatingOut] = useState(false);
 
   useEffect(() => {
-    Animated.parallel([
-      Animated.timing(cardOpacity, {
-        toValue: 1,
-        duration: 400,
-        useNativeDriver: true,
-      }),
-      Animated.timing(cardTranslateY, {
-        toValue: 0,
-        duration: 400,
-        easing: Easing.out(Easing.cubic),
-        useNativeDriver: true,
-      }),
-    ]).start();
+    let cancelled = false;
+
+    // Respect the "reduce motion" system setting: fade only, no slide, shorter.
+    AccessibilityInfo.isReduceMotionEnabled()
+      .then((enabled) => {
+        reduceMotionRef.current = enabled;
+        if (cancelled) return;
+        Animated.parallel([
+          Animated.timing(cardOpacity, {
+            toValue: 1,
+            duration: enabled ? 120 : 400,
+            useNativeDriver: true,
+          }),
+          Animated.timing(cardTranslateY, {
+            toValue: 0,
+            duration: enabled ? 0 : 400,
+            easing: Easing.out(Easing.cubic),
+            useNativeDriver: true,
+          }),
+        ]).start();
+      })
+      .catch(() => {
+        Animated.parallel([
+          Animated.timing(cardOpacity, { toValue: 1, duration: 400, useNativeDriver: true }),
+          Animated.timing(cardTranslateY, { toValue: 0, duration: 400, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
+        ]).start();
+      });
+
+    return () => {
+      cancelled = true;
+      if (navTimeoutRef.current) clearTimeout(navTimeoutRef.current);
+    };
   }, []);
 
   // Shared exit animation before leaving this screen for Sign In
@@ -331,7 +426,7 @@ export default function ForgotPassword() {
         useNativeDriver: true,
       }),
       Animated.timing(cardTranslateY, {
-        toValue: -20,
+        toValue: reduceMotionRef.current ? 0 : -20,
         duration: 150,
         easing: Easing.in(Easing.cubic),
         useNativeDriver: true,
@@ -352,7 +447,7 @@ export default function ForgotPassword() {
         useNativeDriver: true,
       }),
       Animated.timing(cardTranslateY, {
-        toValue: -20,
+        toValue: reduceMotionRef.current ? 0 : -20,
         duration: 150,
         easing: Easing.in(Easing.cubic),
         useNativeDriver: true,
@@ -421,35 +516,42 @@ export default function ForgotPassword() {
     }
   };
 
+  const GOOGLE_ACCOUNT_MESSAGE =
+    "This email is linked to a Google account. Go back to Sign In and choose 'Sign in with Google'.";
+
   const handleSendOTP = async () => {
-    console.log('🔍 handleSendOTP called with email:', email);
+    if (loading || sent) return;
+
+    const trimmedEmail = email.trim();
+    console.log('🔍 handleSendOTP called');
     
     setError('');
 
-    if (!email.trim()) {
-      setError('Please enter your email address.');
+    if (!trimmedEmail) {
+      setError('Enter your email address.');
+      emailInputRef.current?.focus();
       return;
     }
 
-    if (!/\S+@\S+\.\S+/.test(email)) {
-      setError('Please enter a valid email address.');
+    if (!/\S+@\S+\.\S+/.test(trimmedEmail)) {
+      setError('Enter a valid email address, like you@example.com.');
+      emailInputRef.current?.focus();
       return;
     }
 
     setLoading(true);
     
     try {
-      console.log('📤 Sending forgot password request for:', email);
-      const result = await authService.forgotPassword(email);
+      console.log('📤 Sending forgot password request');
+      const result = await authService.forgotPassword(trimmedEmail);
       console.log('📥 Forgot password response:', result);
       
       if (!result.success) {
         console.log('❌ Forgot password failed:', result.message, result.code);
         
-        
         if (result.code === 'GOOGLE_ACCOUNT') {
-          // ⭐ Inline error instead of popup
-          setError("This email is linked to Google. Please use 'Continue with Google' to log in.");
+          // Inline error instead of popup
+          setError(GOOGLE_ACCOUNT_MESSAGE);
           setLoading(false);
           return;
         }
@@ -466,22 +568,22 @@ export default function ForgotPassword() {
       }
 
       console.log('OTP sent successfully, navigating to verify-otp');
-      const maskedEmail = email.replace(/(.{2})(.*)(@.*)/, '$1•••$3');
-      showToast(`OTP code sent to ${maskedEmail}`, false);
       // Every other branch above resets loading before returning; this one
-      // didn't, since it navigates away instead of returning into this
-      // screen. But this screen isn't unmounted by that navigation — Expo
+      // must too. This screen isn't unmounted by the navigation below — Expo
       // Router keeps it alive in the background — so coming back to it
-      // later (e.g. tapping Back on verify-otp) resumed this exact stale
+      // later (e.g. tapping Back on verify-otp) would resume a stale
       // `loading: true` state, leaving Send OTP permanently spinning/disabled.
       setLoading(false);
+      setSent(true); // shows the inline "Code sent" confirmation + button state
 
-      setTimeout(() => {
+      navTimeoutRef.current = setTimeout(() => {
         router.push({
           pathname: '/(auth)/verify-otp',
-          params: { email, purpose: 'reset' },
+          params: { email: trimmedEmail, purpose: 'reset' },
         });
-      }, 400);
+        // Same stale-state reason as above: reset so coming back works.
+        setSent(false);
+      }, 900);
       
     } catch (error: any) {
       console.error('❌ Forgot password error:', error);
@@ -504,7 +606,7 @@ export default function ForgotPassword() {
       if (error.response?.status === 400) {
         const data = error.response?.data;
         if (data?.code === 'GOOGLE_ACCOUNT') {
-          setError("This email is linked to Google. Please use 'Continue with Google' to log in.");
+          setError(GOOGLE_ACCOUNT_MESSAGE);
           setLoading(false);
           return;
         }
@@ -528,11 +630,8 @@ export default function ForgotPassword() {
     handleSendOTP();
   };
 
-  const getOutlineColor = () => {
-    if (error) return '#ef4444';
-    if (emailFocused) return '#4c6fff';
-    return '#dde3fa';
-  };
+  const maskedEmail = email.trim().replace(/(.{2})(.*)(@.*)/, '$1•••$3');
+  const busy = loading || sent;
 
   return (
     <>
@@ -574,36 +673,44 @@ export default function ForgotPassword() {
               },
             ]}
           >
-            {/* Connectors */}
-            <View style={styles.connectorTop} />
-            <View style={styles.connectorBottom} />
-            <View style={styles.connectorLeft} />
-            <View style={styles.connectorRight} />
+            {/* Connectors (decorative) */}
+            <View style={styles.connectorTop} importantForAccessibility="no-hide-descendants" accessibilityElementsHidden />
+            <View style={styles.connectorBottom} importantForAccessibility="no-hide-descendants" accessibilityElementsHidden />
+            <View style={styles.connectorLeft} importantForAccessibility="no-hide-descendants" accessibilityElementsHidden />
+            <View style={styles.connectorRight} importantForAccessibility="no-hide-descendants" accessibilityElementsHidden />
             
-            <TouchableOpacity style={styles.backBtn} onPress={handleBack} activeOpacity={0.7}>
+            <Pressable
+              style={({ pressed }) => [
+                styles.backBtn,
+                focusedControl === 'back' && focusRing,
+                pressed && styles.pressed,
+              ]}
+              onPress={handleBack}
+              onFocus={() => setFocusedControl('back')}
+              onBlur={() => setFocusedControl(null)}
+              hitSlop={{ top: 6, bottom: 6, left: 10, right: 16 }}
+              accessibilityRole="button"
+              accessibilityLabel="Go back"
+            >
               <BackIcon />
               <Text style={styles.backText}>Back</Text>
-            </TouchableOpacity>
+            </Pressable>
+
+            <LogoTile />
             
-            <Text style={styles.heading}>Forgot Password?</Text>
+            <Text style={styles.heading} accessibilityRole="header">Forgot your password?</Text>
+            <Text style={styles.helper}>
+              Enter the email you signed up with and we&apos;ll send you a one-time code to reset your password.
+            </Text>
 
             <View style={styles.formGroup}>
               <Text style={styles.label}>Email Address</Text>
               <View style={getInputWrapperStyle(emailFocused, error)}>
                 <TextInput
                   ref={emailInputRef}
-                  style={[
-                    styles.input, 
-                    Platform.OS === 'web' && { 
-                      outlineWidth: 1,
-                      outlineStyle: 'solid',
-                      outlineOffset: 0,
-                      borderRadius: 12,
-                      outlineColor: getOutlineColor(),
-                    }
-                  ]}
+                  style={[styles.input, noWebOutline]}
                   placeholder="you@example.com"
-                  placeholderTextColor="#b8c0d4"
+                  placeholderTextColor={COLORS.textMuted}
                   value={email}
                   onChangeText={(text) => {
                     setEmail(text);
@@ -614,23 +721,81 @@ export default function ForgotPassword() {
                   keyboardType="email-address"
                   autoCapitalize="none"
                   autoCorrect={false}
+                  autoComplete="email"
+                  textContentType="emailAddress"
                   returnKeyType="go"
                   blurOnSubmit={false}
+                  editable={!busy}
                   onSubmitEditing={handleSubmitEditing}
+                  accessibilityLabel="Email address"
+                  accessibilityHint="Enter the email you signed up with"
                 />
               </View>
-              {error ? <Text style={styles.errorText}>{error}</Text> : null}
+
+              {error ? (
+                <View style={styles.statusRow} accessibilityRole="alert" accessibilityLiveRegion="polite">
+                  <InlineErrorIcon />
+                  <Text style={styles.errorText}>{error}</Text>
+                </View>
+              ) : null}
+
+              {sent ? (
+                <View style={styles.statusRow} accessibilityRole="alert" accessibilityLiveRegion="polite">
+                  <InlineSuccessIcon />
+                  <Text style={styles.successText}>Code sent to {maskedEmail}</Text>
+                </View>
+              ) : null}
             </View>
 
-            <TouchableOpacity style={[styles.btnSend, loading && styles.btnDisabled]} onPress={handleSendOTP} activeOpacity={0.9} disabled={loading}>
-              {loading ? <ActivityIndicator color="#ffffff" size="small" /> : <Text style={styles.btnSendText}>Send OTP Code</Text>}
-            </TouchableOpacity>
+            <Pressable
+              style={({ pressed }) => [
+                styles.btnSend,
+                busy && styles.btnDisabled,
+                focusedControl === 'send' && focusRing,
+                pressed && !busy && styles.pressed,
+              ]}
+              onPress={handleSendOTP}
+              onFocus={() => setFocusedControl('send')}
+              onBlur={() => setFocusedControl(null)}
+              disabled={busy}
+              accessibilityRole="button"
+              accessibilityLabel={loading ? 'Sending code' : sent ? 'Code sent' : 'Send OTP Code'}
+              accessibilityState={{ disabled: busy, busy: loading }}
+            >
+              {loading ? (
+                <View style={styles.btnContentRow}>
+                  <ActivityIndicator color="#ffffff" size="small" />
+                  <Text style={[styles.btnSendText, { marginLeft: 10 }]}>Sending code…</Text>
+                </View>
+              ) : sent ? (
+                <View style={styles.btnContentRow}>
+                  <Svg width={18} height={18} viewBox="0 0 24 24" fill="none">
+                    <Path d="M5 12.5l4.5 4.5L19 7.5" stroke="#ffffff" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" />
+                  </Svg>
+                  <Text style={[styles.btnSendText, { marginLeft: 8 }]}>Code sent</Text>
+                </View>
+              ) : (
+                <Text style={styles.btnSendText}>Send OTP Code</Text>
+              )}
+            </Pressable>
 
             <View style={styles.signinWrap}>
               <Text style={styles.signinText}>Remember your password?</Text>
-              <TouchableOpacity onPress={navigateToSignIn}>
+              <Pressable
+                onPress={navigateToSignIn}
+                onFocus={() => setFocusedControl('signin')}
+                onBlur={() => setFocusedControl(null)}
+                style={({ pressed }) => [
+                  styles.signinLinkBtn,
+                  focusedControl === 'signin' && focusRing,
+                  pressed && styles.pressed,
+                ]}
+                hitSlop={{ top: 6, bottom: 6, left: 6, right: 10 }}
+                accessibilityRole="link"
+                accessibilityLabel="Sign In"
+              >
                 <Text style={styles.signinLink}>Sign In</Text>
-              </TouchableOpacity>
+              </Pressable>
             </View>
           </Animated.View>
         </ScrollView>
@@ -653,8 +818,8 @@ const styles = StyleSheet.create({
     backgroundColor: '#ffffff', 
     borderRadius: 28, 
     paddingHorizontal: 32, 
-    paddingTop: 34, 
-    paddingBottom: 34, 
+    paddingTop: 22, 
+    paddingBottom: 30, 
     width: '100%', 
     maxWidth: 430, 
     shadowColor: '#1e293b', 
@@ -712,100 +877,140 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
     borderColor: '#c7d2fe',
   },
+  // Back: 44px minimum tap target, tighter gap to what follows
   backBtn: { 
     flexDirection: 'row', 
     alignItems: 'center', 
     gap: 6, 
-    marginBottom: 24, 
-    alignSelf: 'flex-start' 
+    minHeight: 44,
+    paddingRight: 12,
+    marginBottom: 4, 
+    alignSelf: 'flex-start',
+    borderRadius: 10,
   },
   backText: { 
-    fontSize: 14, 
-    color: '#4a5568', 
+    fontSize: 15, 
+    color: '#334155', 
     fontWeight: '600' 
+  },
+  pressed: {
+    opacity: 0.7,
+  },
+  logoTile: {
+    width: 56,
+    height: 56,
+    borderRadius: 16,
+    backgroundColor: COLORS.brand,
+    alignItems: 'center',
+    justifyContent: 'center',
+    alignSelf: 'center',
+    marginBottom: 18,
+    transform: [{ rotate: '-6deg' }],
+    shadowColor: COLORS.brand,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.3,
+    shadowRadius: 14,
+    elevation: 6,
   },
   heading: { 
     fontSize: 26, 
     fontWeight: '800', 
-    color: '#0f172a', 
+    color: COLORS.textStrong, 
     textAlign: 'center', 
     letterSpacing: -0.6, 
-    marginBottom: 30, 
-    marginTop: 30
+    marginBottom: 8, 
+  },
+  helper: {
+    fontSize: 14,
+    lineHeight: 21,
+    color: COLORS.textBody,
+    textAlign: 'center',
+    marginBottom: 24,
   },
   formGroup: { 
     marginBottom: 8 
   },
   label: { 
-    fontSize: 13, 
+    fontSize: 14, 
     fontWeight: '600', 
-    color: '#4a5568', 
+    color: COLORS.label, 
     marginBottom: 8 
   },
   inputWrap: { 
     borderWidth: 1, 
-    borderColor: '#dde3fa', 
+    borderColor: COLORS.border, 
     borderRadius: 12,
     backgroundColor: '#ffffff', 
     flexDirection: 'row', 
     alignItems: 'center',
+    minHeight: 48,
   },
   inputWrapFocused: { 
-    borderWidth: 1,
-    backgroundColor: '#ffffff', 
-    borderColor: '#3b5bdb',
-    shadowColor: '#3b5bdb',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.15,
-    shadowRadius: 12,
-    elevation: 4 
+    borderColor: COLORS.brand,
+    shadowColor: COLORS.brand,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 2,
   },
   inputWrapError: { 
-    borderColor: '#ef4444',
+    borderColor: COLORS.error,
     borderWidth: 1,
-  },
-  inputWrapErrorFocused: {
-    borderColor: '#ef4444',
-    borderWidth: 1,
-    backgroundColor: '#ffffff',
-    shadowColor: '#ef4444',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.15,
-    shadowRadius: 12,
-    elevation: 4,
   },
   input: { 
     flex: 1, 
     paddingHorizontal: 16, 
     paddingVertical: Platform.OS === 'ios' ? 13 : 11, 
-    fontSize: 15, 
+    fontSize: 16, // 16px also stops iOS Safari from zooming on focus
     color: '#1a1f36',
   },
+  statusRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    marginTop: 8,
+    marginLeft: 2,
+    gap: 6,
+  },
   errorText: { 
-    fontSize: 12, 
-    color: '#ef4444', 
-    marginTop: 8, 
-    marginLeft: 4, 
+    flex: 1,
+    fontSize: 13, 
+    lineHeight: 18,
+    color: COLORS.error, 
     fontWeight: '500' 
   },
+  successText: {
+    flex: 1,
+    fontSize: 13,
+    lineHeight: 18,
+    color: COLORS.success,
+    fontWeight: '600',
+  },
   btnSend: { 
-    backgroundColor: '#4c6fff', 
+    backgroundColor: COLORS.brand, 
     borderRadius: 14, 
+    minHeight: 52,
     paddingVertical: 16, 
     alignItems: 'center', 
+    justifyContent: 'center',
     marginTop: 18, 
-    shadowColor: '#4c6fff', 
+    shadowColor: COLORS.brand, 
     shadowOffset: { width: 0, height: 10 }, 
-    shadowOpacity: 0.32, 
+    shadowOpacity: 0.3, 
     shadowRadius: 20, 
     elevation: 8 
   },
   btnDisabled: { 
-    opacity: 0.75 
+    opacity: 0.9,
+    backgroundColor: COLORS.brandDark,
+  },
+  btnContentRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   btnSendText: { 
     color: '#ffffff', 
-    fontSize: 15, 
+    fontSize: 16, 
     fontWeight: '700', 
     letterSpacing: 0.3 
   },
@@ -813,17 +1018,24 @@ const styles = StyleSheet.create({
     flexDirection: 'row', 
     justifyContent: 'center', 
     alignItems: 'center', 
-    marginTop: 22 
+    marginTop: 14,
+    flexWrap: 'wrap',
   },
   signinText: { 
-    fontSize: 13, 
-    color: '#8896b3' 
+    fontSize: 14, 
+    color: COLORS.textMuted 
+  },
+  signinLinkBtn: {
+    minHeight: 44,
+    justifyContent: 'center',
+    paddingHorizontal: 6,
+    marginLeft: 2,
+    borderRadius: 8,
   },
   signinLink: { 
-    fontSize: 13, 
+    fontSize: 14, 
     fontWeight: '700', 
-    color: '#3b5bdb', 
-    marginLeft: 4 
+    color: COLORS.brand, 
   },
   // Toast Styles
   toastContainer: {
@@ -849,10 +1061,10 @@ const styles = StyleSheet.create({
     elevation: 6,
   },
   toastSuccess: {
-    backgroundColor: '#10b981',
+    backgroundColor: COLORS.success,
   },
   toastError: {
-    backgroundColor: '#ef4444',
+    backgroundColor: COLORS.error,
   },
   toastText: {
     color: '#ffffff',
