@@ -245,7 +245,7 @@ const PORT = process.env.PORT || 5000;
 
 // RATE LIMITING
 
-// 100/15min was tripping during completely normal single-user interactive
+// 100/15min was tripping during completely normal single-Fuser interactive
 // use — navigating between screens, autosave on tab-switch/blur, opening
 // Share/Print, the Saved Diagrams list ping — well before anything abusive
 // was happening. This is a blanket IP-wide catch-all that sits underneath
